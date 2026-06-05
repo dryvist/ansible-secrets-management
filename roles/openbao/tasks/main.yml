@@ -1,0 +1,189 @@
+---
+# OpenBao install + configure. Native single Go binary on Debian; no Docker.
+# Idempotent and safe to re-run. Bootstrap (init/unseal/AppRole) is delegated
+# to tasks/init.yml, included after the service is up.
+
+# --- Phase 1: prerequisites --------------------------------------------------
+- name: Install OpenBao prerequisites
+  ansible.builtin.apt:
+    name:
+      - ca-certificates
+      - jq
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+# --- Phase 2: system user / group -------------------------------------------
+- name: Create openbao system group
+  ansible.builtin.group:
+    name: "{{ openbao_group }}"
+    system: true
+    state: present
+
+- name: Create openbao system user
+  ansible.builtin.user:
+    name: "{{ openbao_user }}"
+    group: "{{ openbao_group }}"
+    system: true
+    shell: /usr/sbin/nologin
+    home: "{{ openbao_data_dir }}"
+    create_home: false
+    state: present
+
+# --- Phase 3: directories ----------------------------------------------------
+- name: Create OpenBao config directory
+  ansible.builtin.file:
+    path: "{{ openbao_config_dir }}"
+    state: directory
+    owner: root
+    group: "{{ openbao_group }}"
+    mode: "0750"
+
+- name: Create OpenBao data directory (0700, owned by openbao)
+  ansible.builtin.file:
+    path: "{{ openbao_data_dir }}"
+    state: directory
+    owner: "{{ openbao_user }}"
+    group: "{{ openbao_group }}"
+    mode: "0700"
+
+# --- Phase 4: download + verify the .deb on the controller -------------------
+# Mirrors the minio role: stage on the controller (unrestricted egress), verify
+# the SHA256 against the upstream checksums file, then copy to the target. LXC
+# hosts in the outbound-internal firewall group cannot reach GitHub directly.
+#
+# ansible_become: false on the delegated tasks is REQUIRED — Ansible inherits
+# the play's become: true on delegated tasks regardless of task-level become,
+# which fails with "sudo: a password is required" on the controller.
+- name: Stage OpenBao release checksums on controller
+  ansible.builtin.get_url:
+    url: "{{ openbao_checksums_url }}"
+    dest: "/tmp/openbao-{{ openbao_version }}-checksums-linux.txt"
+    mode: "0644"
+    force: true
+  delegate_to: localhost
+  connection: local
+  become: false
+  vars:
+    ansible_become: false
+  run_once: true
+
+- name: Read the expected SHA256 for the amd64 .deb
+  ansible.builtin.set_fact:
+    openbao_deb_sha256: >-
+      {{ (lookup('file', '/tmp/openbao-' ~ openbao_version ~ '-checksums-linux.txt')
+          | regex_search('([0-9a-f]{64})\s+' ~ (openbao_deb_filename | regex_escape), '\1')
+          | first) }}
+  run_once: true
+
+- name: Assert a checksum was found for the .deb
+  ansible.builtin.assert:
+    that:
+      - openbao_deb_sha256 is defined
+      - openbao_deb_sha256 | length == 64
+    fail_msg: >-
+      Could not find a SHA256 for {{ openbao_deb_filename }} in the upstream
+      checksums file. Did the asset naming change for v{{ openbao_version }}?
+  run_once: true
+
+- name: Stage the OpenBao .deb on controller (checksum-verified)
+  ansible.builtin.get_url:
+    url: "{{ openbao_deb_url }}"
+    dest: "/tmp/{{ openbao_deb_filename }}"
+    checksum: "sha256:{{ openbao_deb_sha256 }}"
+    mode: "0644"
+    force: true
+  delegate_to: localhost
+  connection: local
+  become: false
+  vars:
+    ansible_become: false
+  run_once: true
+
+- name: Copy the OpenBao .deb to the target
+  ansible.builtin.copy:
+    src: "/tmp/{{ openbao_deb_filename }}"
+    dest: "/tmp/{{ openbao_deb_filename }}"
+    owner: root
+    group: root
+    mode: "0644"
+
+# --- Phase 5: install the package -------------------------------------------
+# Installing the upstream .deb pulls in the `bao` binary. The package also ships
+# its own openbao user/unit; we override the config + unit below so the role
+# stays the single source of truth (User/Group already created above match).
+- name: Install OpenBao package
+  ansible.builtin.apt:
+    deb: "/tmp/{{ openbao_deb_filename }}"
+    state: present
+
+- name: Remove the staged .deb from the target
+  ansible.builtin.file:
+    path: "/tmp/{{ openbao_deb_filename }}"
+    state: absent
+
+# --- Phase 6: configuration --------------------------------------------------
+- name: Render OpenBao server config
+  ansible.builtin.template:
+    src: openbao.hcl.j2
+    dest: "{{ openbao_config_file }}"
+    owner: root
+    group: "{{ openbao_group }}"
+    mode: "0640"
+  notify: Restart openbao
+
+- name: Render OpenBao AWS unseal EnvironmentFile
+  ansible.builtin.template:
+    src: openbao.env.j2
+    dest: "{{ openbao_env_file }}"
+    owner: root
+    group: "{{ openbao_group }}"
+    mode: "0600"
+  no_log: true
+  notify: Restart openbao
+
+- name: Install OpenBao systemd unit
+  ansible.builtin.template:
+    src: openbao.service.j2
+    dest: /etc/systemd/system/openbao.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart openbao
+
+# --- Phase 7: enable + start -------------------------------------------------
+# Skipped under Docker so the role can be molecule-tested in containers without
+# a functional systemd init; the init/bootstrap phase is likewise gated.
+- name: Enable and start OpenBao
+  ansible.builtin.systemd:
+    name: openbao
+    state: "{{ openbao_service_state }}"
+    enabled: "{{ openbao_service_enabled }}"
+    daemon_reload: true
+  when: ansible_virtualization_type | default('') != 'docker'
+
+# Flush so the restart handler fires before init.yml probes the live socket.
+- name: Apply any pending OpenBao restart before bootstrap
+  ansible.builtin.meta: flush_handlers
+
+# --- Phase 8: wait for the API ----------------------------------------------
+# A sealed-but-up OpenBao still answers /v1/sys/health with 200/429/501/503.
+# With KMS auto-unseal it should reach 200 (initialized+unsealed) on re-runs,
+# or 501 (not initialized) on the very first run. Any of those means the
+# listener is accepting connections, which is all we need before init.yml.
+- name: Wait for the OpenBao listener to accept connections
+  ansible.builtin.uri:
+    url: "{{ openbao_api_addr }}/v1/sys/health"
+    method: GET
+    status_code: [200, 429, 472, 473, 501, 503]
+  register: openbao_health
+  until: openbao_health.status is defined
+  retries: 10
+  delay: 3
+  changed_when: false
+  when: ansible_virtualization_type | default('') != 'docker'
+
+# --- Phase 9: bootstrap (idempotent) ----------------------------------------
+- name: Bootstrap OpenBao (init, KV, policy, AppRole)
+  ansible.builtin.include_tasks: init.yml
+  when: ansible_virtualization_type | default('') != 'docker'

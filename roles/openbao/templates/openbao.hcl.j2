@@ -1,0 +1,46 @@
+{{ ansible_managed | comment }}
+# OpenBao server configuration — Raft storage + AWS-KMS auto-unseal.
+# Rendered by the openbao Ansible role. Do not edit manually.
+
+# Integrated Raft storage. This node is node 1 of a planned 3-node cluster;
+# additional nodes join via `bao operator raft join` against this api_addr.
+storage "raft" {
+  path    = "{{ openbao_data_dir }}"
+  node_id = "{{ openbao_node_id }}"
+}
+
+# Auto-unseal via AWS KMS. With awskms seal, `bao operator init` produces
+# RECOVERY keys (not classic unseal keys); the KMS CMK unwraps the root key on
+# every start, so the process self-unseals without operator key entry.
+# Region + key_id identify the CMK; the AWS creds are delivered to the process
+# via the systemd EnvironmentFile ({{ openbao_env_file }}), never inlined here.
+seal "awskms" {
+  region     = "{{ openbao_kms_region }}"
+  kms_key_id = "{{ openbao_kms_key_id }}"
+}
+
+# Listener bound to THIS node's VLAN IP, never 0.0.0.0.
+# tls_disable = 1: TLS terminates at Traefik on the internal VLAN in front of
+# OpenBao. End-to-end TLS (listener-native certs) is a later hardening step —
+# when added, drop tls_disable and point tls_cert_file/tls_key_file at the
+# node cert, and flip openbao_api_addr to https://.
+listener "tcp" {
+  address     = "{{ openbao_bind_address }}:{{ openbao_api_port }}"
+  tls_disable = 1
+}
+
+# Addresses advertised to clients and peer Raft nodes.
+api_addr     = "{{ openbao_api_addr }}"
+cluster_addr = "{{ openbao_cluster_addr }}"
+
+{% if openbao_enable_mlock %}
+# mlock() keeps the in-memory root/encryption keys out of swap. The systemd
+# unit grants CAP_IPC_LOCK so this succeeds without running as root.
+disable_mlock = false
+{% else %}
+# mlock disabled: the platform could not grant CAP_IPC_LOCK. Secrets may touch
+# swap — ensure swap is disabled or encrypted on this host.
+disable_mlock = true
+{% endif %}
+
+ui = {{ openbao_enable_ui | ternary('true', 'false') }}

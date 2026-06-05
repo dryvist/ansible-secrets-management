@@ -1,0 +1,27 @@
+---
+# Molecule converge playbook — runs the openbao role against the test container.
+# Under Docker, the systemd start, health-wait, and bootstrap phases are skipped
+# by the role's `ansible_virtualization_type != 'docker'` guards, so converge
+# exercises install + user/dir creation + config templating only.
+
+- name: Converge
+  hosts: all
+  become: true
+  gather_facts: true
+
+  vars:
+    # Normally derived from container_ip (Terraform inventory). Supply a stub so
+    # the listener/api_addr render in the container test.
+    container_ip: "192.0.2.210"
+    # KMS + unseal creds are injected from Doppler/SOPS at runtime; stub them so
+    # the config + env templates render. The service never starts under Docker,
+    # so these are inert placeholders.
+    openbao_kms_key_id: "arn:aws:kms:us-east-1:000000000000:key/00000000-0000-0000-0000-000000000000"
+    openbao_kms_region: "us-east-1"
+    openbao_unseal_aws_access_key_id: "AKIAEXAMPLEEXAMPLE00"
+    openbao_unseal_aws_secret_access_key: "examplesecretexamplesecretexamplesecret0"
+
+  tasks:
+    - name: Include openbao role
+      ansible.builtin.include_role:
+        name: openbao

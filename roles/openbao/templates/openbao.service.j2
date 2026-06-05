@@ -1,0 +1,40 @@
+{{ ansible_managed | comment }}
+# OpenBao server systemd unit. Rendered by the openbao Ansible role.
+
+[Unit]
+Description=OpenBao secrets manager
+Documentation=https://openbao.org/docs/
+Requires=network-online.target
+After=network-online.target
+# Re-read config on reload without a full restart (SIGHUP).
+ConditionFileNotEmpty={{ openbao_config_file }}
+
+[Service]
+User={{ openbao_user }}
+Group={{ openbao_group }}
+# AWS KMS unseal credentials (0600, root:openbao). Keeping them in an
+# EnvironmentFile rather than the unit keeps them out of `systemctl show`.
+EnvironmentFile={{ openbao_env_file }}
+{% if openbao_enable_mlock %}
+# CAP_IPC_LOCK lets OpenBao mlock() its memory (disable_mlock=false in config)
+# without running as root.
+AmbientCapabilities=CAP_IPC_LOCK
+CapabilityBoundingSet=CAP_IPC_LOCK CAP_SYSLOG
+{% endif %}
+ExecStart={{ openbao_install_dir }}/bao server -config={{ openbao_config_file }}
+ExecReload=/bin/kill --signal HUP $MAINPID
+KillSignal=SIGINT
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+LimitNOFILE=65536
+# Hardening
+ProtectSystem=full
+ProtectHome=read-only
+PrivateTmp=yes
+PrivateDevices=yes
+NoNewPrivileges=yes
+ReadWritePaths={{ openbao_data_dir }}
+
+[Install]
+WantedBy=multi-user.target

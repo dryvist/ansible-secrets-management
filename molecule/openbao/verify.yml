@@ -1,0 +1,98 @@
+---
+# Molecule verification playbook — validates install + config without a live
+# OpenBao (the service does not start under Docker).
+
+- name: Verify
+  hosts: all
+  become: true
+  gather_facts: true
+
+  vars:
+    openbao_user: openbao
+    openbao_data_dir: /opt/openbao/data
+    openbao_config_dir: /etc/openbao
+    openbao_config_file: /etc/openbao/openbao.hcl
+    openbao_env_file: /etc/openbao/openbao.env
+
+  tasks:
+    - name: Check the bao binary is installed
+      ansible.builtin.stat:
+        path: /usr/bin/bao
+      register: bao_bin
+
+    - name: Assert the bao binary exists
+      ansible.builtin.assert:
+        that:
+          - bao_bin.stat.exists
+        fail_msg: "bao binary not found at /usr/bin/bao"
+
+    - name: Check the openbao system user exists
+      ansible.builtin.command:
+        cmd: "id {{ openbao_user }}"
+      register: bao_user
+      changed_when: false
+      failed_when: bao_user.rc != 0
+
+    - name: Check the data directory exists with 0700
+      ansible.builtin.stat:
+        path: "{{ openbao_data_dir }}"
+      register: bao_data
+
+    - name: Assert the data directory is 0700 and owned by openbao
+      ansible.builtin.assert:
+        that:
+          - bao_data.stat.exists
+          - bao_data.stat.isdir
+          - bao_data.stat.mode == '0700'
+          - bao_data.stat.pw_name == openbao_user
+        fail_msg: "Data dir missing or wrong perms/owner: {{ bao_data.stat | default({}) }}"
+
+    - name: Check the rendered config exists
+      ansible.builtin.stat:
+        path: "{{ openbao_config_file }}"
+      register: bao_cfg
+
+    - name: Assert the config exists
+      ansible.builtin.assert:
+        that:
+          - bao_cfg.stat.exists
+        fail_msg: "openbao.hcl was not rendered"
+
+    - name: Read the rendered config
+      ansible.builtin.slurp:
+        src: "{{ openbao_config_file }}"
+      register: bao_cfg_content
+
+    - name: Assert the config has the expected stanzas
+      ansible.builtin.assert:
+        that:
+          - "'storage \"raft\"' in (bao_cfg_content.content | b64decode)"
+          - "'seal \"awskms\"' in (bao_cfg_content.content | b64decode)"
+          - "'listener \"tcp\"' in (bao_cfg_content.content | b64decode)"
+          # Listener must bind the VLAN IP, never 0.0.0.0.
+          - "'0.0.0.0' not in (bao_cfg_content.content | b64decode)"
+          - "'192.0.2.210:8200' in (bao_cfg_content.content | b64decode)"
+        fail_msg: "openbao.hcl missing expected stanzas or bound to 0.0.0.0"
+
+    - name: Check the env file exists with 0600
+      ansible.builtin.stat:
+        path: "{{ openbao_env_file }}"
+      register: bao_env
+
+    - name: Assert the env file is 0600
+      ansible.builtin.assert:
+        that:
+          - bao_env.stat.exists
+          - bao_env.stat.mode == '0600'
+        fail_msg: "openbao.env missing or not 0600 ({{ bao_env.stat.mode | default('absent') }})"
+
+    - name: Check the systemd unit was installed
+      ansible.builtin.stat:
+        path: /etc/systemd/system/openbao.service
+      register: bao_unit
+
+    - name: Assert the systemd unit exists
+      ansible.builtin.assert:
+        that:
+          - bao_unit.stat.exists
+        fail_msg: "openbao.service unit not installed"

@@ -1,0 +1,100 @@
+---
+# OpenBao single-binary secrets manager — role defaults.
+#
+# OpenBao is a native Go binary on Debian; no Docker. This role installs the
+# upstream .deb (checksum-verified), renders a Raft + AWS-KMS-auto-unseal
+# config, runs it under systemd, and (in init.yml) bootstraps the cluster and
+# the Terraform AppRole.
+
+# --- Version ----------------------------------------------------------------
+# Pinned to a known-good upstream release. Version bumps follow the repo's
+# pinning convention (Renovate keeps the .deb/checksums pin fresh; see
+# renovate.json and AGENTS.md "Version management"). Do NOT scatter the
+# version across multiple files — change it here only.
+openbao_version: "2.5.4"
+
+# --- Download (checksum-verified .deb from GitHub releases) ------------------
+# The controller stages the .deb + the release checksums file, verifies the
+# SHA256, then the .deb is installed on the target. This mirrors the minio
+# role's controller-staging pattern so containers in the outbound-internal
+# firewall group (RFC1918-only egress) don't need direct egress to GitHub.
+openbao_release_base_url: "https://github.com/openbao/openbao/releases/download"
+openbao_deb_filename: "openbao_{{ openbao_version }}_linux_amd64.deb"
+openbao_deb_url: >-
+  {{ openbao_release_base_url }}/v{{ openbao_version }}/{{ openbao_deb_filename }}
+# SHA256SUMS-format file ("<digest>  <filename>" per line) for the linux build.
+openbao_checksums_filename: "checksums-linux.txt"
+openbao_checksums_url: >-
+  {{ openbao_release_base_url }}/v{{ openbao_version }}/{{ openbao_checksums_filename }}
+
+# --- System user / group ----------------------------------------------------
+openbao_user: openbao
+openbao_group: openbao
+
+# --- Paths ------------------------------------------------------------------
+openbao_data_dir: /opt/openbao/data
+openbao_config_dir: /etc/openbao
+openbao_config_file: "{{ openbao_config_dir }}/openbao.hcl"
+# EnvironmentFile holding the AWS unseal creds for the systemd unit (0600).
+openbao_env_file: "{{ openbao_config_dir }}/openbao.env"
+# CLI talks to the local node over loopback by default for bootstrap tasks.
+openbao_install_dir: /usr/bin
+
+# --- Listener / cluster ports -----------------------------------------------
+openbao_api_port: 8200
+openbao_cluster_port: 8201
+
+# --- Node identity & addresses ----------------------------------------------
+# Raft node_id: stable per-node identifier. Defaults to the inventory hostname.
+openbao_node_id: "{{ inventory_hostname }}"
+# The node's VLAN IP. LXC hosts expose this as `container_ip` (set by
+# inventory/load_tofu.yml from the Terraform-exported inventory). Fall back to
+# ansible_host (VMs) so the role works on either. The listener binds to THIS
+# address, never 0.0.0.0 — TLS terminates at Traefik on the internal VLAN.
+openbao_bind_address: >-
+  {{ container_ip | default(ansible_host) | default(ansible_default_ipv4.address) }}
+# Advertised addresses other nodes / clients use to reach this node.
+# tls_disable=1 today (Traefik fronts TLS), so api_addr is http://. End-to-end
+# TLS is a later hardening step — see templates/openbao.hcl.j2.
+openbao_api_addr: "http://{{ openbao_bind_address }}:{{ openbao_api_port }}"
+openbao_cluster_addr: "https://{{ openbao_bind_address }}:{{ openbao_cluster_port }}"
+
+# --- Seal: AWS KMS auto-unseal ----------------------------------------------
+# The KMS key + scoped IAM user are provisioned out-of-band (aws-infra repo).
+# The key id and region identify the CMK; the AWS creds below are injected at
+# runtime from Doppler/SOPS (NOT hardcoded, NOT committed) and land in the
+# 0600 EnvironmentFile so only the openbao process and root can read them.
+openbao_kms_key_id: "{{ lookup('env', 'OPENBAO_KMS_KEY_ID') }}"
+openbao_kms_region: "{{ lookup('env', 'OPENBAO_KMS_REGION') | default('us-east-1', true) }}"
+# Dedicated unseal IAM creds — scoped to kms:Encrypt/Decrypt/DescribeKey on the
+# single CMK above. Sourced from Doppler (iac-conf-mgmt) or SOPS at runtime.
+openbao_unseal_aws_access_key_id: "{{ lookup('env', 'OPENBAO_UNSEAL_AWS_ACCESS_KEY_ID') }}"
+openbao_unseal_aws_secret_access_key: "{{ lookup('env', 'OPENBAO_UNSEAL_AWS_SECRET_ACCESS_KEY') }}"
+
+# --- KV / policy / AppRole ---------------------------------------------------
+openbao_kv_mount: secret
+# Path prefix that the terraform policy is allowed to read/write under the
+# KV v2 mount. Resolves to secret/data/homelab/* + secret/metadata/homelab/*.
+openbao_homelab_path: homelab
+openbao_terraform_policy_name: terraform
+openbao_terraform_approle_name: terraform
+
+# --- Break-glass / bootstrap output (controller-side, never committed) -------
+# init.yml writes recovery shares + root token (and later the AppRole creds) to
+# 0600 files UNDER playbook_dir ON THE CONTROLLER, then prints a LOUD warning to
+# transcribe to paper and delete. These paths are gitignored (see role README).
+openbao_recovery_shares: 5
+openbao_recovery_threshold: 3
+openbao_recovery_file: "{{ playbook_dir }}/.openbao-recovery-{{ inventory_hostname }}.json"
+openbao_approle_file: "{{ playbook_dir }}/.openbao-approle-{{ inventory_hostname }}.json"
+
+# --- systemd hardening -------------------------------------------------------
+# OpenBao mlock()s memory to keep secrets out of swap; that needs CAP_IPC_LOCK.
+# Set to false ONLY if the platform cannot grant the capability (then add
+# disable_mlock=true to the config) — see templates.
+openbao_enable_mlock: true
+openbao_service_state: started
+openbao_service_enabled: true
+
+# --- UI ----------------------------------------------------------------------
+openbao_enable_ui: true

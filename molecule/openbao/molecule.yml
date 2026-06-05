@@ -1,0 +1,53 @@
+---
+# Molecule scenario for the openbao role.
+# CI-only gate: local runs are known-broken in this repo (see AGENTS.md /
+# project memory). Do not run locally.
+dependency:
+  name: galaxy
+  options:
+    requirements-file: ${MOLECULE_PROJECT_DIRECTORY}/requirements.yml
+
+driver:
+  name: docker
+
+platforms:
+  - name: openbao-test
+    # No stable version tags published; geerlingguy only ships :latest.
+    image: geerlingguy/docker-debian12-ansible:latest
+    privileged: true
+    command: ""
+    pre_build_image: true
+    tmpfs:
+      - /run
+      - /run/lock
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:rw
+    cgroupns_mode: host
+    groups:
+      - openbao_group
+      - lxc_containers
+
+provisioner:
+  name: ansible
+  config_options:
+    defaults:
+      interpreter_python: auto_silent
+      roles_path: ${MOLECULE_PROJECT_DIRECTORY}/roles
+
+verifier:
+  name: ansible
+
+scenario:
+  name: openbao
+  test_sequence:
+    - dependency
+    - cleanup
+    - destroy
+    - syntax
+    - create
+    - prepare
+    - converge
+    - idempotence
+    - verify
+    - cleanup
+    - destroy

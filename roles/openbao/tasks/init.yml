@@ -1,0 +1,282 @@
+---
+# OpenBao bootstrap — initialize the cluster, then provision the KV mount,
+# the terraform policy, and the terraform AppRole. Every step is guarded so
+# re-runs are no-ops: nothing here is created if it already exists, and the
+# break-glass material is only emitted on the run that actually initializes.
+#
+# Break-glass safety: recovery shares + root token (and the AppRole creds) are
+# written ONLY to 0600 files on the Ansible CONTROLLER under playbook_dir, and a
+# LOUD warning tells the operator to transcribe to paper and delete the file.
+# These values are NEVER written into the repo or onto the target host, and the
+# `bao` invocations that touch them run with no_log: true.
+
+# All CLI calls target the local node over its advertised api_addr.
+# `bao status` exit codes: 0 = unsealed, 2 = sealed, 1 = error. For an
+# uninitialized node the command still exits 0/2 with "initialized": false in
+# the JSON body, so we parse the body rather than trust the exit code alone.
+- name: Read OpenBao status
+  ansible.builtin.command:
+    cmd: bao status -format=json
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+  register: openbao_status_raw
+  changed_when: false
+  failed_when: openbao_status_raw.rc not in [0, 2]
+
+- name: Parse OpenBao status
+  ansible.builtin.set_fact:
+    openbao_status: "{{ openbao_status_raw.stdout | from_json }}"
+
+# --- Initialization (only when not yet initialized) -------------------------
+- name: Initialize OpenBao (recovery keys via KMS auto-unseal)
+  ansible.builtin.command:
+    cmd: >-
+      bao operator init
+      -recovery-shares={{ openbao_recovery_shares }}
+      -recovery-threshold={{ openbao_recovery_threshold }}
+      -format=json
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+  register: openbao_init_raw
+  no_log: true
+  changed_when: true
+  when: not openbao_status.initialized
+
+- name: Capture init result
+  ansible.builtin.set_fact:
+    openbao_init: "{{ openbao_init_raw.stdout | from_json }}"
+  no_log: true
+  when: not openbao_status.initialized
+
+# Break-glass: write recovery shares + root token to a 0600 file ON THE
+# CONTROLLER (gitignored), then shout at the operator to move it to paper.
+- name: Write break-glass recovery material to controller (0600)
+  ansible.builtin.copy:
+    content: "{{ openbao_init | to_nice_json }}\n"
+    dest: "{{ openbao_recovery_file }}"
+    mode: "0600"
+  delegate_to: localhost
+  connection: local
+  become: false
+  vars:
+    ansible_become: false
+  no_log: true
+  when: not openbao_status.initialized
+
+- name: WARN — transcribe recovery material to paper, then delete the file
+  ansible.builtin.debug:
+    msg: >-
+      ============================================================
+      OpenBao on {{ inventory_hostname }} was just INITIALIZED.
+      Recovery shares + the initial root token were written to:
+        {{ openbao_recovery_file }}
+      (0600, on this controller, gitignored). TRANSCRIBE the
+      recovery shares to PAPER, store them offline split across
+      custodians, then SECURELY DELETE this file. It is the ONLY
+      break-glass path if KMS auto-unseal ever fails. Do NOT
+      commit it. Do NOT leave it on disk.
+      ============================================================
+  when: not openbao_status.initialized
+
+# Root token: from this run's init output, or (on re-runs) the operator must
+# provide BAO_TOKEN out-of-band. We only proceed with the post-init
+# provisioning below when we actually hold a root token from THIS run.
+- name: Set the bootstrap token for provisioning
+  ansible.builtin.set_fact:
+    openbao_bootstrap_token: "{{ openbao_init.root_token }}"
+  no_log: true
+  when: not openbao_status.initialized
+
+# --- KV v2 mount (add-if-missing) -------------------------------------------
+- name: List enabled secrets engines
+  ansible.builtin.command:
+    cmd: bao secrets list -format=json
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  register: openbao_mounts_raw
+  no_log: true
+  changed_when: false
+  when: openbao_bootstrap_token is defined
+
+- name: Enable KV v2 at the configured mount
+  ansible.builtin.command:
+    cmd: "bao secrets enable -path={{ openbao_kv_mount }} -version=2 kv"
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  no_log: true
+  changed_when: true
+  when:
+    - openbao_bootstrap_token is defined
+    - (openbao_kv_mount ~ '/') not in (openbao_mounts_raw.stdout | from_json).keys()
+
+# --- terraform policy (write-if-missing) ------------------------------------
+- name: Render the terraform policy to the controller
+  ansible.builtin.template:
+    src: terraform-policy.hcl.j2
+    dest: "/tmp/openbao-terraform-policy-{{ inventory_hostname }}.hcl"
+    mode: "0600"
+  delegate_to: localhost
+  connection: local
+  become: false
+  vars:
+    ansible_become: false
+  changed_when: false
+  when: openbao_bootstrap_token is defined
+
+- name: List existing policies
+  ansible.builtin.command:
+    cmd: bao policy list -format=json
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  register: openbao_policies_raw
+  no_log: true
+  changed_when: false
+  when: openbao_bootstrap_token is defined
+
+- name: Write the terraform policy
+  ansible.builtin.command:
+    cmd: >-
+      bao policy write {{ openbao_terraform_policy_name }}
+      /tmp/openbao-terraform-policy-{{ inventory_hostname }}.hcl
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  no_log: true
+  changed_when: true
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_terraform_policy_name not in (openbao_policies_raw.stdout | from_json)
+
+- name: Remove the rendered policy from the controller
+  ansible.builtin.file:
+    path: "/tmp/openbao-terraform-policy-{{ inventory_hostname }}.hcl"
+    state: absent
+  delegate_to: localhost
+  connection: local
+  become: false
+  vars:
+    ansible_become: false
+  changed_when: false
+  when: openbao_bootstrap_token is defined
+
+# --- AppRole auth method (add-if-missing) -----------------------------------
+- name: List enabled auth methods
+  ansible.builtin.command:
+    cmd: bao auth list -format=json
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  register: openbao_auth_raw
+  no_log: true
+  changed_when: false
+  when: openbao_bootstrap_token is defined
+
+- name: Enable the AppRole auth method
+  ansible.builtin.command:
+    cmd: bao auth enable approle
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  no_log: true
+  changed_when: true
+  when:
+    - openbao_bootstrap_token is defined
+    - "'approle/' not in (openbao_auth_raw.stdout | from_json).keys()"
+
+# --- terraform AppRole (add-if-missing) -------------------------------------
+- name: Check whether the terraform AppRole already exists
+  ansible.builtin.command:
+    cmd: "bao read -format=json auth/approle/role/{{ openbao_terraform_approle_name }}"
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  register: openbao_approle_check
+  no_log: true
+  changed_when: false
+  failed_when: false
+  when: openbao_bootstrap_token is defined
+
+- name: Create the terraform AppRole bound to the terraform policy
+  ansible.builtin.command:
+    cmd: >-
+      bao write auth/approle/role/{{ openbao_terraform_approle_name }}
+      token_policies={{ openbao_terraform_policy_name }}
+      token_ttl=1h token_max_ttl=4h secret_id_ttl=0
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  no_log: true
+  changed_when: true
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_approle_check.rc is defined
+    - openbao_approle_check.rc != 0
+
+# Surface role_id + a fresh secret_id only when we just created the AppRole on
+# THIS (initializing) run, so re-runs never mint new credentials silently.
+- name: Read the terraform AppRole role_id
+  ansible.builtin.command:
+    cmd: "bao read -format=json auth/approle/role/{{ openbao_terraform_approle_name }}/role-id"
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  register: openbao_role_id_raw
+  no_log: true
+  changed_when: false
+  when:
+    - openbao_bootstrap_token is defined
+    - not openbao_status.initialized
+
+- name: Generate a terraform AppRole secret_id
+  ansible.builtin.command:
+    cmd: "bao write -f -format=json auth/approle/role/{{ openbao_terraform_approle_name }}/secret-id"
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  register: openbao_secret_id_raw
+  no_log: true
+  changed_when: true
+  when:
+    - openbao_bootstrap_token is defined
+    - not openbao_status.initialized
+
+- name: Write AppRole break-glass material to controller (0600)
+  ansible.builtin.copy:
+    content: |
+      {
+        "vault_addr": "{{ openbao_api_addr }}",
+        "role_id": "{{ (openbao_role_id_raw.stdout | from_json).data.role_id }}",
+        "secret_id": "{{ (openbao_secret_id_raw.stdout | from_json).data.secret_id }}"
+      }
+    dest: "{{ openbao_approle_file }}"
+    mode: "0600"
+  delegate_to: localhost
+  connection: local
+  become: false
+  vars:
+    ansible_become: false
+  no_log: true
+  when:
+    - openbao_bootstrap_token is defined
+    - not openbao_status.initialized
+
+- name: INSTRUCT — load the terraform AppRole creds into Doppler, then delete
+  ansible.builtin.debug:
+    msg: >-
+      ============================================================
+      terraform AppRole created on {{ inventory_hostname }}.
+      role_id + secret_id were written to:
+        {{ openbao_approle_file }}
+      (0600, on this controller, gitignored). Load them into the
+      tier-0 secret store, then SECURELY DELETE the file:
+        doppler secrets set VAULT_ADDR={{ openbao_api_addr }}
+        doppler secrets set VAULT_ROLE_ID=<role_id from file>
+        doppler secrets set VAULT_SECRET_ID=<secret_id from file>
+      Do NOT commit this file. Do NOT leave it on disk.
+      ============================================================
+  when:
+    - openbao_bootstrap_token is defined
+    - not openbao_status.initialized
