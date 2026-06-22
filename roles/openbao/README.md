@@ -108,7 +108,7 @@ Highlights:
 | `openbao_enable_mlock` | `true` | mlock secrets out of swap (needs `CAP_IPC_LOCK`). |
 
 AWS unseal credentials and the KMS key id are **never hardcoded or committed**.
-They are injected at runtime from Doppler (`iac-conf-mgmt`) or SOPS into the
+They are injected at runtime from Doppler or SOPS into the
 environment, read via `lookup('env', ...)`, and land in the `0600`
 `openbao.env` systemd `EnvironmentFile` (root:openbao).
 

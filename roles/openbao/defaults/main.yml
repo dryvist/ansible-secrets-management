@@ -67,7 +67,7 @@ openbao_cluster_addr: "https://{{ openbao_bind_address }}:{{ openbao_cluster_por
 openbao_kms_key_id: "{{ lookup('env', 'OPENBAO_KMS_KEY_ID') }}"
 openbao_kms_region: "{{ lookup('env', 'OPENBAO_KMS_REGION') | default('us-east-1', true) }}"
 # Dedicated unseal IAM creds — scoped to kms:Encrypt/Decrypt/DescribeKey on the
-# single CMK above. Sourced from Doppler (iac-conf-mgmt) or SOPS at runtime.
+# single CMK above. Sourced from Doppler or SOPS at runtime.
 openbao_unseal_aws_access_key_id: "{{ lookup('env', 'OPENBAO_UNSEAL_AWS_ACCESS_KEY_ID') }}"
 openbao_unseal_aws_secret_access_key: "{{ lookup('env', 'OPENBAO_UNSEAL_AWS_SECRET_ACCESS_KEY') }}"
 
