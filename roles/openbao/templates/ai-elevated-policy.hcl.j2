@@ -1,0 +1,16 @@
+{{ ansible_managed | comment }}
+# OpenBao policy for the ai-elevated AppRole — trusted infra-touching agents.
+# Everything ai-readonly can read (secret/ai/*, secret/apps/*) PLUS read on the
+# shared platform subtree (secret/platform/*). Still read-only, still NO write
+# and NO infra kernel (secret/infra/*). See docs/SECRETS_HIERARCHY.md.
+
+{% for sub in ['ai', 'apps', 'platform'] %}
+path "{{ openbao_kv_mount }}/data/{{ sub }}/*" {
+  capabilities = ["read"]
+}
+
+path "{{ openbao_kv_mount }}/metadata/{{ sub }}/*" {
+  capabilities = ["read", "list"]
+}
+
+{% endfor %}

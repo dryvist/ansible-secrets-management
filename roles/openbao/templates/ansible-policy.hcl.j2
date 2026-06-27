@@ -1,0 +1,15 @@
+{{ ansible_managed | comment }}
+# OpenBao policy for the Ansible AppRole — config-management pulls.
+# Read-only on the platform + apps subtrees (the credentials roles consume);
+# no write, and no access to the infra kernel (secret/infra/*).
+
+{% for sub in ['platform', 'apps'] %}
+path "{{ openbao_kv_mount }}/data/{{ sub }}/*" {
+  capabilities = ["read"]
+}
+
+path "{{ openbao_kv_mount }}/metadata/{{ sub }}/*" {
+  capabilities = ["read", "list"]
+}
+
+{% endfor %}

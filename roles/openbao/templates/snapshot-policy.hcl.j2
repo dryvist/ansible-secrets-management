@@ -1,0 +1,9 @@
+{{ ansible_managed | comment }}
+# OpenBao policy for the snapshot AppRole — least-privilege backup identity.
+# Grants ONLY the ability to take a raft snapshot, nothing else. Consumed by the
+# off-box snapshot shipping daemon (openbao/openbao-snapshot-agent) so it can
+# authenticate without a broad token.
+
+path "sys/storage/raft/snapshot" {
+  capabilities = ["read"]
+}

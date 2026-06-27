@@ -12,8 +12,8 @@ ConditionFileNotEmpty={{ openbao_config_file }}
 [Service]
 User={{ openbao_user }}
 Group={{ openbao_group }}
-# AWS KMS unseal credentials (0600, root:openbao). Keeping them in an
-# EnvironmentFile rather than the unit keeps them out of `systemctl show`.
+# Static-key auto-unseal material (0600, root:openbao). Keeping it in an
+# EnvironmentFile rather than the unit keeps it out of `systemctl show`.
 EnvironmentFile={{ openbao_env_file }}
 {% if openbao_enable_mlock %}
 # CAP_IPC_LOCK lets OpenBao mlock() its memory (disable_mlock=false in config)

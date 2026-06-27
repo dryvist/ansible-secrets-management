@@ -30,22 +30,23 @@
     create_home: false
     state: present
 
-# --- Phase 3: directories ----------------------------------------------------
-- name: Create OpenBao config directory
-  ansible.builtin.file:
-    path: "{{ openbao_config_dir }}"
-    state: directory
-    owner: root
-    group: "{{ openbao_group }}"
-    mode: "0750"
+# --- Phase 3: detect an existing install ------------------------------------
+# The upstream .deb ships its own /etc/openbao (with package-owned perms) plus a
+# default unit/user. So we (a) gate the download/copy/install/remove on whether
+# the target version is already present, and (b) assert our own directories +
+# perms AFTER install. Together that keeps the role idempotent — no re-copy of
+# the .deb and no perms tug-of-war with the package on re-runs.
+- name: Check the installed OpenBao version
+  ansible.builtin.command: bao version
+  register: openbao_installed_version
+  changed_when: false
+  failed_when: false
 
-- name: Create OpenBao data directory (0700, owned by openbao)
-  ansible.builtin.file:
-    path: "{{ openbao_data_dir }}"
-    state: directory
-    owner: "{{ openbao_user }}"
-    group: "{{ openbao_group }}"
-    mode: "0700"
+- name: Record whether the target OpenBao version is already installed
+  ansible.builtin.set_fact:
+    openbao_already_installed: >-
+      {{ openbao_installed_version.rc == 0
+         and openbao_version in (openbao_installed_version.stdout | default('')) }}
 
 # --- Phase 4: download + verify the .deb on the controller -------------------
 # Mirrors the minio role: stage on the controller (unrestricted egress), verify
@@ -107,20 +108,44 @@
     owner: root
     group: root
     mode: "0644"
+  when: not openbao_already_installed
 
 # --- Phase 5: install the package -------------------------------------------
 # Installing the upstream .deb pulls in the `bao` binary. The package also ships
 # its own openbao user/unit; we override the config + unit below so the role
 # stays the single source of truth (User/Group already created above match).
+# Skipped when the target version is already present (idempotent re-runs).
 - name: Install OpenBao package
   ansible.builtin.apt:
     deb: "/tmp/{{ openbao_deb_filename }}"
     state: present
+  when: not openbao_already_installed
 
 - name: Remove the staged .deb from the target
   ansible.builtin.file:
     path: "/tmp/{{ openbao_deb_filename }}"
     state: absent
+  when: not openbao_already_installed
+
+# --- Phase 5b: directories (AFTER install so our perms are the final state) --
+# Created here, not before install, because the .deb ships /etc/openbao with
+# package-owned perms; asserting our perms afterwards means re-runs (which skip
+# install) find the directory already correct → no change.
+- name: Create OpenBao config directory
+  ansible.builtin.file:
+    path: "{{ openbao_config_dir }}"
+    state: directory
+    owner: root
+    group: "{{ openbao_group }}"
+    mode: "0750"
+
+- name: Create OpenBao data directory (0700, owned by openbao)
+  ansible.builtin.file:
+    path: "{{ openbao_data_dir }}"
+    state: directory
+    owner: "{{ openbao_user }}"
+    group: "{{ openbao_group }}"
+    mode: "0700"
 
 # --- Phase 6: configuration --------------------------------------------------
 - name: Render OpenBao server config
@@ -132,7 +157,7 @@
     mode: "0640"
   notify: Restart openbao
 
-- name: Render OpenBao AWS unseal EnvironmentFile
+- name: Render OpenBao static-seal EnvironmentFile
   ansible.builtin.template:
     src: openbao.env.j2
     dest: "{{ openbao_env_file }}"
@@ -168,9 +193,10 @@
 
 # --- Phase 8: wait for the API ----------------------------------------------
 # A sealed-but-up OpenBao still answers /v1/sys/health with 200/429/501/503.
-# With KMS auto-unseal it should reach 200 (initialized+unsealed) on re-runs,
-# or 501 (not initialized) on the very first run. Any of those means the
-# listener is accepting connections, which is all we need before init.yml.
+# With static-key auto-unseal a joined node reaches 200 (initialized+unsealed)
+# or 429 (standby); a fresh node returns 501 (not initialized). Any of those
+# means the listener is accepting connections, which is all we need before
+# init.yml runs (on the bootstrap host only).
 - name: Wait for the OpenBao listener to accept connections
   ansible.builtin.uri:
     url: "{{ openbao_api_addr }}/v1/sys/health"
@@ -183,7 +209,12 @@
   changed_when: false
   when: ansible_virtualization_type | default('') != 'docker'
 
-# --- Phase 9: bootstrap (idempotent) ----------------------------------------
-- name: Bootstrap OpenBao (init, KV, policy, AppRole)
+# --- Phase 9: bootstrap (idempotent, bootstrap host only) -------------------
+# Only the bootstrap host runs init/provisioning. The other Raft peers join the
+# leader automatically (retry_join) and self-unseal via the static seal, so they
+# need nothing here.
+- name: Bootstrap OpenBao (init, KV, policies, AppRoles)
   ansible.builtin.include_tasks: init.yml
-  when: ansible_virtualization_type | default('') != 'docker'
+  when:
+    - ansible_virtualization_type | default('') != 'docker'
+    - inventory_hostname == openbao_bootstrap_host

@@ -2,9 +2,10 @@
 # OpenBao single-binary secrets manager — role defaults.
 #
 # OpenBao is a native Go binary on Debian; no Docker. This role installs the
-# upstream .deb (checksum-verified), renders a Raft + AWS-KMS-auto-unseal
-# config, runs it under systemd, and (in init.yml) bootstraps the cluster and
-# the Terraform AppRole.
+# upstream .deb (checksum-verified), renders a 3-node Raft HA + on-prem
+# static-key auto-unseal config, runs it under systemd, and (in init.yml)
+# bootstraps the cluster, the secret hierarchy, the RBAC policies, and the
+# AppRoles (terraform / ansible / ai-readonly / ai-elevated / snapshot).
 
 # --- Version ----------------------------------------------------------------
 # Pinned to a known-good upstream release. Version bumps follow the repo's
@@ -35,7 +36,7 @@ openbao_group: openbao
 openbao_data_dir: /opt/openbao/data
 openbao_config_dir: /etc/openbao
 openbao_config_file: "{{ openbao_config_dir }}/openbao.hcl"
-# EnvironmentFile holding the AWS unseal creds for the systemd unit (0600).
+# EnvironmentFile holding the static seal key for the systemd unit (0600).
 openbao_env_file: "{{ openbao_config_dir }}/openbao.env"
 # CLI talks to the local node over loopback by default for bootstrap tasks.
 openbao_install_dir: /usr/bin
@@ -59,34 +60,112 @@ openbao_bind_address: >-
 openbao_api_addr: "http://{{ openbao_bind_address }}:{{ openbao_api_port }}"
 openbao_cluster_addr: "https://{{ openbao_bind_address }}:{{ openbao_cluster_port }}"
 
-# --- Seal: AWS KMS auto-unseal ----------------------------------------------
-# The KMS key + scoped IAM user are provisioned out-of-band (aws-infra repo).
-# The key id and region identify the CMK; the AWS creds below are injected at
-# runtime from Doppler/SOPS (NOT hardcoded, NOT committed) and land in the
-# 0600 EnvironmentFile so only the openbao process and root can read them.
-openbao_kms_key_id: "{{ lookup('env', 'OPENBAO_KMS_KEY_ID') }}"
-openbao_kms_region: "{{ lookup('env', 'OPENBAO_KMS_REGION') | default('us-east-1', true) }}"
-# Dedicated unseal IAM creds — scoped to kms:Encrypt/Decrypt/DescribeKey on the
-# single CMK above. Sourced from Doppler or SOPS at runtime.
-openbao_unseal_aws_access_key_id: "{{ lookup('env', 'OPENBAO_UNSEAL_AWS_ACCESS_KEY_ID') }}"
-openbao_unseal_aws_secret_access_key: "{{ lookup('env', 'OPENBAO_UNSEAL_AWS_SECRET_ACCESS_KEY') }}"
+# --- Raft HA: peers + bootstrap election ------------------------------------
+# Every node carries a retry_join for each peer (built from the openbao_group
+# hostvars' container_ip), so a node that is not yet part of a cluster finds the
+# leader and joins automatically. Self in the list is harmless (ignored).
+openbao_raft_peer_ips: >-
+  {{ groups['openbao_group'] | default([])
+     | map('extract', hostvars)
+     | map(attribute='container_ip', default='')
+     | reject('equalto', '') | list }}
+# Exactly one node runs `bao operator init` — the bootstrap host (the
+# alphabetically-first group member, deterministic across runs). Every other
+# node only ever joins + auto-unseals; it never initializes. KV/policy/AppRole
+# provisioning is likewise gated to this host.
+openbao_bootstrap_host: >-
+  {{ (groups['openbao_group'] | default([inventory_hostname]) | sort | first) }}
 
-# --- KV / policy / AppRole ---------------------------------------------------
+# --- Seal: on-prem static-key auto-unseal (no cloud) ------------------------
+# A single 32-byte AES-256 key (base64), shared by all nodes, unwraps the root
+# key on every start so each node self-unseals without operator key entry and
+# without any cloud KMS. The key is injected at runtime from Doppler tier-0
+# (NOT hardcoded, NOT committed) and lands in the 0600 EnvironmentFile.
+# Generate once:  openssl rand -base64 32
+openbao_seal_key_id: "{{ lookup('env', 'OPENBAO_STATIC_SEAL_KEY_ID') | default('static-1', true) }}"
+openbao_static_seal_key: "{{ lookup('env', 'OPENBAO_STATIC_SEAL_KEY') }}"
+# Rotation (n-1 → n): set the previous key + id during a seal-rewrap, then clear.
+openbao_seal_previous_key_id: "{{ lookup('env', 'OPENBAO_STATIC_SEAL_PREVIOUS_KEY_ID') | default('', true) }}"
+openbao_static_seal_previous_key: "{{ lookup('env', 'OPENBAO_STATIC_SEAL_PREVIOUS_KEY') | default('', true) }}"
+
+# --- KV hierarchy / RBAC policies + AppRoles ---------------------------------
+# Secret hierarchy (see terraform-proxmox docs/SECRETS_HIERARCHY.md):
+#   secret/infra/*     IaC kernel (proxmox/aws/network) — terraform writes
+#   secret/platform/*  shared platform services
+#   secret/apps/*      application credentials
+#   secret/ai/*        LLM stack + AI-agent creds
+#   secret/ci/*        CI/CD tokens
 openbao_kv_mount: secret
-# Path prefix that the terraform policy is allowed to read/write under the
-# KV v2 mount. Resolves to secret/data/homelab/* + secret/metadata/homelab/*.
+# Legacy demo subtree the terraform-proxmox vault-secrets proof writes to; kept
+# writable by the terraform policy so that read/write proof keeps working.
 openbao_homelab_path: homelab
+# Policy + AppRole names. Each policy template grants least-privilege access per
+# the hierarchy; each AppRole binds exactly one policy.
 openbao_terraform_policy_name: terraform
 openbao_terraform_approle_name: terraform
+openbao_ansible_policy_name: ansible
+openbao_ansible_approle_name: ansible
+openbao_ai_readonly_policy_name: ai-readonly
+openbao_ai_readonly_approle_name: ai-readonly
+openbao_ai_elevated_policy_name: ai-elevated
+openbao_ai_elevated_approle_name: ai-elevated
+openbao_snapshot_policy_name: snapshot
+openbao_snapshot_approle_name: snapshot
+# The set of non-root AppRoles to provision, each {name, policy}. Driving the
+# bootstrap from this list keeps init.yml DRY as groups are added.
+openbao_approles:
+  - name: "{{ openbao_terraform_approle_name }}"
+    policy: "{{ openbao_terraform_policy_name }}"
+  - name: "{{ openbao_ansible_approle_name }}"
+    policy: "{{ openbao_ansible_policy_name }}"
+  - name: "{{ openbao_ai_readonly_approle_name }}"
+    policy: "{{ openbao_ai_readonly_policy_name }}"
+  - name: "{{ openbao_ai_elevated_approle_name }}"
+    policy: "{{ openbao_ai_elevated_policy_name }}"
+  - name: "{{ openbao_snapshot_approle_name }}"
+    policy: "{{ openbao_snapshot_policy_name }}"
+# Policy templates rendered + written on the bootstrap host. Each entry maps a
+# policy name to its template; add a row to grow the RBAC surface.
+openbao_policies:
+  - name: "{{ openbao_terraform_policy_name }}"
+    template: terraform-policy.hcl.j2
+  - name: "{{ openbao_ansible_policy_name }}"
+    template: ansible-policy.hcl.j2
+  - name: "{{ openbao_ai_readonly_policy_name }}"
+    template: ai-readonly-policy.hcl.j2
+  - name: "{{ openbao_ai_elevated_policy_name }}"
+    template: ai-elevated-policy.hcl.j2
+  - name: "{{ openbao_snapshot_policy_name }}"
+    template: snapshot-policy.hcl.j2
+
+# --- AppRole token TTLs -------------------------------------------------------
+# Short-lived tokens; secret_id_ttl=0 means the secret_id itself does not expire
+# (rotate manually). Tune per-identity if needed.
+openbao_approle_token_ttl: 1h
+openbao_approle_token_max_ttl: 4h
+
+# --- Raft snapshots (off-box durability) ------------------------------------
+# Automated logical raft snapshots shipped off-box to the on-prem s3 object
+# store. The snapshot IDENTITY (least-privilege policy + AppRole scoped to
+# sys/storage/raft/snapshot) is provisioned here so the shipping daemon
+# (openbao/openbao-snapshot-agent) can authenticate; the daemon itself is wired
+# in a follow-up (no upstream release binary yet — container/source install).
+# "Never lost" already holds without it: 3-node Raft (3 live copies) + recovery
+# shares (paper) + the seal key (Doppler tier-0) + the data-dir on a PBS/ZFS-
+# backed dataset.
+openbao_snapshot_enabled: true
+openbao_snapshot_s3_bucket: openbao-snapshots
 
 # --- Break-glass / bootstrap output (controller-side, never committed) -------
-# init.yml writes recovery shares + root token (and later the AppRole creds) to
+# init.yml writes recovery shares + root token, and each AppRole's creds, to
 # 0600 files UNDER playbook_dir ON THE CONTROLLER, then prints a LOUD warning to
-# transcribe to paper and delete. These paths are gitignored (see role README).
+# transcribe to paper / load into the right tier-0 store and delete. These paths
+# are gitignored (.openbao-recovery-*.json / .openbao-approle-*.json).
 openbao_recovery_shares: 5
 openbao_recovery_threshold: 3
 openbao_recovery_file: "{{ playbook_dir }}/.openbao-recovery-{{ inventory_hostname }}.json"
-openbao_approle_file: "{{ playbook_dir }}/.openbao-approle-{{ inventory_hostname }}.json"
+# One file per AppRole: .openbao-approle-<role>-<host>.json
+openbao_approle_file_prefix: "{{ playbook_dir }}/.openbao-approle"
 
 # --- systemd hardening -------------------------------------------------------
 # OpenBao mlock()s memory to keep secrets out of swap; that needs CAP_IPC_LOCK.

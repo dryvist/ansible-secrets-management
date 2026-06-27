@@ -67,12 +67,18 @@
       ansible.builtin.assert:
         that:
           - "'storage \"raft\"' in (bao_cfg_content.content | b64decode)"
-          - "'seal \"awskms\"' in (bao_cfg_content.content | b64decode)"
+          # On-prem static-key seal — never the cloud awskms seal.
+          - "'seal \"static\"' in (bao_cfg_content.content | b64decode)"
+          - "'awskms' not in (bao_cfg_content.content | b64decode)"
+          # 3-node Raft auto-join: a retry_join block is rendered per peer.
+          - "'retry_join' in (bao_cfg_content.content | b64decode)"
           - "'listener \"tcp\"' in (bao_cfg_content.content | b64decode)"
-          # Listener must bind the VLAN IP, never 0.0.0.0.
-          - "'0.0.0.0' not in (bao_cfg_content.content | b64decode)"
+          # Listener must bind the VLAN IP, never all-interfaces. Match the
+          # address:port form ('0.0.0.0:') so the template's explanatory comment
+          # (which mentions 0.0.0.0) does not false-trip this assertion.
+          - "'0.0.0.0:' not in (bao_cfg_content.content | b64decode)"
           - "'192.0.2.210:8200' in (bao_cfg_content.content | b64decode)"
-        fail_msg: "openbao.hcl missing expected stanzas or bound to 0.0.0.0"
+        fail_msg: "openbao.hcl missing expected stanzas, has awskms, or bound to 0.0.0.0"
 
     - name: Check the env file exists with 0600
       ansible.builtin.stat:
@@ -85,6 +91,19 @@
           - bao_env.stat.exists
           - bao_env.stat.mode == '0600'
         fail_msg: "openbao.env missing or not 0600 ({{ bao_env.stat.mode | default('absent') }})"
+
+    - name: Read the rendered env file
+      ansible.builtin.slurp:
+        src: "{{ openbao_env_file }}"
+      register: bao_env_content
+
+    - name: Assert the env file carries the static seal key, not AWS creds
+      ansible.builtin.assert:
+        that:
+          - "'OPENBAO_STATIC_SEAL_KEY=' in (bao_env_content.content | b64decode)"
+          - "'AWS_ACCESS_KEY_ID' not in (bao_env_content.content | b64decode)"
+          - "'AWS_SECRET_ACCESS_KEY' not in (bao_env_content.content | b64decode)"
+        fail_msg: "openbao.env should carry OPENBAO_STATIC_SEAL_KEY and no AWS creds"
 
     - name: Check the systemd unit was installed
       ansible.builtin.stat:

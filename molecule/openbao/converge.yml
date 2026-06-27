@@ -10,16 +10,13 @@
   gather_facts: true
 
   vars:
-    # Normally derived from container_ip (Terraform inventory). Supply a stub so
-    # the listener/api_addr render in the container test.
-    container_ip: "192.0.2.210"
-    # KMS + unseal creds are injected from Doppler/SOPS at runtime; stub them so
+    # container_ip is supplied as a HOSTVAR via molecule.yml (mirrors production
+    # load_tofu.yml) so the role can build the Raft peer list from hostvars.
+    # The static seal key is injected from Doppler tier-0 at runtime; stub it so
     # the config + env templates render. The service never starts under Docker,
-    # so these are inert placeholders.
-    openbao_kms_key_id: "arn:aws:kms:us-east-1:000000000000:key/00000000-0000-0000-0000-000000000000"
-    openbao_kms_region: "us-east-1"
-    openbao_unseal_aws_access_key_id: "AKIAEXAMPLEEXAMPLE00"
-    openbao_unseal_aws_secret_access_key: "examplesecretexamplesecretexamplesecret0"
+    # so this is an inert placeholder (not a real key).
+    openbao_seal_key_id: "static-test-1"
+    openbao_static_seal_key: "ZXhhbXBsZS1zdGF0aWMtc2VhbC1rZXktMzJieXRlcy0wMA=="
 
   tasks:
     - name: Include openbao role

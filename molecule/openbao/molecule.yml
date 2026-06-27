@@ -29,6 +29,13 @@ platforms:
 
 provisioner:
   name: ansible
+  inventory:
+    # container_ip is a HOSTVAR in production (load_tofu.yml sets it per host);
+    # the role reads it via hostvars to build the Raft peer list, so it must be
+    # a hostvar here too (a play var would not be visible through hostvars).
+    host_vars:
+      openbao-test:
+        container_ip: "192.0.2.210"
   config_options:
     defaults:
       interpreter_python: auto_silent

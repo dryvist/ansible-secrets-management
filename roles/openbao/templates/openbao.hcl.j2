@@ -1,22 +1,36 @@
 {{ ansible_managed | comment }}
-# OpenBao server configuration — Raft storage + AWS-KMS auto-unseal.
+# OpenBao server configuration — 3-node Raft HA + on-prem static-key auto-unseal.
 # Rendered by the openbao Ansible role. Do not edit manually.
 
-# Integrated Raft storage. This node is node 1 of a planned 3-node cluster;
-# additional nodes join via `bao operator raft join` against this api_addr.
+# Integrated Raft storage. This is one peer of a 3-node HA cluster (quorum 2).
+# Every node carries a retry_join for each peer, so a freshly-started node finds
+# the leader and joins automatically; with the static seal it then self-unseals.
+# Exactly one node runs `bao operator init` (the bootstrap host) — the others
+# never initialize, they only join.
 storage "raft" {
   path    = "{{ openbao_data_dir }}"
   node_id = "{{ openbao_node_id }}"
+{% for peer_ip in openbao_raft_peer_ips %}
+  retry_join {
+    leader_api_addr = "http://{{ peer_ip }}:{{ openbao_api_port }}"
+  }
+{% endfor %}
 }
 
-# Auto-unseal via AWS KMS. With awskms seal, `bao operator init` produces
-# RECOVERY keys (not classic unseal keys); the KMS CMK unwraps the root key on
-# every start, so the process self-unseals without operator key entry.
-# Region + key_id identify the CMK; the AWS creds are delivered to the process
-# via the systemd EnvironmentFile ({{ openbao_env_file }}), never inlined here.
-seal "awskms" {
-  region     = "{{ openbao_kms_region }}"
-  kms_key_id = "{{ openbao_kms_key_id }}"
+# On-prem static-key auto-unseal (no cloud). The 32-byte AES-256 key is provided
+# via the env:// reference to OPENBAO_STATIC_SEAL_KEY, delivered to the process
+# through the systemd EnvironmentFile ({{ openbao_env_file }}, 0600) — never
+# inlined here. As with any auto-unseal seal, `bao operator init` produces
+# RECOVERY shares (not classic unseal keys); the static key unwraps the root key
+# on every start, so each node self-unseals without operator key entry. Rotation
+# is n-1→n via current_key/previous_key (see openbao_seal_previous_key_id).
+seal "static" {
+  current_key_id = "{{ openbao_seal_key_id }}"
+  current_key    = "env://OPENBAO_STATIC_SEAL_KEY"
+{% if openbao_seal_previous_key_id | default('') | length > 0 %}
+  previous_key_id = "{{ openbao_seal_previous_key_id }}"
+  previous_key    = "env://OPENBAO_STATIC_SEAL_PREVIOUS_KEY"
+{% endif %}
 }
 
 # Listener bound to THIS node's VLAN IP, never 0.0.0.0.
