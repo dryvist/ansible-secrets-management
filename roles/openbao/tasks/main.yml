@@ -4,14 +4,23 @@
 # to tasks/init.yml, included after the service is up.
 
 # --- Phase 1: prerequisites --------------------------------------------------
-- name: Install OpenBao prerequisites
+# These containers are firewalled to internal-only egress (policy_out: DROP +
+# the `outbound-internal` security group) — a secrets service has no business
+# reaching the public internet, and it never does at runtime. So the role must
+# NOT depend on WAN apt: every package it needs is either in the Debian base
+# template (ca-certificates) or staged from the controller (the OpenBao .deb,
+# below). jq was listed but is unused anywhere in the role — dropped rather than
+# carried as a phantom WAN dependency. `update_cache: false` is deliberate: an
+# apt cache refresh can never succeed behind the internal-only firewall, and
+# forcing one is what wedged bring-up on any node whose pve-firewall is actually
+# running. If a future prereq isn't in the base template, stage it from the
+# controller like the .deb — do not reintroduce a mirror fetch here.
+- name: Ensure OpenBao base prerequisites are present (no WAN; base-template pkgs)
   ansible.builtin.apt:
     name:
       - ca-certificates
-      - jq
     state: present
-    update_cache: true
-    cache_valid_time: 3600
+    update_cache: false
 
 # --- Phase 2: system user / group -------------------------------------------
 - name: Create openbao system group

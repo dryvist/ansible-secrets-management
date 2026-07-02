@@ -15,12 +15,9 @@ Group={{ openbao_group }}
 # Static-key auto-unseal material (0600, root:openbao). Keeping it in an
 # EnvironmentFile rather than the unit keeps it out of `systemctl show`.
 EnvironmentFile={{ openbao_env_file }}
-{% if openbao_enable_mlock %}
-# CAP_IPC_LOCK lets OpenBao mlock() its memory (disable_mlock=false in config)
-# without running as root.
-AmbientCapabilities=CAP_IPC_LOCK
-CapabilityBoundingSet=CAP_IPC_LOCK CAP_SYSLOG
-{% endif %}
+# OpenBao 2.x dropped mlock, so no CAP_IPC_LOCK is needed; swap hygiene comes
+# from the LXC's memory_swap = 0 in deployment.json.
+CapabilityBoundingSet=CAP_SYSLOG
 ExecStart={{ openbao_install_dir }}/bao server -config={{ openbao_config_file }}
 ExecReload=/bin/kill --signal HUP $MAINPID
 KillSignal=SIGINT

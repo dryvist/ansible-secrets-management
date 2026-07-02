@@ -168,10 +168,9 @@ openbao_recovery_file: "{{ playbook_dir }}/.openbao-recovery-{{ inventory_hostna
 openbao_approle_file_prefix: "{{ playbook_dir }}/.openbao-approle"
 
 # --- systemd hardening -------------------------------------------------------
-# OpenBao mlock()s memory to keep secrets out of swap; that needs CAP_IPC_LOCK.
-# Set to false ONLY if the platform cannot grant the capability (then add
-# disable_mlock=true to the config) — see templates.
-openbao_enable_mlock: true
+# NOTE: OpenBao 2.x dropped mlock support (a `disable_mlock` line is a fatal
+# config error since 2.5), so there is no mlock toggle here. Swap hygiene comes
+# from the guest itself: the OpenBao LXCs set memory_swap = 0 in deployment.json.
 openbao_service_state: started
 openbao_service_enabled: true
 

@@ -47,14 +47,10 @@ listener "tcp" {
 api_addr     = "{{ openbao_api_addr }}"
 cluster_addr = "{{ openbao_cluster_addr }}"
 
-{% if openbao_enable_mlock %}
-# mlock() keeps the in-memory root/encryption keys out of swap. The systemd
-# unit grants CAP_IPC_LOCK so this succeeds without running as root.
-disable_mlock = false
-{% else %}
-# mlock disabled: the platform could not grant CAP_IPC_LOCK. Secrets may touch
-# swap — ensure swap is disabled or encrypted on this host.
-disable_mlock = true
-{% endif %}
+# OpenBao 2.x dropped mlock support entirely — any `disable_mlock` line is a
+# fatal config error since 2.5 (the server refuses to start). Swap hygiene is
+# the host's job instead: the OpenBao LXCs carry memory_swap = 0 in
+# deployment.json, so secrets cannot page to disk.
+# https://openbao.org/docs/install/#post-installation-hardening
 
 ui = {{ openbao_enable_ui | ternary('true', 'false') }}

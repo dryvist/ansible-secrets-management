@@ -120,19 +120,20 @@
     - (openbao_kv_mount ~ '/') not in (openbao_mounts_raw.stdout | from_json).keys()
 
 # --- RBAC policies (write-if-missing) ---------------------------------------
-- name: Render the RBAC policies to the controller
+# Rendered on the TARGET: `bao policy write` below executes there and reads
+# the file from its local filesystem (a controller-side render is unreachable
+# from the target). Policy HCL is non-secret — it comes from the committed
+# templates. Rendered into openbao_config_dir (/etc/openbao, 0750 root:openbao)
+# rather than world-writable /tmp, so the write is not exposed to symlink races
+# or other local users on the host.
+- name: Render the RBAC policies to the target
   ansible.builtin.template:
     src: "{{ item.template }}"
-    dest: "/tmp/openbao-policy-{{ item.name }}-{{ inventory_hostname }}.hcl"
+    dest: "{{ openbao_config_dir }}/.policy-{{ item.name }}.hcl"
     mode: "0600"
   loop: "{{ openbao_policies }}"
   loop_control:
     label: "{{ item.name }}"
-  delegate_to: localhost
-  connection: local
-  become: false
-  vars:
-    ansible_become: false
   changed_when: false
   when: openbao_bootstrap_token is defined
 
@@ -151,7 +152,7 @@
   ansible.builtin.command:
     cmd: >-
       bao policy write {{ item.name }}
-      /tmp/openbao-policy-{{ item.name }}-{{ inventory_hostname }}.hcl
+      {{ openbao_config_dir }}/.policy-{{ item.name }}.hcl
   environment:
     BAO_ADDR: "{{ openbao_api_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
@@ -164,18 +165,13 @@
     - openbao_bootstrap_token is defined
     - item.name not in (openbao_policies_raw.stdout | from_json)
 
-- name: Remove the rendered policies from the controller
+- name: Remove the rendered policies from the target
   ansible.builtin.file:
-    path: "/tmp/openbao-policy-{{ item.name }}-{{ inventory_hostname }}.hcl"
+    path: "{{ openbao_config_dir }}/.policy-{{ item.name }}.hcl"
     state: absent
   loop: "{{ openbao_policies }}"
   loop_control:
     label: "{{ item.name }}"
-  delegate_to: localhost
-  connection: local
-  become: false
-  vars:
-    ansible_become: false
   changed_when: false
   when: openbao_bootstrap_token is defined
 
