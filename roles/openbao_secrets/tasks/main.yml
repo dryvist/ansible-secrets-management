@@ -1,0 +1,69 @@
+---
+# Reads the AI KV subtree from OpenBao via the ai-readonly AppRole and merges it
+# into the `bao_ai_secrets` fact. Runs ONCE on the controller (delegate_to
+# localhost, run_once) and publishes the fact to every host in the play. SKIPS
+# CLEANLY when VAULT_ADDR is unset, so pre-migration converges keep working on
+# env/SOPS secrets. All vault interactions are no_log.
+
+- name: Decide whether the OpenBao fetch is enabled
+  ansible.builtin.set_fact:
+    openbao_secrets_active: "{{ openbao_secrets_vault_addr | length > 0 }}"
+
+- name: Report that OpenBao is not configured (env/SOPS fallback in effect)
+  ansible.builtin.debug:
+    msg: >-
+      VAULT_ADDR is unset — openbao_secrets is skipping; AI roles fall back to
+      env/SOPS secrets. Set VAULT_ADDR + AI_VAULT_ROLE_ID + AI_VAULT_SECRET_ID
+      (ai-readonly AppRole) to source secrets from OpenBao.
+  run_once: true
+  when: not openbao_secrets_active
+
+- name: Fetch the AI secrets from OpenBao (controller-side, once)
+  when: openbao_secrets_active
+  delegate_to: localhost
+  run_once: true
+  no_log: true
+  block:
+    - name: Assert the ai-readonly AppRole credentials are present
+      ansible.builtin.assert:
+        that:
+          - openbao_secrets_role_id | length > 0
+          - openbao_secrets_secret_id | length > 0
+        fail_msg: >-
+          VAULT_ADDR is set but AI_VAULT_ROLE_ID / AI_VAULT_SECRET_ID are not.
+          Provide the ai-readonly AppRole role_id + secret_id.
+
+    - name: Log in to OpenBao with the ai-readonly AppRole
+      community.hashi_vault.vault_login:
+        url: "{{ openbao_secrets_vault_addr }}"
+        auth_method: approle
+        role_id: "{{ openbao_secrets_role_id }}"
+        secret_id: "{{ openbao_secrets_secret_id }}"
+        validate_certs: "{{ openbao_secrets_validate_certs }}"
+      register: openbao_secrets_login
+
+    - name: Read each AI KV path (tolerate not-yet-seeded paths)
+      community.hashi_vault.vault_kv2_get:
+        url: "{{ openbao_secrets_vault_addr }}"
+        auth_method: token
+        token: "{{ openbao_secrets_login.login.auth.client_token }}"
+        engine_mount_point: "{{ openbao_secrets_kv_mount }}"
+        path: "{{ item }}"
+        validate_certs: "{{ openbao_secrets_validate_certs }}"
+      loop: "{{ openbao_secrets_paths }}"
+      register: openbao_secrets_reads
+      failed_when: false
+
+    - name: Merge the readable KV paths into one dict
+      ansible.builtin.set_fact:
+        openbao_secrets_merged: "{{ openbao_secrets_merged | default({}) | combine(item.secret) }}"
+      loop: "{{ openbao_secrets_reads.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+      when: item.secret is defined and item.secret is mapping
+
+# The shared, un-prefixed `bao_ai_secrets` fact is published at the PLAYBOOK layer
+# (playbooks/site.yml), not here — mirrors how `tofu_data` is set in
+# inventory/load_tofu.yml, and keeps this role's own facts role-prefixed. This role
+# leaves the merged result on the delegated controller as `openbao_secrets_merged`
+# (hostvars['localhost']); the site.yml play copies it into `bao_ai_secrets` per host.

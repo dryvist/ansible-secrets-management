@@ -1,0 +1,32 @@
+---
+# openbao_secrets role defaults — a controller-side pre-play that logs in to
+# OpenBao with the ai-readonly AppRole and reads the AI KV subtree into a single
+# `bao_ai_secrets` fact. AI roles then read bao-first with an env fallback:
+#   X: "{{ bao_ai_secrets.X | default(lookup('env','X'), true) }}"
+#
+# KV layout is aligned to what roles/openbao actually bootstraps: mount `secret`
+# (KV v2), and the ai-readonly policy grants read on `secret/data/ai/*` (a
+# wildcard — every path under ai/ is covered; nothing is pre-seeded, so a
+# not-yet-written path simply yields no keys and the env fallback wins).
+#
+# SKIPS CLEANLY when VAULT_ADDR is unset, so pre-migration converges keep working.
+
+# AppRole login inputs (env-sourced; see docs — the ai-readonly role_id/secret_id).
+openbao_secrets_vault_addr: "{{ lookup('env', 'VAULT_ADDR') | default('', true) }}"
+openbao_secrets_role_id: "{{ lookup('env', 'AI_VAULT_ROLE_ID') | default('', true) }}"
+openbao_secrets_secret_id: "{{ lookup('env', 'AI_VAULT_SECRET_ID') | default('', true) }}"
+
+# TLS terminates at the OpenBao Traefik ingress (a real cert), so verify by
+# default; override only for a direct-to-node http bootstrap endpoint.
+openbao_secrets_validate_certs: true
+
+# KV v2 mount + the AI paths to read (mount-relative; the ai-readonly policy's
+# `secret/data/ai/*` wildcard covers all of these). Reads tolerate a not-yet-seeded
+# path — only the paths that exist contribute keys to bao_ai_secrets.
+openbao_secrets_kv_mount: secret
+openbao_secrets_paths:
+  - ai/router      # LLM_ROUTER_MASTER_KEY (+ LANGFUSE_* project keys)
+  - ai/llm-large   # LLM_LARGE_BEARER_TOKEN
+  - ai/qdrant      # QDRANT_API_KEY
+  - ai/open-webui  # OPEN_WEBUI_SECRET_KEY, OPEN_WEBUI_OPENAI_API_KEY
+  - ai/hermes      # HERMES_AGENT_MODEL_API_KEY
