@@ -1,32 +1,62 @@
 ---
 # openbao_secrets role defaults — a controller-side pre-play that logs in to
-# OpenBao with the ai-readonly AppRole and reads the AI KV subtree into a single
-# `bao_ai_secrets` fact. AI roles then read bao-first with an env fallback:
-#   X: "{{ bao_ai_secrets.X | default(lookup('env','X'), true) }}"
+# OpenBao, once per resource-domain identity, and reads that domain's KV
+# subtree into a per-domain fact (`bao_<domain>_secrets`, hyphens become
+# underscores — e.g. `local-cloud` -> `bao_local_cloud_secrets`). Consumer
+# roles then read bao-first with an env fallback:
+#   X: "{{ bao_<domain>_secrets.X | default(lookup('env','X'), true) }}"
 #
-# KV layout is aligned to what roles/openbao actually bootstraps: mount `secret`
-# (KV v2), and the ai-readonly policy grants read on `secret/data/ai/*` (a
-# wildcard — every path under ai/ is covered; nothing is pre-seeded, so a
-# not-yet-written path simply yields no keys and the env fallback wins).
+# Each domain authenticates with its OWN least-privilege AppRole (see
+# terraform-proxmox docs/SECRETS_HIERARCHY.md) rather than one broad shared
+# identity — a domain's credentials only ever unlock that domain's KV subtree.
 #
-# SKIPS CLEANLY when VAULT_ADDR is unset, so pre-migration converges keep working.
+# SKIPS CLEANLY at two levels: the whole role no-ops when BAO_ADDR is unset
+# (no OpenBao configured at all), and each domain independently no-ops when
+# its own role_id/secret_id envs are unset (lets an operator migrate one
+# domain at a time onto OpenBao while the rest still fall back to env/SOPS).
 
-# AppRole login inputs (env-sourced; see docs — the ai-readonly role_id/secret_id).
-openbao_secrets_vault_addr: "{{ lookup('env', 'VAULT_ADDR') | default('', true) }}"
-openbao_secrets_role_id: "{{ lookup('env', 'AI_VAULT_ROLE_ID') | default('', true) }}"
-openbao_secrets_secret_id: "{{ lookup('env', 'AI_VAULT_SECRET_ID') | default('', true) }}"
-
+# Shared connection inputs.
+openbao_secrets_bao_addr: "{{ lookup('env', 'BAO_ADDR') | default('', true) }}"
 # TLS terminates at the OpenBao Traefik ingress (a real cert), so verify by
 # default; override only for a direct-to-node http bootstrap endpoint.
 openbao_secrets_validate_certs: true
-
-# KV v2 mount + the AI paths to read (mount-relative; the ai-readonly policy's
-# `secret/data/ai/*` wildcard covers all of these). Reads tolerate a not-yet-seeded
-# path — only the paths that exist contribute keys to bao_ai_secrets.
 openbao_secrets_kv_mount: secret
-openbao_secrets_paths:
-  - ai/router      # LLM_ROUTER_MASTER_KEY (+ LANGFUSE_* project keys)
-  - ai/llm-large   # LLM_LARGE_BEARER_TOKEN
-  - ai/qdrant      # QDRANT_API_KEY
-  - ai/open-webui  # OPEN_WEBUI_SECRET_KEY, OPEN_WEBUI_OPENAI_API_KEY
-  - ai/hermes      # HERMES_AGENT_MODEL_API_KEY
+
+# One entry per resource-domain identity this Ansible converge fetches for.
+# Each domain's role_id/secret_id come from its own env vars — sourced from
+# the operator's keychain-backed resolver on macOS, or a root-only systemd
+# credential on Linux (never a shared/broad credential). Add a domain here as
+# new consumer roles are wired to read bao-first; each needs a matching
+# AppRole + policy in roles/openbao's `openbao_approles`/`openbao_policies`.
+openbao_secrets_domains:
+  - name: observability
+    role_id_env: OBSERVABILITY_VAULT_ROLE_ID
+    secret_id_env: OBSERVABILITY_VAULT_SECRET_ID
+    paths:
+      - platform/splunk
+      - platform/cribl
+  - name: local-cloud
+    role_id_env: LOCAL_CLOUD_VAULT_ROLE_ID
+    secret_id_env: LOCAL_CLOUD_VAULT_SECRET_ID
+    paths:
+      - platform/object-storage
+      - platform/compute
+  - name: monitoring
+    role_id_env: MONITORING_VAULT_ROLE_ID
+    secret_id_env: MONITORING_VAULT_SECRET_ID
+    paths:
+      - apps/monitoring
+  - name: media
+    role_id_env: MEDIA_VAULT_ROLE_ID
+    secret_id_env: MEDIA_VAULT_SECRET_ID
+    paths:
+      - apps/media
+  - name: local-llm
+    role_id_env: LOCAL_LLM_VAULT_ROLE_ID
+    secret_id_env: LOCAL_LLM_VAULT_SECRET_ID
+    paths:
+      - ai/router      # LLM_ROUTER_MASTER_KEY (+ LANGFUSE_* project keys)
+      - ai/llm-large   # LLM_LARGE_BEARER_TOKEN
+      - ai/qdrant      # QDRANT_API_KEY
+      - ai/open-webui  # OPEN_WEBUI_SECRET_KEY, OPEN_WEBUI_OPENAI_API_KEY
+      - ai/hermes      # HERMES_AGENT_MODEL_API_KEY

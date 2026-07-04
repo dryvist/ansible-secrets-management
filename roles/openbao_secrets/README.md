@@ -1,69 +1,115 @@
 # openbao_secrets
 
-A controller-side **pre-play** that logs in to OpenBao with the **ai-readonly**
-AppRole and reads the AI KV subtree into a single `bao_ai_secrets` fact. AI roles
-then resolve their secrets **bao-first with an env fallback**:
+A controller-side **pre-play** that logs in to OpenBao **once per
+resource-domain identity** (each with its own least-privilege AppRole) and
+reads that domain's KV subtree into a per-domain fact,
+`bao_<domain>_secrets` (hyphens become underscores, e.g. `local-cloud` ->
+`bao_local_cloud_secrets`). Consumer roles then resolve their secrets
+**bao-first with an env fallback**:
 
 ```yaml
-some_secret: "{{ bao_ai_secrets.SOME_SECRET | default(lookup('env', 'SOME_SECRET'), true) }}"
+some_secret: "{{ bao_observability_secrets.SOME_SECRET | default(lookup('env', 'SOME_SECRET'), true) }}"
 ```
 
-It runs **once** on the controller (`delegate_to: localhost`, `run_once`), leaving
-the merged result as `openbao_secrets_merged` on the controller; the `site.yml`
-play then copies it into the shared, un-prefixed `bao_ai_secrets` fact per host (the
-publish lives at the playbook layer — like `tofu_data` in `load_tofu.yml` — so the
-role's own facts stay role-prefixed). It **skips cleanly** when `VAULT_ADDR` is
-unset, so converges keep working on env/SOPS secrets before the KV is seeded (the
-`group_vars/all.yml` default `bao_ai_secrets: {}` guarantees the fallback resolves).
+It runs **once** on the controller (`delegate_to: localhost`, `run_once`),
+looping `openbao_secrets_domains` and leaving each domain's merged result in
+`openbao_secrets_by_domain[<domain>]` on the controller; the calling playbook
+then copies each domain's dict into its own shared, un-prefixed
+`bao_<domain>_secrets` fact per host (the publish lives at the playbook
+layer — like `tofu_data` in `load_tofu.yml` — so the role's own facts stay
+role-prefixed). Each domain **skips cleanly** when its own role_id/secret_id
+envs are unset, so an operator can migrate one domain at a time onto OpenBao
+while the rest keep resolving from env/SOPS (the `group_vars/all.yml` `{}`
+defaults guarantee the fallback resolves for every domain).
 
 ## Alignment with `roles/openbao` (RBAC)
 
-The layout is aligned to what `roles/openbao` bootstraps — do not invent paths the
-policy can't read:
+The layout is aligned to what `roles/openbao` bootstraps — do not invent paths
+a policy can't read:
 
 - **KV mount**: `secret` (KV v2).
-- **AppRole**: `ai-readonly` (role_id/secret_id).
-- **Policy grant**: the `ai-readonly` policy grants `read` on `secret/data/ai/*`
-  (and `secret/data/apps/*`) — a wildcard, so every path under `ai/` is readable.
-- **Seeding**: `roles/openbao` seeds **no** values; it creates only the mount +
-  policies + AppRoles. So the paths below yield keys only once a writer populates
-  them; until then every read is empty and the env fallback wins.
+- **One AppRole per domain**, not one shared identity — a domain's
+  credentials only ever unlock that domain's own KV subtree. See
+  `terraform-proxmox` `docs/SECRETS_HIERARCHY.md` for the full RBAC table.
+- **Seeding**: `roles/openbao` seeds **no** values; it creates only the mount,
+  policies, and AppRoles. So a domain's paths yield keys only once a writer
+  populates them; until then every read is empty and the env fallback wins.
+
+## Installation
+
+The role lives in this repository under `roles/openbao_secrets/`. Reference
+it from a pre-fetch play — no Galaxy install needed:
+
+```yaml
+- hosts: <union of every domain's consumer groups>
+  gather_facts: false
+  tasks:
+    - ansible.builtin.include_role:
+        name: openbao_secrets
+```
+
+## Usage
+
+Set `BAO_ADDR` plus each domain's `<DOMAIN>_VAULT_ROLE_ID` / `_SECRET_ID`
+(see [Inputs (env)](#inputs-env)), then run through the normal wrapper:
+
+```sh
+doppler run -- ansible-playbook playbooks/site.yml --tags openbao_secrets
+```
+
+Any domain whose credentials aren't set simply falls back to env/SOPS for its
+consumer roles — see [Wiring](#wiring) for how the pre-fetch play publishes
+each domain's fact.
+
+## Domains fetched (`openbao_secrets_domains`)
+
+| Domain | AppRole env vars | KV paths | Consumers |
+| --- | --- | --- | --- |
+| `observability` | `OBSERVABILITY_VAULT_ROLE_ID` / `_SECRET_ID` | `platform/splunk`, `platform/cribl` | splunk_docker, cribl_* roles |
+| `local-cloud` | `LOCAL_CLOUD_VAULT_ROLE_ID` / `_SECRET_ID` | `platform/object-storage`, `platform/compute` | object_storage role |
+| `monitoring` | `MONITORING_VAULT_ROLE_ID` / `_SECRET_ID` | `apps/monitoring` | netmon, unifi_metrics, prometheus_stack |
+| `media` | `MEDIA_VAULT_ROLE_ID` / `_SECRET_ID` | `apps/media` | *arr/qBittorrent/Plex roles |
+| `local-llm` | `LOCAL_LLM_VAULT_ROLE_ID` / `_SECRET_ID` | `ai/*` (router/llm-large/qdrant/open-webui/hermes) | LLM serving roles |
+
+`local-llm` replaces the old `ai-readonly`-backed `bao_ai_secrets` for the LLM
+**serving stack** — `ai-readonly`/`ai-elevated` are reserved for AI AGENT
+identities (Claude/codex-style agents), not the serving stack itself; keeping
+them separate means an agent's credentials can never be used to read the
+serving stack's own secrets, and vice versa.
+
+All readable path keys for a domain are merged flat into that domain's
+`bao_<domain>_secrets`, keyed by the field name, so a consumer default reads
+`bao_<domain>_secrets.<FIELD_NAME>`.
 
 ## Inputs (env)
 
 | Env var | Purpose |
 | --- | --- |
-| `VAULT_ADDR` | OpenBao ingress URL (`https://openbao.<subdomain>`). Unset ⇒ skip. |
-| `AI_VAULT_ROLE_ID` | ai-readonly AppRole role_id |
-| `AI_VAULT_SECRET_ID` | ai-readonly AppRole secret_id |
+| `BAO_ADDR` | OpenBao ingress URL (`https://openbao.<subdomain>`). Unset ⇒ skip everything. |
+| `<DOMAIN>_VAULT_ROLE_ID` / `_SECRET_ID` | That domain's own AppRole credentials. Unset ⇒ skip just that domain. |
 
-## KV paths read (`openbao_secrets_paths`)
-
-| Path (mount-relative) | Expected keys |
-| --- | --- |
-| `ai/router` | `LLM_ROUTER_MASTER_KEY` (+ `LANGFUSE_*` project keys) |
-| `ai/llm-large` | `LLM_LARGE_BEARER_TOKEN` |
-| `ai/qdrant` | `QDRANT_API_KEY` |
-| `ai/open-webui` | `OPEN_WEBUI_SECRET_KEY`, `OPEN_WEBUI_OPENAI_API_KEY` |
-| `ai/hermes` | `HERMES_AGENT_MODEL_API_KEY` |
-
-All readable path keys are merged flat into `bao_ai_secrets`, keyed by the field
-name, so a consumer default reads `bao_ai_secrets.<FIELD_NAME>`.
+On macOS these are sourced from the operator's dedicated `openbao.keychain-db`
+keychain (72h auto-lock — the keychain's lock state is the access boundary,
+not the AppRole's own TTL) via a resolver script; on Linux guests, from a
+root-only systemd credential / `0600` EnvironmentFile. See
+`terraform-proxmox` `docs/SECRETS_HIERARCHY.md`.
 
 ## Wiring
 
-Runs as the first AI-phase play in `playbooks/site.yml` (before any AI/vectordb
-role), against the union of AI-consuming groups, so `bao_ai_secrets` exists before
-those roles evaluate their secret defaults.
+Runs as a pre-fetch play in `playbooks/site.yml`, against the union of every
+domain's consumer groups, before any of those roles evaluate their secret
+defaults. One execution fetches ALL configured domains (regardless of which
+specific groups are in the play's host list) — cheap and avoids redundant
+logins from being split across multiple domain-scoped plays.
 
 ## Dependencies
 
 - `community.hashi_vault` (added to `requirements.yml`) and its Python `hvac`
   dependency in the controller environment (provided by the Nix dev shell —
-  `nix-devenv#ansible-apps`; see the PR for the companion change).
+  `nix-devenv#ansible-apps`).
 
 ## Not yet live-validated
 
-Verify at the first bao-backed converge: the ai-readonly AppRole login against the
-Traefik ingress, and that `vault_kv2_get` returns the expected field names once the
-`secret/ai/*` paths are seeded.
+Verify at the first bao-backed converge: each domain's AppRole login against
+the Traefik ingress, and that `vault_kv2_get` returns the expected field names
+once that domain's `secret/<path>` is seeded.
