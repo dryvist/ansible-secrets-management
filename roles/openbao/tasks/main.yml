@@ -227,3 +227,16 @@
   when:
     - ansible_virtualization_type | default('') != 'docker'
     - inventory_hostname == openbao_bootstrap_host
+
+# --- Phase 10: automated raft snapshots (all nodes; script leader-gates) -----
+# Deployed on every openbao node so the surviving nodes keep snapshotting after
+# a leadership change. Gated on the snapshot AppRole creds being present: they
+# are emitted by init.yml at bootstrap and injected at converge from tier-0, so
+# a first-bootstrap converge (creds not yet minted) skips this cleanly instead
+# of rendering an empty-cred EnvironmentFile that would fail every cycle.
+- name: Deploy the automated raft snapshot timer
+  ansible.builtin.include_tasks: snapshot.yml
+  when:
+    - openbao_snapshot_enabled | bool
+    - openbao_snapshot_role_id | length > 0
+    - openbao_snapshot_secret_id | length > 0

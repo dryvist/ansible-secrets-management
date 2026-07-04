@@ -1,0 +1,61 @@
+---
+# Automated raft snapshots (on-box, timer-driven). Included from main.yml on
+# every openbao node when the snapshot daemon is enabled AND the snapshot
+# AppRole creds are present. The creds are emitted by init.yml at bootstrap and
+# injected at converge from tier-0; until they exist the include is skipped
+# (see the guard in main.yml), so a first-bootstrap converge stays green.
+# The script leader-gates at runtime, so this deploys identically on all nodes.
+
+- name: Create the OpenBao snapshot staging directory
+  ansible.builtin.file:
+    path: "{{ openbao_snapshot_dir }}"
+    state: directory
+    owner: "{{ openbao_user }}"
+    group: "{{ openbao_group }}"
+    mode: "0700"
+
+- name: Render the OpenBao snapshot AppRole EnvironmentFile
+  ansible.builtin.template:
+    src: openbao-snapshot.env.j2
+    dest: "{{ openbao_snapshot_env_file }}"
+    owner: root
+    group: "{{ openbao_group }}"
+    mode: "0600"
+  no_log: true
+  notify: Restart openbao snapshot timer
+
+- name: Deploy the OpenBao snapshot script
+  ansible.builtin.template:
+    src: openbao-snapshot.sh.j2
+    dest: "{{ openbao_snapshot_script_path }}"
+    owner: root
+    group: root
+    mode: "0755"
+  notify: Restart openbao snapshot timer
+
+- name: Deploy the OpenBao snapshot systemd service unit
+  ansible.builtin.template:
+    src: openbao-snapshot.service.j2
+    dest: "/etc/systemd/system/{{ openbao_snapshot_service_name }}.service"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart openbao snapshot timer
+
+- name: Deploy the OpenBao snapshot systemd timer unit
+  ansible.builtin.template:
+    src: openbao-snapshot.timer.j2
+    dest: "/etc/systemd/system/{{ openbao_snapshot_service_name }}.timer"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart openbao snapshot timer
+
+# Skipped under Docker (molecule) — no functional systemd init in the container.
+- name: Enable and start the OpenBao snapshot timer
+  ansible.builtin.systemd:
+    name: "{{ openbao_snapshot_service_name }}.timer"
+    state: started
+    enabled: true
+    daemon_reload: true
+  when: ansible_virtualization_type | default('') != 'docker'

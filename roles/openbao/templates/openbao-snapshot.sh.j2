@@ -1,0 +1,103 @@
+#!/usr/bin/env bash
+# {{ ansible_managed }}
+#
+# Automated OpenBao raft snapshot. Rendered by the openbao role and run on a
+# systemd timer (every {{ openbao_snapshot_interval }}). Deployed on every
+# openbao node, but only the ACTIVE node acts — standby nodes exit 0 as a no-op,
+# so exactly one snapshot is taken per cycle regardless of who holds leadership.
+#
+# It talks to THIS node's own API address ({{ openbao_api_addr }} — its VLAN IP),
+# never the Traefik ingress VIP: there is no loopback listener (see
+# openbao.hcl.j2), and a backup must come from a known specific node, not
+# whichever node the load balancer happens to pick. It authenticates with the
+# least-privilege `snapshot` AppRole (sys/storage/raft/snapshot read only).
+#
+# Each snapshot is integrity-checked (gzip -t — raft snapshots are gzipped tar)
+# and written under the data volume, which sits on a ZFS/PBS-backed dataset that
+# replicates OFF-BOX; the newest {{ openbao_snapshot_retain }} are kept locally.
+# A second off-box copy into the RustFS `openbao-snapshots` S3 bucket and a full
+# restore-to-scratch drill are tracked follow-ups (see roles/openbao/README.md):
+# these WAN-firewalled nodes cannot be handed a checksum-verifiable S3 client
+# WAN-free, and ZFS replication already carries snapshots off-box in the meantime.
+#
+# NOT `set -e`: every failure is handled explicitly so it ALERTS (ntfy +
+# healthchecks) instead of aborting silently.
+set -uo pipefail
+
+BAO_ADDR="{{ openbao_api_addr }}"
+export BAO_ADDR
+BIN="{{ openbao_install_dir }}/bao"
+SNAP_DIR="{{ openbao_snapshot_dir }}"
+RETAIN="{{ openbao_snapshot_retain }}"
+NTFY_URL="{{ openbao_snapshot_ntfy_url }}"
+HC_URL="{{ openbao_snapshot_healthcheck_url }}"
+HOST="$(hostname)"
+
+log() { logger -t openbao-snapshot "$*"; echo "openbao-snapshot: $*"; }
+
+# Ping a healthchecks endpoint if one is configured; no-op otherwise. $1 is the
+# suffix: "" for the OK ping, "/fail" to signal a breach.
+hc_ping() {
+  [ -n "${HC_URL}" ] || return 0
+  curl -fsS --max-time 8 "${HC_URL}$1" >/dev/null 2>&1 || true
+}
+
+# Alert + signal the deadman failure endpoint, then exit non-zero.
+fail() {
+  local msg="OpenBao snapshot FAILED on ${HOST}: $*"
+  log "${msg}"
+  if [ -n "${NTFY_URL}" ]; then
+    curl -fsS --max-time 8 -H "Title: openbao snapshot" -H "Priority: urgent" \
+      -H "Tags: rotating_light" -d "${msg}" "${NTFY_URL}" >/dev/null 2>&1 || true
+  fi
+  hc_ping /fail
+  exit 1
+}
+
+# 1. Leader-gate. /sys/leader is unauthenticated; is_self=true only on the
+#    active node. A standby (or an unreachable local node — the deadman watchdog
+#    covers real outages) is a clean no-op, so peers never double-ship.
+# ponytail: JSON grep instead of jq (not on these WAN-firewalled nodes); swap to
+# `jq -e .is_self` if jq ever lands in the base image.
+if ! curl -fsS --max-time 8 "${BAO_ADDR}/v1/sys/leader" | grep -q '"is_self":true'; then
+  log "not the active node — nothing to do"
+  exit 0
+fi
+
+# 2. Health-gate: never snapshot a sealed/unhealthy node (standbyok=true so an
+#    unsealed standby still reads 200; sealed=503, uninitialized=501).
+code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 8 \
+  "${BAO_ADDR}/v1/sys/health?standbyok=true")"
+[ "${code}" = "200" ] || fail "health check returned HTTP ${code} (expected 200)"
+
+# 3. Authenticate with the least-privilege snapshot AppRole (-field=token maps
+#    to .auth.client_token for auth responses — no jq needed).
+token="$("${BIN}" write -field=token auth/approle/login \
+  role_id="${OPENBAO_SNAPSHOT_ROLE_ID}" \
+  secret_id="${OPENBAO_SNAPSHOT_SECRET_ID}" 2>/dev/null)" \
+  || fail "snapshot AppRole login failed"
+[ -n "${token}" ] || fail "snapshot AppRole login returned an empty token"
+
+# 4. Take the snapshot.
+ts="$(date -u +%Y%m%dT%H%M%SZ)"
+snap="${SNAP_DIR}/openbao-${HOST}-${ts}.snap"
+BAO_TOKEN="${token}" "${BIN}" operator raft snapshot save "${snap}" \
+  || fail "raft snapshot save failed"
+
+# 5. Integrity: raft snapshots are gzipped tar — gzip -t catches a truncated or
+#    corrupt file before we trust it as a backup.
+gzip -t "${snap}" 2>/dev/null || fail "snapshot ${snap} failed gzip integrity check"
+size="$(stat -c%s "${snap}" 2>/dev/null || echo 0)"
+[ "${size}" -gt 0 ] || fail "snapshot ${snap} is empty"
+
+# 6. Prune: keep the newest ${RETAIN}, drop the rest. Bounds the local footprint;
+#    off-box durability is the ZFS/PBS replication of the data volume.
+# shellcheck disable=SC2012  # names are timestamped + controlled; ls -t is fine.
+ls -1t "${SNAP_DIR}"/openbao-*.snap 2>/dev/null | tail -n "+$((RETAIN + 1))" \
+  | while read -r old; do
+      rm -f "${old}" && log "pruned old snapshot ${old}"
+    done
+
+log "snapshot OK: ${snap} (${size} bytes)"
+hc_ping ""
+exit 0

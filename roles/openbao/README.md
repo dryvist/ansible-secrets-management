@@ -35,12 +35,43 @@ The durability guarantee holds from this role alone:
 - The data dir (`/opt/openbao/data`) lives on a dataset covered by the host
   backup path (PBS / ZFS snapshot + offsite).
 
-A least-privilege **snapshot AppRole** (scoped to `sys/storage/raft/snapshot`)
-is provisioned so the off-box logical-snapshot shipping daemon
-([`openbao/openbao-snapshot-agent`](https://github.com/openbao/openbao-snapshot-agent)
-→ on-prem `s3` bucket `openbao-snapshots`) can authenticate. That daemon has no
-upstream release binary yet (container/source install) and is wired in a
-follow-up; the durability guarantee above does not depend on it.
+### Automated raft snapshots (on-box timer)
+
+An on-box `openbao-snapshot.timer` (every `openbao_snapshot_interval`, default
+`6h`) takes a logical raft snapshot on the **active node only** — the script
+leader-gates at runtime via `/v1/sys/leader` `is_self`, so standby nodes no-op
+and exactly one snapshot is taken per cycle regardless of who holds leadership.
+It:
+
+- authenticates with the least-privilege **`snapshot` AppRole** (scoped to
+  `sys/storage/raft/snapshot`), over the node's **own VLAN IP** (`api_addr`),
+  never the Traefik ingress VIP — OpenBao has no loopback listener, and a backup
+  must come from a known specific node;
+- integrity-checks each snapshot (`gzip -t` — raft snapshots are gzipped tar) and
+  keeps the newest `openbao_snapshot_retain` (default 14) under the data volume,
+  which sits on the ZFS/PBS-backed dataset that already replicates **off-box**;
+- pings the healthchecks deadman + ntfy on every run (OK on success, `/fail` +
+  an urgent ntfy alert on any failure), reusing the `service_deadman` stack.
+
+The daemon is deployed on **every** node (so surviving nodes keep snapshotting
+after a leadership change) and is gated on the snapshot AppRole creds being
+present — a pre-provisioning converge skips it cleanly rather than shipping an
+empty-cred EnvironmentFile. **Seal/liveness alerting** is handled by the
+`service_deadman` role's `openbao_group` check (`bao status` exits non-zero when
+a node is sealed or down → pages via the same deadman + ntfy path).
+
+**Deliberately deferred** (tracked follow-ups — the durability guarantee above
+does not depend on either):
+
+- **A second off-box copy into the RustFS `openbao-snapshots` S3 bucket** (with a
+  `HeadObject` + size/sha256 verify — never trusting the ETag, per RustFS
+  `#1458`). The OpenBao LXCs are WAN-firewalled (`outbound-internal`), and a
+  checksum-verifiable S3 client can't be delivered to them WAN-free the way the
+  `.deb` is; hand-rolling SigV4 in shell is out (repo policy). ZFS replication of
+  the data volume already carries snapshots off-box in the meantime.
+- **A full restore-to-scratch-node drill.** Needs a scratch OpenBao node that
+  does not exist yet; OpenBao 2.5.x has no `snapshot inspect` subcommand, so
+  `gzip -t` is the strongest safe on-box integrity check today.
 
 ## Apply order (important)
 

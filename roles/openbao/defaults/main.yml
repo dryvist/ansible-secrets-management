@@ -144,17 +144,52 @@ openbao_policies:
 openbao_approle_token_ttl: 1h
 openbao_approle_token_max_ttl: 4h
 
-# --- Raft snapshots (off-box durability) ------------------------------------
-# Automated logical raft snapshots shipped off-box to the on-prem s3 object
-# store. The snapshot IDENTITY (least-privilege policy + AppRole scoped to
-# sys/storage/raft/snapshot) is provisioned here so the shipping daemon
-# (openbao/openbao-snapshot-agent) can authenticate; the daemon itself is wired
-# in a follow-up (no upstream release binary yet — container/source install).
-# "Never lost" already holds without it: 3-node Raft (3 live copies) + recovery
-# shares (paper) + the seal key (Doppler tier-0) + the data-dir on a PBS/ZFS-
-# backed dataset.
+# --- Raft snapshots (automated, on-box timer) -------------------------------
+# An on-box systemd timer takes a raft snapshot on the ACTIVE node (leader-gated
+# at runtime via /v1/sys/leader is_self; standby nodes no-op), authenticating
+# with the least-privilege `snapshot` AppRole over the node's OWN api_addr (its
+# VLAN IP — there is no loopback listener; see openbao.hcl.j2), NOT the Traefik
+# ingress VIP. Each snapshot is integrity-checked (gzip -t, since raft snapshots
+# are gzipped tar) and written under the data volume, which sits on a ZFS/PBS-
+# backed dataset that replicates OFF-BOX; the newest N are kept. Success/failure
+# pings the healthchecks deadman + ntfy, reusing the service_deadman alert stack.
+#
+# Deliberately deferred (tracked follow-ups, see roles/openbao/README.md):
+#   * a SECOND off-box copy into the RustFS `openbao-snapshots` S3 bucket +
+#     HeadObject/size/sha256 verify — these WAN-firewalled (outbound-internal)
+#     nodes can't be handed a checksum-verifiable S3 client WAN-free the way the
+#     .deb is, and hand-rolling SigV4 is out; ZFS replication already carries
+#     snapshots off-box in the meantime.
+#   * a full restore-to-scratch-node drill (needs a scratch node that does not
+#     exist yet). gzip -t is the strongest safe on-box integrity check today.
+# "Never lost" already holds regardless: 3-node Raft (3 live copies) + recovery
+# shares (paper) + the seal key (Doppler tier-0) + the ZFS/PBS-backed data dir.
 openbao_snapshot_enabled: true
+# Reserved for the S3 follow-up above (bucket already created by object_storage).
 openbao_snapshot_s3_bucket: openbao-snapshots
+# Timer cadence (systemd OnUnitActiveSec) and how many local snapshots to keep.
+openbao_snapshot_interval: "6h"
+openbao_snapshot_retain: 14
+# Deployed paths. Staging lives under the data dir so it inherits the ZFS/PBS
+# off-box replication of the data volume.
+openbao_snapshot_dir: "{{ openbao_data_dir }}/snapshots"
+openbao_snapshot_script_path: /usr/local/bin/openbao-snapshot.sh
+openbao_snapshot_env_file: "{{ openbao_config_dir }}/openbao-snapshot.env"
+openbao_snapshot_service_name: openbao-snapshot
+# Snapshot AppRole creds the timer logs in with. Emitted by init.yml at
+# bootstrap; injected at converge from tier-0 (Doppler / break-glass file),
+# never committed. When unset the daemon is skipped so a pre-provisioning
+# converge stays green (see the include guard in tasks/main.yml).
+openbao_snapshot_role_id: "{{ lookup('env', 'OPENBAO_SNAPSHOT_ROLE_ID') | default('', true) }}"
+openbao_snapshot_secret_id: "{{ lookup('env', 'OPENBAO_SNAPSHOT_SECRET_ID') | default('', true) }}"
+# ntfy alert target (reuses the repo's ntfy LXC + notification-port convention,
+# matching service_deadman). Topic 'openbao'.
+openbao_snapshot_ntfy_url: >-
+  http://{{ hostvars['ntfy']['container_ip'] | default('ntfy') }}:{{
+  tofu_data.constants.notification_ports.ntfy_http }}/openbao
+# healthchecks deadman ping URL for the snapshot job; EMPTY => ping skipped
+# (ntfy + journal alert still fire). Set per-node from the healthchecks LXC.
+openbao_snapshot_healthcheck_url: "{{ lookup('env', 'OPENBAO_SNAPSHOT_HC_URL') | default('', true) }}"
 
 # --- Break-glass / bootstrap output (controller-side, never committed) -------
 # init.yml writes recovery shares + root token, and each AppRole's creds, to

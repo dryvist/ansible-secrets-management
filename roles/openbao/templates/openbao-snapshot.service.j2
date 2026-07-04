@@ -1,0 +1,21 @@
+{{ ansible_managed | comment }}
+# OpenBao automated raft snapshot — one-shot, timer-driven. Rendered by the
+# openbao role. Leader-gating happens inside the script, so this unit is
+# identical on every node.
+
+[Unit]
+Description=OpenBao automated raft snapshot (leader-gated, one-shot)
+Documentation=https://github.com/JacobPEvans/ansible-proxmox-apps
+After=openbao.service
+Wants=openbao.service
+
+[Service]
+Type=oneshot
+User={{ openbao_user }}
+Group={{ openbao_group }}
+# Snapshot AppRole role_id/secret_id (0600, root:openbao).
+EnvironmentFile={{ openbao_snapshot_env_file }}
+ExecStart={{ openbao_snapshot_script_path }}
+# Snapshots are written under the openbao-owned data volume.
+ReadWritePaths={{ openbao_snapshot_dir }}
+NoNewPrivileges=yes

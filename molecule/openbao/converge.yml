@@ -17,6 +17,15 @@
     # so this is an inert placeholder (not a real key).
     openbao_seal_key_id: "static-test-1"
     openbao_static_seal_key: "ZXhhbXBsZS1zdGF0aWMtc2VhbC1rZXktMzJieXRlcy0wMA=="
+    # Snapshot AppRole creds + alert targets come from tier-0 / load_tofu in
+    # production; stub them so the snapshot daemon templates render under Docker.
+    # The timer never starts here (the systemd task is guarded off under Docker),
+    # so these are inert placeholders. Literal alert URLs avoid a tofu_data
+    # dependency the container has no inventory for.
+    openbao_snapshot_role_id: "test-snapshot-role-id"
+    openbao_snapshot_secret_id: "test-snapshot-secret-id"
+    openbao_snapshot_ntfy_url: "http://ntfy.test/openbao"
+    openbao_snapshot_healthcheck_url: ""
 
   tasks:
     - name: Include openbao role

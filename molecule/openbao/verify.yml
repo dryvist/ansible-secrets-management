@@ -115,3 +115,51 @@
         that:
           - bao_unit.stat.exists
         fail_msg: "openbao.service unit not installed"
+
+    # --- Automated raft snapshot daemon (rendered when snapshot creds are set;
+    # converge.yml stubs them). The timer never starts under Docker, but the
+    # script/env/service/timer templates must all render. ---
+    - name: Stat the snapshot daemon files
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /usr/local/bin/openbao-snapshot.sh
+        - /etc/openbao/openbao-snapshot.env
+        - /etc/systemd/system/openbao-snapshot.service
+        - /etc/systemd/system/openbao-snapshot.timer
+      register: bao_snap_files
+
+    - name: Assert the snapshot script, env, service, and timer all rendered
+      ansible.builtin.assert:
+        that:
+          - item.stat.exists
+        fail_msg: "snapshot daemon file missing: {{ item.item }}"
+      loop: "{{ bao_snap_files.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: Assert the snapshot env file is 0600 (holds the AppRole creds)
+      ansible.builtin.assert:
+        that:
+          - bao_snap_files.results[1].stat.mode == '0600'
+        fail_msg: >-
+          openbao-snapshot.env must be 0600
+          ({{ bao_snap_files.results[1].stat.mode | default('absent') }})
+
+    - name: Read the rendered snapshot script
+      ansible.builtin.slurp:
+        src: /usr/local/bin/openbao-snapshot.sh
+      register: bao_snap_script
+
+    - name: Assert the snapshot script leader-gates, verifies, and alerts
+      ansible.builtin.assert:
+        that:
+          # Leader-gated: only the active node snapshots.
+          - "'/v1/sys/leader' in (bao_snap_script.content | b64decode)"
+          - "'is_self' in (bao_snap_script.content | b64decode)"
+          # Takes + integrity-checks the snapshot.
+          - "'operator raft snapshot save' in (bao_snap_script.content | b64decode)"
+          - "'gzip -t' in (bao_snap_script.content | b64decode)"
+          # Least-privilege snapshot AppRole login, not a root token.
+          - "'auth/approle/login' in (bao_snap_script.content | b64decode)"
+        fail_msg: "openbao-snapshot.sh missing leader-gate, snapshot-save, integrity, or approle-login logic"

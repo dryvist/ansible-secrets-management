@@ -5,3 +5,10 @@
     state: restarted
     daemon_reload: true
   when: ansible_virtualization_type | default('') != 'docker'
+
+- name: Restart openbao snapshot timer
+  ansible.builtin.systemd:
+    name: "{{ openbao_snapshot_service_name }}.timer"
+    state: restarted
+    daemon_reload: true
+  when: ansible_virtualization_type | default('') != 'docker'
