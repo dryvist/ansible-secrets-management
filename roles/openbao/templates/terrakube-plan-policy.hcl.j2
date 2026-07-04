@@ -1,0 +1,16 @@
+{{ ansible_managed | comment }}
+# OpenBao policy for the terrakube-plan AppRole — Terrakube VCS-driven plan
+# and apply runs. Read-only, and scoped to ONLY the terrakube subtree — never
+# secret/infra/* or any other platform service. Terrakube executes plans
+# sourced from VCS (potentially untrusted code, provider behavior, or a
+# compromised module), so this identity is deliberately the narrowest of the
+# infra-adjacent group: a malicious or buggy plan run under this AppRole
+# cannot read or rewrite the secrets Terraform/Ansible later trust.
+
+path "{{ openbao_kv_mount }}/data/platform/terrakube/*" {
+  capabilities = ["read"]
+}
+
+path "{{ openbao_kv_mount }}/metadata/platform/terrakube/*" {
+  capabilities = ["read", "list"]
+}

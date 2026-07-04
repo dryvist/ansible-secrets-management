@@ -1,16 +1,22 @@
 ---
 # OpenBao bootstrap — runs ONLY on the bootstrap host (gated by the include in
 # main.yml: inventory_hostname == openbao_bootstrap_host). It initializes the
-# cluster, then provisions the KV mount, the RBAC policies, and the AppRoles.
-# The other two Raft peers never run this: they join the leader automatically
-# (retry_join in openbao.hcl) and self-unseal via the static seal. Every step is
-# guarded so re-runs are no-ops: nothing is created if it already exists, and
-# break-glass material is only emitted on the run that actually initializes.
+# cluster, then provisions the KV mount, the RBAC policies, and the AppRoles
+# (terraform-apply / terrakube-plan / ansible-converge / observability /
+# local-cloud / monitoring / media / local-llm / public / ai-readonly /
+# ai-elevated / snapshot — see docs/SECRETS_HIERARCHY.md). The other two Raft
+# peers never run this: they join the leader automatically (retry_join in
+# openbao.hcl) and self-unseal via the static seal. Every step is guarded so
+# re-runs are no-ops: nothing is created if it already exists, and break-glass
+# material is only emitted for AppRoles that were newly created THIS run —
+# whether that's the very first bootstrap or a later run against an
+# already-live cluster (supplied a privileged BAO_TOKEN) that only grows the
+# RBAC surface with a few more identities.
 #
-# Break-glass safety: recovery shares + root token (and every AppRole's
+# Break-glass safety: recovery shares + root token (and every new AppRole's
 # role_id/secret_id) are written ONLY to 0600 files on the Ansible CONTROLLER
 # under playbook_dir, and a LOUD warning tells the operator to transcribe to
-# paper / load into the right tier-0 store and delete. These values are NEVER
+# paper / load into the right store and delete. These values are NEVER
 # written into the repo or onto a target host, and the `bao` invocations that
 # touch them run with no_log: true.
 
@@ -86,14 +92,24 @@
       ============================================================
   when: not openbao_status.initialized
 
-# Root token: from this run's init output. We only proceed with the post-init
-# provisioning below when we actually hold a root token from THIS run; on
-# re-runs the operator provides BAO_TOKEN out-of-band for any new policy/role.
-- name: Set the bootstrap token for provisioning
+# Root token: from this run's init output on the FIRST bootstrap. On a cluster
+# that's already initialized, provisioning (new policies/AppRoles) only runs
+# if the operator supplies a privileged token out-of-band via BAO_TOKEN (see
+# openbao_admin_token in defaults) — without one, every step below skips
+# cleanly, so a routine converge that isn't adding RBAC stays a no-op.
+- name: Set the bootstrap token for provisioning (first init)
   ansible.builtin.set_fact:
     openbao_bootstrap_token: "{{ openbao_init.root_token }}"
   no_log: true
   when: not openbao_status.initialized
+
+- name: Use the externally-supplied admin token for provisioning against a live cluster
+  ansible.builtin.set_fact:
+    openbao_bootstrap_token: "{{ openbao_admin_token }}"
+  no_log: true
+  when:
+    - openbao_status.initialized
+    - openbao_admin_token | length > 0
 
 # --- KV v2 mount (add-if-missing) -------------------------------------------
 - name: List enabled secrets engines
@@ -235,60 +251,67 @@
     - openbao_bootstrap_token is defined
     - (item.1.rc | default(0)) != 0
 
-# Surface role_id + a fresh secret_id only on the run that just initialized the
-# cluster (and therefore just created the AppRoles), so re-runs never mint new
-# credentials silently.
-- name: Read each AppRole role_id (init run only)
+# Surface role_id + a fresh secret_id only for AppRoles that were JUST created
+# THIS run (the check above found them missing) — so re-runs never mint new
+# credentials silently, whether this is the very first bootstrap (everything
+# is new) or a later run against an already-live cluster that only adds a few
+# new identities (only those get creds; existing ones are untouched). Each
+# task below loops over the SAME zipped (approle, existence-check) pairs as
+# "Create the missing AppRoles" above, with the SAME per-item `when` guard, so
+# every registered .results list lines up positionally — skipped iterations
+# stay skipped in lockstep across role_id read, secret_id generation, and the
+# final break-glass write.
+- name: Read newly-created AppRole role_ids
   ansible.builtin.command:
-    cmd: "bao read -format=json auth/approle/role/{{ item.name }}/role-id"
+    cmd: "bao read -format=json auth/approle/role/{{ item.0.name }}/role-id"
   environment:
     BAO_ADDR: "{{ openbao_api_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
-  loop: "{{ openbao_approles }}"
+  loop: "{{ openbao_approles | zip(openbao_approle_checks.results | default([])) | list }}"
   loop_control:
-    label: "{{ item.name }}"
+    label: "{{ item.0.name }}"
   register: openbao_role_ids
   no_log: true
   changed_when: false
   when:
     - openbao_bootstrap_token is defined
-    - not openbao_status.initialized
+    - (item.1.rc | default(0)) != 0
 
-- name: Generate each AppRole secret_id (init run only)
+- name: Generate newly-created AppRole secret_ids
   ansible.builtin.command:
-    cmd: "bao write -f -format=json auth/approle/role/{{ item.name }}/secret-id"
+    cmd: "bao write -f -format=json auth/approle/role/{{ item.0.name }}/secret-id"
   environment:
     BAO_ADDR: "{{ openbao_api_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
-  loop: "{{ openbao_approles }}"
+  loop: "{{ openbao_approles | zip(openbao_approle_checks.results | default([])) | list }}"
   loop_control:
-    label: "{{ item.name }}"
+    label: "{{ item.0.name }}"
   register: openbao_secret_ids
   no_log: true
   changed_when: true
   when:
     - openbao_bootstrap_token is defined
-    - not openbao_status.initialized
+    - (item.1.rc | default(0)) != 0
 
-- name: Write each AppRole's break-glass material to controller (0600)
+- name: Write each newly-created AppRole's break-glass material to controller (0600)
   ansible.builtin.copy:
     content: |
       {
-        "approle": "{{ item.0.name }}",
-        "policy": "{{ item.0.policy }}",
+        "approle": "{{ item.0.0.name }}",
+        "policy": "{{ item.0.0.policy }}",
         "vault_addr": "{{ openbao_api_addr }}",
         "role_id": "{{ (item.1.stdout | from_json).data.role_id }}",
         "secret_id": "{{ (item.2.stdout | from_json).data.secret_id }}"
       }
-    dest: "{{ openbao_approle_file_prefix }}-{{ item.0.name }}-{{ inventory_hostname }}.json"
+    dest: "{{ openbao_approle_file_prefix }}-{{ item.0.0.name }}-{{ inventory_hostname }}.json"
     mode: "0600"
   loop: >-
-    {{ openbao_approles
+    {{ (openbao_approles | zip(openbao_approle_checks.results | default([])) | list)
        | zip(openbao_role_ids.results | default([]),
              openbao_secret_ids.results | default([]))
        | list }}
   loop_control:
-    label: "{{ item.0.name }}"
+    label: "{{ item.0.0.name }}"
   delegate_to: localhost
   connection: local
   become: false
@@ -297,25 +320,40 @@
   no_log: true
   when:
     - openbao_bootstrap_token is defined
-    - not openbao_status.initialized
+    - (item.0.1.rc | default(0)) != 0
 
-- name: INSTRUCT — load each AppRole's creds into its tier-0 store, then delete
+# Derive the list of names actually created THIS run (for the instruction
+# message below) from the role_id-read results: Ansible preserves `item` on
+# every registered loop result including skipped ones, so filtering out
+# entries with `skipped` defined leaves exactly the AppRoles that were new.
+- name: Determine which AppRole names were newly created this run
+  ansible.builtin.set_fact:
+    openbao_new_approle_names: >-
+      {{ openbao_role_ids.results | default([])
+         | rejectattr('skipped', 'defined')
+         | map(attribute='item')
+         | map(attribute='0')
+         | map(attribute='name')
+         | list }}
+  when: openbao_bootstrap_token is defined
+
+- name: INSTRUCT — load each new AppRole's creds into its keychain item, then delete
   ansible.builtin.debug:
     msg: >-
       ============================================================
-      AppRoles created: {{ openbao_approles | map(attribute='name') | join(', ') }}.
+      New AppRoles created: {{ (openbao_new_approle_names | default([])) | join(', ') }}.
       Each role_id + secret_id was written to a 0600 file on this
       controller: {{ openbao_approle_file_prefix }}-<role>-{{ inventory_hostname }}.json
-      (gitignored). Load each into the RIGHT tier-0 store, then
-      SECURELY DELETE the file:
-        - terraform / ansible / snapshot -> Doppler tier-0
-            doppler secrets set VAULT_ADDR=<prefer the ingress FQDN>
-            doppler secrets set VAULT_ROLE_ID=<role_id> VAULT_SECRET_ID=<secret_id>
-        - ai-readonly / ai-elevated -> the `ai-secrets` keychain
-      Prefer the OpenBao ingress FQDN for VAULT_ADDR (node-independent,
-      survives a single node loss) over a raw node IP.
-      Do NOT commit these files. Do NOT leave them on disk.
+      (gitignored). Load each into its own item in the dedicated
+      openbao.keychain-db keychain (see terraform-proxmox
+      docs/SECRETS_HIERARCHY.md), except:
+        - `public` -> ships ambiently, NOT keychain-gated (it's the
+          anonymous, non-exploitable-facts identity)
+      Then SECURELY DELETE these files. Prefer the OpenBao ingress
+      FQDN for BAO_ADDR (node-independent, survives a single node
+      loss) over a raw node IP. Do NOT commit these files. Do NOT
+      leave them on disk.
       ============================================================
   when:
     - openbao_bootstrap_token is defined
-    - not openbao_status.initialized
+    - (openbao_new_approle_names | default([])) | length > 0

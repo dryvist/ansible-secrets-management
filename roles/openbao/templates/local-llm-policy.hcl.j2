@@ -1,0 +1,14 @@
+{{ ansible_managed | comment }}
+# OpenBao policy for the local-llm AppRole — the local LLM serving stack
+# (llama_cpp/llm_router/open_webui/qdrant/hermes and similar). Read-only on
+# the full ai subtree, no access to the infra kernel or other platform/apps
+# services. Distinct from ai-readonly/ai-elevated, which are for AI AGENTS
+# consuming these same secrets, not the serving stack itself.
+
+path "{{ openbao_kv_mount }}/data/ai/*" {
+  capabilities = ["read"]
+}
+
+path "{{ openbao_kv_mount }}/metadata/ai/*" {
+  capabilities = ["read", "list"]
+}

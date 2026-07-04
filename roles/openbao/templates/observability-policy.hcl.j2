@@ -1,0 +1,15 @@
+{{ ansible_managed | comment }}
+# OpenBao policy for the observability AppRole — Splunk + Cribl (the ingest
+# pipeline shares HEC tokens, so they're one identity, not two). Read-only,
+# no access to the infra kernel or other platform services.
+
+{% for sub in ['splunk', 'cribl'] %}
+path "{{ openbao_kv_mount }}/data/platform/{{ sub }}/*" {
+  capabilities = ["read"]
+}
+
+path "{{ openbao_kv_mount }}/metadata/platform/{{ sub }}/*" {
+  capabilities = ["read", "list"]
+}
+
+{% endfor %}

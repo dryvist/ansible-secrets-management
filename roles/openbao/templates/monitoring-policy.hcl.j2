@@ -1,0 +1,12 @@
+{{ ansible_managed | comment }}
+# OpenBao policy for the monitoring AppRole — netmon/unifi_metrics/
+# prometheus_stack and similar. Read-only, no access to the infra kernel or
+# other app/platform services.
+
+path "{{ openbao_kv_mount }}/data/apps/monitoring/*" {
+  capabilities = ["read"]
+}
+
+path "{{ openbao_kv_mount }}/metadata/apps/monitoring/*" {
+  capabilities = ["read", "list"]
+}

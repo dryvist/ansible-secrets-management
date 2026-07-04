@@ -5,7 +5,9 @@
 # upstream .deb (checksum-verified), renders a 3-node Raft HA + on-prem
 # static-key auto-unseal config, runs it under systemd, and (in init.yml)
 # bootstraps the cluster, the secret hierarchy, the RBAC policies, and the
-# AppRoles (terraform / ansible / ai-readonly / ai-elevated / snapshot).
+# AppRoles — one per resource-domain identity (terraform-apply / terrakube-plan
+# / ansible-converge / observability / local-cloud / monitoring / media /
+# local-llm / public / ai-readonly / ai-elevated / snapshot).
 
 # --- Version ----------------------------------------------------------------
 # Pinned to a known-good upstream release. Version bumps follow the repo's
@@ -90,34 +92,88 @@ openbao_static_seal_previous_key: "{{ lookup('env', 'OPENBAO_STATIC_SEAL_PREVIOU
 
 # --- KV hierarchy / RBAC policies + AppRoles ---------------------------------
 # Secret hierarchy (see terraform-proxmox docs/SECRETS_HIERARCHY.md):
-#   secret/infra/*     IaC kernel (proxmox/aws/network) — terraform writes
-#   secret/platform/*  shared platform services
-#   secret/apps/*      application credentials
+#   secret/infra/*     IaC kernel (proxmox/aws/network) — terraform-apply writes
+#   secret/platform/*  shared platform services (dns/traefik/terrakube/splunk/
+#                      cribl/object-storage/compute/...)
+#   secret/apps/*      application credentials (media/monitoring/home-automation)
 #   secret/ai/*        LLM stack + AI-agent creds
+#   secret/public/*    non-secret, non-exploitable facts (domain/subdomain) —
+#                      readable by a fixed, non-keychain-gated AppRole
 #   secret/ci/*        CI/CD tokens
 openbao_kv_mount: secret
 # Legacy demo subtree the terraform-proxmox vault-secrets proof writes to; kept
-# writable by the terraform policy so that read/write proof keeps working.
+# writable by the terraform-apply policy so that read/write proof keeps working.
 openbao_homelab_path: homelab
-# Policy + AppRole names. Each policy template grants least-privilege access per
-# the hierarchy; each AppRole binds exactly one policy.
-openbao_terraform_policy_name: terraform
-openbao_terraform_approle_name: terraform
-openbao_ansible_policy_name: ansible
-openbao_ansible_approle_name: ansible
+
+# Policy + AppRole names, one per RBAC identity (see docs/SECRETS_HIERARCHY.md
+# for the full rationale). Split by resource domain, least-privilege:
+#   terraform-apply  — human-triggered IaC apply (was "terraform"); read+write
+#                      secret/infra/*, secret/platform/{dns,traefik}
+#   terrakube-plan   — Terrakube VCS-driven plan/apply runs; read-only,
+#                      secret/platform/terrakube ONLY — deliberately walled off
+#                      from secret/infra/* (untrusted-plan surface)
+#   ansible-converge — config-management pulls (was "ansible"); read-only,
+#                      secret/platform/*, secret/apps/*
+#   observability    — splunk + cribl; read-only, secret/platform/{splunk,cribl}
+#   local-cloud      — object-storage/S3/compute; read-only,
+#                      secret/platform/{object-storage,compute}
+#   monitoring       — read-only, secret/apps/monitoring
+#   media            — read-only, secret/apps/media
+#   local-llm        — LLM serving stack; read-only, secret/ai/*
+#   public           — anonymous, non-exploitable facts (domain/subdomain);
+#                      read-only, secret/public/*; creds NOT keychain-gated —
+#                      shipped ambiently like other non-secret internal config
+#   ai-readonly / ai-elevated / snapshot — unchanged, kept as-is
+openbao_terraform_apply_policy_name: terraform-apply
+openbao_terraform_apply_approle_name: terraform-apply
+openbao_terrakube_plan_policy_name: terrakube-plan
+openbao_terrakube_plan_approle_name: terrakube-plan
+openbao_ansible_converge_policy_name: ansible-converge
+openbao_ansible_converge_approle_name: ansible-converge
+openbao_observability_policy_name: observability
+openbao_observability_approle_name: observability
+openbao_local_cloud_policy_name: local-cloud
+openbao_local_cloud_approle_name: local-cloud
+openbao_monitoring_policy_name: monitoring
+openbao_monitoring_approle_name: monitoring
+openbao_media_policy_name: media
+openbao_media_approle_name: media
+openbao_local_llm_policy_name: local-llm
+openbao_local_llm_approle_name: local-llm
+openbao_public_policy_name: public
+openbao_public_approle_name: public
 openbao_ai_readonly_policy_name: ai-readonly
 openbao_ai_readonly_approle_name: ai-readonly
 openbao_ai_elevated_policy_name: ai-elevated
 openbao_ai_elevated_approle_name: ai-elevated
 openbao_snapshot_policy_name: snapshot
 openbao_snapshot_approle_name: snapshot
+
 # The set of non-root AppRoles to provision, each {name, policy}. Driving the
-# bootstrap from this list keeps init.yml DRY as groups are added.
+# bootstrap from this list keeps init.yml DRY as groups are added. Per-identity
+# `secret_id_bound_cidrs` hardening is left as a tracked follow-up: the real
+# per-domain consumer VLAN CIDRs aren't yet surfaced as Ansible vars in this
+# repo (they live in terraform-proxmox's locals.tf), and a wrong CIDR would
+# silently break legitimate access — worse than the hardening it buys.
 openbao_approles:
-  - name: "{{ openbao_terraform_approle_name }}"
-    policy: "{{ openbao_terraform_policy_name }}"
-  - name: "{{ openbao_ansible_approle_name }}"
-    policy: "{{ openbao_ansible_policy_name }}"
+  - name: "{{ openbao_terraform_apply_approle_name }}"
+    policy: "{{ openbao_terraform_apply_policy_name }}"
+  - name: "{{ openbao_terrakube_plan_approle_name }}"
+    policy: "{{ openbao_terrakube_plan_policy_name }}"
+  - name: "{{ openbao_ansible_converge_approle_name }}"
+    policy: "{{ openbao_ansible_converge_policy_name }}"
+  - name: "{{ openbao_observability_approle_name }}"
+    policy: "{{ openbao_observability_policy_name }}"
+  - name: "{{ openbao_local_cloud_approle_name }}"
+    policy: "{{ openbao_local_cloud_policy_name }}"
+  - name: "{{ openbao_monitoring_approle_name }}"
+    policy: "{{ openbao_monitoring_policy_name }}"
+  - name: "{{ openbao_media_approle_name }}"
+    policy: "{{ openbao_media_policy_name }}"
+  - name: "{{ openbao_local_llm_approle_name }}"
+    policy: "{{ openbao_local_llm_policy_name }}"
+  - name: "{{ openbao_public_approle_name }}"
+    policy: "{{ openbao_public_policy_name }}"
   - name: "{{ openbao_ai_readonly_approle_name }}"
     policy: "{{ openbao_ai_readonly_policy_name }}"
   - name: "{{ openbao_ai_elevated_approle_name }}"
@@ -127,16 +183,37 @@ openbao_approles:
 # Policy templates rendered + written on the bootstrap host. Each entry maps a
 # policy name to its template; add a row to grow the RBAC surface.
 openbao_policies:
-  - name: "{{ openbao_terraform_policy_name }}"
-    template: terraform-policy.hcl.j2
-  - name: "{{ openbao_ansible_policy_name }}"
-    template: ansible-policy.hcl.j2
+  - name: "{{ openbao_terraform_apply_policy_name }}"
+    template: terraform-apply-policy.hcl.j2
+  - name: "{{ openbao_terrakube_plan_policy_name }}"
+    template: terrakube-plan-policy.hcl.j2
+  - name: "{{ openbao_ansible_converge_policy_name }}"
+    template: ansible-converge-policy.hcl.j2
+  - name: "{{ openbao_observability_policy_name }}"
+    template: observability-policy.hcl.j2
+  - name: "{{ openbao_local_cloud_policy_name }}"
+    template: local-cloud-policy.hcl.j2
+  - name: "{{ openbao_monitoring_policy_name }}"
+    template: monitoring-policy.hcl.j2
+  - name: "{{ openbao_media_policy_name }}"
+    template: media-policy.hcl.j2
+  - name: "{{ openbao_local_llm_policy_name }}"
+    template: local-llm-policy.hcl.j2
+  - name: "{{ openbao_public_policy_name }}"
+    template: public-policy.hcl.j2
   - name: "{{ openbao_ai_readonly_policy_name }}"
     template: ai-readonly-policy.hcl.j2
   - name: "{{ openbao_ai_elevated_policy_name }}"
     template: ai-elevated-policy.hcl.j2
   - name: "{{ openbao_snapshot_policy_name }}"
     template: snapshot-policy.hcl.j2
+
+# --- External admin token (provisioning against an ALREADY-LIVE cluster) -----
+# The initial `bao operator init` only happens once; after that, adding new
+# policies/AppRoles (e.g. growing openbao_approles/openbao_policies above)
+# needs a privileged token supplied out-of-band, since there is no longer a
+# fresh root token to mint one from. Set via env, never committed/logged.
+openbao_admin_token: "{{ lookup('env', 'BAO_TOKEN') | default('', true) }}"
 
 # --- AppRole token TTLs -------------------------------------------------------
 # Short-lived tokens; secret_id_ttl=0 means the secret_id itself does not expire

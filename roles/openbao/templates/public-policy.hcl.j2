@@ -1,0 +1,17 @@
+{{ ansible_managed | comment }}
+# OpenBao policy for the public AppRole — the ANONYMOUS domain. Read-only on
+# secret/public/*: sensitive-but-not-exploitable facts (e.g. the internal
+# domain/subdomain) that don't belong in a public repo but aren't secrets in
+# the security sense either. This identity's credentials are deliberately NOT
+# keychain-gated — see docs/SECRETS_HIERARCHY.md. OpenBao has no built-in
+# truly-unauthenticated read path, so this fixed low-privilege AppRole is the
+# closest real equivalent: bound to internal RFC1918 CIDRs at the operator
+# level, shipped ambiently, and scoped so leaking it costs nothing.
+
+path "{{ openbao_kv_mount }}/data/public/*" {
+  capabilities = ["read"]
+}
+
+path "{{ openbao_kv_mount }}/metadata/public/*" {
+  capabilities = ["read", "list"]
+}

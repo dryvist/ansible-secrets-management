@@ -163,3 +163,39 @@
           # Least-privilege snapshot AppRole login, not a root token.
           - "'auth/approle/login' in (bao_snap_script.content | b64decode)"
         fail_msg: "openbao-snapshot.sh missing leader-gate, snapshot-save, integrity, or approle-login logic"
+
+    # RBAC bootstrap (policies/AppRoles) only runs against a live, unsealed
+    # server — unreachable under this Docker scenario — so it can't be
+    # exercised here. What CAN be checked without a live server: every policy
+    # template the role's defaults reference actually exists, catching a
+    # rename/typo before it reaches a live cluster. Live AppRole/policy
+    # behavior (capabilities, cross-domain isolation) is proven separately
+    # against the real cluster.
+    - name: Check every RBAC policy template referenced in role defaults exists
+      ansible.builtin.stat:
+        path: "{{ playbook_dir }}/../../roles/openbao/templates/{{ item }}"
+      loop:
+        - terraform-apply-policy.hcl.j2
+        - terrakube-plan-policy.hcl.j2
+        - ansible-converge-policy.hcl.j2
+        - observability-policy.hcl.j2
+        - local-cloud-policy.hcl.j2
+        - monitoring-policy.hcl.j2
+        - media-policy.hcl.j2
+        - local-llm-policy.hcl.j2
+        - public-policy.hcl.j2
+        - ai-readonly-policy.hcl.j2
+        - ai-elevated-policy.hcl.j2
+        - snapshot-policy.hcl.j2
+      register: bao_policy_templates
+      delegate_to: localhost
+      become: false
+
+    - name: Assert all 12 RBAC policy templates are present
+      ansible.builtin.assert:
+        that:
+          - item.stat.exists
+        fail_msg: "Missing OpenBao policy template: {{ item.item }}"
+      loop: "{{ bao_policy_templates.results }}"
+      loop_control:
+        label: "{{ item.item }}"

@@ -4,7 +4,7 @@ Installs and bootstraps [OpenBao](https://openbao.org/) — a native single Go
 binary on Debian (no Docker) — as a **3-node Raft HA cluster** with **on-prem
 static-key auto-unseal** (no cloud KMS). After the cluster is live the role
 provisions a KV v2 mount, the secret hierarchy, the RBAC policies, and one
-AppRole per group (terraform / ansible / ai-readonly / ai-elevated / snapshot).
+AppRole per resource-domain identity (see [Secret hierarchy & RBAC](#secret-hierarchy--rbac)).
 
 ## Architecture
 
@@ -81,10 +81,12 @@ This role brings OpenBao live **before** anything that reads secrets from it.
    Doppler tier-0 as `OPENBAO_STATIC_SEAL_KEY` (+ `OPENBAO_STATIC_SEAL_KEY_ID`).
 2. `terraform-proxmox` — provision the 3 OpenBao LXCs (VMID/IP/firewall).
 3. **this role** — install + init the cluster, mint the AppRoles.
-4. Operator — transcribe recovery shares to paper; load each AppRole's creds
-   into its tier-0 store (Doppler for terraform/ansible/snapshot, the
-   `ai-secrets` keychain for ai-readonly/ai-elevated).
-5. `terraform-proxmox` `vault-secrets` — now able to authenticate (read/write proof).
+4. Operator — transcribe recovery shares to paper (+ Bitwarden); load each
+   AppRole's `role_id`/`secret_id` into its own item in the dedicated
+   `openbao.keychain-db` keychain — except `public`, which is NOT
+   keychain-gated (see [Secret hierarchy & RBAC](#secret-hierarchy--rbac)).
+5. `terraform-proxmox` `vault-secrets` — now able to authenticate as
+   `terraform-apply` (read/write proof).
 
 ## Installation
 
@@ -122,26 +124,47 @@ The KV v2 mount `secret/` is organized by category (canonical doc:
 `terraform-proxmox` `docs/SECRETS_HIERARCHY.md`):
 
 ```text
-secret/infra/      proxmox/ aws/ network/   # IaC kernel — terraform writes
-secret/platform/   dns/ traefik/ object-storage/ splunk/ cribl/ infisical/
+secret/infra/      proxmox/ aws/ network/   # IaC kernel — terraform-apply writes
+secret/platform/   dns/ traefik/ terrakube/ splunk/ cribl/ object-storage/ compute/
 secret/apps/       media/ monitoring/ home-automation/
 secret/ai/         hermes/ agents/          # LLM stack + AI-agent creds
+secret/public/     domain/ ...              # non-secret, non-exploitable facts
 secret/ci/         github/ doppler-sync/
 ```
 
-One AppRole per group, each bound to a least-privilege policy:
+One AppRole per resource-domain identity, each bound to a least-privilege
+policy — split so no identity spans both an infra-writing role and an
+untrusted execution surface (Terrakube runs VCS-driven, potentially untrusted
+plans):
 
 | AppRole | Reads | Writes | Notes |
 | --- | --- | --- | --- |
-| `terraform` | `secret/infra/*`, `secret/platform/*`, legacy `homelab/*` | same | IaC identity |
-| `ansible` | `secret/platform/*`, `secret/apps/*` | — | config-management pulls |
+| `terraform-apply` | `secret/infra/*`, `secret/platform/{dns,traefik}`, legacy `homelab/*` | same | Human-triggered IaC apply |
+| `terrakube-plan` | `secret/platform/terrakube` only | — | Terrakube VCS-driven runs; deliberately walled off from `secret/infra/*` |
+| `ansible-converge` | `secret/platform/*`, `secret/apps/*` | — | Config-management pulls |
+| `observability` | `secret/platform/{splunk,cribl}` | — | Ingest pipeline (shared HEC tokens) |
+| `local-cloud` | `secret/platform/{object-storage,compute}` | — | RustFS + compute creds |
+| `monitoring` | `secret/apps/monitoring` | — | netmon/unifi_metrics/prometheus_stack |
+| `media` | `secret/apps/media` | — | *arr/qBittorrent/Plex stack |
+| `local-llm` | `secret/ai/*` | — | The LLM serving stack itself |
+| `public` | `secret/public/*` | — | **Anonymous** — creds NOT keychain-gated; shipped ambiently |
 | `ai-readonly` | `secret/ai/*`, `secret/apps/*` | — | **default AI agent; NO `secret/infra/*`** |
 | `ai-elevated` | `ai-readonly` + `secret/platform/*` | — | trusted infra-touching agents; no write |
 | `snapshot` | `sys/storage/raft/snapshot` | — | least-priv backup identity |
 
+**Secret-zero model**: each AppRole's `role_id`/`secret_id` lives as its own
+item in a dedicated macOS keychain (`openbao.keychain-db`, 72h auto-lock) —
+the keychain's LOCK STATE is the entire access boundary, not the AppRole's own
+TTL (`secret_id_ttl=0` is intentional here, not an oversight). The one
+exception is `public`: its credential is deliberately NOT keychain-gated,
+since it only unlocks non-exploitable facts.
+
 The policy/AppRole set is driven by `openbao_policies` / `openbao_approles` in
 `defaults/main.yml` — add a row to grow the RBAC surface (a new policy template
-goes beside the others in `templates/`).
+goes beside the others in `templates/`). Adding a row **after** the cluster is
+already initialized needs a privileged token supplied via `BAO_TOKEN` (see
+[Idempotency](#idempotency)) — only the newly-added identities get created and
+get fresh credentials; existing ones are untouched.
 
 ## Break-glass handling (read this)
 
@@ -150,22 +173,28 @@ With static-key auto-unseal the recovery shares are the only break-glass path if
 the seal key is ever lost, so they are treated as paper secrets:
 
 - On the initializing run, the role writes recovery shares + root token to
-  `.openbao-recovery-<host>.json`, and each AppRole's `role_id`/`secret_id` to
-  `.openbao-approle-<role>-<host>.json`, **all `0600`, on the controller, under
-  `playbook_dir`**.
+  `.openbao-recovery-<host>.json`. Every AppRole created THIS run — whether
+  that's the initial bootstrap (all of them) or a later run against an
+  already-live cluster that only grows the RBAC surface (just the new ones) —
+  has its `role_id`/`secret_id` written to
+  `.openbao-approle-<role>-<host>.json`, **all `0600`, on the controller,
+  under `playbook_dir`**. Existing AppRoles' credentials are never re-emitted.
 - Every `bao` invocation that touches this material runs with `no_log: true`.
-- A **loud warning** tells the operator to transcribe recovery shares to paper,
-  load each AppRole's creds into its tier-0 store, then **securely delete** the files.
+- A **loud warning** names exactly which AppRoles were newly created and tells
+  the operator to transcribe recovery shares to paper (+ Bitwarden), load each
+  new AppRole's creds into its own item in the `openbao.keychain-db` keychain,
+  then **securely delete** the files.
 - Nothing secret is ever written into the repo or onto a target host.
 
 These controller files are gitignored (`.openbao-recovery-*.json` /
 `.openbao-approle-*.json`). After transcription:
 
 ```sh
-# terraform / ansible / snapshot -> Doppler tier-0 (prefer the ingress FQDN)
-doppler secrets set VAULT_ADDR=https://openbao.<subdomain>
-doppler secrets set VAULT_ROLE_ID=<role_id> VAULT_SECRET_ID=<secret_id>
-# ai-readonly / ai-elevated -> the ai-secrets keychain
+security add-generic-password -s "openbao/<domain>" -a role_id -w <role_id> \
+  ~/Library/Keychains/openbao.keychain-db
+security add-generic-password -s "openbao/<domain>" -a secret_id -w <secret_id> \
+  ~/Library/Keychains/openbao.keychain-db
+# `public` is the one exception — ships ambiently, never keychain-gated.
 shred -u <playbook_dir>/.openbao-recovery-<host>.json
 shred -u <playbook_dir>/.openbao-approle-*-<host>.json
 ```
@@ -174,12 +203,18 @@ shred -u <playbook_dir>/.openbao-approle-*-<host>.json
 
 - The `.deb` is checksum-verified against the upstream `checksums-linux.txt`;
   `apt` skips re-install when the version is present.
-- `tasks/init.yml` runs **only on the bootstrap host** and **only initializes
-  when `initialized == false`**. The KV mount, each policy, the AppRole auth
-  method, and each AppRole are guarded by existence checks, so re-runs are no-ops.
-- `role_id`/`secret_id` are surfaced **only on the initializing run**, so
-  re-running never silently mints new credentials. Adding a new policy/AppRole
-  after init requires a root/`BAO_TOKEN` provided out-of-band.
+- `tasks/init.yml` runs **only on the bootstrap host**. The very first
+  `bao operator init` happens once (`initialized == false`); the KV mount,
+  each policy, the AppRole auth method, and each AppRole are guarded by
+  existence checks, so re-runs are no-ops for anything already present.
+- **Growing the RBAC surface on an already-live cluster is supported**: set
+  `openbao_admin_token` (env `BAO_TOKEN`) to a privileged token so the role can
+  authenticate without a fresh init; add rows to `openbao_policies` /
+  `openbao_approles`; re-run. Only the genuinely new policies/AppRoles are
+  created, and `role_id`/`secret_id` are surfaced **only for those** — existing
+  identities and their credentials are never touched or re-emitted, so a
+  routine converge without `BAO_TOKEN` set stays a complete no-op for this
+  section.
 
 ## Seal-key rotation
 
