@@ -2,7 +2,7 @@
 # OpenBao single-binary secrets manager — role defaults.
 #
 # OpenBao is a native Go binary on Debian; no Docker. This role installs the
-# upstream .deb (checksum-verified), renders a 3-node Raft HA + on-prem
+# upstream .deb (checksum-verified), renders a Raft HA + on-prem
 # static-key auto-unseal config, runs it under systemd, and (in init.yml)
 # bootstraps the cluster, the secret hierarchy, the RBAC policies, and the
 # AppRoles — one per resource-domain identity (terraform-apply / terrakube-plan
@@ -77,6 +77,16 @@ openbao_raft_peer_ips: >-
 # provisioning is likewise gated to this host.
 openbao_bootstrap_host: >-
   {{ (groups['openbao_group'] | default([inventory_hostname]) | sort | first) }}
+
+# DATA-LOSS GUARD. `bao operator init` creates a BRAND-NEW empty cluster. On a
+# homelab that already holds live secrets, a fresh init on a mis-scoped run (a
+# node list that dropped the existing members, or a bootstrap host that can't
+# reach them) would orphan the real data into a second, empty cluster. So fresh
+# init is OPT-IN. For a ROLLING EXPANSION of a live cluster (add nodes, preserve
+# data) leave this false — the new nodes join via retry_join and the existing
+# data replicates to them. Set true ONLY for the very first cluster creation.
+# See roles/openbao/README.md ("Rolling expansion / migration").
+openbao_allow_fresh_init: false
 
 # --- Seal: on-prem static-key auto-unseal (no cloud) ------------------------
 # A single 32-byte AES-256 key (base64), shared by all nodes, unwraps the root
@@ -239,7 +249,7 @@ openbao_approle_token_max_ttl: 4h
 #     snapshots off-box in the meantime.
 #   * a full restore-to-scratch-node drill (needs a scratch node that does not
 #     exist yet). gzip -t is the strongest safe on-box integrity check today.
-# "Never lost" already holds regardless: 3-node Raft (3 live copies) + recovery
+# "Never lost" already holds regardless: Raft HA live copies + recovery
 # shares (paper) + the seal key (Doppler tier-0) + the ZFS/PBS-backed data dir.
 openbao_snapshot_enabled: true
 # Reserved for the S3 follow-up above (bucket already created by object_storage).

@@ -1,7 +1,7 @@
 ---
 galaxy_info:
   author: JacobPEvans
-  description: Deploy OpenBao secrets manager (3-node Raft HA + on-prem static-key auto-unseal)
+  description: Deploy OpenBao secrets manager (Raft HA + on-prem static-key auto-unseal)
   license: Apache-2.0
   min_ansible_version: "2.15"
   platforms:

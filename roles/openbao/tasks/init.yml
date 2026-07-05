@@ -4,7 +4,7 @@
 # cluster, then provisions the KV mount, the RBAC policies, and the AppRoles
 # (terraform-apply / terrakube-plan / ansible-converge / observability /
 # local-cloud / monitoring / media / local-llm / public / ai-readonly /
-# ai-elevated / snapshot — see docs/SECRETS_HIERARCHY.md). The other two Raft
+# ai-elevated / snapshot — see docs/SECRETS_HIERARCHY.md). The other Raft
 # peers never run this: they join the leader automatically (retry_join in
 # openbao.hcl) and self-unseal via the static seal. Every step is guarded so
 # re-runs are no-ops: nothing is created if it already exists, and break-glass
@@ -36,7 +36,59 @@
   ansible.builtin.set_fact:
     openbao_status: "{{ openbao_status_raw.stdout | from_json }}"
 
-# --- Initialization (only when not yet initialized) -------------------------
+# --- Data-loss guard: never fresh-init on top of an existing cluster ---------
+# A rolling expansion of a LIVE cluster must JOIN, never re-init. Before the
+# bootstrap host would run `bao operator init`, probe every configured peer: if
+# ANY already reports initialized=true, a real cluster exists and its data must
+# be preserved, so we do NOT init (the peers' retry_join pulls this node in and
+# the data replicates). Fresh init is allowed ONLY when no peer is initialized
+# AND the operator explicitly opted in (openbao_allow_fresh_init) — so a
+# mis-scoped node list fails loudly instead of silently orphaning the secrets.
+- name: Probe peers for an already-initialized cluster
+  ansible.builtin.uri:
+    url: "http://{{ item }}:{{ openbao_api_port }}/v1/sys/health?standbyok=true&uninitcode=200&sealedcode=200"
+    method: GET
+    timeout: 5
+    return_content: true
+  loop: "{{ openbao_raft_peer_ips | reject('equalto', openbao_bind_address) | list }}"
+  loop_control:
+    label: "{{ item }}"
+  register: openbao_peer_health
+  changed_when: false
+  failed_when: false
+  when: not openbao_status.initialized
+
+- name: Determine whether a live cluster already exists among the peers
+  ansible.builtin.set_fact:
+    openbao_existing_cluster_present: >-
+      {{ (openbao_peer_health.results | default([]))
+         | selectattr('json', 'defined')
+         | map(attribute='json.initialized') | select('equalto', true)
+         | list | length > 0 }}
+  when: not openbao_status.initialized
+
+- name: Refuse to fresh-init when a cluster may already exist (data-loss guard)
+  ansible.builtin.fail:
+    msg: >-
+      This bootstrap host is not initialized, no already-initialized peer was
+      reachable, and openbao_allow_fresh_init is false. Refusing `bao operator
+      init` — it would create a NEW empty cluster and orphan any existing
+      secrets. If this is a genuine first bootstrap, re-run with
+      -e openbao_allow_fresh_init=true. If this is a rolling expansion, ensure
+      the existing openbao nodes are in openbao_group and reachable, then re-run.
+  when:
+    - not openbao_status.initialized
+    - not (openbao_existing_cluster_present | default(false))
+    - not (openbao_allow_fresh_init | bool)
+
+- name: Decide fresh-init vs join (join preserves an existing cluster's data)
+  ansible.builtin.set_fact:
+    openbao_do_fresh_init: >-
+      {{ (not openbao_status.initialized)
+         and (not (openbao_existing_cluster_present | default(false)))
+         and (openbao_allow_fresh_init | bool) }}
+
+# --- Initialization (only on a genuine first bootstrap) ---------------------
 # With an auto-unseal seal (static key) `bao operator init` produces RECOVERY
 # shares (not classic unseal keys); the static seal unwraps the root key on
 # every start, so the bootstrap node self-unseals and the peers do too on join.
@@ -52,13 +104,13 @@
   register: openbao_init_raw
   no_log: true
   changed_when: true
-  when: not openbao_status.initialized
+  when: openbao_do_fresh_init
 
 - name: Capture init result
   ansible.builtin.set_fact:
     openbao_init: "{{ openbao_init_raw.stdout | from_json }}"
   no_log: true
-  when: not openbao_status.initialized
+  when: openbao_do_fresh_init
 
 # Break-glass: write recovery shares + root token to a 0600 file ON THE
 # CONTROLLER (gitignored), then shout at the operator to move it to paper.
@@ -73,7 +125,7 @@
   vars:
     ansible_become: false
   no_log: true
-  when: not openbao_status.initialized
+  when: openbao_do_fresh_init
 
 - name: WARN — transcribe recovery material to paper, then delete the file
   ansible.builtin.debug:
@@ -90,7 +142,7 @@
       the seal key is ever lost. Do NOT commit it. Do NOT leave it
       on disk.
       ============================================================
-  when: not openbao_status.initialized
+  when: openbao_do_fresh_init
 
 # Root token: from this run's init output on the FIRST bootstrap. On a cluster
 # that's already initialized, provisioning (new policies/AppRoles) only runs
@@ -101,7 +153,7 @@
   ansible.builtin.set_fact:
     openbao_bootstrap_token: "{{ openbao_init.root_token }}"
   no_log: true
-  when: not openbao_status.initialized
+  when: openbao_do_fresh_init
 
 - name: Use the externally-supplied admin token for provisioning against a live cluster
   ansible.builtin.set_fact:

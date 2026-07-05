@@ -1,8 +1,8 @@
 {{ ansible_managed | comment }}
-# OpenBao server configuration — 3-node Raft HA + on-prem static-key auto-unseal.
+# OpenBao server configuration — Raft HA + on-prem static-key auto-unseal.
 # Rendered by the openbao Ansible role. Do not edit manually.
 
-# Integrated Raft storage. This is one peer of a 3-node HA cluster (quorum 2).
+# Integrated Raft storage. This is one peer of the HA cluster.
 # Every node carries a retry_join for each peer, so a freshly-started node finds
 # the leader and joins automatically; with the static seal it then self-unseals.
 # Exactly one node runs `bao operator init` (the bootstrap host) — the others

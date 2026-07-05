@@ -70,7 +70,7 @@
           # On-prem static-key seal — never the cloud awskms seal.
           - "'seal \"static\"' in (bao_cfg_content.content | b64decode)"
           - "'awskms' not in (bao_cfg_content.content | b64decode)"
-          # 3-node Raft auto-join: a retry_join block is rendered per peer.
+          # Raft auto-join: a retry_join block is rendered per peer.
           - "'retry_join' in (bao_cfg_content.content | b64decode)"
           - "'listener \"tcp\"' in (bao_cfg_content.content | b64decode)"
           # Listener must bind the VLAN IP, never all-interfaces. Match the
