@@ -28,6 +28,12 @@
 # dependency: openbao-01 down -> openbao-02 answers, ingress down -> a per-node
 # endpoint answers. If NONE answers, active_addr stays empty and the role skips
 # to env/SOPS (a total-OpenBao outage must not hard-fail every converge).
+# ansible_become: false on the delegated tasks below is REQUIRED — Ansible
+# inherits the play's become: true on delegated tasks regardless of
+# task-level become, which fails with "sudo: a password is required" on the
+# controller (same gotcha documented in roles/openbao, roles/minio,
+# roles/object_storage, roles/cribl_packs). These are unauthenticated GETs
+# and local set_facts — none need root.
 - name: Probe OpenBao endpoints for a live, unsealed one (client failover)
   ansible.builtin.uri:
     url: "{{ item }}/v1/sys/health?standbyok=true&perfstandbyok=true"
@@ -41,6 +47,10 @@
   failed_when: false
   changed_when: false
   delegate_to: localhost
+  connection: local
+  become: false
+  vars:
+    ansible_become: false
   run_once: true
   # /v1/sys/health is public + unauthenticated (no secret in URL or response), so
   # NOT no_log: keep it visible for troubleshooting DNS/TLS/connectivity failover.
@@ -55,6 +65,10 @@
           | map(attribute='item') | list | first) | default('', true) }}
   delegate_to: localhost
   delegate_facts: true
+  connection: local
+  become: false
+  vars:
+    ansible_become: false
   run_once: true
   when: openbao_secrets_configured
 
@@ -84,13 +98,21 @@
     openbao_secrets_by_domain: {}
   delegate_to: localhost
   delegate_facts: true
+  connection: local
+  become: false
+  vars:
+    ansible_become: false
   run_once: true
   when: openbao_secrets_active
 
 - name: Fetch each domain's secrets from OpenBao (delegated to the controller)
   when: openbao_secrets_active
   delegate_to: localhost
+  connection: local
+  become: false
   run_once: true
+  vars:
+    ansible_become: false
   block:
     - name: Fetch each configured domain's secrets from OpenBao
       ansible.builtin.include_tasks: fetch_domain.yml
