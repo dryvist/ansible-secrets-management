@@ -10,17 +10,69 @@
 
 - name: Decide whether OpenBao is configured at all
   ansible.builtin.set_fact:
-    openbao_secrets_active: "{{ openbao_secrets_bao_addr | length > 0 }}"
+    openbao_secrets_configured: "{{ openbao_secrets_bao_addr_candidates | length > 0 }}"
 
 - name: Report that OpenBao is not configured (env/SOPS fallback in effect)
   ansible.builtin.debug:
     msg: >-
-      BAO_ADDR is unset — openbao_secrets is skipping entirely; every domain
-      falls back to env/SOPS secrets. Set BAO_ADDR plus each domain's
-      <DOMAIN>_VAULT_ROLE_ID / <DOMAIN>_VAULT_SECRET_ID to source that
-      domain's secrets from OpenBao.
+      No OpenBao endpoint (BAO_ADDR unset and no openbao-tagged nodes in the tofu
+      inventory) — openbao_secrets is skipping entirely; every domain falls back
+      to env/SOPS secrets. Set BAO_ADDR plus each domain's role_id/secret_id
+      envs to source that domain's secrets from OpenBao.
   run_once: true
-  when: not openbao_secrets_active
+  when: not openbao_secrets_configured
+
+# Client failover: probe the ordered candidate endpoints ONCE on the controller
+# and pin the first that is reachable + unsealed (health 200, standbyok — a
+# standby forwards to the active peer). This is what removes the single-node
+# dependency: openbao-01 down -> openbao-02 answers, ingress down -> a per-node
+# endpoint answers. If NONE answers, active_addr stays empty and the role skips
+# to env/SOPS (a total-OpenBao outage must not hard-fail every converge).
+- name: Probe OpenBao endpoints for a live, unsealed one (client failover)
+  ansible.builtin.uri:
+    url: "{{ item }}/v1/sys/health?standbyok=true&perfstandbyok=true"
+    method: GET
+    validate_certs: "{{ openbao_secrets_validate_certs }}"
+    timeout: 5
+  loop: "{{ openbao_secrets_bao_addr_candidates }}"
+  loop_control:
+    label: "{{ item }}"
+  register: openbao_secrets_health
+  failed_when: false
+  changed_when: false
+  delegate_to: localhost
+  run_once: true
+  # /v1/sys/health is public + unauthenticated (no secret in URL or response), so
+  # NOT no_log: keep it visible for troubleshooting DNS/TLS/connectivity failover.
+  when: openbao_secrets_configured
+
+- name: Pin the first reachable OpenBao endpoint for this run
+  ansible.builtin.set_fact:
+    openbao_secrets_active_addr: >-
+      {{ (openbao_secrets_health.results
+          | selectattr('status', 'defined')
+          | selectattr('status', 'equalto', 200)
+          | map(attribute='item') | list | first) | default('', true) }}
+  delegate_to: localhost
+  delegate_facts: true
+  run_once: true
+  when: openbao_secrets_configured
+
+- name: Decide whether a usable OpenBao endpoint was found
+  ansible.builtin.set_fact:
+    openbao_secrets_active: "{{ (hostvars['localhost'].openbao_secrets_active_addr | default('', true)) | length > 0 }}"
+
+- name: Report no OpenBao endpoint answered (env/SOPS fallback in effect)
+  ansible.builtin.debug:
+    msg: >-
+      OpenBao is configured but none of {{ openbao_secrets_bao_addr_candidates }}
+      answered /v1/sys/health unsealed — skipping OpenBao for this run; every
+      domain falls back to env/SOPS secrets. This is the DR degrade path, not a
+      hard failure.
+  run_once: true
+  when:
+    - openbao_secrets_configured
+    - not openbao_secrets_active
 
 # delegate_facts is REQUIRED, not optional: set_fact + delegate_to + run_once
 # WITHOUT delegate_facts writes the fact to the play's hosts, NOT to localhost,

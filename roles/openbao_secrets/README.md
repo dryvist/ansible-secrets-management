@@ -61,6 +61,18 @@ Any domain whose credentials aren't set simply falls back to env/SOPS for its
 consumer roles — see [Wiring](#wiring) for how the pre-fetch play publishes
 each domain's fact.
 
+## Client failover
+
+Before fetching, the controller probes an ordered list of endpoints and pins the
+first that answers a health check unsealed (standbyok, since a standby forwards
+to the active peer so any node can serve the read). It tries `BAO_ADDR` (the
+Traefik ingress VIP name, made HA by the `keepalived` role) first, then each
+`openbao`-tagged container's own per-node endpoint derived from the tofu
+inventory (no literal address), so failover holds even if both ingress instances
+are unreachable. If none answers, the role skips to the env/SOPS fallback for
+this run rather than hard-failing every converge. This is client failover only;
+server-side quorum HA needs a fourth node and is out of scope.
+
 ## Domains fetched (`openbao_secrets_domains`)
 
 | Domain | AppRole env vars | KV paths | Consumers |

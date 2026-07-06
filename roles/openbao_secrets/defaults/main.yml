@@ -21,6 +21,19 @@ openbao_secrets_bao_addr: "{{ lookup('env', 'BAO_ADDR') | default('', true) }}"
 # default; override only for a direct-to-node http bootstrap endpoint.
 openbao_secrets_validate_certs: true
 openbao_secrets_kv_mount: secret
+# Client failover across the OpenBao nodes: probe an ordered candidate list and
+# use the first reachable endpoint. See README for the full ordering + rationale.
+openbao_secrets_openbao_api_port: "{{ tofu_data['constants']['service_ports']['openbao_api'] | default(8200) }}"
+openbao_secrets_node_addrs: >-
+  {{ tofu_data['containers'] | default({}) | dict2items
+     | selectattr('value.tags', 'defined')
+     | selectattr('value.tags', 'contains', 'openbao')
+     | map(attribute='value.ip', default='') | reject('equalto', '')
+     | map('regex_replace', '^(.+)$', 'http://\1:' ~ (openbao_secrets_openbao_api_port | string))
+     | list }}
+openbao_secrets_bao_addr_candidates: >-
+  {{ (([openbao_secrets_bao_addr] if openbao_secrets_bao_addr | length > 0 else [])
+      + openbao_secrets_node_addrs) | unique }}
 
 # One entry per resource-domain identity this Ansible converge fetches for.
 # Each domain's role_id/secret_id come from its own env vars — sourced from

@@ -38,7 +38,7 @@
 
     - name: Log in with the AppRole for {{ openbao_domain.name }}
       community.hashi_vault.vault_login:
-        url: "{{ openbao_secrets_bao_addr }}"
+        url: "{{ hostvars['localhost'].openbao_secrets_active_addr | default(openbao_secrets_bao_addr, true) }}"
         auth_method: approle
         role_id: "{{ openbao_secrets_domain_role_id }}"
         secret_id: "{{ openbao_secrets_domain_secret_id }}"
@@ -47,7 +47,7 @@
 
     - name: Read each KV path, tolerating not-yet-seeded ones, for {{ openbao_domain.name }}
       community.hashi_vault.vault_kv2_get:
-        url: "{{ openbao_secrets_bao_addr }}"
+        url: "{{ hostvars['localhost'].openbao_secrets_active_addr | default(openbao_secrets_bao_addr, true) }}"
         auth_method: token
         token: "{{ openbao_secrets_domain_login.login.auth.client_token }}"
         engine_mount_point: "{{ openbao_secrets_kv_mount }}"
