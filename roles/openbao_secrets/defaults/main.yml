@@ -68,8 +68,7 @@ openbao_secrets_domains:
     role_id_env: LOCAL_LLM_VAULT_ROLE_ID
     secret_id_env: LOCAL_LLM_VAULT_SECRET_ID
     paths:
-      - ai/router      # LLM_ROUTER_MASTER_KEY
-      - ai/llm-large   # LLM_LARGE_BEARER_TOKEN
+      - ai/llm         # LLM_ROUTER_MASTER_KEY, LLM_LARGE_BEARER_TOKEN (single seeded KV path)
       - ai/qdrant      # QDRANT_API_KEY
       - ai/open-webui  # OPEN_WEBUI_SECRET_KEY, OPEN_WEBUI_OPENAI_API_KEY
       - ai/hermes      # HERMES_AGENT_MODEL_API_KEY
