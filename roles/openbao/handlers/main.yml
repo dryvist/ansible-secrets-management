@@ -6,6 +6,12 @@
     daemon_reload: true
   when: ansible_virtualization_type | default('') != 'docker'
 
+- name: Restart rsyslog
+  ansible.builtin.systemd:
+    name: rsyslog
+    state: restarted
+  when: ansible_virtualization_type | default('') != 'docker'
+
 - name: Restart openbao snapshot timer
   ansible.builtin.systemd:
     name: "{{ openbao_snapshot_service_name }}.timer"

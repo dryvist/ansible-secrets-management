@@ -278,6 +278,36 @@ openbao_snapshot_ntfy_url: >-
 # (ntfy + journal alert still fire). Set per-node from the healthchecks LXC.
 openbao_snapshot_healthcheck_url: "{{ lookup('env', 'OPENBAO_SNAPSHOT_HC_URL') | default('', true) }}"
 
+# --- Audit device + shipping (file device -> rsyslog imfile -> AI listener) --
+# Enable the file audit device (every node writes its OWN local audit log —
+# the device config replicates cluster-wide, the file does not) and tail it
+# with a dedicated rsyslog imfile ruleset that forwards to the openbao_audit
+# AI ingest listener (syslog CNAME -> HAProxy -> Cribl Stream ai_stamp ->
+# Splunk index=openbao_audit). The dedicated ruleset is load-bearing: audit
+# lines must NOT also hit the syslog_forwarder catch-all (linux/os family) or
+# every secret access would be double-shipped into index=os.
+openbao_audit_enabled: true
+openbao_audit_device_name: file
+openbao_audit_log_dir: /var/log/openbao
+openbao_audit_log_path: "{{ openbao_audit_log_dir }}/audit.log"
+# `bao audit enable` needs a privileged token (BAO_TOKEN via Doppler tier-0 /
+# break-glass, same as openbao_admin_token). When empty the enable step is
+# skipped cleanly — dir/logrotate/rsyslog still converge so the device starts
+# shipping the moment it is enabled.
+openbao_audit_rsyslog_config_path: /etc/rsyslog.d/20-openbao-audit.conf
+openbao_audit_syslog_host: "syslog.{{ lookup('env', 'PROXMOX_SUBDOMAIN') }}"
+# openbao_audit AI ingest port from tofu constants; guarded default = the
+# family's assigned port for inventories that predate ai_log_routing.
+openbao_audit_syslog_port: >-
+  {{ tofu_data.constants.ai_log_routing.openbao_audit.port | default(10331) }}
+openbao_audit_queue_max_disk_space: 256m
+# Logrotate: copytruncate so the running server keeps its file handle (the
+# file audit device only reopens on SIGHUP; truncating in place avoids racing
+# a reload against audit writes).
+openbao_audit_logrotate_path: /etc/logrotate.d/openbao-audit
+openbao_audit_logrotate_rotate: 7
+openbao_audit_logrotate_frequency: daily
+
 # --- Break-glass / bootstrap output (controller-side, never committed) -------
 # init.yml writes recovery shares + root token, and each AppRole's creds, to
 # 0600 files UNDER playbook_dir ON THE CONTROLLER, then prints a LOUD warning to

@@ -228,7 +228,18 @@
     - ansible_virtualization_type | default('') != 'docker'
     - inventory_hostname == openbao_bootstrap_host
 
-# --- Phase 10: automated raft snapshots (all nodes; script leader-gates) -----
+# --- Phase 10: audit device + shipping (all nodes) ---------------------------
+# File audit device (enable is token-gated + bootstrap-host-gated inside) plus
+# the rsyslog imfile ruleset that ships each node's audit log to the
+# openbao_audit AI ingest listener. Skipped under Docker (no systemd/live API),
+# matching the bootstrap/snapshot phases.
+- name: Enable the audit device and ship the audit log
+  ansible.builtin.include_tasks: audit.yml
+  when:
+    - openbao_audit_enabled | bool
+    - ansible_virtualization_type | default('') != 'docker'
+
+# --- Phase 11: automated raft snapshots (all nodes; script leader-gates) -----
 # Deployed on every openbao node so the surviving nodes keep snapshotting after
 # a leadership change. Gated on the snapshot AppRole creds being present: they
 # are emitted by init.yml at bootstrap and injected at converge from tier-0, so

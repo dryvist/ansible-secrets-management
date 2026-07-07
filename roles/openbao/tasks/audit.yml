@@ -1,0 +1,107 @@
+---
+# Audit device enable + shipping. Runs on EVERY node (each node writes its own
+# local audit file once the device is enabled cluster-wide); the actual
+# `bao audit enable` API write is idempotent (guarded by `bao audit list`) and
+# needs a privileged token — skipped cleanly when BAO_TOKEN is absent so a
+# pre-provisioning converge stays green.
+
+- name: Create the OpenBao audit log directory
+  ansible.builtin.file:
+    path: "{{ openbao_audit_log_dir }}"
+    state: directory
+    owner: "{{ openbao_user }}"
+    group: "{{ openbao_group }}"
+    mode: "0750"
+
+- name: Deploy the audit logrotate policy
+  ansible.builtin.template:
+    src: openbao-audit-logrotate.j2
+    dest: "{{ openbao_audit_logrotate_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+
+# --- Enable the file audit device (idempotent, token-gated) ------------------
+- name: List enabled audit devices
+  ansible.builtin.command:
+    cmd: bao audit list -format=json
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_admin_token }}"
+  register: openbao_audit_list
+  changed_when: false
+  # rc=0 with a JSON object when devices exist; OpenBao exits non-zero with
+  # "No audit devices are enabled" on a cluster that has none — treat that as
+  # an empty list, fail on anything else (bad token, sealed node, ...).
+  failed_when:
+    - openbao_audit_list.rc != 0
+    - "'No audit devices are enabled' not in (openbao_audit_list.stderr | default(''))"
+  when: openbao_admin_token | length > 0
+  no_log: true
+
+- name: Enable the file audit device
+  ansible.builtin.command:
+    # mode=0640: the device default is 0600, which the syslog group (rsyslog
+    # imfile reader) cannot open — shipping would fail silently.
+    cmd: >-
+      bao audit enable {{ openbao_audit_device_name }}
+      file_path={{ openbao_audit_log_path }}
+      mode=0640
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_admin_token }}"
+  register: openbao_audit_enable
+  changed_when: openbao_audit_enable.rc == 0
+  when:
+    - openbao_admin_token | length > 0
+    - inventory_hostname == openbao_bootstrap_host
+    - >-
+      (openbao_audit_device_name ~ '/') not in
+      ((openbao_audit_list.stdout | default('{}', true) | from_json)
+       if openbao_audit_list.rc | default(1) == 0 else {})
+  no_log: true
+
+- name: Note when the audit enable step was skipped for a missing token
+  ansible.builtin.debug:
+    msg: >-
+      BAO_TOKEN is not set — skipped `bao audit list/enable`. The audit
+      shipping plumbing (dir, logrotate, rsyslog ruleset) is converged; enable
+      the device with a privileged token to start emitting.
+  when: openbao_admin_token | length == 0
+
+# --- Ship the audit file via a dedicated rsyslog ruleset ----------------------
+# rsyslog is already present on these guests (site.yml applies syslog_forwarder
+# to all non-pipeline LXCs), but install defensively so this role stands alone.
+# update_cache stays false: these guests are firewalled to internal-only
+# egress (see the WAN-free note in main.yml) — a cache refresh would wedge.
+- name: Install rsyslog
+  ansible.builtin.apt:
+    name: rsyslog
+    state: present
+    update_cache: false
+
+# The audit dir is 0750 openbao:openbao and the file 0640 — rsyslog runs as
+# the syslog user, so group membership is what grants read access.
+- name: Add the syslog user to the openbao group for audit-log read access
+  ansible.builtin.user:
+    name: syslog
+    groups: "{{ openbao_group }}"
+    append: true
+  notify: Restart rsyslog
+
+- name: Deploy the audit-log rsyslog imfile shipping ruleset
+  ansible.builtin.template:
+    src: openbao-audit-rsyslog.conf.j2
+    dest: "{{ openbao_audit_rsyslog_config_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+    validate: rsyslogd -N1 -f %s
+  notify: Restart rsyslog
+
+# No unit files are written here, so no daemon_reload.
+- name: Enable and start rsyslog
+  ansible.builtin.systemd:
+    name: rsyslog
+    state: started
+    enabled: true

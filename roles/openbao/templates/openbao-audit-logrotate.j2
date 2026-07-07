@@ -1,0 +1,13 @@
+# {{ ansible_managed }}
+# Rotate the OpenBao file audit device output. copytruncate keeps the running
+# server's file handle valid (the device only reopens on SIGHUP); rsyslog's
+# imfile tracks the truncation via reopenOnTruncate in the shipping ruleset.
+{{ openbao_audit_log_path }} {
+    {{ openbao_audit_logrotate_frequency }}
+    rotate {{ openbao_audit_logrotate_rotate }}
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+}

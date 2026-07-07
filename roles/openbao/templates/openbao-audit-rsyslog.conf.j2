@@ -1,0 +1,35 @@
+# {{ ansible_managed }}
+# Ship the OpenBao audit log to the openbao_audit AI ingest listener:
+#   {{ openbao_audit_log_path }}
+#   -> {{ openbao_audit_syslog_host }}:{{ openbao_audit_syslog_port }} (tcp)
+#   -> HAProxy -> Cribl Stream (ai_stamp) -> Splunk index=openbao_audit.
+#
+# The DEDICATED ruleset is load-bearing: bound via the imfile input below, it
+# keeps audit lines OFF the default ruleset, so they never also hit the
+# syslog_forwarder catch-all (10-forward-cribl.conf) and double-ship into the
+# os index. Audit entries are single-line JSON; they ride inside standard
+# syslog framing with the tag below — the Stream syslog input parses the
+# header and ai_stamp stamps index/sourcetype.
+
+module(load="imfile")
+
+ruleset(name="openbao_audit") {
+  action(type="omfwd"
+         target="{{ openbao_audit_syslog_host }}"
+         port="{{ openbao_audit_syslog_port }}"
+         protocol="tcp"
+         queue.type="LinkedList"
+         queue.filename="openbao_audit_fwd"
+         queue.maxDiskSpace="{{ openbao_audit_queue_max_disk_space }}"
+         queue.saveOnShutdown="on"
+         action.resumeRetryCount="-1")
+  stop
+}
+
+input(type="imfile"
+      File="{{ openbao_audit_log_path }}"
+      Tag="openbao-audit:"
+      Severity="info"
+      Facility="local6"
+      reopenOnTruncate="on"
+      Ruleset="openbao_audit")
