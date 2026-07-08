@@ -1,0 +1,16 @@
+{{ ansible_managed | comment }}
+# OpenBao policy for the ai-orchestrator AppRole — the AI agent/orchestrator's
+# WRITE identity for its own secret domain. Read + create/update on secret/ai/*
+# so agents can persist and rotate their own credentials, and list metadata to
+# discover what exists. Deliberately scoped to secret/ai/* ONLY: no delete, no
+# infra kernel (secret/infra/*), no other app/platform subtrees. This is the
+# one AI identity that may WRITE; ai-readonly/ai-elevated stay read-only.
+# See terraform-proxmox docs/SECRETS_HIERARCHY.md.
+
+path "{{ openbao_kv_mount }}/data/ai/*" {
+  capabilities = ["create", "update", "read"]
+}
+
+path "{{ openbao_kv_mount }}/metadata/ai/*" {
+  capabilities = ["read", "list"]
+}

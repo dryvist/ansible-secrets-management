@@ -135,6 +135,15 @@ openbao_homelab_path: homelab
 #   public           — anonymous, non-exploitable facts (domain/subdomain);
 #                      read-only, secret/public/*; creds NOT keychain-gated —
 #                      shipped ambiently like other non-secret internal config
+#   ai-orchestrator  — AI agent/orchestrator WRITE identity; read + create/update
+#                      secret/ai/* (the one AI identity that may write). Its
+#                      role_id/secret_id are OPERATOR-HELD in the macOS keychain
+#                      (services BAO_AI_ORCHESTRATOR_ROLE_ID / _SECRET_ID),
+#                      externally managed and NOT Doppler-managed. The secret_id
+#                      is non-expiring and IN ACTIVE USE — converges must stay
+#                      idempotent-existence-only for it and must NEVER regenerate
+#                      it (init.yml only mints creds for AppRoles missing this
+#                      run, so an already-live ai-orchestrator is left untouched).
 #   ai-readonly / ai-elevated / snapshot — unchanged, kept as-is
 openbao_terraform_apply_policy_name: terraform-apply
 openbao_terraform_apply_approle_name: terraform-apply
@@ -156,6 +165,8 @@ openbao_hermes_policy_name: hermes
 openbao_hermes_approle_name: hermes
 openbao_public_policy_name: public
 openbao_public_approle_name: public
+openbao_ai_orchestrator_policy_name: ai-orchestrator
+openbao_ai_orchestrator_approle_name: ai-orchestrator
 openbao_ai_readonly_policy_name: ai-readonly
 openbao_ai_readonly_approle_name: ai-readonly
 openbao_ai_elevated_policy_name: ai-elevated
@@ -190,6 +201,13 @@ openbao_approles:
     policy: "{{ openbao_hermes_policy_name }}"
   - name: "{{ openbao_public_approle_name }}"
     policy: "{{ openbao_public_policy_name }}"
+  # ai-orchestrator: role_id/secret_id are OPERATOR-HELD in the macOS keychain
+  # (services BAO_AI_ORCHESTRATOR_ROLE_ID / _SECRET_ID), NOT Doppler-managed.
+  # This AppRole already exists LIVE with a non-expiring secret_id in active
+  # use; init.yml only creates + mints creds for AppRoles missing this run, so
+  # a converge leaves the live role and its secret_id untouched (existence-only).
+  - name: "{{ openbao_ai_orchestrator_approle_name }}"
+    policy: "{{ openbao_ai_orchestrator_policy_name }}"
   - name: "{{ openbao_ai_readonly_approle_name }}"
     policy: "{{ openbao_ai_readonly_policy_name }}"
   - name: "{{ openbao_ai_elevated_approle_name }}"
@@ -219,6 +237,8 @@ openbao_policies:
     template: hermes-policy.hcl.j2
   - name: "{{ openbao_public_policy_name }}"
     template: public-policy.hcl.j2
+  - name: "{{ openbao_ai_orchestrator_policy_name }}"
+    template: ai-orchestrator-policy.hcl.j2
   - name: "{{ openbao_ai_readonly_policy_name }}"
     template: ai-readonly-policy.hcl.j2
   - name: "{{ openbao_ai_elevated_policy_name }}"

@@ -195,6 +195,7 @@ plans):
 | `local-llm` | `secret/ai/*` | — | The LLM serving stack itself |
 | `hermes` | `secret/ai/hermes` only | — | Dedicated least-privilege reader for the Hermes agent; NO broad `secret/ai/*` |
 | `public` | `secret/public/*` | — | **Anonymous** — creds NOT keychain-gated; shipped ambiently |
+| `ai-orchestrator` | `secret/ai/*` | `secret/ai/*` (create/update) | AI agent/orchestrator WRITE identity; role_id/secret_id **operator-held in the macOS keychain**, not Doppler-managed |
 | `ai-readonly` | `secret/ai/*`, `secret/apps/*` | — | **default AI agent; NO `secret/infra/*`** |
 | `ai-elevated` | `ai-readonly` + `secret/platform/*` | — | trusted infra-touching agents; no write |
 | `snapshot` | `sys/storage/raft/snapshot` | — | least-priv backup identity |
