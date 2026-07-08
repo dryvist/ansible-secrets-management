@@ -7,7 +7,7 @@
 # bootstraps the cluster, the secret hierarchy, the RBAC policies, and the
 # AppRoles — one per resource-domain identity (terraform-apply / terrakube-plan
 # / ansible-converge / observability / local-cloud / monitoring / media /
-# local-llm / hermes / public / ai-readonly / ai-elevated / snapshot).
+# local-llm / hermes / hermes-write / public / ai-readonly / ai-elevated / snapshot).
 
 # --- Version ----------------------------------------------------------------
 # Pinned to a known-good upstream release. Version bumps follow the repo's
@@ -132,6 +132,12 @@ openbao_homelab_path: homelab
 #   local-llm        — LLM serving stack; read-only, secret/ai/*
 #   hermes           — Hermes AI agent; read-only, secret/ai/hermes ONLY —
 #                      dedicated least-privilege reader, NOT the broad ai subtree
+#   hermes-write     — least-privilege WRITE to secret/ai/hermes ONLY
+#                      (create/update/read that single path; no wildcard, no
+#                      other paths). Doppler-published, for ansible-splunk
+#                      token-publish + one-time Hermes cred seed. A narrow
+#                      complement to the broad, keychain-held ai-orchestrator
+#                      writer — scoped down to just the Hermes secret.
 #   public           — anonymous, non-exploitable facts (domain/subdomain);
 #                      read-only, secret/public/*; creds NOT keychain-gated —
 #                      shipped ambiently like other non-secret internal config
@@ -163,6 +169,8 @@ openbao_local_llm_policy_name: local-llm
 openbao_local_llm_approle_name: local-llm
 openbao_hermes_policy_name: hermes
 openbao_hermes_approle_name: hermes
+openbao_hermes_write_policy_name: hermes-write
+openbao_hermes_write_approle_name: hermes-write
 openbao_public_policy_name: public
 openbao_public_approle_name: public
 openbao_ai_orchestrator_policy_name: ai-orchestrator
@@ -199,6 +207,8 @@ openbao_approles:
     policy: "{{ openbao_local_llm_policy_name }}"
   - name: "{{ openbao_hermes_approle_name }}"
     policy: "{{ openbao_hermes_policy_name }}"
+  - name: "{{ openbao_hermes_write_approle_name }}"
+    policy: "{{ openbao_hermes_write_policy_name }}"
   - name: "{{ openbao_public_approle_name }}"
     policy: "{{ openbao_public_policy_name }}"
   # ai-orchestrator: role_id/secret_id are OPERATOR-HELD in the macOS keychain
@@ -235,6 +245,8 @@ openbao_policies:
     template: local-llm-policy.hcl.j2
   - name: "{{ openbao_hermes_policy_name }}"
     template: hermes-policy.hcl.j2
+  - name: "{{ openbao_hermes_write_policy_name }}"
+    template: hermes-write-policy.hcl.j2
   - name: "{{ openbao_public_policy_name }}"
     template: public-policy.hcl.j2
   - name: "{{ openbao_ai_orchestrator_policy_name }}"
