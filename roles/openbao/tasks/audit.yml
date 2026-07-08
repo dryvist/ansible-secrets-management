@@ -96,8 +96,17 @@
     owner: root
     group: root
     mode: "0644"
-    validate: rsyslogd -N1 -f %s
   notify: Restart rsyslog
+
+# Full-config check, not a fragment `validate: rsyslogd -N1 -f %s`: the
+# fragment alone has no global workDirectory in scope (it lives in
+# rsyslog.conf), and imfile hard-fails validation without one. Checking the
+# master config picks the fragment up from rsyslog.d with the global applied.
+# On failure the play aborts here, so the notified restart never flushes and
+# the running rsyslog keeps its previous config.
+- name: Validate the full rsyslog configuration
+  ansible.builtin.command: rsyslogd -N1
+  changed_when: false
 
 # No unit files are written here, so no daemon_reload.
 - name: Enable and start rsyslog
