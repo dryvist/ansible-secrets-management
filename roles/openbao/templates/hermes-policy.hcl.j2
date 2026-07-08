@@ -1,0 +1,10 @@
+{{ ansible_managed | comment }}
+# OpenBao policy for the `hermes` AppRole — the Hermes AI agent's dedicated,
+# least-privilege reader. Read-only on EXACTLY secret/ai/hermes (its own
+# secret) and nothing else in the ai subtree or any other domain.
+path "{{ openbao_kv_mount }}/data/ai/hermes" {
+  capabilities = ["read"]
+}
+path "{{ openbao_kv_mount }}/metadata/ai/hermes" {
+  capabilities = ["read", "list"]
+}

@@ -193,6 +193,7 @@ plans):
 | `monitoring` | `secret/apps/monitoring` | — | netmon/unifi_metrics/prometheus_stack |
 | `media` | `secret/apps/media` | — | *arr/qBittorrent/Plex stack |
 | `local-llm` | `secret/ai/*` | — | The LLM serving stack itself |
+| `hermes` | `secret/ai/hermes` only | — | Dedicated least-privilege reader for the Hermes agent; NO broad `secret/ai/*` |
 | `public` | `secret/public/*` | — | **Anonymous** — creds NOT keychain-gated; shipped ambiently |
 | `ai-readonly` | `secret/ai/*`, `secret/apps/*` | — | **default AI agent; NO `secret/infra/*`** |
 | `ai-elevated` | `ai-readonly` + `secret/platform/*` | — | trusted infra-touching agents; no write |
