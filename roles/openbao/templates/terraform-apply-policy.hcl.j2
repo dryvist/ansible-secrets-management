@@ -28,3 +28,11 @@ path "{{ openbao_kv_mount }}/metadata/platform/{{ sub }}/*" {
 }
 
 {% endfor %}
+# Seeding grant for the Nautobot P1 secrets, dryvist/docs-starlight#138.
+path "{{ openbao_kv_mount }}/data/apps/nautobot/*" {
+  capabilities = ["create", "update", "read"]
+}
+
+path "{{ openbao_kv_mount }}/metadata/apps/nautobot/*" {
+  capabilities = ["read", "list"]
+}

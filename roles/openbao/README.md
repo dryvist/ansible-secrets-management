@@ -174,6 +174,7 @@ secret/infra/      proxmox/ aws/ network/   # IaC kernel — terraform-apply wri
 secret/platform/   dns/ traefik/ terrakube/ splunk/ cribl/ object-storage/ compute/
 secret/apps/       media/ monitoring/ home-automation/
 secret/ai/         hermes/ agents/          # LLM stack + AI-agent creds
+secret/locks/      global                   # cross-repo apply lock state
 secret/public/     domain/ ...              # non-secret, non-exploitable facts
 secret/ci/         github/ doppler-sync/
 ```
@@ -185,7 +186,8 @@ plans):
 
 | AppRole | Reads | Writes | Notes |
 | --- | --- | --- | --- |
-| `terraform-apply` | `secret/infra/*`, `secret/platform/{dns,traefik}`, legacy `homelab/*` | same | Human-triggered IaC apply |
+| `terraform-apply` | `secret/infra/*`, `secret/platform/{dns,traefik}`, `secret/apps/nautobot/*`, legacy `homelab/*` | `secret/infra/*`, `secret/platform/{dns,traefik}`, `secret/apps/nautobot/*`, legacy `homelab/*` | Human-triggered IaC apply; Nautobot grant is narrow seed-only for P1 secrets |
+| `flow-lock` | `secret/locks/global`, `secret/infra/*` | `secret/locks/global` | Cross-repo apply lock holder; can release the global lock via metadata delete |
 | `terrakube-plan` | `secret/platform/terrakube` only | — | Terrakube VCS-driven runs; deliberately walled off from `secret/infra/*` |
 | `ansible-converge` | `secret/platform/*`, `secret/apps/*` | — | Config-management pulls |
 | `observability` | `secret/platform/{splunk,cribl}` | — | Ingest pipeline (shared HEC tokens) |
@@ -254,16 +256,16 @@ shred -u <playbook_dir>/.openbao-approle-*-<host>.json
   `apt` skips re-install when the version is present.
 - `tasks/init.yml` runs **only on the bootstrap host**. The very first
   `bao operator init` happens once (`initialized == false`); the KV mount,
-  each policy, the AppRole auth method, and each AppRole are guarded by
-  existence checks, so re-runs are no-ops for anything already present.
+  each policy, the AppRole auth method, and each AppRole are guarded so re-runs
+  are no-ops for anything already present and unchanged.
 - **Growing the RBAC surface on an already-live cluster is supported**: set
   `openbao_admin_token` (env `BAO_TOKEN`) to a privileged token so the role can
   authenticate without a fresh init; add rows to `openbao_policies` /
-  `openbao_approles`; re-run. Only the genuinely new policies/AppRoles are
-  created, and `role_id`/`secret_id` are surfaced **only for those** — existing
-  identities and their credentials are never touched or re-emitted, so a
-  routine converge without `BAO_TOKEN` set stays a complete no-op for this
-  section.
+  `openbao_approles`; re-run. Missing or changed policies are written, only
+  genuinely new AppRoles are created, and `role_id`/`secret_id` are surfaced
+  **only for those** — existing identities and their credentials are never
+  touched or re-emitted, so a routine converge without `BAO_TOKEN` set stays a
+  complete no-op for this section.
 
 ## Seal-key rotation
 

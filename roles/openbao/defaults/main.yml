@@ -5,9 +5,10 @@
 # upstream .deb (checksum-verified), renders a Raft HA + on-prem
 # static-key auto-unseal config, runs it under systemd, and (in init.yml)
 # bootstraps the cluster, the secret hierarchy, the RBAC policies, and the
-# AppRoles — one per resource-domain identity (terraform-apply / terrakube-plan
-# / ansible-converge / observability / local-cloud / monitoring / media /
-# local-llm / hermes / hermes-write / public / ai-readonly / ai-elevated / snapshot).
+# AppRoles — one per resource-domain identity (terraform-apply / flow-lock /
+# terrakube-plan / ansible-converge / observability / local-cloud / monitoring /
+# media / local-llm / hermes / hermes-write / public / ai-readonly /
+# ai-elevated / snapshot).
 
 # --- Version ----------------------------------------------------------------
 # Pinned to a known-good upstream release. Version bumps follow the repo's
@@ -118,7 +119,11 @@ openbao_homelab_path: homelab
 # Policy + AppRole names, one per RBAC identity (see docs/SECRETS_HIERARCHY.md
 # for the full rationale). Split by resource domain, least-privilege:
 #   terraform-apply  — human-triggered IaC apply (was "terraform"); read+write
-#                      secret/infra/*, secret/platform/{dns,traefik}
+#                      secret/infra/*, secret/platform/{dns,traefik}, plus
+#                      narrow secret/apps/nautobot/* seed grant for Nautobot P1
+#   flow-lock        — cross-repo apply lock holder; read/write only the global
+#                      lock record, metadata-delete for release, and read-only
+#                      secret/infra/* context for lock decisions
 #   terrakube-plan   — Terrakube VCS-driven plan/apply runs; read-only,
 #                      secret/platform/terrakube ONLY — deliberately walled off
 #                      from secret/infra/* (untrusted-plan surface)
@@ -153,6 +158,8 @@ openbao_homelab_path: homelab
 #   ai-readonly / ai-elevated / snapshot — unchanged, kept as-is
 openbao_terraform_apply_policy_name: terraform-apply
 openbao_terraform_apply_approle_name: terraform-apply
+openbao_flow_lock_policy_name: flow-lock
+openbao_flow_lock_approle_name: flow-lock
 openbao_terrakube_plan_policy_name: terrakube-plan
 openbao_terrakube_plan_approle_name: terrakube-plan
 openbao_ansible_converge_policy_name: ansible-converge
@@ -191,6 +198,8 @@ openbao_snapshot_approle_name: snapshot
 openbao_approles:
   - name: "{{ openbao_terraform_apply_approle_name }}"
     policy: "{{ openbao_terraform_apply_policy_name }}"
+  - name: "{{ openbao_flow_lock_approle_name }}"
+    policy: "{{ openbao_flow_lock_policy_name }}"
   - name: "{{ openbao_terrakube_plan_approle_name }}"
     policy: "{{ openbao_terrakube_plan_policy_name }}"
   - name: "{{ openbao_ansible_converge_approle_name }}"
@@ -229,6 +238,8 @@ openbao_approles:
 openbao_policies:
   - name: "{{ openbao_terraform_apply_policy_name }}"
     template: terraform-apply-policy.hcl.j2
+  - name: "{{ openbao_flow_lock_policy_name }}"
+    template: flow-lock-policy.hcl.j2
   - name: "{{ openbao_terrakube_plan_policy_name }}"
     template: terrakube-plan-policy.hcl.j2
   - name: "{{ openbao_ansible_converge_policy_name }}"
