@@ -186,8 +186,9 @@ plans):
 
 | AppRole | Reads | Writes | Notes |
 | --- | --- | --- | --- |
-| `terraform-apply` | `secret/infra/*`, `secret/platform/{dns,traefik}`, `secret/apps/nautobot/*`, legacy `homelab/*` | `secret/infra/*`, `secret/platform/{dns,traefik}`, `secret/apps/nautobot/*`, legacy `homelab/*` | Human-triggered IaC apply; Nautobot grant is narrow seed-only for P1 secrets |
-| `flow-lock` | `secret/locks/global`, `secret/infra/*` | `secret/locks/global` | Cross-repo apply lock holder; can release the global lock via metadata delete |
+| `terraform-apply` | `secret/infra/*`, `secret/platform/{dns,traefik}`, `secret/apps/nautobot/*`, legacy `homelab/*` | (same) | Human-triggered IaC apply |
+| `apps-seed` | `secret/apps/*` | `secret/apps/*` create/update | Doppler-published writer; Terraform `vault-secrets` seeds `secret/apps/<app>` at source |
+| `flow-lock` | `secret/locks/global`, `secret/infra/*` | `secret/locks/global` | Cross-repo apply lock; releases the lock via metadata delete |
 | `terrakube-plan` | `secret/platform/terrakube` only | — | Terrakube VCS-driven runs; deliberately walled off from `secret/infra/*` |
 | `ansible-converge` | `secret/platform/*`, `secret/apps/*` | — | Config-management pulls |
 | `observability` | `secret/platform/{splunk,cribl}` | — | Ingest pipeline (shared HEC tokens) |

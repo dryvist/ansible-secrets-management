@@ -202,6 +202,13 @@ openbao_ai_elevated_policy_name: ai-elevated
 openbao_ai_elevated_approle_name: ai-elevated
 openbao_snapshot_policy_name: snapshot
 openbao_snapshot_approle_name: snapshot
+# apps-seed — the automated WRITER for per-app service secrets under
+# secret/apps/* (create/update/read only, no other domain). Terraform
+# (terraform-proxmox vault-secrets) authenticates as this role to generate +
+# store each app's credentials at the source. Doppler-published creds
+# (APPS_SEED_VAULT_ROLE_ID / _SECRET_ID), the same delivery as terraform-apply.
+openbao_apps_seed_policy_name: apps-seed
+openbao_apps_seed_approle_name: apps-seed
 
 # The set of non-root AppRoles to provision, each {name, policy}. Driving the
 # bootstrap from this list keeps init.yml DRY as groups are added. Per-identity
@@ -247,6 +254,9 @@ openbao_approles:
     policy: "{{ openbao_ai_elevated_policy_name }}"
   - name: "{{ openbao_snapshot_approle_name }}"
     policy: "{{ openbao_snapshot_policy_name }}"
+  # apps-seed: Doppler-published writer for secret/apps/* (Terraform vault-secrets).
+  - name: "{{ openbao_apps_seed_approle_name }}"
+    policy: "{{ openbao_apps_seed_policy_name }}"
 # Policy templates rendered + written on the bootstrap host. Each entry maps a
 # policy name to its template; add a row to grow the RBAC surface.
 openbao_policies:
@@ -282,6 +292,8 @@ openbao_policies:
     template: ai-elevated-policy.hcl.j2
   - name: "{{ openbao_snapshot_policy_name }}"
     template: snapshot-policy.hcl.j2
+  - name: "{{ openbao_apps_seed_policy_name }}"
+    template: apps-seed-policy.hcl.j2
 
 # --- External admin token (provisioning against an ALREADY-LIVE cluster) -----
 # The initial `bao operator init` only happens once; after that, adding new
