@@ -230,7 +230,7 @@
   ansible.builtin.set_fact:
     openbao_rendered_policy_map: >-
       {{ openbao_rendered_policy_map | default({})
-         | combine({ item.item.name: (item.content | b64decode) }) }}
+         | combine({ item.item.name: (item.content | default('') | b64decode) }) }}
   loop: "{{ openbao_rendered_policy_reads.results | default([]) }}"
   loop_control:
     label: "{{ item.item.name }}"
@@ -258,7 +258,7 @@
   ansible.builtin.set_fact:
     openbao_existing_policy_map: >-
       {{ openbao_existing_policy_map | default({})
-         | combine({ item.item.name: ((item.stdout | from_json).data.policy | default('')) }) }}
+         | combine({ item.item.name: ((item.stdout | default('{}') | from_json).data.policy | default('')) }) }}
   loop: "{{ openbao_existing_policy_reads.results | default([]) }}"
   loop_control:
     label: "{{ item.item.name }}"
