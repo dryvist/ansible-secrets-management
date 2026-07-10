@@ -116,6 +116,20 @@ openbao_kv_mount: secret
 # writable by the terraform-apply policy so that read/write proof keeps working.
 openbao_homelab_path: homelab
 
+# App secrets promoted into secret/apps/vikunja so OpenBao is their canonical
+# home. Maps each KV key to the converge-env var that carries its value (the
+# vikunja role mints these and stores them in SOPS; a converge run under
+# `sops exec-env` exposes them). The seed step (init.yml) runs only on the
+# bootstrap host under the admin token, writes only when a value differs from
+# what is already stored, and skips any key whose env var is empty — so a
+# converge without the SOPS values (or with unchanged values) writes nothing.
+openbao_vikunja_secrets:
+  token_ro: VIKUNJA_MCP_TOKEN_RO
+  token_rw: VIKUNJA_MCP_TOKEN_RW
+  token_admin: VIKUNJA_MCP_TOKEN_ADMIN
+  svc_mcp_ro_password: VIKUNJA_SVC_MCP_RO_PASSWORD
+  svc_mcp_rw_password: VIKUNJA_SVC_MCP_RW_PASSWORD
+
 # Policy + AppRole names, one per RBAC identity (see docs/SECRETS_HIERARCHY.md
 # for the full rationale). Split by resource domain, least-privilege:
 #   terraform-apply  — human-triggered IaC apply (was "terraform"); read+write

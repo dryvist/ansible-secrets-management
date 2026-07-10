@@ -187,6 +187,58 @@
     - openbao_bootstrap_token is defined
     - (openbao_kv_mount ~ '/') not in (openbao_mounts_raw.stdout | from_json).keys()
 
+# --- App-secret seeding (write-if-changed) ----------------------------------
+# Promote Vikunja MCP service credentials (minted by the vikunja role, stored
+# in SOPS) into secret/apps/vikunja so OpenBao is their canonical home. Values
+# come from the converge environment (SOPS via `sops exec-env`), mapped by
+# openbao_vikunja_secrets. Runs only on the bootstrap host under the admin
+# token; writes only when a value differs from what is already stored.
+- name: Assemble the desired vikunja app-secret map from the converge environment
+  ansible.builtin.set_fact:
+    openbao_vikunja_desired: >-
+      {{ openbao_vikunja_desired | default({})
+         | combine({ item.key: lookup('env', item.value) }) }}
+  loop: "{{ openbao_vikunja_secrets | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  no_log: true
+  when:
+    - openbao_bootstrap_token is defined
+    - lookup('env', item.value) | length > 0
+
+- name: Read the current vikunja app secrets from OpenBao
+  ansible.builtin.command:
+    cmd: "bao kv get -format=json {{ openbao_kv_mount }}/apps/vikunja"
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  register: openbao_vikunja_current
+  failed_when: false
+  changed_when: false
+  no_log: true
+  when:
+    - openbao_bootstrap_token is defined
+    - (openbao_vikunja_desired | default({})) | length > 0
+
+- name: Seed or update the vikunja app secrets in OpenBao (write-if-changed)
+  ansible.builtin.command:
+    argv: >-
+      {{ ['bao', 'kv', 'put', openbao_kv_mount ~ '/apps/vikunja']
+         + (openbao_vikunja_desired.keys() | zip(openbao_vikunja_desired.values())
+            | map('join', '=') | list) }}
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  no_log: true
+  changed_when: true
+  when:
+    - openbao_bootstrap_token is defined
+    - (openbao_vikunja_desired | default({})) | length > 0
+    - >-
+      (openbao_vikunja_current.rc | default(1)) != 0
+      or (openbao_vikunja_current.stdout | default('{}') | from_json).data.data | default({})
+         != (openbao_vikunja_desired | default({}))
+
 # --- RBAC policies (write-if-missing-or-changed) ----------------------------
 # Rendered on the TARGET: `bao policy write` below executes there and reads
 # the file from its local filesystem (a controller-side render is unreachable
