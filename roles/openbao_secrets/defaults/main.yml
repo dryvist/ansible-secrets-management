@@ -76,6 +76,12 @@ openbao_secrets_domains:
       # app-namespaced (e.g. vikunja_db_password) or given a separate domain,
       # so they never collide with Nautobot's bare field names.
       - apps/nautobot
+      # Zammad ITSM/ticketing (incident-management system of record). Fields are
+      # app-namespaced (zammad_db_password, zammad_admin_password) so the flat
+      # merge into bao_apps_secrets never collides with Nautobot's bare names.
+      # The Hermes API token is NOT here — it lives in ai/hermes (local-llm
+      # domain) so the one token has a single home shared by both sides.
+      - apps/zammad
   - name: local-llm
     role_id_env: LOCAL_LLM_VAULT_ROLE_ID
     secret_id_env: LOCAL_LLM_VAULT_SECRET_ID
