@@ -174,6 +174,7 @@ secret/infra/      proxmox/ aws/ network/   # IaC kernel — terraform-apply wri
 secret/platform/   dns/ traefik/ terrakube/ splunk/ cribl/ object-storage/ compute/
 secret/apps/       media/ monitoring/ home-automation/
 secret/ai/         hermes/ agents/          # LLM stack + AI-agent creds
+secret/locks/      global                   # cross-repo apply lock state
 secret/public/     domain/ ...              # non-secret, non-exploitable facts
 secret/ci/         github/ doppler-sync/
 ```
@@ -185,7 +186,9 @@ plans):
 
 | AppRole | Reads | Writes | Notes |
 | --- | --- | --- | --- |
-| `terraform-apply` | `secret/infra/*`, `secret/platform/{dns,traefik}`, legacy `homelab/*` | same | Human-triggered IaC apply |
+| `terraform-apply` | `secret/infra/*`, `secret/platform/{dns,traefik}`, `secret/apps/nautobot/*`, `homelab/*` | (same) | Human-triggered IaC apply[^aws-sts] |
+| `apps-seed` | `secret/apps/*` | `secret/apps/*` create/update | Doppler-published writer; Terraform `vault-secrets` seeds `secret/apps/<app>` at source |
+| `flow-lock` | `secret/locks/global`, `secret/infra/*` | `secret/locks/global` | Cross-repo apply lock; releases the lock via metadata delete |
 | `terrakube-plan` | `secret/platform/terrakube` only | — | Terrakube VCS-driven runs; deliberately walled off from `secret/infra/*` |
 | `ansible-converge` | `secret/platform/*`, `secret/apps/*` | — | Config-management pulls |
 | `observability` | `secret/platform/{splunk,cribl}` | — | Ingest pipeline (shared HEC tokens) |
@@ -201,6 +204,10 @@ plans):
 | `ai-elevated` | `ai-readonly` + `secret/platform/*` | — | trusted infra-touching agents; no write |
 | `snapshot` | `sys/storage/raft/snapshot` | — | least-priv backup identity |
 
+[^aws-sts]: Also grants `read`+`update` on `aws/sts/tf-proxmox` — dynamic AWS
+    STS creds (assumed_role) for `role/tf-proxmox`, replacing the laptop's
+    static aws-vault base key. See the AWS secrets engine section below.
+
 **Secret-zero model**: each AppRole's `role_id`/`secret_id` lives as its own
 item in a dedicated macOS keychain (`openbao.keychain-db`, 72h auto-lock) —
 the keychain's LOCK STATE is the entire access boundary, not the AppRole's own
@@ -214,6 +221,56 @@ goes beside the others in `templates/`). Adding a row **after** the cluster is
 already initialized needs a privileged token supplied via `BAO_TOKEN` (see
 [Idempotency](#idempotency)) — only the newly-added identities get created and
 get fresh credentials; existing ones are untouched.
+
+## AWS secrets engine (dynamic STS creds)
+
+Mounted at `aws/` (add-if-missing, in `tasks/init.yml`) alongside the KV
+engine. Purpose: eliminate the last static AWS key on the workstation — the
+`terraform` IAM base user's aws-vault key, used only for
+`sts:AssumeRole` into `role/tf-proxmox`.
+
+**The AWS engine is NOT builtin to OpenBao** (dropped at the Vault fork; the
+builtin secrets plugins are kv/pki/ssh/transit/totp/rabbitmq/ldap/kubernetes).
+It ships as an external plugin from
+[openbao/openbao-plugins](https://github.com/openbao/openbao-plugins) with
+prebuilt, checksum-verified release binaries. The role therefore:
+
+1. Stages the release tarball from the controller (same WAN-firewall staging
+   pattern as the server .deb) and extracts the binary into
+   `openbao_plugin_dir` on **every** node — the catalog is cluster-replicated
+   but each node execs its own copy, which must match the registered sha256.
+2. Points `plugin_directory` at it in `openbao.hcl` (always set; the dir
+   always exists).
+3. Registers the plugin in the catalog (bootstrap host, add-if-missing,
+   `-sha256` pinned to the staged binary) and mounts it.
+
+**Version upgrade** (deliberately manual, like root-config rotation): bump
+`openbao_aws_plugin_version`, converge (stages the new binary everywhere),
+then re-register with the new sha256 and reload:
+
+```bash
+bao plugin register -sha256=<new-sha256> \
+  -command=openbao-plugin-secrets-aws_linux_amd64_v1 secret aws
+bao plugin reload -plugin aws
+```
+
+- `aws/config/root` holds the ONE long-lived base-user key OpenBao itself uses
+  to call `sts:AssumeRole`. Seeded from `OPENBAO_AWS_ROOT_ACCESS_KEY_ID` /
+  `OPENBAO_AWS_ROOT_SECRET_ACCESS_KEY` (Doppler tier-0). **Write-once**: a
+  routine converge with root already configured never overwrites it — treat
+  key rotation as a deliberate, separate operator action, same as the seal key.
+  If the engine is mounted with no root config and no env key, the converge
+  **fails loudly** rather than leaving a silently-dead engine.
+- `aws/roles/tf-proxmox` (`credential_type=assumed_role`,
+  `role_arns=arn:aws:iam::<acct>:role/tf-proxmox`,
+  `default_sts_ttl=1h`, `max_sts_ttl=2h`) — declares the assumable role.
+  Add-if-missing; bumping the TTLs on an existing role needs a manual
+  `bao write` (not re-driven by a routine converge).
+- The `terraform-apply` AppRole reads `aws/sts/tf-proxmox` to mint a session —
+  see the [^aws-sts] policy footnote above.
+- The laptop side (nix-darwin `credential_process` wrapper reading
+  `terraform-apply`'s `role_id`/`secret_id` from `openbao.keychain-db`) is
+  documented in the nix-darwin repo, not here.
 
 ## Break-glass handling (read this)
 
@@ -254,16 +311,16 @@ shred -u <playbook_dir>/.openbao-approle-*-<host>.json
   `apt` skips re-install when the version is present.
 - `tasks/init.yml` runs **only on the bootstrap host**. The very first
   `bao operator init` happens once (`initialized == false`); the KV mount,
-  each policy, the AppRole auth method, and each AppRole are guarded by
-  existence checks, so re-runs are no-ops for anything already present.
+  each policy, the AppRole auth method, and each AppRole are guarded so re-runs
+  are no-ops for anything already present and unchanged.
 - **Growing the RBAC surface on an already-live cluster is supported**: set
   `openbao_admin_token` (env `BAO_TOKEN`) to a privileged token so the role can
   authenticate without a fresh init; add rows to `openbao_policies` /
-  `openbao_approles`; re-run. Only the genuinely new policies/AppRoles are
-  created, and `role_id`/`secret_id` are surfaced **only for those** — existing
-  identities and their credentials are never touched or re-emitted, so a
-  routine converge without `BAO_TOKEN` set stays a complete no-op for this
-  section.
+  `openbao_approles`; re-run. Missing or changed policies are written, only
+  genuinely new AppRoles are created, and `role_id`/`secret_id` are surfaced
+  **only for those** — existing identities and their credentials are never
+  touched or re-emitted, so a routine converge without `BAO_TOKEN` set stays a
+  complete no-op for this section.
 
 ## Seal-key rotation
 

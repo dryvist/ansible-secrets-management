@@ -5,9 +5,10 @@
 # upstream .deb (checksum-verified), renders a Raft HA + on-prem
 # static-key auto-unseal config, runs it under systemd, and (in init.yml)
 # bootstraps the cluster, the secret hierarchy, the RBAC policies, and the
-# AppRoles — one per resource-domain identity (terraform-apply / terrakube-plan
-# / ansible-converge / observability / local-cloud / monitoring / media /
-# local-llm / hermes / hermes-write / public / ai-readonly / ai-elevated / snapshot).
+# AppRoles — one per resource-domain identity (terraform-apply / flow-lock /
+# terrakube-plan / ansible-converge / observability / local-cloud / monitoring /
+# media / local-llm / hermes / hermes-write / public / ai-readonly /
+# ai-elevated / snapshot).
 
 # --- Version ----------------------------------------------------------------
 # Pinned to a known-good upstream release. Version bumps follow the repo's
@@ -115,10 +116,89 @@ openbao_kv_mount: secret
 # writable by the terraform-apply policy so that read/write proof keeps working.
 openbao_homelab_path: homelab
 
+# App secrets promoted into secret/apps/vikunja so OpenBao is their canonical
+# home. Maps each KV key to the converge-env var that carries its value (the
+# vikunja role mints these and stores them in SOPS; a converge run under
+# `sops exec-env` exposes them). The seed step (init.yml) runs only on the
+# bootstrap host under the admin token, writes only when a value differs from
+# what is already stored, and skips any key whose env var is empty — so a
+# converge without the SOPS values (or with unchanged values) writes nothing.
+openbao_vikunja_secrets:
+  token_ro: VIKUNJA_MCP_TOKEN_RO
+  token_rw: VIKUNJA_MCP_TOKEN_RW
+  token_admin: VIKUNJA_MCP_TOKEN_ADMIN
+  svc_mcp_ro_password: VIKUNJA_SVC_MCP_RO_PASSWORD
+  svc_mcp_rw_password: VIKUNJA_SVC_MCP_RW_PASSWORD
+
+# --- AWS secrets engine (dynamic STS creds, no static laptop key) -----------
+# Replaces the aws-vault `tf-proxmox` static base-user key with short-lived STS
+# creds minted on demand. OpenBao holds ONE long-lived base-user key server-side
+# (Doppler tier-0, secret/infra/aws in spirit — actually stored in the engine's
+# own config, not KV); the `terraform-apply` AppRole reads aws/sts/tf-proxmox to
+# get an assumed_role STS session for role/tf-proxmox. See roles/openbao/README.md.
+#
+# The AWS engine is NOT builtin to OpenBao (dropped at the Vault fork) — it
+# ships as an external plugin from openbao/openbao-plugins with prebuilt,
+# checksum-verified release binaries. The role stages the binary from the
+# controller (same WAN-firewall pattern as the server .deb) onto EVERY node
+# (the catalog sha256 must match the on-disk binary wherever a request lands),
+# then init.yml registers it once and mounts it.
+openbao_aws_engine_enabled: true
+openbao_aws_mount: aws
+# Catalog name the plugin is registered under; `bao secrets enable aws`
+# resolves to it (no builtin shadows the name).
+openbao_aws_plugin_name: aws
+openbao_aws_role_name: tf-proxmox
+# The tf-proxmox IAM role ARN (assumes via the OpenBao-held base user, same
+# relationship aws-vault used). Not a tofu constant today — set via env/extra-vars
+# per the account; see AGENTS.md IP-addressing-style rule (never hardcode).
+openbao_aws_role_arn: "{{ lookup('env', 'OPENBAO_AWS_TF_PROXMOX_ROLE_ARN') }}"
+openbao_aws_root_region: us-east-2
+openbao_aws_default_sts_ttl: 1h
+openbao_aws_max_sts_ttl: 2h
+# The base-user key OpenBao uses to call sts:AssumeRole. Minted via an
+# independent admin path (never the key being rotated out), seeded from Doppler
+# tier-0. Written to aws/config/root ONLY on first configuration — a routine
+# converge never overwrites/rotates it silently (mirrors the seal-key pattern).
+openbao_aws_root_access_key_id: "{{ lookup('env', 'OPENBAO_AWS_ROOT_ACCESS_KEY_ID') | default('', true) }}"
+openbao_aws_root_secret_access_key: "{{ lookup('env', 'OPENBAO_AWS_ROOT_SECRET_ACCESS_KEY') | default('', true) }}"
+
+# --- External plugin staging (openbao/openbao-plugins releases) --------------
+# Every external plugin binary lives here; openbao.hcl points plugin_directory
+# at it. Root-owned, openbao-group-exec, never world/group-writable (the server
+# validates the catalog sha256 against the file before every plugin launch).
+openbao_plugin_dir: /opt/openbao/plugins
+# Version bumps follow the .deb pinning convention: change it here only. On an
+# upgrade the new binary's sha256 differs, so re-registration is a deliberate
+# operator step (see README "AWS secrets engine") — a routine converge never
+# silently re-points the catalog.
+openbao_aws_plugin_version: "0.3.0"
+openbao_aws_plugin_release_base_url: "https://github.com/openbao/openbao-plugins/releases/download"
+openbao_aws_plugin_release_tag: "secrets-aws-v{{ openbao_aws_plugin_version }}"
+# Exact goreleaser asset/member names (verified against the release):
+# tarball openbao-plugin-secrets-aws_linux_amd64_v1.tar.gz contains LICENSE +
+# the binary, which keeps its platform suffix.
+openbao_aws_plugin_tarball: "openbao-plugin-secrets-aws_linux_amd64_v1.tar.gz"
+openbao_aws_plugin_binary: "openbao-plugin-secrets-aws_linux_amd64_v1"
+openbao_aws_plugin_tarball_url: >-
+  {{ openbao_aws_plugin_release_base_url }}/{{ openbao_aws_plugin_release_tag }}/{{ openbao_aws_plugin_tarball }}
+# SHA256SUMS-format file covering the release tarballs.
+openbao_aws_plugin_checksums_filename: "checksums-secrets-aws.txt"
+openbao_aws_plugin_checksums_url: >-
+  {{ openbao_aws_plugin_release_base_url }}/{{ openbao_aws_plugin_release_tag
+  }}/{{ openbao_aws_plugin_checksums_filename }}
+
 # Policy + AppRole names, one per RBAC identity (see docs/SECRETS_HIERARCHY.md
 # for the full rationale). Split by resource domain, least-privilege:
 #   terraform-apply  — human-triggered IaC apply (was "terraform"); read+write
-#                      secret/infra/*, secret/platform/{dns,traefik}
+#                      secret/infra/*, secret/platform/{dns,traefik}, narrow
+#                      secret/apps/nautobot/* seed grant for Nautobot P1, plus
+#                      read+update aws/sts/tf-proxmox (dynamic AWS STS creds for
+#                      the tf-proxmox IAM role — replaces the laptop's static
+#                      aws-vault base key)
+#   flow-lock        — cross-repo apply lock holder; read/write only the global
+#                      lock record, metadata-delete for release, and read-only
+#                      secret/infra/* context for lock decisions
 #   terrakube-plan   — Terrakube VCS-driven plan/apply runs; read-only,
 #                      secret/platform/terrakube ONLY — deliberately walled off
 #                      from secret/infra/* (untrusted-plan surface)
@@ -153,6 +233,8 @@ openbao_homelab_path: homelab
 #   ai-readonly / ai-elevated / snapshot — unchanged, kept as-is
 openbao_terraform_apply_policy_name: terraform-apply
 openbao_terraform_apply_approle_name: terraform-apply
+openbao_flow_lock_policy_name: flow-lock
+openbao_flow_lock_approle_name: flow-lock
 openbao_terrakube_plan_policy_name: terrakube-plan
 openbao_terrakube_plan_approle_name: terrakube-plan
 openbao_ansible_converge_policy_name: ansible-converge
@@ -181,6 +263,13 @@ openbao_ai_elevated_policy_name: ai-elevated
 openbao_ai_elevated_approle_name: ai-elevated
 openbao_snapshot_policy_name: snapshot
 openbao_snapshot_approle_name: snapshot
+# apps-seed — the automated WRITER for per-app service secrets under
+# secret/apps/* (create/update/read only, no other domain). Terraform
+# (terraform-proxmox vault-secrets) authenticates as this role to generate +
+# store each app's credentials at the source. Doppler-published creds
+# (APPS_SEED_VAULT_ROLE_ID / _SECRET_ID), the same delivery as terraform-apply.
+openbao_apps_seed_policy_name: apps-seed
+openbao_apps_seed_approle_name: apps-seed
 
 # The set of non-root AppRoles to provision, each {name, policy}. Driving the
 # bootstrap from this list keeps init.yml DRY as groups are added. Per-identity
@@ -191,6 +280,8 @@ openbao_snapshot_approle_name: snapshot
 openbao_approles:
   - name: "{{ openbao_terraform_apply_approle_name }}"
     policy: "{{ openbao_terraform_apply_policy_name }}"
+  - name: "{{ openbao_flow_lock_approle_name }}"
+    policy: "{{ openbao_flow_lock_policy_name }}"
   - name: "{{ openbao_terrakube_plan_approle_name }}"
     policy: "{{ openbao_terrakube_plan_policy_name }}"
   - name: "{{ openbao_ansible_converge_approle_name }}"
@@ -224,11 +315,16 @@ openbao_approles:
     policy: "{{ openbao_ai_elevated_policy_name }}"
   - name: "{{ openbao_snapshot_approle_name }}"
     policy: "{{ openbao_snapshot_policy_name }}"
+  # apps-seed: Doppler-published writer for secret/apps/* (Terraform vault-secrets).
+  - name: "{{ openbao_apps_seed_approle_name }}"
+    policy: "{{ openbao_apps_seed_policy_name }}"
 # Policy templates rendered + written on the bootstrap host. Each entry maps a
 # policy name to its template; add a row to grow the RBAC surface.
 openbao_policies:
   - name: "{{ openbao_terraform_apply_policy_name }}"
     template: terraform-apply-policy.hcl.j2
+  - name: "{{ openbao_flow_lock_policy_name }}"
+    template: flow-lock-policy.hcl.j2
   - name: "{{ openbao_terrakube_plan_policy_name }}"
     template: terrakube-plan-policy.hcl.j2
   - name: "{{ openbao_ansible_converge_policy_name }}"
@@ -257,6 +353,8 @@ openbao_policies:
     template: ai-elevated-policy.hcl.j2
   - name: "{{ openbao_snapshot_policy_name }}"
     template: snapshot-policy.hcl.j2
+  - name: "{{ openbao_apps_seed_policy_name }}"
+    template: apps-seed-policy.hcl.j2
 
 # --- External admin token (provisioning against an ALREADY-LIVE cluster) -----
 # The initial `bao operator init` only happens once; after that, adding new
@@ -309,11 +407,10 @@ openbao_snapshot_service_name: openbao-snapshot
 # converge stays green (see the include guard in tasks/main.yml).
 openbao_snapshot_role_id: "{{ lookup('env', 'OPENBAO_SNAPSHOT_ROLE_ID') | default('', true) }}"
 openbao_snapshot_secret_id: "{{ lookup('env', 'OPENBAO_SNAPSHOT_SECRET_ID') | default('', true) }}"
-# ntfy alert target (reuses the repo's ntfy LXC + notification-port convention,
-# matching service_deadman). Topic 'openbao'.
+# ntfy alert target — FQDN-first: the Traefik-fronted service name
+# (matching service_deadman). Topic 'openbao'.
 openbao_snapshot_ntfy_url: >-
-  http://{{ hostvars['ntfy']['container_ip'] | default('ntfy') }}:{{
-  tofu_data.constants.notification_ports.ntfy_http }}/openbao
+  https://ntfy.{{ tofu_data.domain }}/openbao
 # healthchecks deadman ping URL for the snapshot job; EMPTY => ping skipped
 # (ntfy + journal alert still fire). Set per-node from the healthchecks LXC.
 openbao_snapshot_healthcheck_url: "{{ lookup('env', 'OPENBAO_SNAPSHOT_HC_URL') | default('', true) }}"

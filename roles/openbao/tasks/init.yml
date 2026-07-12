@@ -187,7 +187,224 @@
     - openbao_bootstrap_token is defined
     - (openbao_kv_mount ~ '/') not in (openbao_mounts_raw.stdout | from_json).keys()
 
-# --- RBAC policies (write-if-missing) ---------------------------------------
+# --- App-secret seeding (write-if-changed) ----------------------------------
+# Promote Vikunja MCP service credentials (minted by the vikunja role, stored
+# in SOPS) into secret/apps/vikunja so OpenBao is their canonical home. Values
+# come from the converge environment (SOPS via `sops exec-env`), mapped by
+# openbao_vikunja_secrets. Runs only on the bootstrap host under the admin
+# token; writes only when a value differs from what is already stored.
+- name: Assemble the desired vikunja app-secret map from the converge environment
+  ansible.builtin.set_fact:
+    openbao_vikunja_desired: >-
+      {{ openbao_vikunja_desired | default({})
+         | combine({ item.key: lookup('env', item.value) }) }}
+  loop: "{{ openbao_vikunja_secrets | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  no_log: true
+  when:
+    - openbao_bootstrap_token is defined
+    - lookup('env', item.value) | length > 0
+
+- name: Read the current vikunja app secrets from OpenBao
+  ansible.builtin.command:
+    cmd: "bao kv get -format=json {{ openbao_kv_mount }}/apps/vikunja"
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  register: openbao_vikunja_current
+  failed_when: false
+  changed_when: false
+  no_log: true
+  when:
+    - openbao_bootstrap_token is defined
+    - (openbao_vikunja_desired | default({})) | length > 0
+
+- name: Seed or update the vikunja app secrets in OpenBao (write-if-changed)
+  ansible.builtin.command:
+    argv: >-
+      {{ ['bao', 'kv', 'put', openbao_kv_mount ~ '/apps/vikunja']
+         + (openbao_vikunja_desired.keys() | zip(openbao_vikunja_desired.values())
+            | map('join', '=') | list) }}
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  no_log: true
+  changed_when: true
+  when:
+    - openbao_bootstrap_token is defined
+    - (openbao_vikunja_desired | default({})) | length > 0
+    - >-
+      (openbao_vikunja_current.rc | default(1)) != 0
+      or (openbao_vikunja_current.stdout | default('{}') | from_json).data.data | default({})
+         != (openbao_vikunja_desired | default({}))
+
+# --- AWS secrets engine (external plugin: register + enable, add-if-missing) -
+# Dynamic STS creds for role/tf-proxmox — replaces the laptop's static
+# aws-vault base key. The engine is NOT builtin: main.yml staged the plugin
+# binary on every node; here the bootstrap host registers it in the
+# cluster-replicated catalog (pinned to the staged binary's sha256), then
+# mounts it. See defaults/main.yml for the var docs.
+- name: Read the staged AWS plugin binary's sha256
+  ansible.builtin.stat:
+    path: "{{ openbao_plugin_dir }}/{{ openbao_aws_plugin_binary }}"
+    checksum_algorithm: sha256
+  register: openbao_aws_plugin_stat
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_aws_engine_enabled
+
+- name: Assert the AWS plugin binary is staged
+  ansible.builtin.assert:
+    that:
+      - openbao_aws_plugin_stat.stat.exists
+    fail_msg: >-
+      {{ openbao_plugin_dir }}/{{ openbao_aws_plugin_binary }} is missing —
+      the staging phase in main.yml should have extracted it. Re-run the full
+      role (not init in isolation).
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_aws_engine_enabled
+
+- name: Check whether the AWS plugin is already registered
+  ansible.builtin.command:
+    cmd: "bao plugin info secret {{ openbao_aws_plugin_name }}"
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  register: openbao_aws_plugin_check
+  no_log: true
+  changed_when: false
+  failed_when: false
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_aws_engine_enabled
+
+# Add-if-missing, like every other identity this file provisions. A VERSION
+# BUMP (new binary, new sha256) is deliberately NOT re-registered here — see
+# README "AWS secrets engine" for the manual upgrade step, mirroring how the
+# root config and role TTLs are never silently re-driven by a converge.
+- name: Register the AWS plugin (pinned to the staged binary's sha256)
+  ansible.builtin.command:
+    cmd: >-
+      bao plugin register
+      -sha256={{ openbao_aws_plugin_stat.stat.checksum }}
+      -command={{ openbao_aws_plugin_binary }}
+      secret {{ openbao_aws_plugin_name }}
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  no_log: true
+  changed_when: true
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_aws_engine_enabled
+    - (openbao_aws_plugin_check.rc | default(1)) != 0
+
+- name: Enable the AWS secrets engine
+  ansible.builtin.command:
+    cmd: "bao secrets enable -path={{ openbao_aws_mount }} {{ openbao_aws_plugin_name }}"
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  no_log: true
+  changed_when: true
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_aws_engine_enabled
+    - (openbao_aws_mount ~ '/') not in (openbao_mounts_raw.stdout | from_json).keys()
+
+# Root config holds the ONE long-lived AWS base-user key OpenBao uses to call
+# sts:AssumeRole. Checked via `bao read`, not the mounts list above — a mount
+# can exist with no root config yet configured (fresh `secrets enable`).
+- name: Check whether the AWS engine root config already exists
+  ansible.builtin.command:
+    cmd: "bao read -format=json {{ openbao_aws_mount }}/config/root"
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  register: openbao_aws_root_check
+  no_log: true
+  changed_when: false
+  failed_when: false
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_aws_engine_enabled
+
+# Fail loudly rather than silently leave a mounted-but-unconfigured engine: a
+# skip here would make `bao read aws/sts/tf-proxmox` fail later with a much
+# more confusing error, and a routine converge that forgot the root key would
+# look green while doing nothing.
+- name: Refuse to leave the AWS engine mounted with no root config and no key supplied
+  ansible.builtin.fail:
+    msg: >-
+      The AWS secrets engine at {{ openbao_aws_mount }}/ has no root config yet,
+      and OPENBAO_AWS_ROOT_ACCESS_KEY_ID/OPENBAO_AWS_ROOT_SECRET_ACCESS_KEY are
+      unset. Seed the base-user key (minted via an independent admin path, NOT
+      the key being rotated out) into Doppler tier-0 and re-run with those env
+      vars set, or set openbao_aws_engine_enabled: false to skip AWS entirely.
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_aws_engine_enabled
+    - (openbao_aws_root_check.rc | default(1)) != 0
+    - (openbao_aws_root_access_key_id | length == 0) or (openbao_aws_root_secret_access_key | length == 0)
+
+# Write-once: a routine converge with root already configured never
+# overwrites/rotates it silently (mirrors the seal-key pattern) — rotation is a
+# deliberate, separate operator action.
+- name: Configure the AWS engine root credentials (first configuration only)
+  ansible.builtin.command:
+    cmd: >-
+      bao write {{ openbao_aws_mount }}/config/root
+      access_key={{ openbao_aws_root_access_key_id }}
+      secret_key={{ openbao_aws_root_secret_access_key }}
+      region={{ openbao_aws_root_region }}
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  no_log: true
+  changed_when: true
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_aws_engine_enabled
+    - (openbao_aws_root_check.rc | default(1)) != 0
+    - openbao_aws_root_access_key_id | length > 0
+    - openbao_aws_root_secret_access_key | length > 0
+
+- name: Check whether the tf-proxmox AWS role already exists
+  ansible.builtin.command:
+    cmd: "bao read -format=json {{ openbao_aws_mount }}/roles/{{ openbao_aws_role_name }}"
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  register: openbao_aws_role_check
+  no_log: true
+  changed_when: false
+  failed_when: false
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_aws_engine_enabled
+
+- name: Create the tf-proxmox AWS role (assumed_role, add-if-missing)
+  ansible.builtin.command:
+    cmd: >-
+      bao write {{ openbao_aws_mount }}/roles/{{ openbao_aws_role_name }}
+      credential_type=assumed_role
+      role_arns={{ openbao_aws_role_arn }}
+      default_sts_ttl={{ openbao_aws_default_sts_ttl }}
+      max_sts_ttl={{ openbao_aws_max_sts_ttl }}
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  no_log: true
+  changed_when: true
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_aws_engine_enabled
+    - (openbao_aws_role_check.rc | default(1)) != 0
+    - openbao_aws_role_arn | length > 0
+
+# --- RBAC policies (write-if-missing-or-changed) ----------------------------
 # Rendered on the TARGET: `bao policy write` below executes there and reads
 # the file from its local filesystem (a controller-side render is unreachable
 # from the target). Policy HCL is non-secret — it comes from the committed
@@ -216,7 +433,59 @@
   changed_when: false
   when: openbao_bootstrap_token is defined
 
-- name: Write the RBAC policies that are missing
+- name: Read rendered RBAC policy contents from the target
+  ansible.builtin.slurp:
+    src: "{{ openbao_config_dir }}/.policy-{{ item.name }}.hcl"
+  loop: "{{ openbao_policies }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: openbao_rendered_policy_reads
+  changed_when: false
+  when: openbao_bootstrap_token is defined
+
+- name: Build the rendered RBAC policy content map
+  ansible.builtin.set_fact:
+    openbao_rendered_policy_map: >-
+      {{ openbao_rendered_policy_map | default({})
+         | combine({ item.item.name: (item.content | default('') | b64decode) }) }}
+  loop: "{{ openbao_rendered_policy_reads.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+  when:
+    - openbao_bootstrap_token is defined
+    - not (item.skipped | default(false))
+
+- name: Read existing RBAC policy contents
+  ansible.builtin.command:
+    cmd: "bao policy read -format=json {{ item.name }}"
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  loop: "{{ openbao_policies }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: openbao_existing_policy_reads
+  no_log: true
+  changed_when: false
+  when:
+    - openbao_bootstrap_token is defined
+    - item.name in (openbao_policies_raw.stdout | from_json)
+
+- name: Build the existing RBAC policy content map
+  ansible.builtin.set_fact:
+    openbao_existing_policy_map: >-
+      {{ openbao_existing_policy_map | default({})
+         | combine({ item.item.name: ((item.stdout | default('{}') | from_json).data.policy | default('')) }) }}
+  loop: "{{ openbao_existing_policy_reads.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+  no_log: true
+  when:
+    - openbao_bootstrap_token is defined
+    - not (item.skipped | default(false))
+    - (item.rc | default(1)) == 0
+
+- name: Write the RBAC policies that are missing or changed
   ansible.builtin.command:
     cmd: >-
       bao policy write {{ item.name }}
@@ -231,7 +500,12 @@
   changed_when: true
   when:
     - openbao_bootstrap_token is defined
-    - item.name not in (openbao_policies_raw.stdout | from_json)
+    - >-
+      item.name not in (openbao_policies_raw.stdout | from_json)
+      or
+      (openbao_existing_policy_map | default({})).get(item.name, '')
+      !=
+      (openbao_rendered_policy_map | default({})).get(item.name, '')
 
 - name: Remove the rendered policies from the target
   ansible.builtin.file:

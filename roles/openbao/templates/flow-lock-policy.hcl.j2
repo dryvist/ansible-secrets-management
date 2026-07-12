@@ -1,0 +1,21 @@
+{{ ansible_managed | comment }}
+# OpenBao policy for the flow-lock AppRole — the cross-repo apply lock holder.
+# It can create/update/read the single global lock record, delete that lock's
+# metadata to release it, and read infra context for lock decisions. No broad
+# metadata delete, no app/platform/ai access.
+
+path "{{ openbao_kv_mount }}/data/locks/global" {
+  capabilities = ["create", "update", "read"]
+}
+
+path "{{ openbao_kv_mount }}/metadata/locks/global" {
+  capabilities = ["delete"]
+}
+
+path "{{ openbao_kv_mount }}/data/infra/*" {
+  capabilities = ["read"]
+}
+
+path "{{ openbao_kv_mount }}/metadata/infra/*" {
+  capabilities = ["read", "list"]
+}

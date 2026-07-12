@@ -64,6 +64,24 @@ openbao_secrets_domains:
     secret_id_env: MEDIA_VAULT_SECRET_ID
     paths:
       - apps/media
+  - name: apps
+    role_id_env: APPS_VAULT_ROLE_ID
+    secret_id_env: APPS_VAULT_SECRET_ID
+    paths:
+      # Nautobot IPAM/DCIM (issue #138). The apps/nautobot KV path carries the
+      # fields db_password, secret_key, superuser_password (the #138 secret
+      # contract WS-C seeds), merged flat into bao_apps_secrets. Future apps
+      # sharing the Postgres instance (Vikunja P3, EspoCRM P4) add their own
+      # `apps/<app>` path here; because the merge is flat, their fields MUST be
+      # app-namespaced (e.g. vikunja_db_password) or given a separate domain,
+      # so they never collide with Nautobot's bare field names.
+      - apps/nautobot
+      # Zammad ITSM/ticketing (incident-management system of record). Fields are
+      # app-namespaced (zammad_db_password, zammad_admin_password) so the flat
+      # merge into bao_apps_secrets never collides with Nautobot's bare names.
+      # The Hermes API token is NOT here — it lives in ai/hermes (local-llm
+      # domain) so the one token has a single home shared by both sides.
+      - apps/zammad
   - name: local-llm
     role_id_env: LOCAL_LLM_VAULT_ROLE_ID
     secret_id_env: LOCAL_LLM_VAULT_SECRET_ID

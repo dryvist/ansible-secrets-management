@@ -199,3 +199,44 @@
       loop: "{{ bao_policy_templates.results }}"
       loop_control:
         label: "{{ item.item }}"
+
+    # The AWS secrets engine registration/config only runs against a live
+    # server (init.yml is entirely docker-guarded), so it can't be exercised
+    # here either. What CAN be checked without a live server: the external
+    # plugin binary actually staged, the server config pointing at it, and the
+    # terraform-apply policy template source still granting the dynamic AWS
+    # STS path — catches a future edit silently dropping any of them.
+    - name: Assert the rendered config sets plugin_directory
+      ansible.builtin.assert:
+        that:
+          - "'plugin_directory' in (bao_cfg_content.content | b64decode)"
+        fail_msg: "openbao.hcl is missing plugin_directory (external plugins would be unloadable)"
+
+    - name: Stat the staged AWS plugin binary
+      ansible.builtin.stat:
+        path: /opt/openbao/plugins/openbao-plugin-secrets-aws_linux_amd64_v1
+      register: bao_aws_plugin
+
+    - name: Assert the AWS plugin binary is staged, root-owned, and not world/group-writable
+      ansible.builtin.assert:
+        that:
+          - bao_aws_plugin.stat.exists
+          - bao_aws_plugin.stat.pw_name == 'root'
+          - bao_aws_plugin.stat.mode == '0750'
+        fail_msg: >-
+          AWS plugin binary missing or wrong owner/mode:
+          {{ bao_aws_plugin.stat | default({}) }}
+
+    - name: Read the terraform-apply policy template source
+      ansible.builtin.slurp:
+        src: "{{ playbook_dir }}/../../roles/openbao/templates/terraform-apply-policy.hcl.j2"
+      register: bao_terraform_apply_policy_src
+      delegate_to: localhost
+      become: false
+
+    - name: Assert the terraform-apply policy grants aws/sts/tf-proxmox
+      ansible.builtin.assert:
+        that:
+          - "'aws/sts/' in (bao_terraform_apply_policy_src.content | b64decode)"
+          - "'\"read\", \"update\"' in (bao_terraform_apply_policy_src.content | b64decode)"
+        fail_msg: "terraform-apply-policy.hcl.j2 is missing the dynamic AWS STS grant"

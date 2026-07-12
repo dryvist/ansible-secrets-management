@@ -156,6 +156,84 @@
     group: "{{ openbao_group }}"
     mode: "0700"
 
+# Always created (openbao.hcl sets plugin_directory unconditionally, and the
+# server refuses to start if the configured path is absent). Root-owned and
+# never group-writable: the server validates each plugin launch against the
+# catalog sha256, but a writable directory would still invite tampering.
+- name: Create OpenBao plugin directory (0750, root-owned, openbao-exec)
+  ansible.builtin.file:
+    path: "{{ openbao_plugin_dir }}"
+    state: directory
+    owner: root
+    group: "{{ openbao_group }}"
+    mode: "0750"
+
+# --- Phase 5c: stage the AWS secrets engine plugin (external, all nodes) -----
+# The AWS engine is not builtin (see defaults) — stage its checksum-verified
+# release tarball from the controller exactly like the server .deb, on EVERY
+# node: the plugin catalog is cluster-replicated but each node execs its OWN
+# copy of the binary, which must match the registered sha256.
+- name: Stage the AWS plugin checksums file on controller
+  ansible.builtin.get_url:
+    url: "{{ openbao_aws_plugin_checksums_url }}"
+    dest: "/tmp/openbao-{{ openbao_aws_plugin_release_tag }}-checksums.txt"
+    mode: "0644"
+    force: true
+  delegate_to: localhost
+  connection: local
+  become: false
+  vars:
+    ansible_become: false
+  run_once: true
+  when: openbao_aws_engine_enabled
+
+- name: Read the expected SHA256 for the AWS plugin tarball
+  ansible.builtin.set_fact:
+    openbao_aws_plugin_sha256: >-
+      {{ (lookup('file', '/tmp/openbao-' ~ openbao_aws_plugin_release_tag ~ '-checksums.txt')
+          | regex_search('([0-9a-f]{64})\s+' ~ (openbao_aws_plugin_tarball | regex_escape), '\1')
+          | first) }}
+  run_once: true
+  when: openbao_aws_engine_enabled
+
+- name: Assert a checksum was found for the AWS plugin tarball
+  ansible.builtin.assert:
+    that:
+      - openbao_aws_plugin_sha256 is defined
+      - openbao_aws_plugin_sha256 | length == 64
+    fail_msg: >-
+      Could not find a SHA256 for {{ openbao_aws_plugin_tarball }} in the
+      upstream checksums file. Did the asset naming change for
+      {{ openbao_aws_plugin_release_tag }}?
+  run_once: true
+  when: openbao_aws_engine_enabled
+
+- name: Stage the AWS plugin tarball on controller (checksum-verified)
+  ansible.builtin.get_url:
+    url: "{{ openbao_aws_plugin_tarball_url }}"
+    dest: "/tmp/{{ openbao_aws_plugin_tarball }}"
+    checksum: "sha256:{{ openbao_aws_plugin_sha256 }}"
+    mode: "0644"
+    force: true
+  delegate_to: localhost
+  connection: local
+  become: false
+  vars:
+    ansible_become: false
+  run_once: true
+  when: openbao_aws_engine_enabled
+
+- name: Extract the AWS plugin binary into the plugin directory
+  ansible.builtin.unarchive:
+    src: "/tmp/{{ openbao_aws_plugin_tarball }}"
+    dest: "{{ openbao_plugin_dir }}"
+    include:
+      - "{{ openbao_aws_plugin_binary }}"
+    owner: root
+    group: "{{ openbao_group }}"
+    mode: "0750"
+  when: openbao_aws_engine_enabled
+
 # --- Phase 6: configuration --------------------------------------------------
 - name: Render OpenBao server config
   ansible.builtin.template:

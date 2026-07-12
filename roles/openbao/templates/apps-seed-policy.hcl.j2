@@ -1,0 +1,23 @@
+{{ ansible_managed | comment }}
+# OpenBao policy for the apps-seed AppRole — the automated writer that seeds
+# per-app service secrets under secret/apps/*. Terraform (terraform-proxmox
+# vault-secrets) authenticates as this role to generate-at-source and store
+# each app's credentials (e.g. secret/apps/zammad, secret/apps/nautobot):
+# random_password + vault_kv_secret_v2, generate-if-absent.
+#
+# Scope is secret/apps/* and nothing else — NO infra/platform/ai paths. The
+# trailing `*` (not `/*`) matters: `secret/data/apps/*` matches the exact path
+# `secret/data/apps/zammad` as well as any `secret/data/apps/zammad/<sub>`. A
+# `/*` glob would match only the sub-paths and 403 on the parent write.
+#
+# create/update/read is enough for Terraform to manage the value; no `delete`
+# (secrets are generate-if-absent and never torn down under a live service).
+# See terraform-proxmox docs/SECRETS_HIERARCHY.md.
+
+path "{{ openbao_kv_mount }}/data/apps/*" {
+  capabilities = ["create", "update", "read"]
+}
+
+path "{{ openbao_kv_mount }}/metadata/apps/*" {
+  capabilities = ["read", "list"]
+}
