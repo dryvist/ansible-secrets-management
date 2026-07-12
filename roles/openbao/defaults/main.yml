@@ -346,11 +346,10 @@ openbao_snapshot_service_name: openbao-snapshot
 # converge stays green (see the include guard in tasks/main.yml).
 openbao_snapshot_role_id: "{{ lookup('env', 'OPENBAO_SNAPSHOT_ROLE_ID') | default('', true) }}"
 openbao_snapshot_secret_id: "{{ lookup('env', 'OPENBAO_SNAPSHOT_SECRET_ID') | default('', true) }}"
-# ntfy alert target (reuses the repo's ntfy LXC + notification-port convention,
-# matching service_deadman). Topic 'openbao'.
+# ntfy alert target — FQDN-first: the Traefik-fronted service name
+# (matching service_deadman). Topic 'openbao'.
 openbao_snapshot_ntfy_url: >-
-  http://{{ hostvars['ntfy']['container_ip'] }}:{{
-  tofu_data.constants.notification_ports.ntfy_http }}/openbao
+  https://ntfy.{{ tofu_data.domain }}/openbao
 # healthchecks deadman ping URL for the snapshot job; EMPTY => ping skipped
 # (ntfy + journal alert still fire). Set per-node from the healthchecks LXC.
 openbao_snapshot_healthcheck_url: "{{ lookup('env', 'OPENBAO_SNAPSHOT_HC_URL') | default('', true) }}"
