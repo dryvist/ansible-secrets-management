@@ -190,9 +190,9 @@
 - name: Read the expected SHA256 for the AWS plugin tarball
   ansible.builtin.set_fact:
     openbao_aws_plugin_sha256: >-
-      {{ (lookup('file', '/tmp/openbao-' ~ openbao_aws_plugin_release_tag ~ '-checksums.txt')
-          | regex_search('([0-9a-f]{64})\s+' ~ (openbao_aws_plugin_tarball | regex_escape), '\1')
-          | first) }}
+      {{ lookup('file', '/tmp/openbao-' ~ openbao_aws_plugin_release_tag ~ '-checksums.txt')
+         | regex_search('([0-9a-f]{64})\s+' ~ (openbao_aws_plugin_tarball | regex_escape), '\1')
+         | default('', true) }}
   run_once: true
   when: openbao_aws_engine_enabled
 
