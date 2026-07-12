@@ -4,17 +4,10 @@
 # to tasks/init.yml, included after the service is up.
 
 # --- Phase 1: prerequisites --------------------------------------------------
-# These containers are firewalled to internal-only egress (policy_out: DROP +
-# the `outbound-internal` security group) — a secrets service has no business
-# reaching the public internet, and it never does at runtime. So the role must
-# NOT depend on WAN apt: every package it needs is either in the Debian base
-# template (ca-certificates) or staged from the controller (the OpenBao .deb,
-# below). jq was listed but is unused anywhere in the role — dropped rather than
-# carried as a phantom WAN dependency. `update_cache: false` is deliberate: an
-# apt cache refresh can never succeed behind the internal-only firewall, and
-# forcing one is what wedged bring-up on any node whose pve-firewall is actually
-# running. If a future prereq isn't in the base template, stage it from the
-# controller like the .deb — do not reintroduce a mirror fetch here.
+# These containers have narrowly-scoped runtime HTTPS egress for the AWS and
+# GitHub APIs, but package installation remains controller-staged. Do not turn
+# runtime API access into a target-side apt dependency: every package is either
+# in the Debian base template or copied from the controller.
 - name: Ensure OpenBao base prerequisites are present (no WAN; base-template pkgs)
   ansible.builtin.apt:
     name:
@@ -187,11 +180,48 @@
   run_once: true
   when: openbao_aws_engine_enabled
 
-- name: Read the expected SHA256 for the AWS plugin tarball
+- name: Stage the AWS plugin detached signature on controller
+  ansible.builtin.get_url:
+    url: "{{ openbao_aws_plugin_signature_url }}"
+    dest: "/tmp/{{ openbao_aws_plugin_tarball }}.sig"
+    mode: "0644"
+    force: true
+  delegate_to: localhost
+  connection: local
+  become: false
+  vars:
+    ansible_become: false
+  run_once: true
+  when: openbao_aws_engine_enabled
+
+- name: Build the OpenBao release verification keyring on controller
+  ansible.builtin.command:
+    argv:
+      - gpg
+      - --batch
+      - --yes
+      - --dearmor
+      - --output
+      - /tmp/openbao-release.gpg
+      - "{{ role_path }}/files/openbao-release.asc"
+  delegate_to: localhost
+  connection: local
+  become: false
+  vars:
+    ansible_become: false
+  run_once: true
+  changed_when: false
+  when: openbao_aws_engine_enabled
+
+- name: Read the expected SHA256 values for the AWS plugin release
   ansible.builtin.set_fact:
     openbao_aws_plugin_sha256: >-
       {{ (lookup('file', '/tmp/openbao-' ~ openbao_aws_plugin_release_tag ~ '-checksums.txt')
           | regex_search('([0-9a-f]{64})\s+' ~ (openbao_aws_plugin_tarball | regex_escape), '\1')
+          | first) }}
+    openbao_aws_plugin_binary_sha256: >-
+      {{ (lookup('file', '/tmp/openbao-' ~ openbao_aws_plugin_release_tag ~ '-checksums.txt')
+          | regex_search('([0-9a-f]{64})\s+' ~ (openbao_aws_plugin_binary | regex_escape) ~ '$', '\1', multiline=True)
           | first) }}
   run_once: true
   when: openbao_aws_engine_enabled
@@ -201,6 +231,8 @@
     that:
       - openbao_aws_plugin_sha256 is defined
       - openbao_aws_plugin_sha256 | length == 64
+      - openbao_aws_plugin_binary_sha256 is defined
+      - openbao_aws_plugin_binary_sha256 | length == 64
     fail_msg: >-
       Could not find a SHA256 for {{ openbao_aws_plugin_tarball }} in the
       upstream checksums file. Did the asset naming change for
@@ -223,6 +255,23 @@
   run_once: true
   when: openbao_aws_engine_enabled
 
+- name: Verify the AWS plugin release signature
+  ansible.builtin.command:
+    argv:
+      - gpgv
+      - --keyring
+      - /tmp/openbao-release.gpg
+      - "/tmp/{{ openbao_aws_plugin_tarball }}.sig"
+      - "/tmp/{{ openbao_aws_plugin_tarball }}"
+  delegate_to: localhost
+  connection: local
+  become: false
+  vars:
+    ansible_become: false
+  run_once: true
+  changed_when: false
+  when: openbao_aws_engine_enabled
+
 - name: Extract the AWS plugin binary into the plugin directory
   ansible.builtin.unarchive:
     src: "/tmp/{{ openbao_aws_plugin_tarball }}"
@@ -233,6 +282,139 @@
     group: "{{ openbao_group }}"
     mode: "0750"
   when: openbao_aws_engine_enabled
+
+- name: Verify the extracted AWS plugin binary
+  ansible.builtin.stat:
+    path: "{{ openbao_plugin_dir }}/{{ openbao_aws_plugin_binary }}"
+    checksum_algorithm: sha256
+  register: openbao_aws_extracted_plugin
+  when: openbao_aws_engine_enabled
+
+- name: Assert the extracted AWS plugin matches the signed release
+  ansible.builtin.assert:
+    that:
+      - openbao_aws_extracted_plugin.stat.checksum == openbao_aws_plugin_binary_sha256
+    fail_msg: "The extracted AWS plugin SHA256 does not match the signed release manifest"
+  when: openbao_aws_engine_enabled
+
+- name: Install the immutable AWS plugin command
+  ansible.builtin.copy:
+    src: "{{ openbao_plugin_dir }}/{{ openbao_aws_plugin_binary }}"
+    dest: "{{ openbao_plugin_dir }}/{{ openbao_aws_plugin_command }}"
+    remote_src: true
+    owner: root
+    group: "{{ openbao_group }}"
+    mode: "0750"
+  when: openbao_aws_engine_enabled
+
+# --- Phase 5d: stage the GitHub secrets engine plugin (external, all nodes) --
+- name: Stage the GitHub plugin checksum manifest on controller
+  ansible.builtin.get_url:
+    url: "{{ openbao_github_plugin_checksums_url }}"
+    dest: "/tmp/openbao-github-{{ openbao_github_plugin_checksums_filename }}"
+    mode: "0644"
+    force: true
+  delegate_to: localhost
+  connection: local
+  become: false
+  vars:
+    ansible_become: false
+  run_once: true
+  when: openbao_github_engine_enabled
+
+- name: Stage the GitHub plugin checksum signature on controller
+  ansible.builtin.get_url:
+    url: "{{ openbao_github_plugin_checksums_signature_url }}"
+    dest: "/tmp/openbao-github-{{ openbao_github_plugin_checksums_filename }}.sig"
+    mode: "0644"
+    force: true
+  delegate_to: localhost
+  connection: local
+  become: false
+  vars:
+    ansible_become: false
+  run_once: true
+  when: openbao_github_engine_enabled
+
+- name: Build the GitHub plugin release verification keyring on controller
+  ansible.builtin.command:
+    argv:
+      - gpg
+      - --batch
+      - --yes
+      - --dearmor
+      - --output
+      - /tmp/martin-baillie-release.gpg
+      - "{{ role_path }}/files/martin-baillie-release.asc"
+  delegate_to: localhost
+  connection: local
+  become: false
+  vars:
+    ansible_become: false
+  run_once: true
+  changed_when: false
+  when: openbao_github_engine_enabled
+
+- name: Verify the GitHub plugin checksum manifest signature
+  ansible.builtin.command:
+    argv:
+      - gpgv
+      - --keyring
+      - /tmp/martin-baillie-release.gpg
+      - "/tmp/openbao-github-{{ openbao_github_plugin_checksums_filename }}.sig"
+      - "/tmp/openbao-github-{{ openbao_github_plugin_checksums_filename }}"
+  delegate_to: localhost
+  connection: local
+  become: false
+  vars:
+    ansible_become: false
+  run_once: true
+  changed_when: false
+  when: openbao_github_engine_enabled
+
+- name: Read the expected SHA256 for the GitHub plugin binary
+  ansible.builtin.set_fact:
+    openbao_github_plugin_sha256: >-
+      {{ (lookup('file', '/tmp/openbao-github-' ~ openbao_github_plugin_checksums_filename)
+          | regex_search('([0-9a-f]{64})\s+' ~ (openbao_github_plugin_asset | regex_escape) ~ '$', '\1', multiline=True)
+          | first) }}
+  run_once: true
+  when: openbao_github_engine_enabled
+
+- name: Assert a checksum was found for the GitHub plugin binary
+  ansible.builtin.assert:
+    that:
+      - openbao_github_plugin_sha256 is defined
+      - openbao_github_plugin_sha256 | length == 64
+    fail_msg: >-
+      Could not find {{ openbao_github_plugin_asset }} in the signed GitHub
+      plugin checksum manifest for {{ openbao_github_plugin_release_tag }}.
+  run_once: true
+  when: openbao_github_engine_enabled
+
+- name: Stage the GitHub plugin binary on controller
+  ansible.builtin.get_url:
+    url: "{{ openbao_github_plugin_asset_url }}"
+    dest: "/tmp/{{ openbao_github_plugin_asset }}"
+    checksum: "sha256:{{ openbao_github_plugin_sha256 }}"
+    mode: "0750"
+    force: true
+  delegate_to: localhost
+  connection: local
+  become: false
+  vars:
+    ansible_become: false
+  run_once: true
+  when: openbao_github_engine_enabled
+
+- name: Install the immutable GitHub plugin command
+  ansible.builtin.copy:
+    src: "/tmp/{{ openbao_github_plugin_asset }}"
+    dest: "{{ openbao_plugin_dir }}/{{ openbao_github_plugin_command }}"
+    owner: root
+    group: "{{ openbao_group }}"
+    mode: "0750"
+  when: openbao_github_engine_enabled
 
 # --- Phase 6: configuration --------------------------------------------------
 - name: Render OpenBao server config
