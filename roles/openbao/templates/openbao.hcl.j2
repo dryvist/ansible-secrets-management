@@ -47,6 +47,13 @@ listener "tcp" {
 api_addr     = "{{ openbao_api_addr }}"
 cluster_addr = "{{ openbao_cluster_addr }}"
 
+# External plugins (e.g. the AWS secrets engine, which is NOT builtin to
+# OpenBao). Binaries are staged here by the role (checksum-verified, from the
+# controller) and registered in the catalog by init.yml. The directory always
+# exists (main.yml creates it) — OpenBao refuses to start if this path is set
+# but absent.
+plugin_directory = "{{ openbao_plugin_dir }}"
+
 # OpenBao 2.x dropped mlock support entirely — any `disable_mlock` line is a
 # fatal config error since 2.5 (the server refuses to start). Swap hygiene is
 # the host's job instead: the OpenBao LXCs carry memory_swap = 0 in

@@ -130,11 +130,72 @@ openbao_vikunja_secrets:
   svc_mcp_ro_password: VIKUNJA_SVC_MCP_RO_PASSWORD
   svc_mcp_rw_password: VIKUNJA_SVC_MCP_RW_PASSWORD
 
+# --- AWS secrets engine (dynamic STS creds, no static laptop key) -----------
+# Replaces the aws-vault `tf-proxmox` static base-user key with short-lived STS
+# creds minted on demand. OpenBao holds ONE long-lived base-user key server-side
+# (Doppler tier-0, secret/infra/aws in spirit — actually stored in the engine's
+# own config, not KV); the `terraform-apply` AppRole reads aws/sts/tf-proxmox to
+# get an assumed_role STS session for role/tf-proxmox. See roles/openbao/README.md.
+#
+# The AWS engine is NOT builtin to OpenBao (dropped at the Vault fork) — it
+# ships as an external plugin from openbao/openbao-plugins with prebuilt,
+# checksum-verified release binaries. The role stages the binary from the
+# controller (same WAN-firewall pattern as the server .deb) onto EVERY node
+# (the catalog sha256 must match the on-disk binary wherever a request lands),
+# then init.yml registers it once and mounts it.
+openbao_aws_engine_enabled: true
+openbao_aws_mount: aws
+# Catalog name the plugin is registered under; `bao secrets enable aws`
+# resolves to it (no builtin shadows the name).
+openbao_aws_plugin_name: aws
+openbao_aws_role_name: tf-proxmox
+# The tf-proxmox IAM role ARN (assumes via the OpenBao-held base user, same
+# relationship aws-vault used). Not a tofu constant today — set via env/extra-vars
+# per the account; see AGENTS.md IP-addressing-style rule (never hardcode).
+openbao_aws_role_arn: "{{ lookup('env', 'OPENBAO_AWS_TF_PROXMOX_ROLE_ARN') }}"
+openbao_aws_root_region: us-east-2
+openbao_aws_default_sts_ttl: 1h
+openbao_aws_max_sts_ttl: 2h
+# The base-user key OpenBao uses to call sts:AssumeRole. Minted via an
+# independent admin path (never the key being rotated out), seeded from Doppler
+# tier-0. Written to aws/config/root ONLY on first configuration — a routine
+# converge never overwrites/rotates it silently (mirrors the seal-key pattern).
+openbao_aws_root_access_key_id: "{{ lookup('env', 'OPENBAO_AWS_ROOT_ACCESS_KEY_ID') | default('', true) }}"
+openbao_aws_root_secret_access_key: "{{ lookup('env', 'OPENBAO_AWS_ROOT_SECRET_ACCESS_KEY') | default('', true) }}"
+
+# --- External plugin staging (openbao/openbao-plugins releases) --------------
+# Every external plugin binary lives here; openbao.hcl points plugin_directory
+# at it. Root-owned, openbao-group-exec, never world/group-writable (the server
+# validates the catalog sha256 against the file before every plugin launch).
+openbao_plugin_dir: /opt/openbao/plugins
+# Version bumps follow the .deb pinning convention: change it here only. On an
+# upgrade the new binary's sha256 differs, so re-registration is a deliberate
+# operator step (see README "AWS secrets engine") — a routine converge never
+# silently re-points the catalog.
+openbao_aws_plugin_version: "0.3.0"
+openbao_aws_plugin_release_base_url: "https://github.com/openbao/openbao-plugins/releases/download"
+openbao_aws_plugin_release_tag: "secrets-aws-v{{ openbao_aws_plugin_version }}"
+# Exact goreleaser asset/member names (verified against the release):
+# tarball openbao-plugin-secrets-aws_linux_amd64_v1.tar.gz contains LICENSE +
+# the binary, which keeps its platform suffix.
+openbao_aws_plugin_tarball: "openbao-plugin-secrets-aws_linux_amd64_v1.tar.gz"
+openbao_aws_plugin_binary: "openbao-plugin-secrets-aws_linux_amd64_v1"
+openbao_aws_plugin_tarball_url: >-
+  {{ openbao_aws_plugin_release_base_url }}/{{ openbao_aws_plugin_release_tag }}/{{ openbao_aws_plugin_tarball }}
+# SHA256SUMS-format file covering the release tarballs.
+openbao_aws_plugin_checksums_filename: "checksums-secrets-aws.txt"
+openbao_aws_plugin_checksums_url: >-
+  {{ openbao_aws_plugin_release_base_url }}/{{ openbao_aws_plugin_release_tag
+  }}/{{ openbao_aws_plugin_checksums_filename }}
+
 # Policy + AppRole names, one per RBAC identity (see docs/SECRETS_HIERARCHY.md
 # for the full rationale). Split by resource domain, least-privilege:
 #   terraform-apply  — human-triggered IaC apply (was "terraform"); read+write
-#                      secret/infra/*, secret/platform/{dns,traefik}, plus
-#                      narrow secret/apps/nautobot/* seed grant for Nautobot P1
+#                      secret/infra/*, secret/platform/{dns,traefik}, narrow
+#                      secret/apps/nautobot/* seed grant for Nautobot P1, plus
+#                      read+update aws/sts/tf-proxmox (dynamic AWS STS creds for
+#                      the tf-proxmox IAM role — replaces the laptop's static
+#                      aws-vault base key)
 #   flow-lock        — cross-repo apply lock holder; read/write only the global
 #                      lock record, metadata-delete for release, and read-only
 #                      secret/infra/* context for lock decisions
