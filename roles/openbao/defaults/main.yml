@@ -349,7 +349,7 @@ openbao_snapshot_secret_id: "{{ lookup('env', 'OPENBAO_SNAPSHOT_SECRET_ID') | de
 # ntfy alert target (reuses the repo's ntfy LXC + notification-port convention,
 # matching service_deadman). Topic 'openbao'.
 openbao_snapshot_ntfy_url: >-
-  http://{{ hostvars['ntfy']['container_ip'] | default('ntfy') }}:{{
+  http://{{ hostvars['ntfy']['container_ip'] }}:{{
   tofu_data.constants.notification_ports.ntfy_http }}/openbao
 # healthchecks deadman ping URL for the snapshot job; EMPTY => ping skipped
 # (ntfy + journal alert still fire). Set per-node from the healthchecks LXC.
