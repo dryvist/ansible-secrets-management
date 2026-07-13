@@ -168,11 +168,11 @@ openbao_aws_root_secret_access_key: "{{ lookup('env', 'OPENBAO_AWS_ROOT_SECRET_A
 # at it. Root-owned, openbao-group-exec, never world/group-writable (the server
 # validates the catalog sha256 against the file before every plugin launch).
 openbao_plugin_dir: /opt/openbao/plugins
-# Version bumps follow the .deb pinning convention: change it here only. On an
-# upgrade the new binary's sha256 differs, so re-registration is a deliberate
-# operator step (see README "AWS secrets engine") — a routine converge never
-# silently re-points the catalog.
+# Version bumps follow the .deb pinning convention: change the version here.
+# Commands are version-qualified on disk and in the catalog so a new release
+# never overwrites the executable used by the currently-running plugin.
 openbao_aws_plugin_version: "0.3.0"
+openbao_aws_plugin_catalog_version: "v{{ openbao_aws_plugin_version }}"
 openbao_aws_plugin_release_base_url: "https://github.com/openbao/openbao-plugins/releases/download"
 openbao_aws_plugin_release_tag: "secrets-aws-v{{ openbao_aws_plugin_version }}"
 # Exact goreleaser asset/member names (verified against the release):
@@ -180,6 +180,7 @@ openbao_aws_plugin_release_tag: "secrets-aws-v{{ openbao_aws_plugin_version }}"
 # the binary, which keeps its platform suffix.
 openbao_aws_plugin_tarball: "openbao-plugin-secrets-aws_linux_amd64_v1.tar.gz"
 openbao_aws_plugin_binary: "openbao-plugin-secrets-aws_linux_amd64_v1"
+openbao_aws_plugin_command: "{{ openbao_aws_plugin_binary }}-v{{ openbao_aws_plugin_version }}"
 openbao_aws_plugin_tarball_url: >-
   {{ openbao_aws_plugin_release_base_url }}/{{ openbao_aws_plugin_release_tag }}/{{ openbao_aws_plugin_tarball }}
 # SHA256SUMS-format file covering the release tarballs.
@@ -187,6 +188,44 @@ openbao_aws_plugin_checksums_filename: "checksums-secrets-aws.txt"
 openbao_aws_plugin_checksums_url: >-
   {{ openbao_aws_plugin_release_base_url }}/{{ openbao_aws_plugin_release_tag
   }}/{{ openbao_aws_plugin_checksums_filename }}
+openbao_aws_plugin_signature_url: "{{ openbao_aws_plugin_tarball_url }}.sig"
+
+# --- GitHub secrets engine (ephemeral GitHub App installation tokens) ------
+# Independent from the AWS engine: it has its own mount, catalog entry,
+# configuration, permission sets, policy grant, and leases. The App private key
+# is required only for first configuration/rotation and is never stored in KV.
+openbao_github_engine_enabled: true
+openbao_github_mount: github
+openbao_github_plugin_name: vault-plugin-secrets-github
+openbao_github_plugin_version: "2.3.2"
+openbao_github_plugin_catalog_version: "v{{ openbao_github_plugin_version }}"
+openbao_github_plugin_release_base_url: >-
+  https://github.com/martinbaillie/vault-plugin-secrets-github/releases/download
+openbao_github_plugin_release_tag: "v{{ openbao_github_plugin_version }}"
+openbao_github_plugin_asset: vault-plugin-secrets-github-linux-amd64
+openbao_github_plugin_command: >-
+  {{ openbao_github_plugin_asset }}-v{{ openbao_github_plugin_version }}
+openbao_github_plugin_asset_url: >-
+  {{ openbao_github_plugin_release_base_url }}/{{ openbao_github_plugin_release_tag
+  }}/{{ openbao_github_plugin_asset }}
+openbao_github_plugin_checksums_filename: SHA256SUMS
+openbao_github_plugin_checksums_url: >-
+  {{ openbao_github_plugin_release_base_url }}/{{ openbao_github_plugin_release_tag
+  }}/{{ openbao_github_plugin_checksums_filename }}
+openbao_github_plugin_checksums_signature_url: >-
+  {{ openbao_github_plugin_checksums_url }}.sig
+openbao_github_app_id: "{{ lookup('env', 'OPENBAO_GITHUB_APP_ID') | default('', true) }}"
+openbao_github_app_private_key: >-
+  {{ lookup('env', 'OPENBAO_GITHUB_APP_PRIVATE_KEY') | default('', true) }}
+openbao_github_dryvist_installation_id: >-
+  {{ lookup('env', 'OPENBAO_GITHUB_DRYVIST_INSTALLATION_ID') | default('', true) }}
+openbao_github_personal_installation_id: >-
+  {{ lookup('env', 'OPENBAO_GITHUB_PERSONAL_INSTALLATION_ID') | default('', true) }}
+openbao_github_permission_sets:
+  - name: dryvist-full-automation
+    installation_id: "{{ openbao_github_dryvist_installation_id }}"
+  - name: personal-full-automation
+    installation_id: "{{ openbao_github_personal_installation_id }}"
 
 # Policy + AppRole names, one per RBAC identity (see docs/SECRETS_HIERARCHY.md
 # for the full rationale). Split by resource domain, least-privilege:

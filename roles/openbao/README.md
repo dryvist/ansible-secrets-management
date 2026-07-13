@@ -241,18 +241,11 @@ prebuilt, checksum-verified release binaries. The role therefore:
    but each node execs its own copy, which must match the registered sha256.
 2. Points `plugin_directory` at it in `openbao.hcl` (always set; the dir
    always exists).
-3. Registers the plugin in the catalog (bootstrap host, add-if-missing,
-   `-sha256` pinned to the staged binary) and mounts it.
-
-**Version upgrade** (deliberately manual, like root-config rotation): bump
-`openbao_aws_plugin_version`, converge (stages the new binary everywhere),
-then re-register with the new sha256 and reload:
-
-```bash
-bao plugin register -sha256=<new-sha256> \
-  -command=openbao-plugin-secrets-aws_linux_amd64_v1 secret aws
-bao plugin reload -plugin aws
-```
+3. Verifies the publisher signature, archive hash, and extracted executable
+   hash; installs an immutable version-qualified command on every voter.
+4. Registers the semantic version in the catalog, mounts/tunes `aws/` to that
+   version, and globally reloads the plugin after an upgrade. Previous
+   commands/catalog versions remain available for rollback.
 
 - `aws/config/root` holds the ONE long-lived base-user key OpenBao itself uses
   to call `sts:AssumeRole`. Seeded from `OPENBAO_AWS_ROOT_ACCESS_KEY_ID` /
@@ -271,6 +264,36 @@ bao plugin reload -plugin aws
 - The laptop side (nix-darwin `credential_process` wrapper reading
   `terraform-apply`'s `role_id`/`secret_id` from `openbao.keychain-db`) is
   documented in the nix-darwin repo, not here.
+
+## GitHub secrets engine (ephemeral GitHub App tokens)
+
+Mounted independently at `github/` using
+[`martinbaillie/vault-plugin-secrets-github`](https://github.com/martinbaillie/vault-plugin-secrets-github)
+v2.3.2. It is a secrets engine, not the first-party `auth-github` login
+plugin: callers authenticate to OpenBao through their existing AppRole and the
+engine returns one-hour GitHub App installation tokens.
+
+The release checksum manifest is verified with Martin Baillie's pinned signing
+key before the Linux amd64 binary is checksum-verified and copied to every Raft
+voter. The engine stores one dedicated GitHub App ID/private key in its own
+encrypted mount configuration. The key is required only for first configuration
+or an explicit rotation; routine converges never rewrite it.
+
+Two administrator-owned permission sets separate the App installations:
+
+- `github/token/dryvist-full-automation`
+- `github/token/personal-full-automation`
+
+Only the `ai-orchestrator` policy can update those exact token endpoints. It
+cannot call the unrestricted `github/token` endpoint, edit permission sets, or
+read engine configuration. AWS remains separately mounted and authorized:
+`terraform-apply` can mint `aws/sts/tf-proxmox`, but has no GitHub-engine grant.
+
+First configuration requires `OPENBAO_GITHUB_APP_ID`,
+`OPENBAO_GITHUB_APP_PRIVATE_KEY`, and the two account installation IDs. After
+the sealed write succeeds, remove the temporary controller copy of the private
+key. A live acceptance run must issue and revoke one token from each permission
+set before the engine is considered deployed.
 
 ## Break-glass handling (read this)
 

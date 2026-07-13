@@ -14,3 +14,13 @@ path "{{ openbao_kv_mount }}/data/ai/*" {
 path "{{ openbao_kv_mount }}/metadata/ai/*" {
   capabilities = ["read", "list"]
 }
+
+# Mint only the two administrator-defined GitHub App permission sets. The raw
+# github/token endpoint and the engine's config/permissionset administration
+# paths are intentionally absent, so this identity cannot widen the token.
+{% for permission_set in openbao_github_permission_sets %}
+path "{{ openbao_github_mount }}/token/{{ permission_set.name }}" {
+  capabilities = ["update"]
+}
+
+{% endfor %}

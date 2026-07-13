@@ -247,7 +247,7 @@
 # mounts it. See defaults/main.yml for the var docs.
 - name: Read the staged AWS plugin binary's sha256
   ansible.builtin.stat:
-    path: "{{ openbao_plugin_dir }}/{{ openbao_aws_plugin_binary }}"
+    path: "{{ openbao_plugin_dir }}/{{ openbao_aws_plugin_command }}"
     checksum_algorithm: sha256
   register: openbao_aws_plugin_stat
   when:
@@ -259,7 +259,7 @@
     that:
       - openbao_aws_plugin_stat.stat.exists
     fail_msg: >-
-      {{ openbao_plugin_dir }}/{{ openbao_aws_plugin_binary }} is missing —
+      {{ openbao_plugin_dir }}/{{ openbao_aws_plugin_command }} is missing —
       the staging phase in main.yml should have extracted it. Re-run the full
       role (not init in isolation).
   when:
@@ -268,7 +268,10 @@
 
 - name: Check whether the AWS plugin is already registered
   ansible.builtin.command:
-    cmd: "bao plugin info secret {{ openbao_aws_plugin_name }}"
+    cmd: >-
+      bao plugin info -format=json
+      -version={{ openbao_aws_plugin_catalog_version }}
+      secret {{ openbao_aws_plugin_name }}
   environment:
     BAO_ADDR: "{{ openbao_api_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
@@ -280,21 +283,19 @@
     - openbao_bootstrap_token is defined
     - openbao_aws_engine_enabled
 
-# Add-if-missing, like every other identity this file provisions. A VERSION
-# BUMP (new binary, new sha256) is deliberately NOT re-registered here — see
-# README "AWS secrets engine" for the manual upgrade step, mirroring how the
-# root config and role TTLs are never silently re-driven by a converge.
 - name: Register the AWS plugin (pinned to the staged binary's sha256)
   ansible.builtin.command:
     cmd: >-
       bao plugin register
       -sha256={{ openbao_aws_plugin_stat.stat.checksum }}
-      -command={{ openbao_aws_plugin_binary }}
+      -command={{ openbao_aws_plugin_command }}
+      -version={{ openbao_aws_plugin_catalog_version }}
       secret {{ openbao_aws_plugin_name }}
   environment:
     BAO_ADDR: "{{ openbao_api_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
   no_log: true
+  register: openbao_aws_plugin_register
   changed_when: true
   when:
     - openbao_bootstrap_token is defined
@@ -303,7 +304,10 @@
 
 - name: Enable the AWS secrets engine
   ansible.builtin.command:
-    cmd: "bao secrets enable -path={{ openbao_aws_mount }} {{ openbao_aws_plugin_name }}"
+    cmd: >-
+      bao secrets enable -path={{ openbao_aws_mount }}
+      -plugin-version={{ openbao_aws_plugin_catalog_version }}
+      {{ openbao_aws_plugin_name }}
   environment:
     BAO_ADDR: "{{ openbao_api_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
@@ -313,6 +317,38 @@
     - openbao_bootstrap_token is defined
     - openbao_aws_engine_enabled
     - (openbao_aws_mount ~ '/') not in (openbao_mounts_raw.stdout | from_json).keys()
+
+- name: Tune the existing AWS mount to the declared plugin version
+  ansible.builtin.command:
+    cmd: >-
+      bao secrets tune -plugin-version={{ openbao_aws_plugin_catalog_version }}
+      {{ openbao_aws_mount }}/
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  no_log: true
+  register: openbao_aws_plugin_tune
+  changed_when: true
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_aws_engine_enabled
+    - (openbao_aws_mount ~ '/') in (openbao_mounts_raw.stdout | from_json).keys()
+    - >-
+      ((openbao_mounts_raw.stdout | from_json)[openbao_aws_mount ~ '/'].plugin_version
+       | default('')) != openbao_aws_plugin_catalog_version
+
+- name: Reload the AWS plugin across the Raft cluster after an upgrade
+  ansible.builtin.command:
+    cmd: "bao plugin reload -plugin={{ openbao_aws_plugin_name }} -scope=global"
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  no_log: true
+  changed_when: true
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_aws_engine_enabled
+    - openbao_aws_plugin_tune is changed
 
 # Root config holds the ONE long-lived AWS base-user key OpenBao uses to call
 # sts:AssumeRole. Checked via `bao read`, not the mounts list above — a mount
@@ -353,15 +389,19 @@
 # overwrites/rotates it silently (mirrors the seal-key pattern) — rotation is a
 # deliberate, separate operator action.
 - name: Configure the AWS engine root credentials (first configuration only)
-  ansible.builtin.command:
-    cmd: >-
-      bao write {{ openbao_aws_mount }}/config/root
-      access_key={{ openbao_aws_root_access_key_id }}
-      secret_key={{ openbao_aws_root_secret_access_key }}
-      region={{ openbao_aws_root_region }}
-  environment:
-    BAO_ADDR: "{{ openbao_api_addr }}"
-    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  ansible.builtin.uri:
+    url: "{{ openbao_api_addr }}/v1/{{ openbao_aws_mount }}/config/root"
+    method: POST
+    headers:
+      X-Vault-Token: "{{ openbao_bootstrap_token }}"
+    body_format: json
+    body:
+      access_key: "{{ openbao_aws_root_access_key_id }}"
+      secret_key: "{{ openbao_aws_root_secret_access_key }}"
+      region: "{{ openbao_aws_root_region }}"
+    status_code:
+      - 200
+      - 204
   no_log: true
   changed_when: true
   when:
@@ -403,6 +443,235 @@
     - openbao_aws_engine_enabled
     - (openbao_aws_role_check.rc | default(1)) != 0
     - openbao_aws_role_arn | length > 0
+
+# --- GitHub secrets engine (independent GitHub App token broker) ------------
+- name: Read the staged GitHub plugin binary's sha256
+  ansible.builtin.stat:
+    path: "{{ openbao_plugin_dir }}/{{ openbao_github_plugin_command }}"
+    checksum_algorithm: sha256
+  register: openbao_github_plugin_stat
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_github_engine_enabled
+
+- name: Assert the GitHub plugin binary is staged
+  ansible.builtin.assert:
+    that:
+      - openbao_github_plugin_stat.stat.exists
+    fail_msg: >-
+      {{ openbao_plugin_dir }}/{{ openbao_github_plugin_command }} is missing.
+      Re-run the full role so every Raft voter receives the plugin first.
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_github_engine_enabled
+
+- name: Check whether the GitHub plugin version is registered
+  ansible.builtin.command:
+    cmd: >-
+      bao plugin info -format=json
+      -version={{ openbao_github_plugin_catalog_version }}
+      secret {{ openbao_github_plugin_name }}
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  register: openbao_github_plugin_check
+  no_log: true
+  changed_when: false
+  failed_when: false
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_github_engine_enabled
+
+- name: Register the GitHub secrets plugin version
+  ansible.builtin.command:
+    cmd: >-
+      bao plugin register
+      -sha256={{ openbao_github_plugin_stat.stat.checksum }}
+      -command={{ openbao_github_plugin_command }}
+      -version={{ openbao_github_plugin_catalog_version }}
+      secret {{ openbao_github_plugin_name }}
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  register: openbao_github_plugin_register
+  no_log: true
+  changed_when: true
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_github_engine_enabled
+    - (openbao_github_plugin_check.rc | default(1)) != 0
+
+- name: Enable the GitHub secrets engine
+  ansible.builtin.command:
+    cmd: >-
+      bao secrets enable -path={{ openbao_github_mount }}
+      -plugin-version={{ openbao_github_plugin_catalog_version }}
+      {{ openbao_github_plugin_name }}
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  no_log: true
+  changed_when: true
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_github_engine_enabled
+    - (openbao_github_mount ~ '/') not in (openbao_mounts_raw.stdout | from_json).keys()
+
+- name: Tune the existing GitHub mount to the declared plugin version
+  ansible.builtin.command:
+    cmd: >-
+      bao secrets tune -plugin-version={{ openbao_github_plugin_catalog_version }}
+      {{ openbao_github_mount }}/
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  register: openbao_github_plugin_tune
+  no_log: true
+  changed_when: true
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_github_engine_enabled
+    - (openbao_github_mount ~ '/') in (openbao_mounts_raw.stdout | from_json).keys()
+    - >-
+      ((openbao_mounts_raw.stdout | from_json)[openbao_github_mount ~ '/'].plugin_version
+       | default('')) != openbao_github_plugin_catalog_version
+
+- name: Reload the GitHub plugin across the Raft cluster after an upgrade
+  ansible.builtin.command:
+    cmd: "bao plugin reload -plugin={{ openbao_github_plugin_name }} -scope=global"
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  no_log: true
+  changed_when: true
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_github_engine_enabled
+    - openbao_github_plugin_tune is changed
+
+- name: Read the GitHub engine configuration
+  ansible.builtin.command:
+    cmd: "bao read -format=json {{ openbao_github_mount }}/config"
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  register: openbao_github_config_check
+  no_log: true
+  changed_when: false
+  failed_when: false
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_github_engine_enabled
+
+- name: Require the GitHub App credentials for first configuration
+  ansible.builtin.assert:
+    that:
+      - openbao_github_app_id | length > 0
+      - openbao_github_app_private_key | length > 0
+    fail_msg: >-
+      The GitHub secrets engine is unconfigured. Supply OPENBAO_GITHUB_APP_ID
+      and OPENBAO_GITHUB_APP_PRIVATE_KEY for this one-time sealed write.
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_github_engine_enabled
+    - (openbao_github_config_check.rc | default(1)) != 0
+
+- name: Configure the GitHub App credentials (first configuration only)
+  ansible.builtin.uri:
+    url: "{{ openbao_api_addr }}/v1/{{ openbao_github_mount }}/config"
+    method: POST
+    headers:
+      X-Vault-Token: "{{ openbao_bootstrap_token }}"
+    body_format: json
+    body:
+      app_id: "{{ openbao_github_app_id | int }}"
+      prv_key: "{{ openbao_github_app_private_key }}"
+      exclude_repository_metadata: true
+    status_code:
+      - 200
+      - 204
+  no_log: true
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_github_engine_enabled
+    - (openbao_github_config_check.rc | default(1)) != 0
+    - openbao_github_app_id | length > 0
+    - openbao_github_app_private_key | length > 0
+
+- name: Refuse an unexpected GitHub App ID drift
+  ansible.builtin.assert:
+    that:
+      - >-
+        (openbao_github_config_check.stdout | from_json).data.app_id | string
+        == openbao_github_app_id | string
+    fail_msg: >-
+      The configured GitHub App ID differs from OPENBAO_GITHUB_APP_ID. Rotate
+      the App key deliberately; a routine converge will not replace it.
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_github_engine_enabled
+    - (openbao_github_config_check.rc | default(1)) == 0
+    - openbao_github_app_id | length > 0
+
+- name: Require both GitHub App installation IDs
+  ansible.builtin.assert:
+    that:
+      - openbao_github_dryvist_installation_id | int > 0
+      - openbao_github_personal_installation_id | int > 0
+    fail_msg: >-
+      Supply OPENBAO_GITHUB_DRYVIST_INSTALLATION_ID and
+      OPENBAO_GITHUB_PERSONAL_INSTALLATION_ID after installing the dedicated
+      App on both accounts.
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_github_engine_enabled
+
+- name: Read the GitHub token permission sets
+  ansible.builtin.command:
+    cmd: >-
+      bao read -format=json
+      {{ openbao_github_mount }}/permissionset/{{ item.name }}
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  loop: "{{ openbao_github_permission_sets }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: openbao_github_permission_set_checks
+  no_log: true
+  changed_when: false
+  failed_when: false
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_github_engine_enabled
+
+- name: Reconcile the GitHub token permission sets
+  ansible.builtin.uri:
+    url: >-
+      {{ openbao_api_addr }}/v1/{{ openbao_github_mount
+      }}/permissionset/{{ item.0.name }}
+    method: POST
+    headers:
+      X-Vault-Token: "{{ openbao_bootstrap_token }}"
+    body_format: json
+    body:
+      installation_id: "{{ item.0.installation_id | int }}"
+    status_code:
+      - 200
+      - 204
+  loop: >-
+    {{ openbao_github_permission_sets
+       | zip(openbao_github_permission_set_checks.results | default([])) | list }}
+  loop_control:
+    label: "{{ item.0.name }}"
+  no_log: true
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_github_engine_enabled
+    - >-
+      (item.1.rc | default(1)) != 0
+      or ((item.1.stdout | from_json).data.installation_id | int)
+         != (item.0.installation_id | int)
 
 # --- RBAC policies (write-if-missing-or-changed) ----------------------------
 # Rendered on the TARGET: `bao policy write` below executes there and reads

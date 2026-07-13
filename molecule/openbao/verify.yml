@@ -214,7 +214,7 @@
 
     - name: Stat the staged AWS plugin binary
       ansible.builtin.stat:
-        path: /opt/openbao/plugins/openbao-plugin-secrets-aws_linux_amd64_v1
+        path: /opt/openbao/plugins/openbao-plugin-secrets-aws_linux_amd64_v1-v0.3.0
       register: bao_aws_plugin
 
     - name: Assert the AWS plugin binary is staged, root-owned, and not world/group-writable
@@ -226,6 +226,21 @@
         fail_msg: >-
           AWS plugin binary missing or wrong owner/mode:
           {{ bao_aws_plugin.stat | default({}) }}
+
+    - name: Stat the staged GitHub plugin binary
+      ansible.builtin.stat:
+        path: /opt/openbao/plugins/vault-plugin-secrets-github-linux-amd64-v2.3.2
+      register: bao_github_plugin
+
+    - name: Assert the GitHub plugin binary is staged and protected
+      ansible.builtin.assert:
+        that:
+          - bao_github_plugin.stat.exists
+          - bao_github_plugin.stat.pw_name == 'root'
+          - bao_github_plugin.stat.mode == '0750'
+        fail_msg: >-
+          GitHub plugin binary missing or wrong owner/mode:
+          {{ bao_github_plugin.stat | default({}) }}
 
     - name: Read the terraform-apply policy template source
       ansible.builtin.slurp:
@@ -240,3 +255,26 @@
           - "'aws/sts/' in (bao_terraform_apply_policy_src.content | b64decode)"
           - "'\"read\", \"update\"' in (bao_terraform_apply_policy_src.content | b64decode)"
         fail_msg: "terraform-apply-policy.hcl.j2 is missing the dynamic AWS STS grant"
+
+    - name: Load OpenBao role defaults for policy rendering
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../../roles/openbao/defaults/main.yml"
+
+    - name: Render the ai-orchestrator policy with role defaults
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../../roles/openbao/templates/ai-orchestrator-policy.hcl.j2"
+        dest: /tmp/ai-orchestrator-policy.hcl
+        mode: "0600"
+
+    - name: Read the rendered ai-orchestrator policy
+      ansible.builtin.slurp:
+        src: /tmp/ai-orchestrator-policy.hcl
+      register: bao_ai_orchestrator_policy
+
+    - name: Assert ai-orchestrator can mint only named GitHub permission sets
+      ansible.builtin.assert:
+        that:
+          - "'github/token/dryvist-full-automation' in (bao_ai_orchestrator_policy.content | b64decode)"
+          - "'github/token/personal-full-automation' in (bao_ai_orchestrator_policy.content | b64decode)"
+          - "'github/token/*' not in (bao_ai_orchestrator_policy.content | b64decode)"
+        fail_msg: "ai-orchestrator policy does not preserve the named GitHub token boundary"
