@@ -1,17 +1,42 @@
 {{ ansible_managed | comment }}
 # OpenBao policy for the ai-orchestrator AppRole — the AI agent/orchestrator's
-# WRITE identity for its own secret domain. Read + create/update on secret/ai/*
-# so agents can persist and rotate their own credentials, and list metadata to
-# discover what exists. Deliberately scoped to secret/ai/* ONLY: no delete, no
-# infra kernel (secret/infra/*), no other app/platform subtrees. This is the
-# one AI identity that may WRITE; ai-readonly/ai-elevated stay read-only.
-# See terraform-proxmox docs/SECRETS_HIERARCHY.md.
+# WRITE identity for its own secret domain. Read + create/update, DEMOTED from
+# the former broad secret/ai/* to only the two subtrees it actually writes:
+# secret/ai/hermes (the one-time Hermes cred seed; exact secret, matches
+# hermes-policy) and secret/ai/agents/* (per-agent creds). No delete, no infra
+# kernel (secret/infra/*), no other ai/ subpath, no other app/platform subtree.
+# This is the one AI identity that may WRITE; ai-readonly/ai-elevated stay
+# read-only. See terraform-proxmox docs/SECRETS_HIERARCHY.md.
+#
+# PHASE-3 PREREQUISITE (before the first post-merge converge rewrites this
+# policy): run `bao kv list secret/ai/` (and one level deeper) against live
+# OpenBao and add any other subpath ai-orchestrator actually writes here — the
+# reconcile is write-if-changed, so this narrowing lands at that converge. The
+# live ai-orchestrator AppRole is existence-only and must be deliberately
+# re-written ONCE at Phase-3 identity convergence (human-supervised) to pick up
+# this policy + the 30m token_ttl; a routine converge never touches it.
 
-path "{{ openbao_kv_mount }}/data/ai/*" {
+path "{{ openbao_kv_mount }}/data/ai/hermes" {
   capabilities = ["create", "update", "read"]
 }
 
-path "{{ openbao_kv_mount }}/metadata/ai/*" {
+path "{{ openbao_kv_mount }}/data/ai/hermes/*" {
+  capabilities = ["create", "update", "read"]
+}
+
+path "{{ openbao_kv_mount }}/data/ai/agents/*" {
+  capabilities = ["create", "update", "read"]
+}
+
+path "{{ openbao_kv_mount }}/metadata/ai/hermes" {
+  capabilities = ["read", "list"]
+}
+
+path "{{ openbao_kv_mount }}/metadata/ai/hermes/*" {
+  capabilities = ["read", "list"]
+}
+
+path "{{ openbao_kv_mount }}/metadata/ai/agents/*" {
   capabilities = ["read", "list"]
 }
 

@@ -189,7 +189,7 @@ plans):
 | `terraform-apply` | `secret/infra/*`, `secret/platform/{dns,traefik}`, `secret/apps/nautobot/*`, `homelab/*` | (same) | Human-triggered IaC apply[^aws-sts] |
 | `apps-seed` | `secret/apps/*` | `secret/apps/*` create/update | Doppler-published writer; Terraform `vault-secrets` seeds `secret/apps/<app>` at source |
 | `flow-lock` | `secret/locks/global`, `secret/infra/*` | `secret/locks/global` | Cross-repo apply lock; releases the lock via metadata delete |
-| `terrakube-plan` | `secret/platform/terrakube` only | — | Terrakube VCS-driven runs; deliberately walled off from `secret/infra/*` |
+| `terrakube-<workspace>` JWT | Only that workspace's native paths | Workspace-specific | Short-lived; exact organization/workspace subject and audience |
 | `ansible-converge` | `secret/platform/*`, `secret/apps/*` | — | Config-management pulls |
 | `observability` | `secret/platform/{splunk,cribl}` | — | Ingest pipeline (shared HEC tokens) |
 | `local-cloud` | `secret/platform/{object-storage,compute}` | — | RustFS + compute creds |
@@ -203,6 +203,18 @@ plans):
 | `ai-readonly` | `secret/ai/*`, `secret/apps/*` | — | **default AI agent; NO `secret/infra/*`** |
 | `ai-elevated` | `ai-readonly` + `secret/platform/*` | — | trusted infra-touching agents; no write |
 | `snapshot` | `sys/storage/raft/snapshot` | — | least-priv backup identity |
+
+### Terrakube workload identity
+
+The role enables JWT auth at `auth/terrakube` using the internal Terrakube API
+as both OIDC discovery URL and bound issuer. Each fleet workspace in
+`openbao_terrakube_workspaces` has its own `terrakube-<workspace>` role and
+policy. The role binds audience
+`openbao.workload.identity` and the exact subject
+`organization:<openbao_terrakube_organization>:workspace:<workspace>`; a token from one workspace cannot
+select another workspace's policy. Terrakube stores only the non-secret dynamic
+credential controls. Provider credentials remain in their native OpenBao KV or
+secrets-engine paths and are returned through a short-lived OpenBao token.
 
 [^aws-sts]: Also grants `read`+`update` on `aws/sts/tf-proxmox` — dynamic AWS
     STS creds (assumed_role) for `role/tf-proxmox`, replacing the laptop's

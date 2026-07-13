@@ -1,0 +1,31 @@
+# Terrakube workspace policy for {{ item.workspace.name }}. The matching JWT role binds
+# the exact organization/workspace subject before this policy can be issued.
+path "auth/token/lookup-self" {
+  capabilities = ["read"]
+}
+
+path "auth/token/renew-self" {
+  capabilities = ["update"]
+}
+
+path "auth/token/revoke-self" {
+  capabilities = ["update"]
+}
+{% for path in item.workspace.kv_read | default([]) %}
+
+path "{{ openbao_kv_mount }}/data/{{ path }}" {
+  capabilities = ["read"]
+}
+{% endfor %}
+{% for path in item.workspace.kv_write | default([]) %}
+
+path "{{ openbao_kv_mount }}/data/{{ path }}" {
+  capabilities = ["create", "read", "update"]
+}
+{% endfor %}
+{% for path in item.workspace.api_update | default([]) %}
+
+path "{{ path }}" {
+  capabilities = ["read", "update"]
+}
+{% endfor %}
