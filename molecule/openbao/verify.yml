@@ -256,17 +256,25 @@
           - "'\"read\", \"update\"' in (bao_terraform_apply_policy_src.content | b64decode)"
         fail_msg: "terraform-apply-policy.hcl.j2 is missing the dynamic AWS STS grant"
 
-    - name: Read the ai-orchestrator policy template source
-      ansible.builtin.slurp:
+    - name: Load OpenBao role defaults for policy rendering
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../../roles/openbao/defaults/main.yml"
+
+    - name: Render the ai-orchestrator policy with role defaults
+      ansible.builtin.template:
         src: "{{ playbook_dir }}/../../roles/openbao/templates/ai-orchestrator-policy.hcl.j2"
-      register: bao_ai_orchestrator_policy_src
-      delegate_to: localhost
-      become: false
+        dest: /tmp/ai-orchestrator-policy.hcl
+        mode: "0600"
+
+    - name: Read the rendered ai-orchestrator policy
+      ansible.builtin.slurp:
+        src: /tmp/ai-orchestrator-policy.hcl
+      register: bao_ai_orchestrator_policy
 
     - name: Assert ai-orchestrator can mint only named GitHub permission sets
       ansible.builtin.assert:
         that:
-          - "'github/token/dryvist-full-automation' in (bao_ai_orchestrator_policy_src.content | b64decode)"
-          - "'github/token/personal-full-automation' in (bao_ai_orchestrator_policy_src.content | b64decode)"
-          - "'github/token/*' not in (bao_ai_orchestrator_policy_src.content | b64decode)"
+          - "'github/token/dryvist-full-automation' in (bao_ai_orchestrator_policy.content | b64decode)"
+          - "'github/token/personal-full-automation' in (bao_ai_orchestrator_policy.content | b64decode)"
+          - "'github/token/*' not in (bao_ai_orchestrator_policy.content | b64decode)"
         fail_msg: "ai-orchestrator policy does not preserve the named GitHub token boundary"
