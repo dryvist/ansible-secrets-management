@@ -13,6 +13,15 @@
     openbao_config_dir: /etc/openbao
     openbao_config_file: /etc/openbao/openbao.hcl
     openbao_env_file: /etc/openbao/openbao.env
+    openbao_terrakube_workspace_names:
+      - iac-platform
+      - tofu-github
+      - tofu-unifi
+      - tofu-aws-production
+      - tofu-runs-on
+      - tofu-proxmox
+      - tofu-proxmox-aws-infra
+      - tofu-proxmox-servarr-config
 
   tasks:
     - name: Check the bao binary is installed
@@ -176,7 +185,7 @@
         path: "{{ playbook_dir }}/../../roles/openbao/templates/{{ item }}"
       loop:
         - terraform-apply-policy.hcl.j2
-        - terrakube-plan-policy.hcl.j2
+        - terrakube-workspace-policy.hcl.j2
         - ansible-converge-policy.hcl.j2
         - observability-policy.hcl.j2
         - local-cloud-policy.hcl.j2
@@ -191,7 +200,7 @@
       delegate_to: localhost
       become: false
 
-    - name: Assert all 12 RBAC policy templates are present
+    - name: Assert every RBAC policy template is present
       ansible.builtin.assert:
         that:
           - item.stat.exists
@@ -199,6 +208,22 @@
       loop: "{{ bao_policy_templates.results }}"
       loop_control:
         label: "{{ item.item }}"
+
+    - name: Read OpenBao defaults for Terrakube workspace coverage
+      ansible.builtin.slurp:
+        src: "{{ playbook_dir }}/../../roles/openbao/defaults/main.yml"
+      register: bao_defaults_source
+      delegate_to: localhost
+      become: false
+
+    - name: Assert all nine exact-claim Terrakube JWT roles are declared
+      ansible.builtin.assert:
+        that:
+          - >-
+            item in ((bao_defaults_source.content | b64decode | from_yaml).openbao_terrakube_workspaces
+            | map(attribute='name', default='') | reject('equalto', '') | list)
+        fail_msg: "Missing Terrakube JWT workspace declaration: {{ item }}"
+      loop: "{{ openbao_terrakube_workspace_names }}"
 
     # The AWS secrets engine registration/config only runs against a live
     # server (init.yml is entirely docker-guarded), so it can't be exercised

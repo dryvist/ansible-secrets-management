@@ -3,9 +3,9 @@
 # Read/write on the infra kernel (it provisions those secrets) plus the
 # dns/traefik platform subtrees, plus the legacy homelab demo subtree the
 # vault-secrets read/write proof uses. Deliberately NOT the rest of
-# secret/platform/* (e.g. terrakube) — that's the terrakube-plan identity,
-# kept separate because Terrakube executes untrusted VCS-driven plans and
-# must never be able to read or rewrite the infra kernel. KV v2 splits data
+# secret/platform/* (e.g. terrakube) — Terrakube receives a distinct
+# exact-workspace JWT policy and must never be able to read or rewrite the
+# infra kernel. KV v2 splits data
 # and metadata paths, so both are listed explicitly.
 #
 # Plus: dynamic AWS STS creds for role/tf-proxmox (the AWS secrets engine,

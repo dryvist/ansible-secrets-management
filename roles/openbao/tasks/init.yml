@@ -2,7 +2,7 @@
 # OpenBao bootstrap — runs ONLY on the bootstrap host (gated by the include in
 # main.yml: inventory_hostname == openbao_bootstrap_host). It initializes the
 # cluster, then provisions the KV mount, the RBAC policies, and the AppRoles
-# (terraform-apply / terrakube-plan / ansible-converge / observability /
+# (terraform-apply / Terrakube JWT / ansible-converge / observability /
 # local-cloud / monitoring / media / local-llm / public / ai-readonly /
 # ai-elevated / snapshot — see docs/SECRETS_HIERARCHY.md). The other Raft
 # peers never run this: they join the leader automatically (retry_join in
@@ -238,6 +238,23 @@
       (openbao_vikunja_current.rc | default(1)) != 0
       or (openbao_vikunja_current.stdout | default('{}') | from_json).data.data | default({})
          != (openbao_vikunja_desired | default({}))
+
+# --- App-secret generation (generate-if-absent) -----------------------------
+# Generate + seed each app's service credentials directly in OpenBao, replacing
+# the retired terraform-proxmox vault-secrets root. Human-gated: runs only on
+# the bootstrap host under the admin token. Each secret is created ONCE when
+# absent and never rewritten, so a live credential is never rotated (same
+# create-once contract the tofu root had via random_password + ignore_changes).
+- name: Generate + seed per-app service secrets in OpenBao (generate-if-absent)
+  ansible.builtin.include_tasks: seed_generated_app_secret.yml
+  loop: "{{ openbao_generated_app_secrets | dict2items }}"
+  loop_control:
+    loop_var: openbao_seed_item
+    label: "{{ openbao_seed_item.key }}"
+  vars:
+    openbao_seed_app: "{{ openbao_seed_item.key }}"
+    openbao_seed_fields: "{{ openbao_seed_item.value }}"
+  when: openbao_bootstrap_token is defined
 
 # --- AWS secrets engine (external plugin: register + enable, add-if-missing) -
 # Dynamic STS creds for role/tf-proxmox — replaces the laptop's static
@@ -810,6 +827,105 @@
     - openbao_bootstrap_token is defined
     - "'approle/' not in (openbao_auth_raw.stdout | from_json).keys()"
 
+# --- Terrakube native JWT workload identity --------------------------------
+- name: Enable the Terrakube JWT auth method
+  ansible.builtin.command:
+    cmd: "bao auth enable -path={{ openbao_terrakube_jwt_auth_path }} jwt"
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  no_log: true
+  changed_when: true
+  when:
+    - openbao_bootstrap_token is defined
+    - (openbao_terrakube_jwt_auth_path ~ '/') not in (openbao_auth_raw.stdout | from_json).keys()
+
+- name: Read the Terrakube JWT auth configuration
+  ansible.builtin.command:
+    cmd: "bao read -format=json auth/{{ openbao_terrakube_jwt_auth_path }}/config"
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  register: openbao_terrakube_jwt_config_current
+  no_log: true
+  changed_when: false
+  failed_when: false
+  when: openbao_bootstrap_token is defined
+
+- name: Configure Terrakube as the JWT issuer
+  ansible.builtin.command:
+    cmd: "bao write auth/{{ openbao_terrakube_jwt_auth_path }}/config -"
+    stdin: >-
+      {{ {'oidc_discovery_url': openbao_terrakube_jwt_issuer,
+            'bound_issuer': openbao_terrakube_jwt_issuer} | to_json }}
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  no_log: true
+  changed_when: true
+  when:
+    - openbao_bootstrap_token is defined
+    - >-
+      (openbao_terrakube_jwt_config_current.rc | default(1)) != 0
+      or ((openbao_terrakube_jwt_config_current.stdout | default('{}') | from_json).data
+          | default({}, true)).oidc_discovery_url | default('')
+         != openbao_terrakube_jwt_issuer
+      or ((openbao_terrakube_jwt_config_current.stdout | default('{}') | from_json).data
+          | default({}, true)).bound_issuer | default('')
+         != openbao_terrakube_jwt_issuer
+
+- name: Read Terrakube workspace JWT roles
+  ansible.builtin.command:
+    cmd: "bao read -format=json auth/{{ openbao_terrakube_jwt_auth_path }}/role/terrakube-{{ item.name }}"
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  loop: "{{ openbao_terrakube_workspaces }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: openbao_terrakube_jwt_role_reads
+  no_log: true
+  changed_when: false
+  failed_when: false
+  when: openbao_bootstrap_token is defined
+
+- name: Reconcile exact-claim Terrakube workspace JWT roles
+  ansible.builtin.command:
+    cmd: "bao write auth/{{ openbao_terrakube_jwt_auth_path }}/role/terrakube-{{ item.0.name }} -"
+    stdin: >-
+      {{ {'role_type': 'jwt',
+            'bound_audiences': [openbao_terrakube_jwt_audience],
+            'bound_claims': {
+              'sub': 'organization:' ~ openbao_terrakube_organization ~ ':workspace:' ~ item.0.name
+            },
+            'user_claim': 'sub',
+            'policies': ['terrakube-' ~ item.0.name],
+            'token_ttl': openbao_terrakube_jwt_token_ttl} | to_json }}
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  loop: "{{ openbao_terrakube_workspaces | zip(openbao_terrakube_jwt_role_reads.results | default([])) | list }}"
+  loop_control:
+    label: "{{ item.0.name }}"
+  no_log: true
+  changed_when: true
+  when:
+    - openbao_bootstrap_token is defined
+    - >-
+      (item.1.rc | default(1)) != 0
+      or ((item.1.stdout | default('{}') | from_json).data
+          | default({}, true)).bound_audiences | default([])
+         != [openbao_terrakube_jwt_audience]
+      or (((item.1.stdout | default('{}') | from_json).data
+           | default({}, true)).bound_claims | default({}, true)).sub | default('')
+         != 'organization:' ~ openbao_terrakube_organization ~ ':workspace:' ~ item.0.name
+      or ((item.1.stdout | default('{}') | from_json).data
+          | default({}, true)).token_policies | default([])
+         != ['terrakube-' ~ item.0.name]
+      or ((item.1.stdout | default('{}') | from_json).data
+          | default({}, true)).token_ttl | default(0) | int
+         != (openbao_terrakube_jwt_token_ttl | regex_replace('m$', '') | int) * 60
+
 # --- AppRoles (add-if-missing), one per RBAC group --------------------------
 - name: Check whether each AppRole already exists
   ansible.builtin.command:
@@ -831,7 +947,7 @@
     cmd: >-
       bao write auth/approle/role/{{ item.0.name }}
       token_policies={{ item.0.policy }}
-      token_ttl={{ openbao_approle_token_ttl }}
+      token_ttl={{ item.0.token_ttl | default(openbao_approle_token_ttl) }}
       token_max_ttl={{ openbao_approle_token_max_ttl }}
       secret_id_ttl=0
   environment:
@@ -932,17 +1048,17 @@
          | list }}
   when: openbao_bootstrap_token is defined
 
-- name: INSTRUCT — load each new AppRole's creds into its keychain item, then delete
+- name: INSTRUCT — publish each new AppRole's creds to Doppler tier-0, then delete
   ansible.builtin.debug:
     msg: >-
       ============================================================
       New AppRoles created: {{ (openbao_new_approle_names | default([])) | join(', ') }}.
       Each role_id + secret_id was written to a 0600 file on this
       controller: {{ openbao_approle_file_prefix }}-<role>-{{ inventory_hostname }}.json
-      (gitignored). Load each into its own item in the dedicated
-      openbao.keychain-db keychain (see terraform-proxmox
+      (gitignored). Publish each to Doppler tier-0, consumed as ambient
+      env under `doppler run` (see terraform-proxmox
       docs/SECRETS_HIERARCHY.md), except:
-        - `public` -> ships ambiently, NOT keychain-gated (it's the
+        - `public` -> ships ambiently, needs no secret-zero (it's the
           anonymous, non-exploitable-facts identity)
       Then SECURELY DELETE these files. Prefer the OpenBao ingress
       FQDN for BAO_ADDR (node-independent, survives a single node

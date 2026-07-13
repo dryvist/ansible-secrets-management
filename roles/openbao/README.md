@@ -82,10 +82,10 @@ This role brings OpenBao live **before** anything that reads secrets from it.
    Doppler tier-0 as `OPENBAO_STATIC_SEAL_KEY` (+ `OPENBAO_STATIC_SEAL_KEY_ID`).
 2. `terraform-proxmox` — provision the 5 OpenBao LXCs (VMID/IP/firewall).
 3. **this role** — install + init the cluster, mint the AppRoles.
-4. Operator — transcribe recovery shares to paper (+ Bitwarden); load each
-   AppRole's `role_id`/`secret_id` into its own item in the dedicated
-   `openbao.keychain-db` keychain — except `public`, which is NOT
-   keychain-gated (see [Secret hierarchy & RBAC](#secret-hierarchy--rbac)).
+4. Operator — transcribe recovery shares to paper (+ Bitwarden); publish each
+   AppRole's `role_id`/`secret_id` to Doppler tier-0, consumed as ambient env
+   under `doppler run` — except `public`, which needs no secret-zero at all
+   (see [Secret hierarchy & RBAC](#secret-hierarchy--rbac)).
 5. `terraform-proxmox` `vault-secrets` — now able to authenticate as
    `terraform-apply` (read/write proof).
 
@@ -189,7 +189,7 @@ plans):
 | `terraform-apply` | `secret/infra/*`, `secret/platform/{dns,traefik}`, `secret/apps/nautobot/*`, `homelab/*` | (same) | Human-triggered IaC apply[^aws-sts] |
 | `apps-seed` | `secret/apps/*` | `secret/apps/*` create/update | Doppler-published writer; Terraform `vault-secrets` seeds `secret/apps/<app>` at source |
 | `flow-lock` | `secret/locks/global`, `secret/infra/*` | `secret/locks/global` | Cross-repo apply lock; releases the lock via metadata delete |
-| `terrakube-plan` | `secret/platform/terrakube` only | — | Terrakube VCS-driven runs; deliberately walled off from `secret/infra/*` |
+| `terrakube-<workspace>` JWT | Only that workspace's native paths | Workspace-specific | Short-lived; exact organization/workspace subject and audience |
 | `ansible-converge` | `secret/platform/*`, `secret/apps/*` | — | Config-management pulls |
 | `observability` | `secret/platform/{splunk,cribl}` | — | Ingest pipeline (shared HEC tokens) |
 | `local-cloud` | `secret/platform/{object-storage,compute}` | — | RustFS + compute creds |
@@ -198,21 +198,33 @@ plans):
 | `local-llm` | `secret/ai/*` | — | The LLM serving stack itself |
 | `hermes` | `secret/ai/hermes` only | — | Dedicated least-privilege reader for the Hermes agent; NO broad `secret/ai/*` |
 | `hermes-write` | `secret/ai/hermes` only | `secret/ai/hermes` only | Narrow Doppler-published writer; least-priv complement to `ai-orchestrator` |
-| `public` | `secret/public/*` | — | **Anonymous** — creds NOT keychain-gated; shipped ambiently |
-| `ai-orchestrator` | `secret/ai/*` | `secret/ai/*` (create/update) | Broad AI-orchestrator WRITE; creds operator-held in the macOS keychain (not Doppler) |
+| `public` | `secret/public/*` | — | **Anonymous** — no secret-zero; shipped ambiently |
+| `ai-orchestrator` | `secret/ai/{hermes,agents}` | `secret/ai/{hermes,agents}` (create/update) | WRITE; Doppler tier-0; narrowed + 30m TTL at Phase-3 |
 | `ai-readonly` | `secret/ai/*`, `secret/apps/*` | — | **default AI agent; NO `secret/infra/*`** |
 | `ai-elevated` | `ai-readonly` + `secret/platform/*` | — | trusted infra-touching agents; no write |
 | `snapshot` | `sys/storage/raft/snapshot` | — | least-priv backup identity |
+
+### Terrakube workload identity
+
+The role enables JWT auth at `auth/terrakube` using the internal Terrakube API
+as both OIDC discovery URL and bound issuer. Each fleet workspace in
+`openbao_terrakube_workspaces` has its own `terrakube-<workspace>` role and
+policy. The role binds audience
+`openbao.workload.identity` and the exact subject
+`organization:<openbao_terrakube_organization>:workspace:<workspace>`; a token from one workspace cannot
+select another workspace's policy. Terrakube stores only the non-secret dynamic
+credential controls. Provider credentials remain in their native OpenBao KV or
+secrets-engine paths and are returned through a short-lived OpenBao token.
 
 [^aws-sts]: Also grants `read`+`update` on `aws/sts/tf-proxmox` — dynamic AWS
     STS creds (assumed_role) for `role/tf-proxmox`, replacing the laptop's
     static aws-vault base key. See the AWS secrets engine section below.
 
-**Secret-zero model**: each AppRole's `role_id`/`secret_id` lives as its own
-item in a dedicated macOS keychain (`openbao.keychain-db`, 72h auto-lock) —
-the keychain's LOCK STATE is the entire access boundary, not the AppRole's own
-TTL (`secret_id_ttl=0` is intentional here, not an oversight). The one
-exception is `public`: its credential is deliberately NOT keychain-gated,
+**Secret-zero model**: each AppRole's `role_id`/`secret_id` is published to
+Doppler tier-0 and reaches its consumer as ambient environment under
+`doppler run` — access to Doppler tier-0 is the entire access boundary, not
+the AppRole's own TTL (`secret_id_ttl=0` is intentional here, not an
+oversight). The one exception is `public`: it needs no secret-zero at all,
 since it only unlocks non-exploitable facts.
 
 The policy/AppRole set is driven by `openbao_policies` / `openbao_approles` in
@@ -262,7 +274,8 @@ prebuilt, checksum-verified release binaries. The role therefore:
 - The `terraform-apply` AppRole reads `aws/sts/tf-proxmox` to mint a session —
   see the [^aws-sts] policy footnote above.
 - The laptop side (nix-darwin `credential_process` wrapper reading
-  `terraform-apply`'s `role_id`/`secret_id` from `openbao.keychain-db`) is
+  `terraform-apply`'s `role_id`/`secret_id` secret-zero from the ambient
+  environment, injected by running terragrunt under `doppler run`) is
   documented in the nix-darwin repo, not here.
 
 ## GitHub secrets engine (ephemeral GitHub App tokens)
@@ -310,20 +323,19 @@ the seal key is ever lost, so they are treated as paper secrets:
   under `playbook_dir`**. Existing AppRoles' credentials are never re-emitted.
 - Every `bao` invocation that touches this material runs with `no_log: true`.
 - A **loud warning** names exactly which AppRoles were newly created and tells
-  the operator to transcribe recovery shares to paper (+ Bitwarden), load each
-  new AppRole's creds into its own item in the `openbao.keychain-db` keychain,
-  then **securely delete** the files.
+  the operator to transcribe recovery shares to paper (+ Bitwarden), publish
+  each new AppRole's creds to Doppler tier-0 (consumed as ambient env under
+  `doppler run`), then **securely delete** the files.
 - Nothing secret is ever written into the repo or onto a target host.
 
 These controller files are gitignored (`.openbao-recovery-*.json` /
 `.openbao-approle-*.json`). After transcription:
 
 ```sh
-security add-generic-password -s "openbao/<domain>" -a role_id -w <role_id> \
-  ~/Library/Keychains/openbao.keychain-db
-security add-generic-password -s "openbao/<domain>" -a secret_id -w <secret_id> \
-  ~/Library/Keychains/openbao.keychain-db
-# `public` is the one exception — ships ambiently, never keychain-gated.
+# Publish secret-zero to Doppler tier-0 (consumed as ambient env via `doppler run`).
+doppler secrets set OPENBAO_APPROLE_<ROLE>_ROLE_ID="<role_id>" --project <proj> --config <cfg>
+doppler secrets set OPENBAO_APPROLE_<ROLE>_SECRET_ID="<secret_id>" --project <proj> --config <cfg>
+# `public` needs no secret-zero — it ships ambiently.
 shred -u <playbook_dir>/.openbao-recovery-<host>.json
 shred -u <playbook_dir>/.openbao-approle-*-<host>.json
 ```

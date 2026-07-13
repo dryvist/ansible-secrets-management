@@ -6,7 +6,7 @@
 # static-key auto-unseal config, runs it under systemd, and (in init.yml)
 # bootstraps the cluster, the secret hierarchy, the RBAC policies, and the
 # AppRoles — one per resource-domain identity (terraform-apply / flow-lock /
-# terrakube-plan / ansible-converge / observability / local-cloud / monitoring /
+# ansible-converge / observability / local-cloud / monitoring /
 # media / local-llm / hermes / hermes-write / public / ai-readonly /
 # ai-elevated / snapshot).
 
@@ -109,7 +109,7 @@ openbao_static_seal_previous_key: "{{ lookup('env', 'OPENBAO_STATIC_SEAL_PREVIOU
 #   secret/apps/*      application credentials (media/monitoring/home-automation)
 #   secret/ai/*        LLM stack + AI-agent creds
 #   secret/public/*    non-secret, non-exploitable facts (domain/subdomain) —
-#                      readable by a fixed, non-keychain-gated AppRole
+#                      readable by a fixed, low-privilege AppRole
 #   secret/ci/*        CI/CD tokens
 openbao_kv_mount: secret
 # Legacy demo subtree the terraform-proxmox vault-secrets proof writes to; kept
@@ -129,6 +129,20 @@ openbao_vikunja_secrets:
   token_admin: VIKUNJA_MCP_TOKEN_ADMIN
   svc_mcp_ro_password: VIKUNJA_SVC_MCP_RO_PASSWORD
   svc_mcp_rw_password: VIKUNJA_SVC_MCP_RW_PASSWORD
+
+# App service secrets GENERATED (random, generate-if-absent) in OpenBao itself,
+# replacing the retired terraform-proxmox vault-secrets root. Each app maps to
+# its field list; every field gets a random alnum value created once at
+# secret/apps/<app> and never rotated (init.yml → seed_generated_app_secret.yml).
+# openbao_secrets then exposes these paths to the nautobot/zammad roles.
+openbao_generated_app_secrets:
+  nautobot: [db_password, secret_key, superuser_password]
+  zammad: [db_password, admin_password, hermes_api_token]
+# Random length for generated app credentials (alnum). secret_key needs more
+# entropy than a login credential, so it gets its own length (matches the 64-char
+# key the nautobot role generates locally when none is supplied).
+openbao_app_secret_length: 40
+openbao_app_secret_key_length: 64
 
 # --- AWS secrets engine (dynamic STS creds, no static laptop key) -----------
 # Replaces the aws-vault `tf-proxmox` static base-user key with short-lived STS
@@ -238,9 +252,8 @@ openbao_github_permission_sets:
 #   flow-lock        — cross-repo apply lock holder; read/write only the global
 #                      lock record, metadata-delete for release, and read-only
 #                      secret/infra/* context for lock decisions
-#   terrakube-plan   — Terrakube VCS-driven plan/apply runs; read-only,
-#                      secret/platform/terrakube ONLY — deliberately walled off
-#                      from secret/infra/* (untrusted-plan surface)
+#   Terrakube jobs authenticate through the exact-claim JWT roles below;
+#   there is no stored Terrakube AppRole credential.
 #   ansible-converge — config-management pulls (was "ansible"); read-only,
 #                      secret/platform/*, secret/apps/*
 #   observability    — splunk + cribl; read-only, secret/platform/{splunk,cribl}
@@ -255,16 +268,16 @@ openbao_github_permission_sets:
 #                      (create/update/read that single path; no wildcard, no
 #                      other paths). Doppler-published, for ansible-splunk
 #                      token-publish + one-time Hermes cred seed. A narrow
-#                      complement to the broad, keychain-held ai-orchestrator
+#                      complement to the broad ai-orchestrator
 #                      writer — scoped down to just the Hermes secret.
 #   public           — anonymous, non-exploitable facts (domain/subdomain);
-#                      read-only, secret/public/*; creds NOT keychain-gated —
+#                      read-only, secret/public/*; needs no secret-zero —
 #                      shipped ambiently like other non-secret internal config
 #   ai-orchestrator  — AI agent/orchestrator WRITE identity; read + create/update
 #                      secret/ai/* (the one AI identity that may write). Its
-#                      role_id/secret_id are OPERATOR-HELD in the macOS keychain
+#                      role_id/secret_id are operator-held in Doppler tier-0
 #                      (services BAO_AI_ORCHESTRATOR_ROLE_ID / _SECRET_ID),
-#                      externally managed and NOT Doppler-managed. The secret_id
+#                      consumed as ambient env under `doppler run`. The secret_id
 #                      is non-expiring and IN ACTIVE USE — converges must stay
 #                      idempotent-existence-only for it and must NEVER regenerate
 #                      it (init.yml only mints creds for AppRoles missing this
@@ -274,8 +287,32 @@ openbao_terraform_apply_policy_name: terraform-apply
 openbao_terraform_apply_approle_name: terraform-apply
 openbao_flow_lock_policy_name: flow-lock
 openbao_flow_lock_approle_name: flow-lock
-openbao_terrakube_plan_policy_name: terrakube-plan
-openbao_terrakube_plan_approle_name: terrakube-plan
+# Terrakube native workload identity. The API signs a short-lived JWT per job;
+# OpenBao verifies it through internal OIDC discovery and binds the exact
+# organization/workspace `sub` claim before issuing a short-lived token.
+openbao_terrakube_jwt_auth_path: terrakube
+openbao_terrakube_jwt_issuer: "https://terrakube-api.{{ (tofu_data | default({})).domain | default('local') }}"
+openbao_terrakube_jwt_audience: openbao.workload.identity
+openbao_terrakube_jwt_token_ttl: 90m
+# Real org login is environment-specific; override in group_vars/host_vars.
+openbao_terrakube_organization: "{{ (tofu_data | default({})).organization | default('example-org') }}"
+openbao_terrakube_workspaces:
+  - name: iac-platform
+    kv_read: [platform/terrakube/main]
+  - name: tofu-github
+    kv_read: [infrastructure/github]
+  - name: tofu-unifi
+    kv_read: [infrastructure/unifi]
+  - name: tofu-aws-production
+    api_update: [aws/sts/tofu-aws-production]
+  - name: tofu-runs-on
+    api_update: [aws/sts/tofu-runs-on]
+  - name: tofu-proxmox
+    kv_read: [infrastructure/proxmox, platform/object-storage]
+  - name: tofu-proxmox-aws-infra
+    api_update: [aws/sts/tf-proxmox]
+  - name: tofu-proxmox-servarr-config
+    kv_read: [apps/media]
 openbao_ansible_converge_policy_name: ansible-converge
 openbao_ansible_converge_approle_name: ansible-converge
 openbao_observability_policy_name: observability
@@ -321,8 +358,6 @@ openbao_approles:
     policy: "{{ openbao_terraform_apply_policy_name }}"
   - name: "{{ openbao_flow_lock_approle_name }}"
     policy: "{{ openbao_flow_lock_policy_name }}"
-  - name: "{{ openbao_terrakube_plan_approle_name }}"
-    policy: "{{ openbao_terrakube_plan_policy_name }}"
   - name: "{{ openbao_ansible_converge_approle_name }}"
     policy: "{{ openbao_ansible_converge_policy_name }}"
   - name: "{{ openbao_observability_approle_name }}"
@@ -341,13 +376,14 @@ openbao_approles:
     policy: "{{ openbao_hermes_write_policy_name }}"
   - name: "{{ openbao_public_approle_name }}"
     policy: "{{ openbao_public_policy_name }}"
-  # ai-orchestrator: role_id/secret_id are OPERATOR-HELD in the macOS keychain
-  # (services BAO_AI_ORCHESTRATOR_ROLE_ID / _SECRET_ID), NOT Doppler-managed.
+  # ai-orchestrator: role_id/secret_id are operator-held in Doppler tier-0
+  # (services BAO_AI_ORCHESTRATOR_ROLE_ID / _SECRET_ID), consumed as ambient env.
   # This AppRole already exists LIVE with a non-expiring secret_id in active
   # use; init.yml only creates + mints creds for AppRoles missing this run, so
   # a converge leaves the live role and its secret_id untouched (existence-only).
   - name: "{{ openbao_ai_orchestrator_approle_name }}"
     policy: "{{ openbao_ai_orchestrator_policy_name }}"
+    token_ttl: 30m  # demoted: broad-write identity gets a short token TTL
   - name: "{{ openbao_ai_readonly_approle_name }}"
     policy: "{{ openbao_ai_readonly_policy_name }}"
   - name: "{{ openbao_ai_elevated_approle_name }}"
@@ -360,12 +396,34 @@ openbao_approles:
 # Policy templates rendered + written on the bootstrap host. Each entry maps a
 # policy name to its template; add a row to grow the RBAC surface.
 openbao_policies:
+  - name: terrakube-iac-platform
+    template: terrakube-workspace-policy.hcl.j2
+    workspace: "{{ openbao_terrakube_workspaces[0] }}"
+  - name: terrakube-tofu-github
+    template: terrakube-workspace-policy.hcl.j2
+    workspace: "{{ openbao_terrakube_workspaces[1] }}"
+  - name: terrakube-tofu-unifi
+    template: terrakube-workspace-policy.hcl.j2
+    workspace: "{{ openbao_terrakube_workspaces[2] }}"
+  - name: terrakube-tofu-aws-production
+    template: terrakube-workspace-policy.hcl.j2
+    workspace: "{{ openbao_terrakube_workspaces[3] }}"
+  - name: terrakube-tofu-runs-on
+    template: terrakube-workspace-policy.hcl.j2
+    workspace: "{{ openbao_terrakube_workspaces[4] }}"
+  - name: terrakube-tofu-proxmox
+    template: terrakube-workspace-policy.hcl.j2
+    workspace: "{{ openbao_terrakube_workspaces[5] }}"
+  - name: terrakube-tofu-proxmox-aws-infra
+    template: terrakube-workspace-policy.hcl.j2
+    workspace: "{{ openbao_terrakube_workspaces[6] }}"
+  - name: terrakube-tofu-proxmox-servarr-config
+    template: terrakube-workspace-policy.hcl.j2
+    workspace: "{{ openbao_terrakube_workspaces[7] }}"
   - name: "{{ openbao_terraform_apply_policy_name }}"
     template: terraform-apply-policy.hcl.j2
   - name: "{{ openbao_flow_lock_policy_name }}"
     template: flow-lock-policy.hcl.j2
-  - name: "{{ openbao_terrakube_plan_policy_name }}"
-    template: terrakube-plan-policy.hcl.j2
   - name: "{{ openbao_ansible_converge_policy_name }}"
     template: ansible-converge-policy.hcl.j2
   - name: "{{ openbao_observability_policy_name }}"
