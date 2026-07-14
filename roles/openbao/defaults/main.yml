@@ -291,7 +291,7 @@ openbao_flow_lock_approle_name: flow-lock
 # OpenBao verifies it through internal OIDC discovery and binds the exact
 # organization/workspace `sub` claim before issuing a short-lived token.
 openbao_terrakube_jwt_auth_path: terrakube
-openbao_terrakube_jwt_issuer: "https://terrakube-api.{{ (tofu_data | default({})).domain | default('local') }}"
+openbao_terrakube_jwt_issuer: "https://terrakube-api.{{ lookup('env', 'PROXMOX_SUBDOMAIN') | default('local', true) }}"
 openbao_terrakube_jwt_audience: openbao.workload.identity
 openbao_terrakube_jwt_token_ttl: 90m
 # Real org login is environment-specific; override in group_vars/host_vars.
