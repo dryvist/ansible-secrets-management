@@ -216,9 +216,11 @@ select another workspace's policy. Terrakube stores only the non-secret dynamic
 credential controls. Provider credentials remain in their native OpenBao KV or
 secrets-engine paths and are returned through a short-lived OpenBao token.
 
-[^aws-sts]: Also grants `read`+`update` on `aws/sts/tf-proxmox` — dynamic AWS
-    STS creds (assumed_role) for `role/tf-proxmox`, replacing the laptop's
-    static aws-vault base key. See the AWS secrets engine section below.
+[^aws-sts]: Also grants `read`+`update` on `aws/sts/tf-proxmox` and
+    `aws/sts/openbao-iac-admin` — dynamic AWS STS creds (assumed_role) for
+    `role/tf-proxmox` and the broader, permissions-boundary-capped
+    `role/openbao-iac-admin`, replacing static aws-vault base keys. See the
+    AWS secrets engine section below.
 
 **Secret-zero model**: each AppRole's `role_id`/`secret_id` is published to
 Doppler tier-0 and reaches its consumer as ambient environment under
@@ -271,12 +273,17 @@ prebuilt, checksum-verified release binaries. The role therefore:
   `default_sts_ttl=1h`, `max_sts_ttl=2h`) — declares the assumable role.
   Add-if-missing; bumping the TTLs on an existing role needs a manual
   `bao write` (not re-driven by a routine converge).
-- The `terraform-apply` AppRole reads `aws/sts/tf-proxmox` to mint a session —
-  see the [^aws-sts] policy footnote above.
+- `aws/roles/openbao-iac-admin` — a second, independent assumed_role broker
+  for a broader IaC/admin identity capped by its own AWS permissions
+  boundary (not tf-proxmox-scoped). Same shape as the role above
+  (`default_sts_ttl=1h`, `max_sts_ttl=1h` — this role's AWS
+  `MaxSessionDuration` is 3600s), same add-if-missing semantics.
+- The `terraform-apply` AppRole reads `aws/sts/tf-proxmox` and
+  `aws/sts/openbao-iac-admin` to mint a session — see the [^aws-sts] policy
+  footnote above.
 - The laptop side (nix-darwin `credential_process` wrapper reading
-  `terraform-apply`'s `role_id`/`secret_id` secret-zero from the ambient
-  environment, injected by running terragrunt under `doppler run`) is
-  documented in the nix-darwin repo, not here.
+  `terraform-apply`'s `role_id`/`secret_id` secret-zero) is documented in the
+  nix-darwin repo, not here.
 
 ## GitHub secrets engine (ephemeral GitHub App tokens)
 

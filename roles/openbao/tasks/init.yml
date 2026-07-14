@@ -269,7 +269,7 @@
   register: openbao_aws_plugin_stat
   when:
     - openbao_bootstrap_token is defined
-    - openbao_aws_engine_enabled
+    - openbao_aws_engine_enabled | bool
 
 - name: Assert the AWS plugin binary is staged
   ansible.builtin.assert:
@@ -281,7 +281,7 @@
       role (not init in isolation).
   when:
     - openbao_bootstrap_token is defined
-    - openbao_aws_engine_enabled
+    - openbao_aws_engine_enabled | bool
 
 - name: Check whether the AWS plugin is already registered
   ansible.builtin.command:
@@ -298,7 +298,7 @@
   failed_when: false
   when:
     - openbao_bootstrap_token is defined
-    - openbao_aws_engine_enabled
+    - openbao_aws_engine_enabled | bool
 
 - name: Register the AWS plugin (pinned to the staged binary's sha256)
   ansible.builtin.command:
@@ -316,7 +316,7 @@
   changed_when: true
   when:
     - openbao_bootstrap_token is defined
-    - openbao_aws_engine_enabled
+    - openbao_aws_engine_enabled | bool
     - (openbao_aws_plugin_check.rc | default(1)) != 0
 
 - name: Enable the AWS secrets engine
@@ -332,7 +332,7 @@
   changed_when: true
   when:
     - openbao_bootstrap_token is defined
-    - openbao_aws_engine_enabled
+    - openbao_aws_engine_enabled | bool
     - (openbao_aws_mount ~ '/') not in (openbao_mounts_raw.stdout | from_json).keys()
 
 - name: Tune the existing AWS mount to the declared plugin version
@@ -348,7 +348,7 @@
   changed_when: true
   when:
     - openbao_bootstrap_token is defined
-    - openbao_aws_engine_enabled
+    - openbao_aws_engine_enabled | bool
     - (openbao_aws_mount ~ '/') in (openbao_mounts_raw.stdout | from_json).keys()
     - >-
       ((openbao_mounts_raw.stdout | from_json)[openbao_aws_mount ~ '/'].plugin_version
@@ -364,7 +364,7 @@
   changed_when: true
   when:
     - openbao_bootstrap_token is defined
-    - openbao_aws_engine_enabled
+    - openbao_aws_engine_enabled | bool
     - openbao_aws_plugin_tune is changed
 
 # Root config holds the ONE long-lived AWS base-user key OpenBao uses to call
@@ -382,7 +382,7 @@
   failed_when: false
   when:
     - openbao_bootstrap_token is defined
-    - openbao_aws_engine_enabled
+    - openbao_aws_engine_enabled | bool
 
 # Fail loudly rather than silently leave a mounted-but-unconfigured engine: a
 # skip here would make `bao read aws/sts/tf-proxmox` fail later with a much
@@ -398,7 +398,7 @@
       vars set, or set openbao_aws_engine_enabled: false to skip AWS entirely.
   when:
     - openbao_bootstrap_token is defined
-    - openbao_aws_engine_enabled
+    - openbao_aws_engine_enabled | bool
     - (openbao_aws_root_check.rc | default(1)) != 0
     - (openbao_aws_root_access_key_id | length == 0) or (openbao_aws_root_secret_access_key | length == 0)
 
@@ -423,7 +423,7 @@
   changed_when: true
   when:
     - openbao_bootstrap_token is defined
-    - openbao_aws_engine_enabled
+    - openbao_aws_engine_enabled | bool
     - (openbao_aws_root_check.rc | default(1)) != 0
     - openbao_aws_root_access_key_id | length > 0
     - openbao_aws_root_secret_access_key | length > 0
@@ -440,7 +440,7 @@
   failed_when: false
   when:
     - openbao_bootstrap_token is defined
-    - openbao_aws_engine_enabled
+    - openbao_aws_engine_enabled | bool
 
 - name: Create the tf-proxmox AWS role (assumed_role, add-if-missing)
   ansible.builtin.command:
@@ -457,9 +457,42 @@
   changed_when: true
   when:
     - openbao_bootstrap_token is defined
-    - openbao_aws_engine_enabled
+    - openbao_aws_engine_enabled | bool
     - (openbao_aws_role_check.rc | default(1)) != 0
     - openbao_aws_role_arn | length > 0
+
+- name: Check whether the openbao-iac-admin AWS role already exists
+  ansible.builtin.command:
+    cmd: "bao read -format=json {{ openbao_aws_mount }}/roles/{{ openbao_aws_iac_admin_role_name }}"
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  register: openbao_aws_iac_admin_role_check
+  no_log: true
+  changed_when: false
+  failed_when: false
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_aws_engine_enabled | bool
+
+- name: Create the openbao-iac-admin AWS role (assumed_role, add-if-missing)
+  ansible.builtin.command:
+    cmd: >-
+      bao write {{ openbao_aws_mount }}/roles/{{ openbao_aws_iac_admin_role_name }}
+      credential_type=assumed_role
+      role_arns={{ openbao_aws_iac_admin_role_arn }}
+      default_sts_ttl={{ openbao_aws_iac_admin_default_sts_ttl }}
+      max_sts_ttl={{ openbao_aws_iac_admin_max_sts_ttl }}
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  no_log: true
+  changed_when: true
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_aws_engine_enabled | bool
+    - (openbao_aws_iac_admin_role_check.rc | default(1)) != 0
+    - openbao_aws_iac_admin_role_arn | length > 0
 
 # --- GitHub secrets engine (independent GitHub App token broker) ------------
 - name: Read the staged GitHub plugin binary's sha256
@@ -469,7 +502,7 @@
   register: openbao_github_plugin_stat
   when:
     - openbao_bootstrap_token is defined
-    - openbao_github_engine_enabled
+    - openbao_github_engine_enabled | bool
 
 - name: Assert the GitHub plugin binary is staged
   ansible.builtin.assert:
@@ -480,7 +513,7 @@
       Re-run the full role so every Raft voter receives the plugin first.
   when:
     - openbao_bootstrap_token is defined
-    - openbao_github_engine_enabled
+    - openbao_github_engine_enabled | bool
 
 - name: Check whether the GitHub plugin version is registered
   ansible.builtin.command:
@@ -497,7 +530,7 @@
   failed_when: false
   when:
     - openbao_bootstrap_token is defined
-    - openbao_github_engine_enabled
+    - openbao_github_engine_enabled | bool
 
 - name: Register the GitHub secrets plugin version
   ansible.builtin.command:
@@ -515,7 +548,7 @@
   changed_when: true
   when:
     - openbao_bootstrap_token is defined
-    - openbao_github_engine_enabled
+    - openbao_github_engine_enabled | bool
     - (openbao_github_plugin_check.rc | default(1)) != 0
 
 - name: Enable the GitHub secrets engine
@@ -531,7 +564,7 @@
   changed_when: true
   when:
     - openbao_bootstrap_token is defined
-    - openbao_github_engine_enabled
+    - openbao_github_engine_enabled | bool
     - (openbao_github_mount ~ '/') not in (openbao_mounts_raw.stdout | from_json).keys()
 
 - name: Tune the existing GitHub mount to the declared plugin version
@@ -547,7 +580,7 @@
   changed_when: true
   when:
     - openbao_bootstrap_token is defined
-    - openbao_github_engine_enabled
+    - openbao_github_engine_enabled | bool
     - (openbao_github_mount ~ '/') in (openbao_mounts_raw.stdout | from_json).keys()
     - >-
       ((openbao_mounts_raw.stdout | from_json)[openbao_github_mount ~ '/'].plugin_version
@@ -563,7 +596,7 @@
   changed_when: true
   when:
     - openbao_bootstrap_token is defined
-    - openbao_github_engine_enabled
+    - openbao_github_engine_enabled | bool
     - openbao_github_plugin_tune is changed
 
 - name: Read the GitHub engine configuration
@@ -578,7 +611,7 @@
   failed_when: false
   when:
     - openbao_bootstrap_token is defined
-    - openbao_github_engine_enabled
+    - openbao_github_engine_enabled | bool
 
 - name: Require the GitHub App credentials for first configuration
   ansible.builtin.assert:
@@ -590,7 +623,7 @@
       and OPENBAO_GITHUB_APP_PRIVATE_KEY for this one-time sealed write.
   when:
     - openbao_bootstrap_token is defined
-    - openbao_github_engine_enabled
+    - openbao_github_engine_enabled | bool
     - (openbao_github_config_check.rc | default(1)) != 0
 
 - name: Configure the GitHub App credentials (first configuration only)
@@ -610,7 +643,7 @@
   no_log: true
   when:
     - openbao_bootstrap_token is defined
-    - openbao_github_engine_enabled
+    - openbao_github_engine_enabled | bool
     - (openbao_github_config_check.rc | default(1)) != 0
     - openbao_github_app_id | length > 0
     - openbao_github_app_private_key | length > 0
@@ -626,7 +659,7 @@
       the App key deliberately; a routine converge will not replace it.
   when:
     - openbao_bootstrap_token is defined
-    - openbao_github_engine_enabled
+    - openbao_github_engine_enabled | bool
     - (openbao_github_config_check.rc | default(1)) == 0
     - openbao_github_app_id | length > 0
 
@@ -641,7 +674,7 @@
       App on both accounts.
   when:
     - openbao_bootstrap_token is defined
-    - openbao_github_engine_enabled
+    - openbao_github_engine_enabled | bool
 
 - name: Read the GitHub token permission sets
   ansible.builtin.command:
@@ -660,7 +693,7 @@
   failed_when: false
   when:
     - openbao_bootstrap_token is defined
-    - openbao_github_engine_enabled
+    - openbao_github_engine_enabled | bool
 
 - name: Reconcile the GitHub token permission sets
   ansible.builtin.uri:
@@ -684,7 +717,7 @@
   no_log: true
   when:
     - openbao_bootstrap_token is defined
-    - openbao_github_engine_enabled
+    - openbao_github_engine_enabled | bool
     - >-
       (item.1.rc | default(1)) != 0
       or ((item.1.stdout | from_json).data.installation_id | int)

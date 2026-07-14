@@ -170,6 +170,14 @@ openbao_aws_role_arn: "{{ lookup('env', 'OPENBAO_AWS_TF_PROXMOX_ROLE_ARN') }}"
 openbao_aws_root_region: us-east-2
 openbao_aws_default_sts_ttl: 1h
 openbao_aws_max_sts_ttl: 2h
+# Second assumed_role broker: a broad IaC/admin identity capped by its own AWS
+# permissions boundary (not tf-proxmox-scoped). Mirrors the tf-proxmox role
+# above — same env-var indirection, same add-if-missing create task.
+openbao_aws_iac_admin_role_name: openbao-iac-admin
+openbao_aws_iac_admin_role_arn: "{{ lookup('env', 'OPENBAO_AWS_IAC_ADMIN_ROLE_ARN') | default('', true) }}"
+openbao_aws_iac_admin_default_sts_ttl: 1h
+# 1h, not 2h like tf-proxmox: this role's AWS MaxSessionDuration is 3600s.
+openbao_aws_iac_admin_max_sts_ttl: 1h
 # The base-user key OpenBao uses to call sts:AssumeRole. Minted via an
 # independent admin path (never the key being rotated out), seeded from Doppler
 # tier-0. Written to aws/config/root ONLY on first configuration — a routine
@@ -291,11 +299,16 @@ openbao_flow_lock_approle_name: flow-lock
 # OpenBao verifies it through internal OIDC discovery and binds the exact
 # organization/workspace `sub` claim before issuing a short-lived token.
 openbao_terrakube_jwt_auth_path: terrakube
-openbao_terrakube_jwt_issuer: "https://terrakube-api.{{ (tofu_data | default({})).domain | default('local') }}"
+openbao_terrakube_jwt_issuer: "https://terrakube-api.{{ lookup('env', 'PROXMOX_SUBDOMAIN') | default('local', true) }}"
 openbao_terrakube_jwt_audience: openbao.workload.identity
 openbao_terrakube_jwt_token_ttl: 90m
-# Real org login is environment-specific; override in group_vars/host_vars.
-openbao_terrakube_organization: "{{ (tofu_data | default({})).organization | default('example-org') }}"
+# Org login that Terrakube stamps into the JWT `sub`
+# (`organization:<name>:workspace:<name>`, from job.getOrganization().getName()).
+# Must equal the Terrakube organization name — set by iac-platform's
+# `organization_name` var (mirrors the GitHub org login). The tofu inventory
+# does not carry an `organization` key, so this is sourced directly here;
+# override in group_vars/host_vars for a different environment.
+openbao_terrakube_organization: dryvist
 openbao_terrakube_workspaces:
   - name: iac-platform
     kv_read: [platform/terrakube/main]
@@ -346,6 +359,13 @@ openbao_snapshot_approle_name: snapshot
 # (APPS_SEED_VAULT_ROLE_ID / _SECRET_ID), the same delivery as terraform-apply.
 openbao_apps_seed_policy_name: apps-seed
 openbao_apps_seed_approle_name: apps-seed
+# llm-gate — the Mac Studio's llm-large Caddy gate. Dedicated least-privilege
+# reader for EXACTLY the two secrets it injects into Caddy: the bearer token
+# (secret/ai/llm) and the Route53 ACME creds (secret/platform/acme). role_id/
+# secret_id are delivered to the Studio's auto-readable keychain and consumed
+# by openbao-run (the doppler-free replacement for the gate's ~/.doppler token).
+openbao_llm_gate_policy_name: llm-gate
+openbao_llm_gate_approle_name: llm-gate
 
 # The set of non-root AppRoles to provision, each {name, policy}. Driving the
 # bootstrap from this list keeps init.yml DRY as groups are added. Per-identity
@@ -393,6 +413,10 @@ openbao_approles:
   # apps-seed: Doppler-published writer for secret/apps/* (Terraform vault-secrets).
   - name: "{{ openbao_apps_seed_approle_name }}"
     policy: "{{ openbao_apps_seed_policy_name }}"
+  # llm-gate: role_id/secret_id delivered to the Studio's auto-readable keychain
+  # (openbao-run secret-zero); reads only the bearer + ACME creds it injects.
+  - name: "{{ openbao_llm_gate_approle_name }}"
+    policy: "{{ openbao_llm_gate_policy_name }}"
 # Policy templates rendered + written on the bootstrap host. Each entry maps a
 # policy name to its template; add a row to grow the RBAC surface.
 openbao_policies:
@@ -452,6 +476,8 @@ openbao_policies:
     template: snapshot-policy.hcl.j2
   - name: "{{ openbao_apps_seed_policy_name }}"
     template: apps-seed-policy.hcl.j2
+  - name: "{{ openbao_llm_gate_policy_name }}"
+    template: llm-gate-policy.hcl.j2
 
 # --- External admin token (provisioning against an ALREADY-LIVE cluster) -----
 # The initial `bao operator init` only happens once; after that, adding new

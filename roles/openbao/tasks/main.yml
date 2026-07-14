@@ -178,7 +178,7 @@
   vars:
     ansible_become: false
   run_once: true
-  when: openbao_aws_engine_enabled
+  when: openbao_aws_engine_enabled | bool
 
 - name: Stage the AWS plugin detached signature on controller
   ansible.builtin.get_url:
@@ -192,7 +192,7 @@
   vars:
     ansible_become: false
   run_once: true
-  when: openbao_aws_engine_enabled
+  when: openbao_aws_engine_enabled | bool
 
 - name: Build the OpenBao release verification keyring on controller
   ansible.builtin.command:
@@ -211,7 +211,7 @@
     ansible_become: false
   run_once: true
   changed_when: false
-  when: openbao_aws_engine_enabled
+  when: openbao_aws_engine_enabled | bool
 
 - name: Read the expected SHA256 values for the AWS plugin release
   ansible.builtin.set_fact:
@@ -224,7 +224,7 @@
           | regex_search('([0-9a-f]{64})\s+' ~ (openbao_aws_plugin_binary | regex_escape) ~ '$', '\1', multiline=True)
           | first) }}
   run_once: true
-  when: openbao_aws_engine_enabled
+  when: openbao_aws_engine_enabled | bool
 
 - name: Assert a checksum was found for the AWS plugin tarball
   ansible.builtin.assert:
@@ -238,7 +238,7 @@
       upstream checksums file. Did the asset naming change for
       {{ openbao_aws_plugin_release_tag }}?
   run_once: true
-  when: openbao_aws_engine_enabled
+  when: openbao_aws_engine_enabled | bool
 
 - name: Stage the AWS plugin tarball on controller (checksum-verified)
   ansible.builtin.get_url:
@@ -253,7 +253,7 @@
   vars:
     ansible_become: false
   run_once: true
-  when: openbao_aws_engine_enabled
+  when: openbao_aws_engine_enabled | bool
 
 - name: Verify the AWS plugin release signature
   ansible.builtin.command:
@@ -270,7 +270,7 @@
     ansible_become: false
   run_once: true
   changed_when: false
-  when: openbao_aws_engine_enabled
+  when: openbao_aws_engine_enabled | bool
 
 - name: Extract the AWS plugin binary into the plugin directory
   ansible.builtin.unarchive:
@@ -281,21 +281,21 @@
     owner: root
     group: "{{ openbao_group }}"
     mode: "0750"
-  when: openbao_aws_engine_enabled
+  when: openbao_aws_engine_enabled | bool
 
 - name: Verify the extracted AWS plugin binary
   ansible.builtin.stat:
     path: "{{ openbao_plugin_dir }}/{{ openbao_aws_plugin_binary }}"
     checksum_algorithm: sha256
   register: openbao_aws_extracted_plugin
-  when: openbao_aws_engine_enabled
+  when: openbao_aws_engine_enabled | bool
 
 - name: Assert the extracted AWS plugin matches the signed release
   ansible.builtin.assert:
     that:
       - openbao_aws_extracted_plugin.stat.checksum == openbao_aws_plugin_binary_sha256
     fail_msg: "The extracted AWS plugin SHA256 does not match the signed release manifest"
-  when: openbao_aws_engine_enabled
+  when: openbao_aws_engine_enabled | bool
 
 - name: Install the immutable AWS plugin command
   ansible.builtin.copy:
@@ -305,7 +305,7 @@
     owner: root
     group: "{{ openbao_group }}"
     mode: "0750"
-  when: openbao_aws_engine_enabled
+  when: openbao_aws_engine_enabled | bool
 
 # --- Phase 5d: stage the GitHub secrets engine plugin (external, all nodes) --
 - name: Stage the GitHub plugin checksum manifest on controller
@@ -320,7 +320,7 @@
   vars:
     ansible_become: false
   run_once: true
-  when: openbao_github_engine_enabled
+  when: openbao_github_engine_enabled | bool
 
 - name: Stage the GitHub plugin checksum signature on controller
   ansible.builtin.get_url:
@@ -334,7 +334,7 @@
   vars:
     ansible_become: false
   run_once: true
-  when: openbao_github_engine_enabled
+  when: openbao_github_engine_enabled | bool
 
 - name: Build the GitHub plugin release verification keyring on controller
   ansible.builtin.command:
@@ -353,7 +353,7 @@
     ansible_become: false
   run_once: true
   changed_when: false
-  when: openbao_github_engine_enabled
+  when: openbao_github_engine_enabled | bool
 
 - name: Verify the GitHub plugin checksum manifest signature
   ansible.builtin.command:
@@ -370,7 +370,7 @@
     ansible_become: false
   run_once: true
   changed_when: false
-  when: openbao_github_engine_enabled
+  when: openbao_github_engine_enabled | bool
 
 - name: Read the expected SHA256 for the GitHub plugin binary
   ansible.builtin.set_fact:
@@ -379,7 +379,7 @@
           | regex_search('([0-9a-f]{64})\s+' ~ (openbao_github_plugin_asset | regex_escape) ~ '$', '\1', multiline=True)
           | first) }}
   run_once: true
-  when: openbao_github_engine_enabled
+  when: openbao_github_engine_enabled | bool
 
 - name: Assert a checksum was found for the GitHub plugin binary
   ansible.builtin.assert:
@@ -390,7 +390,7 @@
       Could not find {{ openbao_github_plugin_asset }} in the signed GitHub
       plugin checksum manifest for {{ openbao_github_plugin_release_tag }}.
   run_once: true
-  when: openbao_github_engine_enabled
+  when: openbao_github_engine_enabled | bool
 
 - name: Stage the GitHub plugin binary on controller
   ansible.builtin.get_url:
@@ -405,7 +405,7 @@
   vars:
     ansible_become: false
   run_once: true
-  when: openbao_github_engine_enabled
+  when: openbao_github_engine_enabled | bool
 
 - name: Install the immutable GitHub plugin command
   ansible.builtin.copy:
@@ -414,7 +414,7 @@
     owner: root
     group: "{{ openbao_group }}"
     mode: "0750"
-  when: openbao_github_engine_enabled
+  when: openbao_github_engine_enabled | bool
 
 # --- Phase 6: configuration --------------------------------------------------
 - name: Render OpenBao server config
