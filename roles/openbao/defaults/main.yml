@@ -302,8 +302,13 @@ openbao_terrakube_jwt_auth_path: terrakube
 openbao_terrakube_jwt_issuer: "https://terrakube-api.{{ lookup('env', 'PROXMOX_SUBDOMAIN') | default('local', true) }}"
 openbao_terrakube_jwt_audience: openbao.workload.identity
 openbao_terrakube_jwt_token_ttl: 90m
-# Real org login is environment-specific; override in group_vars/host_vars.
-openbao_terrakube_organization: "{{ (tofu_data | default({})).organization | default('example-org') }}"
+# Org login that Terrakube stamps into the JWT `sub`
+# (`organization:<name>:workspace:<name>`, from job.getOrganization().getName()).
+# Must equal the Terrakube organization name — set by iac-platform's
+# `organization_name` var (mirrors the GitHub org login). The tofu inventory
+# does not carry an `organization` key, so this is sourced directly here;
+# override in group_vars/host_vars for a different environment.
+openbao_terrakube_organization: dryvist
 openbao_terrakube_workspaces:
   - name: iac-platform
     kv_read: [platform/terrakube/main]
