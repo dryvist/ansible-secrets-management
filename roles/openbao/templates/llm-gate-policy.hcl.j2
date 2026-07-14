@@ -1,0 +1,19 @@
+{{ ansible_managed | comment }}
+# OpenBao policy for the `llm-gate` AppRole — the Mac Studio's llm-large Caddy
+# gate. Least-privilege reader for EXACTLY the two secrets it injects into
+# Caddy at (re)start via openbao-run: the bearer token it enforces
+# (secret/ai/llm) and the Route53 ACME credentials for its Let's Encrypt cert
+# (secret/platform/acme, shared with the traefik ingress). Nothing else in the
+# ai subtree, the platform subtree, or any other domain.
+path "{{ openbao_kv_mount }}/data/ai/llm" {
+  capabilities = ["read"]
+}
+path "{{ openbao_kv_mount }}/metadata/ai/llm" {
+  capabilities = ["read", "list"]
+}
+path "{{ openbao_kv_mount }}/data/platform/acme" {
+  capabilities = ["read"]
+}
+path "{{ openbao_kv_mount }}/metadata/platform/acme" {
+  capabilities = ["read", "list"]
+}
