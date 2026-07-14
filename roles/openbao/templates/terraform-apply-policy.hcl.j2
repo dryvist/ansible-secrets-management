@@ -8,10 +8,11 @@
 # infra kernel. KV v2 splits data
 # and metadata paths, so both are listed explicitly.
 #
-# Plus: dynamic AWS STS creds for role/tf-proxmox (the AWS secrets engine,
-# assumed_role type) — replaces the laptop's static aws-vault base key. "read"
-# generates a new lease; "update" is required by some OpenBao/Vault client
-# libraries that issue the STS request as a write against aws/sts/:role.
+# Plus: dynamic AWS STS creds for role/tf-proxmox and role/openbao-iac-admin
+# (the AWS secrets engine, assumed_role type) — replaces static aws-vault base
+# keys. "read" generates a new lease; "update" is required by some
+# OpenBao/Vault client libraries that issue the STS request as a write against
+# aws/sts/:role.
 
 {% for sub in ['infra', openbao_homelab_path] %}
 path "{{ openbao_kv_mount }}/data/{{ sub }}/*" {
@@ -45,5 +46,12 @@ path "{{ openbao_kv_mount }}/metadata/apps/nautobot/*" {
 # Dynamic AWS STS creds for role/tf-proxmox — replaces the laptop's static
 # aws-vault base key.
 path "{{ openbao_aws_mount }}/sts/{{ openbao_aws_role_name }}" {
+  capabilities = ["read", "update"]
+}
+
+# Dynamic AWS STS creds for the general OpenBao-brokered IaC/admin identity —
+# a broad IaC/admin role capped by its own AWS permissions boundary, not
+# scoped to tf-proxmox.
+path "{{ openbao_aws_mount }}/sts/{{ openbao_aws_iac_admin_role_name }}" {
   capabilities = ["read", "update"]
 }

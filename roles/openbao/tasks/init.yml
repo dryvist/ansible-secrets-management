@@ -461,6 +461,39 @@
     - (openbao_aws_role_check.rc | default(1)) != 0
     - openbao_aws_role_arn | length > 0
 
+- name: Check whether the openbao-iac-admin AWS role already exists
+  ansible.builtin.command:
+    cmd: "bao read -format=json {{ openbao_aws_mount }}/roles/{{ openbao_aws_iac_admin_role_name }}"
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  register: openbao_aws_iac_admin_role_check
+  no_log: true
+  changed_when: false
+  failed_when: false
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_aws_engine_enabled | bool
+
+- name: Create the openbao-iac-admin AWS role (assumed_role, add-if-missing)
+  ansible.builtin.command:
+    cmd: >-
+      bao write {{ openbao_aws_mount }}/roles/{{ openbao_aws_iac_admin_role_name }}
+      credential_type=assumed_role
+      role_arns={{ openbao_aws_iac_admin_role_arn }}
+      default_sts_ttl={{ openbao_aws_iac_admin_default_sts_ttl }}
+      max_sts_ttl={{ openbao_aws_iac_admin_max_sts_ttl }}
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  no_log: true
+  changed_when: true
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_aws_engine_enabled | bool
+    - (openbao_aws_iac_admin_role_check.rc | default(1)) != 0
+    - openbao_aws_iac_admin_role_arn | length > 0
+
 # --- GitHub secrets engine (independent GitHub App token broker) ------------
 - name: Read the staged GitHub plugin binary's sha256
   ansible.builtin.stat:

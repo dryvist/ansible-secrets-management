@@ -170,6 +170,14 @@ openbao_aws_role_arn: "{{ lookup('env', 'OPENBAO_AWS_TF_PROXMOX_ROLE_ARN') }}"
 openbao_aws_root_region: us-east-2
 openbao_aws_default_sts_ttl: 1h
 openbao_aws_max_sts_ttl: 2h
+# Second assumed_role broker: a broad IaC/admin identity capped by its own AWS
+# permissions boundary (not tf-proxmox-scoped). Mirrors the tf-proxmox role
+# above — same env-var indirection, same add-if-missing create task.
+openbao_aws_iac_admin_role_name: openbao-iac-admin
+openbao_aws_iac_admin_role_arn: "{{ lookup('env', 'OPENBAO_AWS_IAC_ADMIN_ROLE_ARN') | default('', true) }}"
+openbao_aws_iac_admin_default_sts_ttl: 1h
+# 1h, not 2h like tf-proxmox: this role's AWS MaxSessionDuration is 3600s.
+openbao_aws_iac_admin_max_sts_ttl: 1h
 # The base-user key OpenBao uses to call sts:AssumeRole. Minted via an
 # independent admin path (never the key being rotated out), seeded from Doppler
 # tier-0. Written to aws/config/root ONLY on first configuration — a routine
