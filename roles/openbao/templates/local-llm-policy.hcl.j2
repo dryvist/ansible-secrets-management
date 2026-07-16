@@ -12,3 +12,16 @@ path "{{ openbao_kv_mount }}/data/ai/*" {
 path "{{ openbao_kv_mount }}/metadata/ai/*" {
   capabilities = ["read", "list"]
 }
+
+# Carve the paid-SaaS provider key area (ai/saas/<provider>) OUT of the broad
+# ai/* read: those keys (Anthropic/Google/OpenAI/OpenRouter, one field per
+# model) are consumed by per-provider policies (e.g. ai-saas-openrouter),
+# not by every local-llm converge. Longest-prefix match means an attached
+# per-provider policy's exact-path read still wins over this glob deny.
+path "{{ openbao_kv_mount }}/data/ai/saas/*" {
+  capabilities = ["deny"]
+}
+
+path "{{ openbao_kv_mount }}/metadata/ai/saas/*" {
+  capabilities = ["deny"]
+}

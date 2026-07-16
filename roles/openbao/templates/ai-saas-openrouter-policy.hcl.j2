@@ -1,0 +1,18 @@
+{{ ansible_managed | comment }}
+# OpenBao policy for OpenRouter consumption — read-only on the single
+# ai/saas/openrouter KV entry (one field per OpenRouter MODEL, field name =
+# model slug, e.g. nvidia-nemotron-3-ultra-550b-a55b-free). Part of the
+# paid-SaaS provider key area ai/saas/<provider> (anthropic/google/openai/
+# openrouter, ...): each provider gets its own read policy so a consumer is
+# granted exactly the providers it uses, never the whole SaaS area. Attached
+# to the local-llm AppRole so the llm_router converge can render per-model
+# keys; the exact path here out-precedences local-llm's ai/saas/* deny
+# (longest-prefix match).
+
+path "{{ openbao_kv_mount }}/data/ai/saas/openrouter" {
+  capabilities = ["read"]
+}
+
+path "{{ openbao_kv_mount }}/metadata/ai/saas/openrouter" {
+  capabilities = ["read", "list"]
+}
