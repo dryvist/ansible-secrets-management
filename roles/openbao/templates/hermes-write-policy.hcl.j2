@@ -1,8 +1,9 @@
 {{ ansible_managed | comment }}
 # OpenBao policy for the hermes-write AppRole — the ONLY write path into
-# secret/ai/*. Scoped to the single Hermes credential secret and nothing else:
-# ansible-splunk publishes the minted Splunk MCP token here, and the one-time
-# Hermes cred seed writes here. Deliberately NO wildcard, NO other ai/* paths,
+# secret/ai/*. Scoped to the Hermes seed and shared Splunk MCP secret only:
+# ansible-splunk publishes the Splunk MCP connection to ai/mcp/splunk, while
+# the one-time Hermes cred seed still writes ai/hermes during migration.
+# Deliberately NO wildcard, NO other ai/* paths,
 # NO infra/platform/apps. Update-in-place is a read-modify-write on a known
 # path, so `read` on the exact secret is enough — no `list`.
 # See terraform-proxmox docs/SECRETS_HIERARCHY.md.
@@ -12,5 +13,13 @@ path "{{ openbao_kv_mount }}/data/ai/hermes" {
 }
 
 path "{{ openbao_kv_mount }}/metadata/ai/hermes" {
+  capabilities = ["read"]
+}
+
+path "{{ openbao_kv_mount }}/data/ai/mcp/splunk" {
+  capabilities = ["create", "update", "read"]
+}
+
+path "{{ openbao_kv_mount }}/metadata/ai/mcp/splunk" {
   capabilities = ["read"]
 }

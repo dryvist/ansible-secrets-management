@@ -196,8 +196,8 @@ plans):
 | `monitoring` | `secret/apps/monitoring` | — | netmon/unifi_metrics/prometheus_stack |
 | `media` | `secret/apps/media` | — | *arr/qBittorrent/Plex stack |
 | `local-llm` | `secret/ai/*` | — | The LLM serving stack itself |
-| `hermes` | `secret/ai/hermes` only | — | Dedicated least-privilege reader for the Hermes agent; NO broad `secret/ai/*` |
-| `hermes-write` | `secret/ai/hermes` only | `secret/ai/hermes` only | Narrow Doppler-published writer; least-priv complement to `ai-orchestrator` |
+| `hermes` | `secret/ai/hermes`, `secret/ai/mcp/splunk` | — | Dedicated least-privilege reader for Hermes; NO broad `secret/ai/*` |
+| `hermes-write` | exact Hermes + Splunk MCP paths | exact Hermes + Splunk MCP paths | Narrow publisher/seed writer; complements `ai-orchestrator` |
 | `public` | `secret/public/*` | — | **Anonymous** — no secret-zero; shipped ambiently |
 | `ai-orchestrator` | `secret/ai/{hermes,agents}` | `secret/ai/{hermes,agents}` (create/update) | WRITE; Doppler tier-0; narrowed + 30m TTL at Phase-3 |
 | `ai-readonly` | `secret/ai/*`, `secret/apps/*` | — | **default AI agent; NO `secret/infra/*`** |

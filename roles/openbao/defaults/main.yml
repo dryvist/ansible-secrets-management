@@ -270,12 +270,11 @@ openbao_github_permission_sets:
 #   monitoring       — read-only, secret/apps/monitoring
 #   media            — read-only, secret/apps/media
 #   local-llm        — LLM serving stack; read-only, secret/ai/*
-#   hermes           — Hermes AI agent; read-only, secret/ai/hermes ONLY —
-#                      dedicated least-privilege reader, NOT the broad ai subtree
-#   hermes-write     — least-privilege WRITE to secret/ai/hermes ONLY
-#                      (create/update/read that single path; no wildcard, no
-#                      other paths). Doppler-published, for ansible-splunk
-#                      token-publish + one-time Hermes cred seed. A narrow
+#   hermes           — Hermes AI agent; read-only, exact secret/ai/hermes and
+#                      secret/ai/mcp/splunk paths, NOT the broad ai subtree
+#   hermes-write     — least-privilege WRITE to exact secret/ai/hermes and
+#                      secret/ai/mcp/splunk paths (no wildcard, no other paths).
+#                      Used for ansible-splunk publication + one-time Hermes seed. A narrow
 #                      complement to the broad ai-orchestrator
 #                      writer — scoped down to just the Hermes secret.
 #   public           — anonymous, non-exploitable facts (domain/subdomain);
