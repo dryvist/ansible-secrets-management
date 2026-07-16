@@ -1,0 +1,16 @@
+{{ ansible_managed | comment }}
+# OpenBao policy for the apps AppRole — the shared-Postgres application tier
+# (openbao_secrets domain "apps"). Read-only, generated from
+# openbao_generated_app_secrets so the policy stays in lockstep with the
+# seeded apps and never subsumes sibling domains that also live under apps/
+# (e.g. apps/media belongs to the media AppRole).
+
+{% for app in openbao_generated_app_secrets.keys() | sort %}
+path "{{ openbao_kv_mount }}/data/apps/{{ app }}" {
+  capabilities = ["read"]
+}
+
+path "{{ openbao_kv_mount }}/metadata/apps/{{ app }}" {
+  capabilities = ["read", "list"]
+}
+{% endfor %}

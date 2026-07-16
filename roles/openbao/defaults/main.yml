@@ -335,6 +335,12 @@ openbao_monitoring_policy_name: monitoring
 openbao_monitoring_approle_name: monitoring
 openbao_media_policy_name: media
 openbao_media_approle_name: media
+# apps — read-side AppRole for the shared-Postgres application tier
+# (openbao_secrets domain "apps": Nautobot, Zammad). apps-seed above is the
+# WRITER; this is the enumerated read-only consumer the converge logs in with
+# via APPS_VAULT_ROLE_ID / APPS_VAULT_SECRET_ID.
+openbao_apps_policy_name: apps
+openbao_apps_approle_name: apps
 openbao_local_llm_policy_name: local-llm
 openbao_local_llm_approle_name: local-llm
 openbao_hermes_policy_name: hermes
@@ -464,6 +470,8 @@ openbao_base_approles:
     policy: "{{ openbao_monitoring_policy_name }}"
   - name: "{{ openbao_media_approle_name }}"
     policy: "{{ openbao_media_policy_name }}"
+  - name: "{{ openbao_apps_approle_name }}"
+    policy: "{{ openbao_apps_policy_name }}"
   - name: "{{ openbao_local_llm_approle_name }}"
     policy: "{{ openbao_local_llm_policy_name }}"
   - name: "{{ openbao_hermes_approle_name }}"
@@ -566,6 +574,8 @@ openbao_base_policies:
     template: monitoring-policy.hcl.j2
   - name: "{{ openbao_media_policy_name }}"
     template: media-policy.hcl.j2
+  - name: "{{ openbao_apps_policy_name }}"
+    template: apps-policy.hcl.j2
   - name: "{{ openbao_local_llm_policy_name }}"
     template: local-llm-policy.hcl.j2
   - name: "{{ openbao_hermes_policy_name }}"
