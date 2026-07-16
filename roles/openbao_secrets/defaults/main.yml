@@ -96,9 +96,9 @@ openbao_secrets_domains:
       - ai/open-webui  # OPEN_WEBUI_SECRET_KEY, OPEN_WEBUI_OPENAI_API_KEY
       - ai/hermes      # GH_PAT_WRITE_PROJECT_ISSUES, HERMES_GITHUB_APP_{ID,INSTALLATION_ID,
                        #   PRIVATE_KEY}. The old account-wide OPENROUTER_API_KEY
-                       #   parked here is SUPERSEDED by the per-model keys in
-                       #   ai/saas/openrouter below — retire it (bao kv delete
-                       #   field) once the per-model keys are seeded.
+                       #   was transferred to the deepseek-deepseek-v4-flash
+                       #   per-model field in ai/saas/openrouter and removed
+                       #   from this path (2026-07-16).
       - ai/saas/openrouter  # Paid-SaaS provider key area (ai/saas/<provider>).
                        #   One field per OpenRouter MODEL (field name = model
                        #   slug, e.g. nvidia-nemotron-3-ultra-550b-a55b-free),
