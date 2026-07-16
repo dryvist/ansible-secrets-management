@@ -80,13 +80,13 @@ This role brings OpenBao live **before** anything that reads secrets from it.
 
 1. Generate the seal key once (`openssl rand -base64 32`) and load it into
    Doppler tier-0 as `OPENBAO_STATIC_SEAL_KEY` (+ `OPENBAO_STATIC_SEAL_KEY_ID`).
-2. `terraform-proxmox` — provision the 5 OpenBao LXCs (VMID/IP/firewall).
+2. `tofu-proxmox` — provision the 5 OpenBao LXCs (VMID/IP/firewall).
 3. **this role** — install + init the cluster, mint the AppRoles.
 4. Operator — transcribe recovery shares to paper (+ Bitwarden); publish each
    AppRole's `role_id`/`secret_id` to Doppler tier-0, consumed as ambient env
    under `doppler run` — except `public`, which needs no secret-zero at all
    (see [Secret hierarchy & RBAC](#secret-hierarchy--rbac)).
-5. `terraform-proxmox` `vault-secrets` — now able to authenticate as
+5. `tofu-proxmox` `vault-secrets` — now able to authenticate as
    `terraform-apply` (read/write proof).
 
 ## Rolling expansion / migration (preserve a live cluster's data)
@@ -113,7 +113,7 @@ phases so the data replicates to the new voters before the old ones leave:
    migration: `-e openbao_bootstrap_host=openbao-02` (never a new node; and not a
    node whose host is currently unstable). `openbao_allow_fresh_init` stays
    `false`.
-3. `terraform-proxmox` apply creates the five new LXCs; then run this role with
+3. `tofu-proxmox` apply creates the five new LXCs; then run this role with
    `--limit openbao_group,localhost`.
 4. **Verify before Phase 2:** `bao operator raft list-peers` shows all 7;
    `bao operator raft autopilot state` shows 7 healthy voters; a read of a known
@@ -122,7 +122,7 @@ phases so the data replicates to the new voters before the old ones leave:
 **Phase 2 — remove the old nodes (shrink to the clean 5):**
 
 1. `bao operator raft remove-peer openbao-01` then `... openbao-02`.
-2. Drop `openbao-01`/`openbao-02` from `deployment.json`; `terraform-proxmox`
+2. Drop `openbao-01`/`openbao-02` from `deployment.json`; `tofu-proxmox`
    apply destroys the two old LXCs. Final state: 5 voters, quorum 3 — survives
    any single node, and any single Proxmox host, going down.
 
@@ -167,7 +167,7 @@ bootstrap steps short-circuit on their existence checks.
 ## Secret hierarchy & RBAC
 
 The KV v2 mount `secret/` is organized by category (canonical doc:
-`terraform-proxmox` `docs/SECRETS_HIERARCHY.md`):
+`tofu-proxmox` `docs/SECRETS_HIERARCHY.md`):
 
 ```text
 secret/infra/      proxmox/ aws/ network/   # IaC kernel — terraform-apply writes
