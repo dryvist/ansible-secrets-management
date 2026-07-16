@@ -345,10 +345,86 @@ openbao_public_policy_name: public
 openbao_public_approle_name: public
 openbao_ai_orchestrator_policy_name: ai-orchestrator
 openbao_ai_orchestrator_approle_name: ai-orchestrator
-openbao_ai_readonly_policy_name: ai-readonly
+# ai-readonly / ai-elevated are now ACTOR ROLES that ATTACH base capability
+# policies (below) — they no longer own a standalone `ai-*` policy object. Only
+# the AppRole names survive as vars; their token_policies are composed rollups.
 openbao_ai_readonly_approle_name: ai-readonly
-openbao_ai_elevated_policy_name: ai-elevated
 openbao_ai_elevated_approle_name: ai-elevated
+# --- AI-agent access model: CAPABILITY (actor-agnostic) vs ACTOR (ai-*) --------
+# Three layers, all driven by the single source-of-truth list below:
+#   1. BASE CAPABILITY policies (un-prefixed, reusable by ANY actor):
+#        read-<svc>  = read/list on secret/<svc>/*
+#        write-<svc> = create/update/delete/patch on secret/<svc>/*
+#        github-mint = mint the administrator-defined GitHub App permission sets
+#      One read+write pair is rendered per openbao_ai_domains entry; one read-only
+#      leaf per openbao_ai_readonly_extra_subtrees entry (see kv-capability-policy
+#      + github-mint templates). "Broad on services, specific on users."
+#   2. ROLLUP composition groups (lists of base policy NAMES — NOT new policy
+#        objects; OpenBao composes at the token layer, so there are no duplicated
+#        path rules): read-all, read-write-all (derived below).
+#   3. ACTOR ROLES (`ai-*` AppRoles) that ATTACH the capabilities/rollups they are
+#        allowed, plus actor mechanics (TTLs, inert human-gated secret_id):
+#        ai-readonly    -> [read-all]                       (standing, ambient)
+#        ai-elevated    -> [read-all + read-<extra>]        (standing, ambient)
+#        ai-apply-<svc> -> [read-<svc>, write-<svc>, github-mint]  (per-task, <=1h)
+#        ai-apply-all   -> [read-write-all, github-mint]           (per-task, <=1h)
+#        ai-admin       -> [ai-admin]                        (break-glass, <=10m)
+# Authorization is scoped by TASK / BLAST-RADIUS and gated by a HUMAN, never by
+# model capability; the model is an AUDIT claim, never a key. Every apply/admin
+# role is provisioned manage_secret_id:false below, so the converge creates the
+# INERT role but never mints/stores a standing secret_id — a token exists only
+# after a human response-wraps a single-use secret_id on demand
+# (`bao write -wrap-ttl=90s -f auth/approle/role/<role>/secret-id`). See the
+# docs.dryvist.com "AI Agent Access (OpenBao)" runbook for the full grant flow.
+#
+# SINGLE SOURCE OF TRUTH: add a writable service = ONE entry here. It renders a
+# new read-<svc>+write-<svc> pair, which auto-joins read-all/read-write-all and
+# every actor role that references them, and mints an ai-apply-<svc> role — no
+# other edit needed. (Formerly openbao_ai_apply_domains; renamed because the list
+# now drives read capabilities and rollups too, not only the apply tier.)
+openbao_ai_domains: [ai, apps]
+# Read-only subtrees the ELEVATED actor may additionally read but which are NOT
+# writable/applyable (they get a read-<svc> leaf only — no write leaf, no apply
+# role). One entry = one extra read leaf, auto-attached to ai-elevated.
+openbao_ai_readonly_extra_subtrees: [platform]
+# Fail-closed guard: no AI capability leaf may ever be minted for the IaC kernel
+# or a control-plane mount. init.yml asserts the two lists above contain none of
+# these before rendering anything. (Belt-and-braces with the enumerated-allowlist
+# proof; a typo like `infra` fails the converge instead of granting the kernel.)
+openbao_ai_forbidden_subtrees: [infra, sys, auth]
+# --- Derived rollups + generated policy/approle fragments (do NOT edit; add a
+# service to openbao_ai_domains instead). read-all / read-write-all are lists of
+# base policy NAMES attached to actor roles' token_policies — composition, not
+# duplicated path rules. ---
+openbao_ai_read_subtrees: "{{ (openbao_ai_domains + openbao_ai_readonly_extra_subtrees) | unique }}"
+openbao_read_all_policies: "{{ openbao_ai_domains | map('regex_replace', '^(.+)$', 'read-\\1') | list }}"
+openbao_read_write_all_policies: >-
+  {{ (openbao_ai_domains | map('regex_replace', '^(.+)$', 'read-\1') | list)
+     + (openbao_ai_domains | map('regex_replace', '^(.+)$', 'write-\1') | list) }}
+# Base capability policy fragments for the render loop (one read leaf per read
+# subtree, one write leaf per writable domain, plus the shared github-mint leaf).
+openbao_ai_capability_policies: >-
+  {{ (openbao_ai_read_subtrees | map('regex_replace', '^(.+)$',
+        '{"name": "read-\1", "template": "kv-capability-policy.hcl.j2", "subtree": "\1", "mode": "read"}')
+      | map('from_json') | list)
+     + (openbao_ai_domains | map('regex_replace', '^(.+)$',
+        '{"name": "write-\1", "template": "kv-capability-policy.hcl.j2", "subtree": "\1", "mode": "write"}')
+      | map('from_json') | list)
+     + [{"name": "github-mint", "template": "github-mint-policy.hcl.j2"}] }}
+# ai-apply-<svc> actor roles: one per writable domain, scoped to that service's
+# read+write leaves plus per-run GitHub attribution. Inert (no standing secret_id).
+openbao_ai_apply_approles: >-
+  {{ openbao_ai_domains | map('regex_replace', '^(.+)$',
+       '{"name": "ai-apply-\1", "token_policies": ["read-\1", "write-\1", "github-mint"],
+         "token_ttl": "1h", "manage_secret_id": false, "secret_id_ttl": "15m", "secret_id_num_uses": 1}')
+     | map('from_json') | list }}
+openbao_ai_admin_policy_name: ai-admin
+openbao_ai_admin_approle_name: ai-admin
+# Token/secret_id bounds for the elevated tiers. secret_id_ttl bounds an UNUSED
+# minted grant; num_uses=1 makes the wrapped secret_id single-login.
+openbao_ai_apply_token_ttl: 1h
+openbao_ai_admin_token_ttl: 10m
+openbao_ai_elevated_secret_id_ttl: 15m
 openbao_snapshot_policy_name: snapshot
 openbao_snapshot_approle_name: snapshot
 # apps-seed — the automated WRITER for per-app service secrets under
@@ -372,7 +448,7 @@ openbao_llm_gate_approle_name: llm-gate
 # per-domain consumer VLAN CIDRs aren't yet surfaced as Ansible vars in this
 # repo (they live in terraform-proxmox's locals.tf), and a wrong CIDR would
 # silently break legitimate access — worse than the hardening it buys.
-openbao_approles:
+openbao_base_approles:
   - name: "{{ openbao_terraform_apply_approle_name }}"
     policy: "{{ openbao_terraform_apply_policy_name }}"
   - name: "{{ openbao_flow_lock_approle_name }}"
@@ -403,10 +479,38 @@ openbao_approles:
   - name: "{{ openbao_ai_orchestrator_approle_name }}"
     policy: "{{ openbao_ai_orchestrator_policy_name }}"
     token_ttl: 30m  # demoted: broad-write identity gets a short token TTL
+  # ai-readonly / ai-elevated ACTOR roles: standing (ambient) READ tiers. Their
+  # token_policies ATTACH composed rollups — no standalone ai-* policy object.
+  # ai-readonly = read-all (every read-<svc>); ai-elevated = read-all + the
+  # read-only extras (secret/platform/*). Adding a service to openbao_ai_domains
+  # auto-widens read-all, so both tiers grow from one list entry.
   - name: "{{ openbao_ai_readonly_approle_name }}"
-    policy: "{{ openbao_ai_readonly_policy_name }}"
+    token_policies: "{{ openbao_read_all_policies }}"
   - name: "{{ openbao_ai_elevated_approle_name }}"
-    policy: "{{ openbao_ai_elevated_policy_name }}"
+    token_policies: >-
+      {{ openbao_read_all_policies
+         + (openbao_ai_readonly_extra_subtrees | map('regex_replace', '^(.+)$', 'read-\1') | list) }}
+  # ai-apply-all: the read-write-all rollup consumer — a scoped-but-broad WRITE
+  # actor for a genuinely cross-domain task. Composed ONLY of KV read+write base
+  # leaves (+ github-mint), so by construction it CANNOT touch sys/policies, auth,
+  # token/create, or the IaC kernel — the union of leaves has no control-plane
+  # path. Still human-gated + inert like every apply tier (no standing secret_id).
+  - name: ai-apply-all
+    token_policies: "{{ openbao_read_write_all_policies + ['github-mint'] }}"
+    token_ttl: "{{ openbao_ai_apply_token_ttl }}"
+    manage_secret_id: false
+    secret_id_ttl: "{{ openbao_ai_elevated_secret_id_ttl }}"
+    secret_id_num_uses: 1
+  # ai-admin: break-glass, the ONE self-modify-capable role (policy/auth/token
+  # admin). NO standing secret_id; a token exists only after a human one-shot grant
+  # and lives <=10m, alerted on every use.
+  - name: "{{ openbao_ai_admin_approle_name }}"
+    policy: "{{ openbao_ai_admin_policy_name }}"
+    token_ttl: "{{ openbao_ai_admin_token_ttl }}"
+    token_max_ttl: "{{ openbao_ai_admin_token_ttl }}"
+    manage_secret_id: false
+    secret_id_ttl: "{{ openbao_ai_elevated_secret_id_ttl }}"
+    secret_id_num_uses: 1
   - name: "{{ openbao_snapshot_approle_name }}"
     policy: "{{ openbao_snapshot_policy_name }}"
   # apps-seed: Doppler-published writer for secret/apps/* (Terraform vault-secrets).
@@ -416,9 +520,12 @@ openbao_approles:
   # (openbao-run secret-zero); reads only the bearer + ACME creds it injects.
   - name: "{{ openbao_llm_gate_approle_name }}"
     policy: "{{ openbao_llm_gate_policy_name }}"
+# Full AppRole set = the static base above + the per-service ai-apply-<svc> actor
+# roles generated from openbao_ai_domains. init.yml loops this combined list.
+openbao_approles: "{{ openbao_base_approles + openbao_ai_apply_approles }}"
 # Policy templates rendered + written on the bootstrap host. Each entry maps a
 # policy name to its template; add a row to grow the RBAC surface.
-openbao_policies:
+openbao_base_policies:
   - name: terrakube-iac-platform
     template: terrakube-workspace-policy.hcl.j2
     workspace: "{{ openbao_terrakube_workspaces[0] }}"
@@ -467,16 +574,22 @@ openbao_policies:
     template: public-policy.hcl.j2
   - name: "{{ openbao_ai_orchestrator_policy_name }}"
     template: ai-orchestrator-policy.hcl.j2
-  - name: "{{ openbao_ai_readonly_policy_name }}"
-    template: ai-readonly-policy.hcl.j2
-  - name: "{{ openbao_ai_elevated_policy_name }}"
-    template: ai-elevated-policy.hcl.j2
+  # ai-readonly / ai-elevated / ai-apply-<svc> no longer own standalone policies —
+  # they are ACTOR roles that attach the base read-/write- capability leaves
+  # (generated below into openbao_ai_capability_policies). ai-admin remains a
+  # standalone policy: it is the sole self-modify tier and is NOT composed leaves.
+  # ai-admin: break-glass. Intentionally root-ish; contained by TTL + human grant.
+  - name: "{{ openbao_ai_admin_policy_name }}"
+    template: ai-admin-policy.hcl.j2
   - name: "{{ openbao_snapshot_policy_name }}"
     template: snapshot-policy.hcl.j2
   - name: "{{ openbao_apps_seed_policy_name }}"
     template: apps-seed-policy.hcl.j2
   - name: "{{ openbao_llm_gate_policy_name }}"
     template: llm-gate-policy.hcl.j2
+# Full policy set = the static base above + the base read-/write-/github-mint
+# capability leaves generated from openbao_ai_domains. init.yml renders this list.
+openbao_policies: "{{ openbao_base_policies + openbao_ai_capability_policies }}"
 
 # --- External admin token (provisioning against an ALREADY-LIVE cluster) -----
 # The initial `bao operator init` only happens once; after that, adding new

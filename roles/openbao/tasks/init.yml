@@ -723,6 +723,25 @@
       or ((item.1.stdout | from_json).data.installation_id | int)
          != (item.0.installation_id | int)
 
+# --- Fail-closed guard: no AI capability leaf for the control plane / kernel --
+# The base read-/write- leaves are rendered blindly from openbao_ai_domains +
+# openbao_ai_readonly_extra_subtrees. A typo or malicious entry naming the IaC
+# kernel or a control-plane mount (infra / sys / auth) would mint a leaf granting
+# it, and every rollup composed of leaves would inherit it — the one way the
+# enumerated-allowlist proof could be subverted. Refuse before rendering anything.
+- name: Assert no AI capability subtree names a forbidden control-plane path
+  ansible.builtin.assert:
+    that:
+      - (openbao_ai_domains + openbao_ai_readonly_extra_subtrees)
+        | map('lower') | select('in', openbao_ai_forbidden_subtrees) | list | length == 0
+    fail_msg: >-
+      An AI capability subtree names a forbidden control-plane/kernel path
+      ({{ openbao_ai_forbidden_subtrees | join(', ') }}). Refusing to render base
+      read-/write- leaves — this would grant the IaC kernel or the policy/auth
+      control plane and break the self-escalation invariant.
+    success_msg: "AI capability subtrees are all outside the control plane/kernel."
+  when: openbao_bootstrap_token is defined
+
 # --- RBAC policies (write-if-missing-or-changed) ----------------------------
 # Rendered on the TARGET: `bao policy write` below executes there and reads
 # the file from its local filesystem (a controller-side render is unreachable
@@ -979,10 +998,11 @@
   ansible.builtin.command:
     cmd: >-
       bao write auth/approle/role/{{ item.0.name }}
-      token_policies={{ item.0.policy }}
+      token_policies={{ (item.0.token_policies | default([item.0.policy])) | join(',') }}
       token_ttl={{ item.0.token_ttl | default(openbao_approle_token_ttl) }}
-      token_max_ttl={{ openbao_approle_token_max_ttl }}
-      secret_id_ttl=0
+      token_max_ttl={{ item.0.token_max_ttl | default(openbao_approle_token_max_ttl) }}
+      secret_id_ttl={{ item.0.secret_id_ttl | default('0') }}
+      secret_id_num_uses={{ item.0.secret_id_num_uses | default('0') }}
   environment:
     BAO_ADDR: "{{ openbao_api_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
@@ -1020,7 +1040,18 @@
   when:
     - openbao_bootstrap_token is defined
     - (item.1.rc | default(0)) != 0
+    # Inert (manage_secret_id:false) roles are excluded from role_id read,
+    # secret_id mint, break-glass write, AND the derived "newly created" list, so
+    # the "publish creds to Doppler" instruction never names a role with no
+    # standing creds. Their role_id is retrievable on demand at grant time.
+    - item.0.manage_secret_id | default(true)
 
+# manage_secret_id:false roles (ai-apply-<domain>, ai-admin) deliberately get NO
+# standing secret_id — the human-gated access model mints a single-use,
+# response-wrapped secret_id on demand instead. The role is created inert above;
+# skipping here (and in the break-glass write below) keeps a skipped result in
+# .results at this index so the positional zip in the break-glass write stays
+# aligned, exactly like an already-existing role is skipped.
 - name: Generate newly-created AppRole secret_ids
   ansible.builtin.command:
     cmd: "bao write -f -format=json auth/approle/role/{{ item.0.name }}/secret-id"
@@ -1036,13 +1067,14 @@
   when:
     - openbao_bootstrap_token is defined
     - (item.1.rc | default(0)) != 0
+    - item.0.manage_secret_id | default(true)
 
 - name: Write each newly-created AppRole's break-glass material to controller (0600)
   ansible.builtin.copy:
     content: |
       {
         "approle": "{{ item.0.0.name }}",
-        "policy": "{{ item.0.0.policy }}",
+        "policy": "{{ (item.0.0.token_policies | default([item.0.0.policy])) | join(',') }}",
         "vault_addr": "{{ openbao_api_addr }}",
         "role_id": "{{ (item.1.stdout | from_json).data.role_id }}",
         "secret_id": "{{ (item.2.stdout | from_json).data.secret_id }}"
@@ -1065,6 +1097,7 @@
   when:
     - openbao_bootstrap_token is defined
     - (item.0.1.rc | default(0)) != 0
+    - item.0.0.manage_secret_id | default(true)
 
 # Derive the list of names actually created THIS run (for the instruction
 # message below) from the role_id-read results: Ansible preserves `item` on
