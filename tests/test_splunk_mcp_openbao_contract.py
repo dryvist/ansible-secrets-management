@@ -64,8 +64,11 @@ def test_local_llm_fetch_contract_merges_canonical_splunk_fields():
 
 
 def test_hermes_inventory_keeps_rendered_environment_interface():
-    inventory = _read("inventory/group_vars/hermes_agent_group.yml")
+    inventory = yaml.safe_load(_read("inventory/group_vars/hermes_agent_group.yml"))
 
-    assert "secret/ai/mcp/splunk" in inventory
-    assert "bao_local_llm_secrets.SPLUNK_MCP_URL" in inventory
-    assert "bao_local_llm_secrets.SPLUNK_MCP_TOKEN" in inventory
+    assert "bao_local_llm_secrets.SPLUNK_MCP_URL" in inventory.get(
+        "hermes_agent_splunk_mcp_url", ""
+    )
+    assert "bao_local_llm_secrets.SPLUNK_MCP_TOKEN" in inventory.get(
+        "hermes_agent_splunk_mcp_token", ""
+    )
