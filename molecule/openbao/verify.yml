@@ -406,3 +406,113 @@
           - "'github/token/personal-full-automation' in (bao_ai_orchestrator_policy.content | b64decode)"
           - "'github/token/*' not in (bao_ai_orchestrator_policy.content | b64decode)"
         fail_msg: "ai-orchestrator policy does not preserve the named GitHub token boundary"
+
+    # --- SSH CA (signed client certificates, ssh-certificate-authority ADR) ---
+    # init.yml's engine/CA/role writes are live-server-only (bootstrap-token
+    # guarded), so this scenario proves the STRUCTURAL invariants: the role
+    # table matches the ADR exactly, sign leaves are confined to enumerated
+    # sign endpoints, and the actor attachments follow the security decisions
+    # (ai-elevated signs ONLY automation-ai; readonly signs nothing).
+    - name: Assert the SSH signing role table matches the ADR
+      vars:
+        ssh_roles_by_name: "{{ openbao_ssh_roles | items2dict(key_name='name', value_name='principal') }}"
+      ansible.builtin.assert:
+        that:
+          - openbao_ssh_mount == 'ssh-client-ca'
+          - "ssh_roles_by_name == {'automation-ai': 'ai-agent', 'automation-ansible': 'ansible', 'ci-runner': 'ci'}"
+          - (openbao_ssh_roles | selectattr('name', 'equalto', 'automation-ai') | first).ttl == '1h'
+          - (openbao_ssh_roles | selectattr('name', 'equalto', 'automation-ansible') | first).ttl == '1h'
+          - (openbao_ssh_roles | selectattr('name', 'equalto', 'ci-runner') | first).ttl == '30m'
+          # No wildcard principals, ever (documented upstream wildcard bug +
+          # per-principal-class design).
+          - openbao_ssh_roles | map(attribute='principal') | select('equalto', '*') | list | length == 0
+        fail_msg: "openbao_ssh_roles drifted from the ssh-certificate-authority ADR table"
+
+    - name: Assert per-role extensions (interactive AI only; ansible/ci exec-channel)
+      ansible.builtin.assert:
+        that:
+          - >-
+            (openbao_ssh_roles | selectattr('name', 'equalto', 'automation-ai') | first).extensions.keys()
+            | list == ['permit-pty']
+          - "(openbao_ssh_roles | selectattr('name', 'equalto', 'automation-ansible') | first).extensions == {}"
+          - "(openbao_ssh_roles | selectattr('name', 'equalto', 'ci-runner') | first).extensions == {}"
+        fail_msg: "SSH role extensions drifted (agent-forwarding or pty leaked into a non-interactive role)"
+
+    - name: Render every generated ssh-sign leaf
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../../roles/openbao/templates/{{ item.template }}"
+        dest: "/tmp/ssh-sign-{{ item.name }}.hcl"
+        mode: "0600"
+      loop: "{{ openbao_ssh_sign_policies }}"
+      loop_control:
+        label: "{{ item.name }}"
+      delegate_to: localhost
+      become: false
+
+    - name: Slurp the rendered ssh-sign leaves back
+      ansible.builtin.slurp:
+        src: "/tmp/ssh-sign-{{ item.name }}.hcl"
+      loop: "{{ openbao_ssh_sign_policies }}"
+      loop_control:
+        label: "{{ item.name }}"
+      register: bao_ssh_sign_policy_reads
+      delegate_to: localhost
+      become: false
+
+    - name: Assert every ssh-sign leaf grants exactly one enumerated sign endpoint
+      vars:
+        sign_grants: >-
+          {{ bao_ssh_sign_policy_reads.results
+             | map(attribute='content') | map('b64decode')
+             | map('regex_replace', '(?m)^#.*$', '') | join('\n') }}
+      ansible.builtin.assert:
+        that:
+          # Only sign endpoints — never config, roles, keys, or the KV mount.
+          - "'ssh-client-ca/config' not in sign_grants"
+          - "'ssh-client-ca/roles' not in sign_grants"
+          - "'ssh-client-ca/keys' not in sign_grants"
+          - "'secret/' not in sign_grants"
+          - "'sys/' not in sign_grants"
+          - "'auth/' not in sign_grants"
+          # Positive: the three enumerated sign paths are granted create+update.
+          - "'ssh-client-ca/sign/automation-ai' in sign_grants"
+          - "'ssh-client-ca/sign/automation-ansible' in sign_grants"
+          - "'ssh-client-ca/sign/ci-runner' in sign_grants"
+          - "'create\", \"update' in sign_grants"
+        fail_msg: >-
+          An ssh-sign leaf escaped the enumerated sign-endpoint allowlist —
+          it could reconfigure the CA or cross into KV/control-plane paths.
+
+    - name: Assert actor attachments follow the SSH signing security decisions
+      vars:
+        elevated_role: "{{ openbao_approles | selectattr('name', 'equalto', 'ai-elevated') | first }}"
+        readonly_role: "{{ openbao_approles | selectattr('name', 'equalto', 'ai-readonly') | first }}"
+        converge_role: "{{ openbao_approles | selectattr('name', 'equalto', 'ansible-converge') | first }}"
+        apply_roles: "{{ openbao_approles | selectattr('name', 'match', '^ai-apply-') | list }}"
+      ansible.builtin.assert:
+        that:
+          # ai-elevated signs ONLY automation-ai — never ansible/ci roles.
+          - "'ssh-sign-automation-ai' in elevated_role.token_policies"
+          - "'ssh-sign-automation-ansible' not in elevated_role.token_policies"
+          - "'ssh-sign-ci-runner' not in elevated_role.token_policies"
+          # ai-readonly signs nothing.
+          - readonly_role.token_policies | select('match', '^ssh-sign-') | list | length == 0
+          # ansible-converge signs ONLY automation-ansible.
+          - "'ssh-sign-automation-ansible' in converge_role.token_policies"
+          - >-
+            converge_role.token_policies | select('match', '^ssh-sign-')
+            | reject('equalto', 'ssh-sign-automation-ansible') | list | length == 0
+          # every ai-apply-<svc> signs ONLY automation-ai.
+          - >-
+            apply_roles | map(attribute='token_policies')
+            | select('contains', 'ssh-sign-automation-ai') | list
+            | length == (apply_roles | length)
+          - >-
+            apply_roles | map(attribute='token_policies')
+            | map('select', 'match', '^ssh-sign-')
+            | map('reject', 'equalto', 'ssh-sign-automation-ai')
+            | map('list') | flatten | length == 0
+        fail_msg: >-
+          SSH signing attachment drifted from the security decisions
+          (ai-elevated/apply sign only automation-ai; readonly none;
+          ansible-converge only automation-ansible).

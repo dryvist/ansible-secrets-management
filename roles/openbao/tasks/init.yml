@@ -723,6 +723,167 @@
       or ((item.1.stdout | from_json).data.installation_id | int)
          != (item.0.installation_id | int)
 
+# --- SSH secrets engine (builtin — the SSH client CA) ------------------------
+# Signed short-TTL client certificates per the ssh-certificate-authority ADR.
+# Builtin engine: no plugin staging/registration, just enable + write-once CA
+# + add-if-missing roles. Host trust is distributed elsewhere (ansible-proxmox
+# ssh_ca_trust role) against a pinned CA fingerprint.
+- name: Enable the SSH secrets engine
+  ansible.builtin.command:
+    cmd: "bao secrets enable -path={{ openbao_ssh_mount }} ssh"
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  no_log: true
+  changed_when: true
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_ssh_engine_enabled | bool
+    - (openbao_ssh_mount ~ '/') not in (openbao_mounts_raw.stdout | from_json).keys()
+
+# Write-once: the CA keypair is generated INSIDE OpenBao on first configuration
+# and never exported; a routine converge with a CA already configured leaves it
+# untouched (rotation is a deliberate operator action via the multi-issuer API).
+- name: Check whether the SSH CA is already configured
+  ansible.builtin.command:
+    cmd: "bao read -format=json {{ openbao_ssh_mount }}/config/ca"
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  register: openbao_ssh_ca_check
+  no_log: true
+  changed_when: false
+  failed_when: false
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_ssh_engine_enabled | bool
+
+- name: Generate the SSH CA signing key (first configuration only, never exported)
+  ansible.builtin.uri:
+    url: "{{ openbao_api_addr }}/v1/{{ openbao_ssh_mount }}/config/ca"
+    method: POST
+    headers:
+      X-Vault-Token: "{{ openbao_bootstrap_token }}"
+    body_format: json
+    # key_type per the ADR (ed25519). If the deployed OpenBao rejects it the
+    # converge fails loudly here — do NOT silently fall back; see defaults.
+    body: >-
+      {{ {'generate_signing_key': true}
+         | combine({'key_type': openbao_ssh_ca_key_type} if openbao_ssh_ca_key_type | length > 0 else {}) }}
+    status_code:
+      - 200
+      - 204
+  no_log: true
+  changed_when: true
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_ssh_engine_enabled | bool
+    - (openbao_ssh_ca_check.rc | default(1)) != 0
+
+# Surface the CA public key + fingerprint ONCE, in this verified bootstrap
+# session — this is the trusted ceremony the ssh_ca_trust role's pinned
+# fingerprint comes from (committed as reviewable IaC data, human-reviewed
+# before any trust rollout). Public material only; safe to log.
+- name: Read the SSH CA public key
+  ansible.builtin.command:
+    cmd: "bao read -field=public_key {{ openbao_ssh_mount }}/config/ca"
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  register: openbao_ssh_ca_public_key
+  changed_when: false
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_ssh_engine_enabled | bool
+
+- name: Show the SSH CA public key fingerprint (pin this in ssh_ca_trust)
+  ansible.builtin.shell:
+    cmd: >-
+      set -o pipefail;
+      printf '%s\n' "{{ openbao_ssh_ca_public_key.stdout }}"
+      | ssh-keygen -l -f /dev/stdin
+    executable: /bin/bash
+  register: openbao_ssh_ca_fingerprint
+  changed_when: false
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_ssh_engine_enabled | bool
+
+- name: Report the SSH CA fingerprint
+  ansible.builtin.debug:
+    msg: "SSH CA fingerprint (pin in ansible-proxmox ssh_ca_trust): {{ openbao_ssh_ca_fingerprint.stdout }}"
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_ssh_engine_enabled | bool
+
+- name: Warn when no source-address restriction is configured for SSH certs
+  ansible.builtin.debug:
+    msg: >-
+      OPENBAO_SSH_SOURCE_CIDRS is unset — SSH certificates will be valid from
+      ANY source address. Documented residual: compensated by the guest
+      firewall default-deny layer. Set the env var (Doppler) to add the
+      source-address critical option.
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_ssh_engine_enabled | bool
+    - openbao_ssh_source_address_cidrs | length == 0
+
+- name: Check which SSH signing roles already exist
+  ansible.builtin.command:
+    cmd: "bao read -format=json {{ openbao_ssh_mount }}/roles/{{ item.name }}"
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  loop: "{{ openbao_ssh_roles }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: openbao_ssh_role_checks
+  no_log: true
+  changed_when: false
+  failed_when: false
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_ssh_engine_enabled | bool
+
+# Explicit principals only — never allowed_users="*" (documented upstream
+# wildcard bug, and a wildcard would defeat the per-principal-class design).
+# ttl == max_ttl: a sign request may shorten a cert's life, never extend it.
+- name: Create the SSH signing roles (add-if-missing)
+  ansible.builtin.uri:
+    url: "{{ openbao_api_addr }}/v1/{{ openbao_ssh_mount }}/roles/{{ item.0.name }}"
+    method: POST
+    headers:
+      X-Vault-Token: "{{ openbao_bootstrap_token }}"
+    body_format: json
+    body: >-
+      {{ {
+           'key_type': 'ca',
+           'allow_user_certificates': true,
+           'allowed_users': item.0.principal,
+           'default_user': item.0.principal,
+           'ttl': item.0.ttl,
+           'max_ttl': item.0.ttl,
+           'allowed_extensions': item.0.extensions.keys() | join(','),
+           'default_extensions': item.0.extensions,
+           'algorithm_signer': 'default'
+         }
+         | combine({'default_critical_options': {'source-address': openbao_ssh_source_address_cidrs}}
+                   if openbao_ssh_source_address_cidrs | length > 0 else {}) }}
+    status_code:
+      - 200
+      - 204
+  loop: >-
+    {{ openbao_ssh_roles
+       | zip(openbao_ssh_role_checks.results | default([])) | list }}
+  loop_control:
+    label: "{{ item.0.name }}"
+  no_log: true
+  changed_when: true
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_ssh_engine_enabled | bool
+    - (item.1.rc | default(1)) != 0
+
 # --- Fail-closed guard: no AI capability leaf for the control plane / kernel --
 # The base read-/write- leaves are rendered blindly from openbao_ai_domains +
 # openbao_ai_readonly_extra_subtrees. A typo or malicious entry naming the IaC
@@ -741,6 +902,27 @@
       control plane and break the self-escalation invariant.
     success_msg: "AI capability subtrees are all outside the control plane/kernel."
   when: openbao_bootstrap_token is defined
+
+# Companion guard for the ssh-sign leaves: they are the one DELIBERATE grant
+# class outside secret/, allowlisted to exactly <ssh mount>/sign/<enumerated
+# role>. Refuse if the mount collides with a control-plane path or a sign leaf
+# names a role outside the enumerated openbao_ssh_roles table.
+- name: Assert ssh-sign leaves stay inside the enumerated SSH CA sign allowlist
+  ansible.builtin.assert:
+    that:
+      - openbao_ssh_mount not in (openbao_ai_forbidden_subtrees + [openbao_kv_mount])
+      - >-
+        openbao_ssh_sign_policies | map(attribute='ssh_role')
+        | reject('in', openbao_ssh_roles | map(attribute='name') | list)
+        | list | length == 0
+    fail_msg: >-
+      An ssh-sign policy targets a mount or role outside the enumerated SSH CA
+      allowlist ({{ openbao_ssh_mount }}/sign/<{{ openbao_ssh_roles | map(attribute='name') | join('|') }}>).
+      Refusing to render.
+    success_msg: "ssh-sign leaves are confined to the enumerated SSH CA sign endpoints."
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_ssh_engine_enabled | bool
 
 # --- RBAC policies (write-if-missing-or-changed) ----------------------------
 # Rendered on the TARGET: `bao policy write` below executes there and reads
@@ -1014,6 +1196,31 @@
   when:
     - openbao_bootstrap_token is defined
     - (item.1.rc | default(0)) != 0
+
+# Policy-attachment drift on EXISTING AppRoles is reconciled through the
+# dedicated /policies sub-endpoint: it updates token_policies ONLY — other
+# role fields keep their live values and no secret_id is minted or touched
+# (a full `bao write auth/approle/role/<name>` would reset unspecified
+# fields to defaults, which is exactly why creation above is add-if-missing).
+- name: Reconcile token_policies on existing AppRoles
+  ansible.builtin.command:
+    cmd: >-
+      bao write auth/approle/role/{{ item.0.name }}/policies
+      token_policies={{ (item.0.token_policies | default([item.0.policy])) | join(',') }}
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  loop: "{{ openbao_approles | zip(openbao_approle_checks.results | default([])) | list }}"
+  loop_control:
+    label: "{{ item.0.name }}"
+  no_log: true
+  changed_when: true
+  when:
+    - openbao_bootstrap_token is defined
+    - (item.1.rc | default(1)) == 0
+    - >-
+      ((item.1.stdout | from_json).data.token_policies | default([]) | sort)
+      != ((item.0.token_policies | default([item.0.policy])) | sort)
 
 # Surface role_id + a fresh secret_id only for AppRoles that were JUST created
 # THIS run (the check above found them missing) — so re-runs never mint new

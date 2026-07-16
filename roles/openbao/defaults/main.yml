@@ -249,6 +249,47 @@ openbao_github_permission_sets:
   - name: personal-full-automation
     installation_id: "{{ openbao_github_personal_installation_id }}"
 
+# --- SSH secrets engine (signed client certificates — the SSH CA) -----------
+# Implements the ssh-certificate-authority ADR (docs-starlight): automation
+# authenticates to estate hosts with short-TTL SSH certificates signed by an
+# OpenBao CA; humans stay on static authorized_keys (a CA outage must never
+# lock humans out). SSH is a BUILTIN engine — no plugin staging, unlike
+# aws/github above. The CA keypair is generated INSIDE OpenBao on first
+# configuration and is never exported; a routine converge never regenerates it
+# (write-once, mirrors aws config/root). Host-side trust (TrustedUserCAKeys +
+# AuthorizedPrincipalsFile) is distributed by ansible-proxmox's ssh_ca_trust
+# role against a PINNED CA fingerprint recorded at mint time.
+openbao_ssh_engine_enabled: true
+openbao_ssh_mount: ssh-client-ca
+# CA key type per the ADR. If the deployed OpenBao rejects key_type on
+# config/ca, the converge fails loudly — override to '' to generate the
+# engine default (RSA) and track an ed25519 rotation via the multi-issuer API.
+openbao_ssh_ca_key_type: ed25519
+# Per-principal-class signing roles (ADR table). Cert TTL == max TTL; a sign
+# request may pass a SHORTER ttl per task, never longer. automation-ai signs
+# interactive agent certs (permit-pty); automation-ansible and ci-runner are
+# exec-channel only — NO extensions (a host that genuinely needs a tty for
+# become opts in via its own role data, not a blanket grant here).
+openbao_ssh_roles:
+  - name: automation-ai
+    principal: ai-agent
+    ttl: 1h
+    extensions: { "permit-pty": "" }
+  - name: automation-ansible
+    principal: ansible
+    ttl: 1h
+    extensions: {}
+  - name: ci-runner
+    principal: ci
+    ttl: 30m
+    extensions: {}
+# source-address critical option: comma-separated CIDRs certificates are valid
+# FROM (management + compute VLANs). Delivered via env (Doppler, same channel
+# as NETWORK_CIDR_*) because real CIDRs are never committed. Empty = the
+# converge warns loudly and the residual is compensated by the guest-firewall
+# default-deny layer (SSH ingress only from management paths).
+openbao_ssh_source_address_cidrs: "{{ lookup('env', 'OPENBAO_SSH_SOURCE_CIDRS') | default('', true) }}"
+
 # Policy + AppRole names, one per RBAC identity (see docs/SECRETS_HIERARCHY.md
 # for the full rationale). Split by resource domain, least-privilege:
 #   terraform-apply  — human-triggered IaC apply (was "terraform"); read+write
@@ -424,11 +465,24 @@ openbao_ai_capability_policies: >-
         '{"name": "write-\1", "template": "kv-capability-policy.hcl.j2", "subtree": "\1", "mode": "write"}')
       | map('from_json') | list)
      + [{"name": "github-mint", "template": "github-mint-policy.hcl.j2"}] }}
+# ssh-sign-<role> capability leaves: one per SSH signing role, granting ONLY
+# the sign endpoint of that role. These are DELIBERATE enumerated grants
+# outside secret/ — the kv-leaf self-escalation proof still holds for the KV
+# rollups (read-all / read-write-all stay pure KV); an ssh-sign leaf adds
+# exactly one non-KV path (<mount>/sign/<role>) and nothing else, asserted
+# fail-closed in init.yml before rendering.
+openbao_ssh_sign_policies: >-
+  {{ openbao_ssh_roles | map(attribute='name') | map('regex_replace', '^(.+)$',
+       '{"name": "ssh-sign-\1", "template": "ssh-sign-policy.hcl.j2", "ssh_role": "\1"}')
+     | map('from_json') | list
+     if openbao_ssh_engine_enabled else [] }}
 # ai-apply-<svc> actor roles: one per writable domain, scoped to that service's
-# read+write leaves plus per-run GitHub attribution. Inert (no standing secret_id).
+# read+write leaves plus per-run GitHub attribution and interactive SSH-cert
+# signing (ssh-sign-automation-ai — 1h certs, non-root principals, audited).
+# Inert (no standing secret_id).
 openbao_ai_apply_approles: >-
   {{ openbao_ai_domains | map('regex_replace', '^(.+)$',
-       '{"name": "ai-apply-\1", "token_policies": ["read-\1", "write-\1", "github-mint"],
+       '{"name": "ai-apply-\1", "token_policies": ["read-\1", "write-\1", "github-mint", "ssh-sign-automation-ai"],
          "token_ttl": "1h", "token_max_ttl": "1h",
          "manage_secret_id": false, "secret_id_ttl": "15m", "secret_id_num_uses": 1}')
      | map('from_json') | list }}
@@ -467,8 +521,12 @@ openbao_base_approles:
     policy: "{{ openbao_terraform_apply_policy_name }}"
   - name: "{{ openbao_flow_lock_approle_name }}"
     policy: "{{ openbao_flow_lock_policy_name }}"
+  # ansible-converge additionally signs automation-ansible SSH certs: the
+  # pre-play mint in each repo's run-ansible.sh replaces the shared static key.
   - name: "{{ openbao_ansible_converge_approle_name }}"
-    policy: "{{ openbao_ansible_converge_policy_name }}"
+    token_policies: >-
+      {{ [openbao_ansible_converge_policy_name]
+         + (['ssh-sign-automation-ansible'] if openbao_ssh_engine_enabled else []) }}
   - name: "{{ openbao_observability_approle_name }}"
     policy: "{{ openbao_observability_policy_name }}"
   - name: "{{ openbao_local_cloud_approle_name }}"
@@ -507,17 +565,24 @@ openbao_base_approles:
   # auto-widens read-all, so both tiers grow from one list entry.
   - name: "{{ openbao_ai_readonly_approle_name }}"
     token_policies: "{{ openbao_read_all_policies }}"
+  # ai-elevated additionally attaches ssh-sign-automation-ai: the STANDING
+  # ability to mint 1h ai-agent SSH certs. Deliberate, documented tradeoff
+  # (agents must pull SSH access friction-free) — bounded by non-root
+  # principals, default-deny host opt-in, cert TTL, and audit-logged signs.
   - name: "{{ openbao_ai_elevated_approle_name }}"
     token_policies: >-
       {{ openbao_read_all_policies
-         + (openbao_ai_readonly_extra_subtrees | map('regex_replace', '^(.+)$', 'read-\1') | list) }}
+         + (openbao_ai_readonly_extra_subtrees | map('regex_replace', '^(.+)$', 'read-\1') | list)
+         + (['ssh-sign-automation-ai'] if openbao_ssh_engine_enabled else []) }}
   # ai-apply-all: the read-write-all rollup consumer — a scoped-but-broad WRITE
   # actor for a genuinely cross-domain task. Composed ONLY of KV read+write base
   # leaves (+ github-mint), so by construction it CANNOT touch sys/policies, auth,
   # token/create, or the IaC kernel — the union of leaves has no control-plane
   # path. Still human-gated + inert like every apply tier (no standing secret_id).
   - name: ai-apply-all
-    token_policies: "{{ openbao_read_write_all_policies + ['github-mint'] }}"
+    token_policies: >-
+      {{ openbao_read_write_all_policies + ['github-mint']
+         + (['ssh-sign-automation-ai'] if openbao_ssh_engine_enabled else []) }}
     token_ttl: "{{ openbao_ai_apply_token_ttl }}"
     token_max_ttl: "{{ openbao_ai_apply_token_ttl }}"
     manage_secret_id: false
@@ -614,8 +679,12 @@ openbao_base_policies:
   - name: "{{ openbao_llm_gate_policy_name }}"
     template: llm-gate-policy.hcl.j2
 # Full policy set = the static base above + the base read-/write-/github-mint
-# capability leaves generated from openbao_ai_domains. init.yml renders this list.
-openbao_policies: "{{ openbao_base_policies + openbao_ai_capability_policies }}"
+# capability leaves generated from openbao_ai_domains + the ssh-sign-<role>
+# leaves generated from openbao_ssh_roles. init.yml renders this list.
+# NOTE: ssh-sign-ci-runner is rendered but attached to no identity yet — no CI
+# AppRole/JWT identity exists in this role today; attach it when one does.
+openbao_policies: >-
+  {{ openbao_base_policies + openbao_ai_capability_policies + openbao_ssh_sign_policies }}
 
 # --- External admin token (provisioning against an ALREADY-LIVE cluster) -----
 # The initial `bao operator init` only happens once; after that, adding new

@@ -341,6 +341,45 @@ the sealed write succeeds, remove the temporary controller copy of the private
 key. A live acceptance run must issue and revoke one token from each permission
 set before the engine is considered deployed.
 
+## SSH secrets engine (signed client certificates — the SSH CA)
+
+Mounted at `ssh-client-ca/` (add-if-missing, in `tasks/init.yml`). Implements
+the `ssh-certificate-authority` ADR (docs site): automation authenticates to
+estate hosts with **short-TTL SSH certificates** signed by an OpenBao CA;
+humans stay on static `authorized_keys` so a CA outage can never lock a human
+out. **SSH is a builtin engine** — no plugin staging, registration, or reload
+apparatus; the block is enable + write-once CA + add-if-missing roles.
+
+- `config/ca` is generated **inside OpenBao on first configuration**
+  (`generate_signing_key=true`, `key_type` from `openbao_ssh_ca_key_type`,
+  ed25519 per the ADR) and the private key is **never exported**. Write-once:
+  a routine converge never regenerates it; rotation is a deliberate operator
+  action via the multi-issuer API (append the new CA public key to hosts'
+  trust file, re-sign via the new issuer, drop the old after cert TTL drain).
+- The converge prints the CA public-key **fingerprint** — that value is the
+  trusted-ceremony input pinned in `ansible-proxmox`'s `ssh_ca_trust` role
+  (committed, human-reviewed) so host trust distribution can never
+  trust-on-first-use a substituted endpoint.
+- Signing roles are the ADR's per-principal-class table
+  (`openbao_ssh_roles`): `automation-ai` (principal `ai-agent`, 1h,
+  `permit-pty`), `automation-ansible` (`ansible`, 1h, no extensions),
+  `ci-runner` (`ci`, 30m, no extensions). `ttl == max_ttl`; a sign request
+  may shorten a cert's life, never extend it. Principals are always explicit
+  — never `*`.
+- One `ssh-sign-<role>` policy leaf per role grants exactly that role's
+  `sign/` endpoint. Attachment follows the security decisions:
+  `ssh-sign-automation-ai` → `ai-elevated` (standing, a documented tradeoff:
+  friction-free agent SSH bounded by 1h certs, non-root principals,
+  default-deny host opt-in, audit) + every `ai-apply-*`;
+  `ssh-sign-automation-ansible` → `ansible-converge` only;
+  `ssh-sign-ci-runner` → unattached until a CI identity exists.
+- `OPENBAO_SSH_SOURCE_CIDRS` (Doppler) adds a `source-address` critical
+  option restricting where certs are valid from; unset ⇒ loud warning and
+  the guest-firewall default-deny layer is the compensating control.
+- **ai-agent is never a hypervisor root principal** — PVE nodes map
+  `root: [ansible]` only; `ai-agent` reaches guest-level accounts on hosts
+  that opt in (see `ssh_ca_trust`).
+
 ## Break-glass handling (read this)
 
 `bao operator init` produces **recovery** shares plus an initial **root token**.
