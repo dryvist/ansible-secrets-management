@@ -146,6 +146,11 @@ openbao_generated_app_secrets:
   # db_password. The consumers already read the namespaced names
   # (inventory/group_vars/{zammad_group,postgres_group}.yml).
   zammad: [zammad_db_password, zammad_admin_password, zammad_hermes_api_token]
+  # Streaming-replication credential for the shared-apps Postgres pair (the
+  # postgres role's primary creates the replicator login with it; the standby
+  # puts it in .pgpass). Bare name is safe in the flat bao_apps_secrets merge —
+  # no other app path carries a replication_password field.
+  postgres: [replication_password]
 # Random length for generated app credentials (alnum). secret_key needs more
 # entropy than a login credential, so it gets its own length (matches the 64-char
 # key the nautobot role generates locally when none is supplied).
