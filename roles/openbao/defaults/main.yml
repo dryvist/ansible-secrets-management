@@ -416,7 +416,8 @@ openbao_ai_capability_policies: >-
 openbao_ai_apply_approles: >-
   {{ openbao_ai_domains | map('regex_replace', '^(.+)$',
        '{"name": "ai-apply-\1", "token_policies": ["read-\1", "write-\1", "github-mint"],
-         "token_ttl": "1h", "manage_secret_id": false, "secret_id_ttl": "15m", "secret_id_num_uses": 1}')
+         "token_ttl": "1h", "token_max_ttl": "1h",
+         "manage_secret_id": false, "secret_id_ttl": "15m", "secret_id_num_uses": 1}')
      | map('from_json') | list }}
 openbao_ai_admin_policy_name: ai-admin
 openbao_ai_admin_approle_name: ai-admin
@@ -498,6 +499,7 @@ openbao_base_approles:
   - name: ai-apply-all
     token_policies: "{{ openbao_read_write_all_policies + ['github-mint'] }}"
     token_ttl: "{{ openbao_ai_apply_token_ttl }}"
+    token_max_ttl: "{{ openbao_ai_apply_token_ttl }}"
     manage_secret_id: false
     secret_id_ttl: "{{ openbao_ai_elevated_secret_id_ttl }}"
     secret_id_num_uses: 1

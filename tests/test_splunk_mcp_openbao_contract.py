@@ -23,13 +23,17 @@ def test_hermes_can_read_own_bundle_and_shared_splunk_secret():
 
 
 def test_default_ai_policies_can_read_shared_splunk_secret():
-    ai_readonly = _read("roles/openbao/templates/ai-readonly-policy.hcl.j2")
+    # ai-readonly is now a composed actor role (#931): it attaches the read-ai
+    # capability leaf, which the kv-capability template renders as read on
+    # secret/data/ai/* — covering ai/mcp/splunk.
+    defaults = yaml.safe_load(_read("roles/openbao/defaults/main.yml"))
+    leaf = _read("roles/openbao/templates/kv-capability-policy.hcl.j2")
     local_llm = _read("roles/openbao/templates/local-llm-policy.hcl.j2")
 
-    assert "{% for sub in ['ai', 'apps'] %}" in ai_readonly
-    assert 'path "{{ openbao_kv_mount }}/data/{{ sub }}/*"' in ai_readonly
+    assert "ai" in defaults["openbao_ai_domains"]
+    assert 'path "{{ openbao_kv_mount }}/data/{{ item.subtree }}/*"' in leaf
+    assert 'capabilities = ["read"]' in leaf
     assert 'path "{{ openbao_kv_mount }}/data/ai/*"' in local_llm
-    assert 'capabilities = ["read"]' in ai_readonly
     assert 'capabilities = ["read"]' in local_llm
 
 
