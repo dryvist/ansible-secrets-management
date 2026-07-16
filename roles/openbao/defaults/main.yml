@@ -269,7 +269,13 @@ openbao_github_permission_sets:
 #                      secret/platform/{object-storage,compute}
 #   monitoring       — read-only, secret/apps/monitoring
 #   media            — read-only, secret/apps/media
-#   local-llm        — LLM serving stack; read-only, secret/ai/*
+#   local-llm        — LLM serving stack; read-only, secret/ai/* MINUS the
+#                      ai/saas/* carve-out (paid-SaaS provider keys)
+#   ai-saas-openrouter — per-provider read leaf for the paid-SaaS key area
+#                      secret/ai/saas/<provider> (anthropic/google/openai/
+#                      openrouter, one field per MODEL). Attached to local-llm
+#                      so the llm_router converge reads OpenRouter keys only;
+#                      future providers get their own sibling policy.
 #   hermes           — Hermes AI agent; read-only, exact secret/ai/hermes and
 #                      secret/ai/mcp/splunk paths, NOT the broad ai subtree
 #   hermes-write     — least-privilege WRITE to exact secret/ai/hermes and
@@ -343,6 +349,7 @@ openbao_apps_policy_name: apps
 openbao_apps_approle_name: apps
 openbao_local_llm_policy_name: local-llm
 openbao_local_llm_approle_name: local-llm
+openbao_ai_saas_openrouter_policy_name: ai-saas-openrouter
 openbao_hermes_policy_name: hermes
 openbao_hermes_approle_name: hermes
 openbao_hermes_write_policy_name: hermes-write
@@ -472,8 +479,13 @@ openbao_base_approles:
     policy: "{{ openbao_media_policy_name }}"
   - name: "{{ openbao_apps_approle_name }}"
     policy: "{{ openbao_apps_policy_name }}"
+  # local-llm additionally attaches the OpenRouter SaaS read leaf: the
+  # llm_router converge renders per-model OpenRouter keys, while the
+  # local-llm policy itself denies the rest of the ai/saas/* provider area.
   - name: "{{ openbao_local_llm_approle_name }}"
-    policy: "{{ openbao_local_llm_policy_name }}"
+    token_policies:
+      - "{{ openbao_local_llm_policy_name }}"
+      - "{{ openbao_ai_saas_openrouter_policy_name }}"
   - name: "{{ openbao_hermes_approle_name }}"
     policy: "{{ openbao_hermes_policy_name }}"
   - name: "{{ openbao_hermes_write_approle_name }}"
@@ -578,6 +590,8 @@ openbao_base_policies:
     template: apps-policy.hcl.j2
   - name: "{{ openbao_local_llm_policy_name }}"
     template: local-llm-policy.hcl.j2
+  - name: "{{ openbao_ai_saas_openrouter_policy_name }}"
+    template: ai-saas-openrouter-policy.hcl.j2
   - name: "{{ openbao_hermes_policy_name }}"
     template: hermes-policy.hcl.j2
   - name: "{{ openbao_hermes_write_policy_name }}"
