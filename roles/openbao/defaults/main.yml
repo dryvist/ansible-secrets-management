@@ -129,6 +129,9 @@ openbao_vikunja_secrets:
   token_admin: VIKUNJA_MCP_TOKEN_ADMIN
   svc_mcp_ro_password: VIKUNJA_SVC_MCP_RO_PASSWORD
   svc_mcp_rw_password: VIKUNJA_SVC_MCP_RW_PASSWORD
+  # App-namespaced DB password (matches the postgres_managed_databases +
+  # vikunja_group.yml consumers reading bao_apps_secrets.vikunja_db_password).
+  vikunja_db_password: VIKUNJA_DB_PASSWORD
 
 # App service secrets GENERATED (random, generate-if-absent) in OpenBao itself,
 # replacing the retired terraform-proxmox vault-secrets root. Each app maps to
@@ -137,7 +140,12 @@ openbao_vikunja_secrets:
 # openbao_secrets then exposes these paths to the nautobot/zammad roles.
 openbao_generated_app_secrets:
   nautobot: [db_password, secret_key, superuser_password]
-  zammad: [db_password, admin_password, hermes_api_token]
+  # Zammad fields are app-namespaced (zammad_*) so the flat merge into
+  # bao_apps_secrets (openbao_secrets reads apps/nautobot + apps/zammad +
+  # apps/vikunja into one dict) never collides with Nautobot's bare
+  # db_password. The consumers already read the namespaced names
+  # (inventory/group_vars/{zammad_group,postgres_group}.yml).
+  zammad: [zammad_db_password, zammad_admin_password, zammad_hermes_api_token]
 # Random length for generated app credentials (alnum). secret_key needs more
 # entropy than a login credential, so it gets its own length (matches the 64-char
 # key the nautobot role generates locally when none is supplied).
@@ -388,6 +396,11 @@ openbao_media_approle_name: media
 # via APPS_VAULT_ROLE_ID / APPS_VAULT_SECRET_ID.
 openbao_apps_policy_name: apps
 openbao_apps_approle_name: apps
+# Apps the read-side `apps` policy grants read on = the generate-if-absent apps
+# (nautobot, zammad) PLUS vikunja, whose secret/apps/vikunja is seeded from the
+# SOPS->bao promotion map (openbao_vikunja_secrets), not generate-if-absent. The
+# apps-policy template loops this so vikunja's read grant is not silently missed.
+openbao_apps_read_apps: "{{ ((openbao_generated_app_secrets.keys() | list) + ['vikunja']) | sort }}"
 openbao_local_llm_policy_name: local-llm
 openbao_local_llm_approle_name: local-llm
 openbao_ai_saas_openrouter_policy_name: ai-saas-openrouter
