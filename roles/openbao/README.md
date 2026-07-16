@@ -80,13 +80,13 @@ This role brings OpenBao live **before** anything that reads secrets from it.
 
 1. Generate the seal key once (`openssl rand -base64 32`) and load it into
    Doppler tier-0 as `OPENBAO_STATIC_SEAL_KEY` (+ `OPENBAO_STATIC_SEAL_KEY_ID`).
-2. `terraform-proxmox` — provision the 5 OpenBao LXCs (VMID/IP/firewall).
+2. `tofu-proxmox` — provision the 5 OpenBao LXCs (VMID/IP/firewall).
 3. **this role** — install + init the cluster, mint the AppRoles.
 4. Operator — transcribe recovery shares to paper (+ Bitwarden); publish each
    AppRole's `role_id`/`secret_id` to Doppler tier-0, consumed as ambient env
    under `doppler run` — except `public`, which needs no secret-zero at all
    (see [Secret hierarchy & RBAC](#secret-hierarchy--rbac)).
-5. `terraform-proxmox` `vault-secrets` — now able to authenticate as
+5. `tofu-proxmox` `vault-secrets` — now able to authenticate as
    `terraform-apply` (read/write proof).
 
 ## Rolling expansion / migration (preserve a live cluster's data)
@@ -113,7 +113,7 @@ phases so the data replicates to the new voters before the old ones leave:
    migration: `-e openbao_bootstrap_host=openbao-02` (never a new node; and not a
    node whose host is currently unstable). `openbao_allow_fresh_init` stays
    `false`.
-3. `terraform-proxmox` apply creates the five new LXCs; then run this role with
+3. `tofu-proxmox` apply creates the five new LXCs; then run this role with
    `--limit openbao_group,localhost`.
 4. **Verify before Phase 2:** `bao operator raft list-peers` shows all 7;
    `bao operator raft autopilot state` shows 7 healthy voters; a read of a known
@@ -122,7 +122,7 @@ phases so the data replicates to the new voters before the old ones leave:
 **Phase 2 — remove the old nodes (shrink to the clean 5):**
 
 1. `bao operator raft remove-peer openbao-01` then `... openbao-02`.
-2. Drop `openbao-01`/`openbao-02` from `deployment.json`; `terraform-proxmox`
+2. Drop `openbao-01`/`openbao-02` from `deployment.json`; `tofu-proxmox`
    apply destroys the two old LXCs. Final state: 5 voters, quorum 3 — survives
    any single node, and any single Proxmox host, going down.
 
@@ -167,7 +167,7 @@ bootstrap steps short-circuit on their existence checks.
 ## Secret hierarchy & RBAC
 
 The KV v2 mount `secret/` is organized by category (canonical doc:
-`terraform-proxmox` `docs/SECRETS_HIERARCHY.md`):
+`tofu-proxmox` `docs/SECRETS_HIERARCHY.md`):
 
 ```text
 secret/infra/      proxmox/ aws/ network/   # IaC kernel — terraform-apply writes
@@ -340,6 +340,45 @@ First configuration requires `OPENBAO_GITHUB_APP_ID`,
 the sealed write succeeds, remove the temporary controller copy of the private
 key. A live acceptance run must issue and revoke one token from each permission
 set before the engine is considered deployed.
+
+## SSH secrets engine (signed client certificates — the SSH CA)
+
+Mounted at `ssh-client-ca/` (add-if-missing, in `tasks/init.yml`). Implements
+the `ssh-certificate-authority` ADR (docs site): automation authenticates to
+estate hosts with **short-TTL SSH certificates** signed by an OpenBao CA;
+humans stay on static `authorized_keys` so a CA outage can never lock a human
+out. **SSH is a builtin engine** — no plugin staging, registration, or reload
+apparatus; the block is enable + write-once CA + add-if-missing roles.
+
+- `config/ca` is generated **inside OpenBao on first configuration**
+  (`generate_signing_key=true`, `key_type` from `openbao_ssh_ca_key_type`,
+  ed25519 per the ADR) and the private key is **never exported**. Write-once:
+  a routine converge never regenerates it; rotation is a deliberate operator
+  action via the multi-issuer API (append the new CA public key to hosts'
+  trust file, re-sign via the new issuer, drop the old after cert TTL drain).
+- The converge prints the CA public-key **fingerprint** — that value is the
+  trusted-ceremony input pinned in `ansible-proxmox`'s `ssh_ca_trust` role
+  (committed, human-reviewed) so host trust distribution can never
+  trust-on-first-use a substituted endpoint.
+- Signing roles are the ADR's per-principal-class table
+  (`openbao_ssh_roles`): `automation-ai` (principal `ai-agent`, 1h,
+  `permit-pty`), `automation-ansible` (`ansible`, 1h, no extensions),
+  `ci-runner` (`ci`, 30m, no extensions). `ttl == max_ttl`; a sign request
+  may shorten a cert's life, never extend it. Principals are always explicit
+  — never `*`.
+- One `ssh-sign-<role>` policy leaf per role grants exactly that role's
+  `sign/` endpoint. Attachment follows the security decisions:
+  `ssh-sign-automation-ai` → `ai-elevated` (standing, a documented tradeoff:
+  friction-free agent SSH bounded by 1h certs, non-root principals,
+  default-deny host opt-in, audit) + every `ai-apply-*`;
+  `ssh-sign-automation-ansible` → `ansible-converge` only;
+  `ssh-sign-ci-runner` → unattached until a CI identity exists.
+- `OPENBAO_SSH_SOURCE_CIDRS` (Doppler) adds a `source-address` critical
+  option restricting where certs are valid from; unset ⇒ loud warning and
+  the guest-firewall default-deny layer is the compensating control.
+- **ai-agent is never a hypervisor root principal** — PVE nodes map
+  `root: [ansible]` only; `ai-agent` reaches guest-level accounts on hosts
+  that opt in (see `ssh_ca_trust`).
 
 ## Break-glass handling (read this)
 

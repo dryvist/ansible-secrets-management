@@ -27,3 +27,25 @@ path "{{ openbao_kv_mount }}/data/ai/mcp/splunk" {
 path "{{ openbao_kv_mount }}/metadata/ai/mcp/splunk" {
   capabilities = ["read"]
 }
+
+# Transitional exact-path exception (Vikunja MCP): the converge publishes the
+# minted Vikunja MCP connection here. Same narrow create/update/read on the
+# SINGLE secret as the splunk grant above — deliberately NOT a wildcard.
+path "{{ openbao_kv_mount }}/data/ai/mcp/vikunja" {
+  capabilities = ["create", "update", "read"]
+}
+
+path "{{ openbao_kv_mount }}/metadata/ai/mcp/vikunja" {
+  capabilities = ["read"]
+}
+
+# Transitional exact-path exception (Zammad MCP): the converge publishes the
+# minted Zammad MCP connection here. Same narrow create/update/read on the
+# SINGLE secret as the splunk grant above — deliberately NOT a wildcard.
+path "{{ openbao_kv_mount }}/data/ai/mcp/zammad" {
+  capabilities = ["create", "update", "read"]
+}
+
+path "{{ openbao_kv_mount }}/metadata/ai/mcp/zammad" {
+  capabilities = ["read"]
+}

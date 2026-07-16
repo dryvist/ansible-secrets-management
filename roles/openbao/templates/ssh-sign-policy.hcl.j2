@@ -1,0 +1,16 @@
+{{ ansible_managed | comment }}
+# SSH-SIGN capability leaf — grants EXACTLY one signing endpoint of the SSH CA
+# (the ssh-certificate-authority ADR's per-principal-class roles). Rendered once
+# per openbao_ssh_roles entry. Like the KV capability leaves, the name is
+# deliberately un-prefixed of any actor: any identity (an AI tier, the
+# ansible-converge AppRole, a future CI identity) attaches the policy NAME.
+#
+# Scope proof: this leaf names ONE path — {{ openbao_ssh_mount }}/sign/{{ item.ssh_role }}
+# — and nothing else. It cannot read the CA private key (never exported), cannot
+# reconfigure the engine (config/*, roles/* untouched), and cannot mint a cert
+# for any other principal class: the sign endpoint's certificate principals are
+# fixed server-side by the role's allowed_users/default_user. Certificate TTL is
+# clamped server-side by the role's ttl/max_ttl.
+path "{{ openbao_ssh_mount }}/sign/{{ item.ssh_role }}" {
+  capabilities = ["create", "update"]
+}

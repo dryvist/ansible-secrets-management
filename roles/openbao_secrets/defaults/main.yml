@@ -82,6 +82,11 @@ openbao_secrets_domains:
       # The Hermes API token is NOT here — it lives in ai/hermes (local-llm
       # domain) so the one token has a single home shared by both sides.
       - apps/zammad
+      # Vikunja task-management (issue #141). Fields come from the SOPS->bao
+      # promotion map (roles/openbao openbao_vikunja_secrets): vikunja_db_password
+      # (app-namespaced, matches the postgres + vikunja_group consumers) plus the
+      # MCP svc-account passwords + API tokens. Merged flat into bao_apps_secrets.
+      - apps/vikunja
   - name: local-llm
     role_id_env: LOCAL_LLM_VAULT_ROLE_ID
     secret_id_env: LOCAL_LLM_VAULT_SECRET_ID

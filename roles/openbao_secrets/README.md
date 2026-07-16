@@ -30,7 +30,7 @@ a policy can't read:
 - **KV mount**: `secret` (KV v2).
 - **One AppRole per domain**, not one shared identity — a domain's
   credentials only ever unlock that domain's own KV subtree. See
-  `terraform-proxmox` `docs/SECRETS_HIERARCHY.md` for the full RBAC table.
+  `tofu-proxmox` `docs/SECRETS_HIERARCHY.md` for the full RBAC table.
 - **Seeding**: `roles/openbao` seeds **no** values; it creates only the mount,
   policies, and AppRoles. So a domain's paths yield keys only once a writer
   populates them; until then every read is empty and the env fallback wins.
@@ -104,7 +104,7 @@ On macOS these are sourced from the operator's dedicated `openbao.keychain-db`
 keychain (72h auto-lock — the keychain's lock state is the access boundary,
 not the AppRole's own TTL) via a resolver script; on Linux guests, from a
 root-only systemd credential / `0600` EnvironmentFile. See
-`terraform-proxmox` `docs/SECRETS_HIERARCHY.md`.
+`tofu-proxmox` `docs/SECRETS_HIERARCHY.md`.
 
 ## Wiring
 
