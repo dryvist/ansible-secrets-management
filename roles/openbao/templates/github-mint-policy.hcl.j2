@@ -1,0 +1,15 @@
+{{ ansible_managed | comment }}
+# BASE CAPABILITY policy `github-mint` — actor-agnostic, mint-only. Grants ONLY
+# the administrator-defined GitHub App permission sets (ephemeral installation
+# tokens) so a run's commits/merges are attributed to a per-run token, not a
+# standing PAT. The raw {{ openbao_github_mount }}/token endpoint and the engine's
+# config/* + permissionset/* administration paths are ABSENT, so an actor holding
+# this capability can only mint the pre-defined sets — it cannot widen the token's
+# scope. Attached (via token_policies) to the apply-tier actor roles; carries no
+# self-escalation path, so composing it with the KV leaves is safe.
+{% for permission_set in openbao_github_permission_sets %}
+path "{{ openbao_github_mount }}/token/{{ permission_set.name }}" {
+  capabilities = ["update"]
+}
+
+{% endfor %}

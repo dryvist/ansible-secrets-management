@@ -193,8 +193,9 @@
         - media-policy.hcl.j2
         - local-llm-policy.hcl.j2
         - public-policy.hcl.j2
-        - ai-readonly-policy.hcl.j2
-        - ai-elevated-policy.hcl.j2
+        - kv-capability-policy.hcl.j2
+        - github-mint-policy.hcl.j2
+        - ai-admin-policy.hcl.j2
         - snapshot-policy.hcl.j2
       register: bao_policy_templates
       delegate_to: localhost
@@ -209,12 +210,114 @@
       loop_control:
         label: "{{ item.item }}"
 
-    - name: Read OpenBao defaults for Terrakube workspace coverage
+    # --- Self-escalation invariant for the leaf->rollup composition model -------
+    # The base read-/write- capability policies + the rollups composed from them
+    # (read-all, read-write-all) must be an ENUMERATED union that provably EXCLUDES
+    # the control plane and the IaC kernel: sys/policies*, auth/* (incl.
+    # .../secret-id), auth/token/create, and secret/infra/*. Composition attaches
+    # policy NAMES to a token, so if every base leaf excludes those paths, so does
+    # every union of leaves. We prove it by rendering every generated capability
+    # policy and scanning its GRANT lines (dropping `#` comment lines, which name
+    # the excluded paths in prose). `ai-admin` is the ONE self-modify role and is
+    # deliberately NOT part of this composition — it is asserted separately.
+    - name: Load OpenBao role defaults (rendered) for the composition invariant
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../../roles/openbao/defaults/main.yml"
+
+    - name: Render every generated base capability policy (read-/write-/github-mint)
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../../roles/openbao/templates/{{ item.template }}"
+        dest: "/tmp/cap-{{ item.name }}.hcl"
+        mode: "0600"
+      loop: "{{ openbao_ai_capability_policies }}"
+      loop_control:
+        label: "{{ item.name }}"
+      delegate_to: localhost
+      become: false
+
+    - name: Slurp the rendered base capability policies back
+      ansible.builtin.slurp:
+        src: "/tmp/cap-{{ item.name }}.hcl"
+      loop: "{{ openbao_ai_capability_policies }}"
+      loop_control:
+        label: "{{ item.name }}"
+      register: bao_cap_policy_reads
+      delegate_to: localhost
+      become: false
+
+    - name: Assert NO base capability leaf grants a control-plane / kernel path
+      vars:
+        # Concatenate every leaf's GRANT lines (reject `#` comment lines).
+        cap_grants: >-
+          {{ bao_cap_policy_reads.results
+             | map(attribute='content') | map('b64decode')
+             | map('regex_replace', '(?m)^#.*$', '') | join('\n') }}
+      ansible.builtin.assert:
+        that:
+          - "'sys/policies' not in cap_grants"
+          - "'auth/approle' not in cap_grants"
+          - "'auth/token' not in cap_grants"
+          - "'/secret-id' not in cap_grants"
+          - "'secret/data/infra' not in cap_grants"
+          - "'secret/metadata/infra' not in cap_grants"
+          # Positive: the write leaves DO grant scoped create/update/delete/patch.
+          - "'create\", \"update\", \"delete\", \"patch' in cap_grants"
+        fail_msg: >-
+          A base read-/write- capability leaf gained a self-escalation grant
+          (policy edit / auth mint / secret-id / token mint / infra kernel), so
+          every rollup composed from the leaves would inherit it.
+
+    - name: Read OpenBao defaults source for the remaining structural assertions
       ansible.builtin.slurp:
         src: "{{ playbook_dir }}/../../roles/openbao/defaults/main.yml"
       register: bao_defaults_source
       delegate_to: localhost
       become: false
+
+    # The read-write-all rollup must be a union of ONLY the generated read-/write-
+    # base leaf names — never a hand-added admin/control policy — so it cannot
+    # smuggle in `ai-admin`, a terrakube policy, etc.
+    - name: Assert read-write-all is exactly the read-/write- leaves of the source list
+      vars:
+        rw_expected: >-
+          {{ (openbao_ai_domains | map('regex_replace', '^(.+)$', 'read-\1') | list)
+             + (openbao_ai_domains | map('regex_replace', '^(.+)$', 'write-\1') | list) }}
+      ansible.builtin.assert:
+        that:
+          - (openbao_read_write_all_policies | sort) == (rw_expected | sort)
+          # No member outside the read-/write- namespace (no admin/control policy).
+          - (openbao_read_write_all_policies | select('match', '^(?!read-|write-).*') | list | length) == 0
+        fail_msg: >-
+          read-write-all contains a policy that is not a read-/write- base leaf of
+          openbao_ai_domains — the composition could carry a control-plane grant.
+
+    # Every apply/admin actor role must carry NO standing secret_id — the
+    # human-gated model mints a single-use wrapped one on demand. Uses the RENDERED
+    # openbao_approles (Jinja-composed), covering the generated ai-apply-<svc>.
+    - name: Assert every apply/admin actor role carries no standing secret_id
+      vars:
+        gated_roles: >-
+          {{ (openbao_ai_domains | map('regex_replace', '^(.+)$', 'ai-apply-\1') | list)
+             + ['ai-apply-all', 'ai-admin'] }}
+      ansible.builtin.assert:
+        that:
+          - >-
+            openbao_approles
+            | selectattr('name', 'in', gated_roles)
+            | selectattr('manage_secret_id', 'equalto', false)
+            | list | length == (gated_roles | length)
+        fail_msg: "An apply/admin AI actor role (ai-apply-*/ai-admin) is missing manage_secret_id:false"
+
+    # ai-admin is the ONLY role permitted to self-modify (policy/auth/token). Prove
+    # it attaches its own standalone ai-admin policy, NOT the composed base leaves.
+    - name: Assert ai-admin is the sole self-modify role (standalone policy, not composed leaves)
+      vars:
+        admin_role: "{{ openbao_approles | selectattr('name', 'equalto', 'ai-admin') | first }}"
+      ansible.builtin.assert:
+        that:
+          - admin_role.policy | default('') == 'ai-admin'
+          - admin_role.token_policies is not defined
+        fail_msg: "ai-admin must attach the standalone ai-admin policy, not composed base leaves."
 
     - name: Assert all nine exact-claim Terrakube JWT roles are declared
       ansible.builtin.assert:

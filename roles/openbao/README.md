@@ -196,13 +196,26 @@ plans):
 | `monitoring` | `secret/apps/monitoring` | — | netmon/unifi_metrics/prometheus_stack |
 | `media` | `secret/apps/media` | — | *arr/qBittorrent/Plex stack |
 | `local-llm` | `secret/ai/*` | — | The LLM serving stack itself |
-| `hermes` | `secret/ai/hermes` only | — | Dedicated least-privilege reader for the Hermes agent; NO broad `secret/ai/*` |
-| `hermes-write` | `secret/ai/hermes` only | `secret/ai/hermes` only | Narrow Doppler-published writer; least-priv complement to `ai-orchestrator` |
+| `hermes` | `secret/ai/hermes`, `secret/ai/mcp/splunk` | — | Dedicated least-privilege reader for Hermes; NO broad `secret/ai/*` |
+| `hermes-write` | exact Hermes + Splunk MCP paths | exact Hermes + Splunk MCP paths | Narrow publisher/seed writer; complements `ai-orchestrator` |
 | `public` | `secret/public/*` | — | **Anonymous** — no secret-zero; shipped ambiently |
 | `ai-orchestrator` | `secret/ai/{hermes,agents}` | `secret/ai/{hermes,agents}` (create/update) | WRITE; Doppler tier-0; narrowed + 30m TTL at Phase-3 |
-| `ai-readonly` | `secret/ai/*`, `secret/apps/*` | — | **default AI agent; NO `secret/infra/*`** |
-| `ai-elevated` | `ai-readonly` + `secret/platform/*` | — | trusted infra-touching agents; no write |
+| `ai-readonly` | `read-all` (= `read-<svc>` ∀ services) | — | **default AI agent; NO `secret/infra/*`**[^ai-tiers] |
+| `ai-elevated` | `read-all` + `read-platform` | — | trusted infra-touching agents; no write[^ai-tiers] |
+| `ai-apply-<svc>` | `read-<svc>` | `write-<svc>` + `github-mint` | Task-scoped WRITE, one service; no standing secret_id; ≤1h[^ai-tiers] |
+| `ai-apply-all` | `read-write-all` | `read-write-all` + `github-mint` | Cross-domain WRITE rollup; no standing secret_id; ≤1h[^ai-tiers] |
+| `ai-admin` | all KV + policy/auth admin | policy/AppRole/token, all KV, AWS STS | Break-glass; **sole self-modify role**; ≤10m; alerted[^ai-tiers] |
 | `snapshot` | `sys/storage/raft/snapshot` | — | least-priv backup identity |
+
+The AI rows above are **actor roles**: they carry no path rules themselves, only
+attach **actor-agnostic base capability policies** — `read-<svc>` / `write-<svc>`
+(one pair per entry in `openbao_ai_domains`), plus `github-mint`. The rollups
+`read-all` / `read-write-all` are lists of those base policy names (composition at
+the token layer, no duplicated path rules). Adding a writable service is **one
+entry** in `openbao_ai_domains`: it renders a new `read-<svc>`/`write-<svc>` pair,
+auto-joins the rollups, mints an `ai-apply-<svc>` role, and becomes available to
+any future actor (`human-*`, `ci-*`) that attaches the same base names. "Broad on
+services, specific on users."
 
 ### Terrakube workload identity
 
@@ -215,6 +228,19 @@ policy. The role binds audience
 select another workspace's policy. Terrakube stores only the non-secret dynamic
 credential controls. Provider credentials remain in their native OpenBao KV or
 secrets-engine paths and are returned through a short-lived OpenBao token.
+
+[^ai-tiers]: Task-scoped AI actor roles. Authorization is by task/blast-radius
+    and human-gated, never by model capability (model is an audit claim). Every
+    apply/admin role is inert (`manage_secret_id: false`) — a token exists only
+    after a human response-wraps a single-use `secret_id`. Self-escalation is
+    excluded **by construction**: the `read-<svc>`/`write-<svc>` base policies each
+    grant EXACTLY one `secret/{data,metadata}/<svc>/*` path, so any union of them
+    (`read-all`, `read-write-all`, any `ai-apply-*` role) can only widen KV reach —
+    it can never name `sys/policies*`, `auth/*` (incl. `.../secret-id`),
+    `auth/token/create`, or the IaC kernel (`secret/infra/*`). A bootstrap guard
+    refuses to render a leaf for a forbidden subtree. `ai-admin` is the sole role
+    that attaches a self-modify policy, and it is break-glass (≤10m, alerted).
+    Full grant/redeem runbook: docs.dryvist.com "AI Agent Access (OpenBao)".
 
 [^aws-sts]: Also grants `read`+`update` on `aws/sts/tf-proxmox` and
     `aws/sts/openbao-iac-admin` — dynamic AWS STS creds (assumed_role) for

@@ -1,0 +1,43 @@
+{{ ansible_managed | comment }}
+# BASE CAPABILITY policy — actor-agnostic, one KV subtree, one mode. Rendered once
+# per (subtree, mode): a read + write pair for every entry in openbao_ai_domains,
+# plus a read-only leaf for every openbao_ai_readonly_extra_subtrees entry. The
+# name is deliberately UN-prefixed (`read-{{ item.subtree }}` / `write-...`), not
+# `ai-...`: these capabilities are reusable by ANY actor — an AI AppRole, a human
+# via userpass, a CI identity, a Terrakube workspace role — that attaches the
+# policy name to its token_policies. "Broad on services, specific on users."
+#
+# COMPOSITION, NOT DUPLICATION. Every rollup (read-all, read-write-all) and every
+# actor role (ai-readonly, ai-elevated, ai-apply-<svc>, ai-apply-all) is built by
+# ATTACHING these base policy NAMES to a token/AppRole — never by copying path
+# rules. Adding a service to openbao_ai_domains renders a new read+write pair and
+# auto-includes it in the rollups and any actor role that references them, so a
+# new service is ONE list entry.
+#
+# SELF-ESCALATION PROOF (holds for every union of these leaves, by construction):
+# a leaf grants capabilities on EXACTLY ONE
+# {{ openbao_kv_mount }}/{data,metadata}/{{ item.subtree }}/* path and NOTHING
+# else. No base policy — and therefore no rollup composed only of base policies —
+# can name sys/policies*, auth/* (incl. .../secret-id), auth/token/create, or the
+# IaC kernel ({{ openbao_kv_mount }}/data/infra/*). Composing KV leaves can only
+# widen KV reach; it can never cross into the policy / auth / token control plane.
+# A wrong subtree name (e.g. `infra`) is rejected up front by the bootstrap guard
+# in init.yml, so this template is never asked to grant the kernel.
+{% if item.mode == 'write' %}
+# WRITE capability: create / update / delete / patch on this subtree's data. No
+# `sudo`, and no metadata capability (KV-v2 metadata delete = permanent destroy),
+# so a write actor mutates values but cannot escape its subtree or destroy the
+# version history wholesale. Blast radius = exactly secret/{{ item.subtree }}/*.
+path "{{ openbao_kv_mount }}/data/{{ item.subtree }}/*" {
+  capabilities = ["create", "update", "delete", "patch"]
+}
+{% else %}
+# READ capability: read + list on data and metadata for this subtree only.
+path "{{ openbao_kv_mount }}/data/{{ item.subtree }}/*" {
+  capabilities = ["read"]
+}
+
+path "{{ openbao_kv_mount }}/metadata/{{ item.subtree }}/*" {
+  capabilities = ["read", "list"]
+}
+{% endif %}
