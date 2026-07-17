@@ -18,11 +18,15 @@ authentication_backend:
   file:
     path: "{{ authelia_users_file }}"
 
-# Passkey-first login: a discoverable WebAuthn credential is a full first
-# factor, so day-to-day login is one Touch ID prompt — no password typed.
+# Passkey-first login: a discoverable WebAuthn credential logs the user in with
+# one Touch ID prompt, no password typed. A passkey alone is only one_factor by
+# default, so uv_two_factors lets a user-verifying passkey (Touch ID performs
+# user verification) satisfy the two_factor policy on its own — otherwise the
+# two_factor routes below would still demand a password after the passkey.
 webauthn:
   disable: false
   enable_passkey_login: true
+  experimental_enable_passkey_uv_two_factors: true
 
 access_control:
   default_policy: deny
@@ -35,11 +39,12 @@ access_control:
       resources:
         - "^/api(?:/.*)?$"
 {% endfor %}
-    # Every Traefik-fronted UI under the ingress base domain. one_factor is
-    # the passkey (passkey login satisfies one_factor); step-up to
-    # two_factor per-domain later if wanted.
+    # Every Traefik-fronted UI under the ingress base domain. two_factor is
+    # required so Authelia exposes passkey/WebAuthn enrolment at all (it hides
+    # it when nothing needs a second factor); a UV passkey satisfies it in one
+    # Touch ID gesture via webauthn.experimental_enable_passkey_uv_two_factors.
     - domain: "*.{{ authelia_cookie_domain }}"
-      policy: one_factor
+      policy: two_factor
 
 session:
   cookies:
@@ -59,11 +64,11 @@ storage:
     path: "{{ authelia_db_path }}"
 
 notifier:
-  # crit-1 service must not crashloop when the SMTP relay/DNS is briefly
-  # unreachable at boot; passkey-first login never needs the notifier anyway.
+  # crit-1 service must not crashloop when a downstream is briefly unreachable
+  # at boot; passkey-first login never touches the notifier anyway.
   disable_startup_check: true
-  smtp:
-    address: "smtp://{{ authelia_smtp_host }}:{{ authelia_smtp_port }}"
-    sender: "Authelia <{{ authelia_smtp_sender }}>"
-    # The internal relay accepts unauthenticated plain SMTP.
-    disable_require_tls: true
+  # Filesystem backend, not SMTP: auth-critical flows (passkey enrolment's
+  # one-time code, password reset) must not depend on mail/DNS reachability in
+  # a single-user homelab. The code is written here and read by the operator.
+  filesystem:
+    filename: "{{ authelia_notification_file }}"
