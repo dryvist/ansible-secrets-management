@@ -9,10 +9,11 @@ AppRole per resource-domain identity (see [Secret hierarchy & RBAC](#secret-hier
 > **Before changing anything here, read
 > [`.claude/rules/openbao-plugins-first.md`](../../.claude/rules/openbao-plugins-first.md).**
 > Secrets engines are mandatory wherever one exists: GitHub tokens are minted
-> from `github/token/<permission_set>` (attach the existing `github-mint`
-> policy) and AWS credentials from `aws/sts/<role>`. A static PAT or access key
-> stored in KV is manual credential control and is rejected. KV is only for
-> values no engine can mint.
+> from `github/token/<permission_set>` (estate identities attach the existing
+> `github-mint` policy; the workstation tiers are `github-read` /
+> `github-write` / `github-admin`) and AWS credentials from `aws/sts/<role>`.
+> A static PAT or access key stored in KV is manual credential control and is
+> rejected. KV is only for values no engine can mint.
 
 ## Architecture
 
@@ -333,21 +334,40 @@ voter. The engine stores one dedicated GitHub App ID/private key in its own
 encrypted mount configuration. The key is required only for first configuration
 or an explicit rotation; routine converges never rewrite it.
 
-Two administrator-owned permission sets separate the App installations:
+Token access is tiered; the tier IS the privilege boundary:
 
-- `github/token/dryvist-full-automation`
-- `github/token/personal-full-automation`
+- **read (`github-read`)** — `github/token/read-dryvist-all` and
+  `github/token/read-personal-all`: all repos, read-only permission map stored
+  in the set itself (the set path ignores request bodies, so a holder cannot
+  widen it). Standing ambient AppRole.
+- **write (`github-write`)** — the raw `github/token` endpoint, pinned to
+  exactly ONE allowlisted repository per request: the policy requires
+  `installation_id` + `repositories`, allowlists their values
+  (`openbao_github_write_repo_allowlist`, value globs honored), and denies
+  `permissions`, `org_name`, and `repository_ids` outright. Standing ambient
+  AppRole, plus the claim-before-work write lease under
+  `secret/locks/github-write/` (KV-v2 CAS acquire, `delete_version_after`
+  deadman).
+- **admin (`github-admin`)** — `github/token/dryvist-full-automation` and
+  `github/token/personal-full-automation`: installation-wide, full App
+  ceiling. INERT AppRole — a human response-wraps a single-use secret_id per
+  elevation.
 
-Only the `ai-orchestrator` policy can update those exact token endpoints. It
-cannot call the unrestricted `github/token` endpoint, edit permission sets, or
-read engine configuration. AWS remains separately mounted and authorized:
-`terraform-apply` can mint `aws/sts/tf-proxmox`, but has no GitHub-engine grant.
+Estate identities (`ai-apply-*`, `ai-orchestrator`) attach the `github-mint`
+capability policy, which grants the read-tier sets only. No policy except
+`github-write` touches raw `github/token`; nothing but the converge edits
+permission sets or engine configuration. AWS remains separately mounted and
+authorized: `terraform-apply` can mint `aws/sts/tf-proxmox`, but has no
+GitHub-engine grant.
 
 First configuration requires `OPENBAO_GITHUB_APP_ID`,
 `OPENBAO_GITHUB_APP_PRIVATE_KEY`, and the two account installation IDs. After
 the sealed write succeeds, remove the temporary controller copy of the private
-key. A live acceptance run must issue and revoke one token from each permission
-set before the engine is considered deployed.
+key. "Configured" means a non-zero `app_id` is stored — a virgin mount answers
+the config read with `app_id: 0`, which must trigger first configuration, not
+the drift refusal (issue #1079). A live acceptance run must issue and revoke
+one token from each permission set — and prove an off-allowlist `github/token`
+request is denied — before the engine is considered deployed.
 
 ## SSH secrets engine (signed client certificates — the SSH CA)
 

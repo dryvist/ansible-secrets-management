@@ -625,6 +625,20 @@
     - openbao_bootstrap_token is defined
     - openbao_github_engine_enabled | bool
 
+# A virgin mount answers the config read with rc=0 and app_id=0 — "endpoint
+# readable" is NOT "App configured" (issue #1079: gating first configuration
+# on rc alone made the first-config path unreachable and tripped the drift
+# assert against app_id 0). Configured means a non-zero app_id is stored.
+- name: Determine whether the GitHub App is actually configured
+  ansible.builtin.set_fact:
+    openbao_github_app_configured: >-
+      {{ (openbao_github_config_check.rc | default(1)) == 0
+         and ((openbao_github_config_check.stdout | default('{}', true)
+               | from_json).data.app_id | default(0, true) | int) != 0 }}
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_github_engine_enabled | bool
+
 - name: Require the GitHub App credentials for first configuration
   ansible.builtin.assert:
     that:
@@ -636,7 +650,7 @@
   when:
     - openbao_bootstrap_token is defined
     - openbao_github_engine_enabled | bool
-    - (openbao_github_config_check.rc | default(1)) != 0
+    - not (openbao_github_app_configured | default(false) | bool)
 
 - name: Configure the GitHub App credentials (first configuration only)
   ansible.builtin.uri:
@@ -656,7 +670,7 @@
   when:
     - openbao_bootstrap_token is defined
     - openbao_github_engine_enabled | bool
-    - (openbao_github_config_check.rc | default(1)) != 0
+    - not (openbao_github_app_configured | default(false) | bool)
     - openbao_github_app_id | length > 0
     - openbao_github_app_private_key | length > 0
 
@@ -672,7 +686,7 @@
   when:
     - openbao_bootstrap_token is defined
     - openbao_github_engine_enabled | bool
-    - (openbao_github_config_check.rc | default(1)) == 0
+    - openbao_github_app_configured | default(false) | bool
     - openbao_github_app_id | length > 0
 
 - name: Require both GitHub App installation IDs
@@ -707,6 +721,10 @@
     - openbao_bootstrap_token is defined
     - openbao_github_engine_enabled | bool
 
+# Body carries the stored token-request shape: installation_id always, plus
+# the read-only permissions map on read-tier sets. Admin-tier sets stay
+# permissions-less on purpose — an omitted map IS the full App ceiling, which
+# is what break-glass means. Drift on either field re-POSTs the set.
 - name: Reconcile the GitHub token permission sets
   ansible.builtin.uri:
     url: >-
@@ -716,8 +734,10 @@
     headers:
       X-Vault-Token: "{{ openbao_bootstrap_token }}"
     body_format: json
-    body:
-      installation_id: "{{ item.0.installation_id | int }}"
+    body: >-
+      {{ {'installation_id': item.0.installation_id | int}
+         | combine({'permissions': item.0.permissions}
+                   if item.0.permissions is defined else {}) }}
     status_code:
       - 200
       - 204
@@ -734,6 +754,8 @@
       (item.1.rc | default(1)) != 0
       or ((item.1.stdout | from_json).data.installation_id | int)
          != (item.0.installation_id | int)
+      or ((item.1.stdout | from_json).data.permissions | default({}, true))
+         != (item.0.permissions | default({}, true))
 
 # --- SSH secrets engine (builtin — the SSH client CA) ------------------------
 # Signed short-TTL client certificates per the ssh-certificate-authority ADR.

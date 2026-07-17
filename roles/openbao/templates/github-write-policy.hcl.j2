@@ -1,0 +1,54 @@
+{{ ansible_managed | comment }}
+# github-write — per-repository WRITE minting, parameter-pinned. This is the
+# ONE policy allowed to touch the raw {{ openbao_github_mount }}/token endpoint,
+# and the parameter pinning is the entire privilege boundary:
+#
+#   * required_parameters forces every request to name an installation AND a
+#     repositories list — an unconstrained request (= full installation
+#     ceiling) is impossible.
+#   * allowed_parameters restricts installation_id to the two known
+#     installations and every repositories element to the administrator
+#     allowlist (openbao_github_write_repo_allowlist; prefix/suffix value
+#     globs honored). Listing any key denies all unlisted parameters, so
+#     org_name and repository_ids — both alternate selectors that would
+#     bypass the name allowlist — are denied by construction.
+#   * denied_parameters bans `permissions` outright (belt-and-suspenders on
+#     top of the allowlist gating): an omitted permissions map yields the App
+#     ceiling scoped to the ONE named repo, and map-valued parameter matching
+#     stays out of the trust path.
+#
+# The write-lease lock subtree implements claim-before-work (see
+# session-coordination): the wrapper CAS-acquires
+# secret/locks/github-write/<installation_id>/<repo> before minting, so two
+# agents cannot hold the same repo. KV-v2 delete_version_after is the deadman.
+path "{{ openbao_github_mount }}/token" {
+  capabilities = ["update"]
+  required_parameters = ["installation_id", "repositories"]
+  allowed_parameters = {
+    "installation_id" = [
+      "{{ openbao_github_dryvist_installation_id }}",
+      {{ openbao_github_dryvist_installation_id | int }},
+      "{{ openbao_github_personal_installation_id }}",
+      {{ openbao_github_personal_installation_id | int }}
+    ]
+    "repositories" = [
+{% for repo in openbao_github_write_repo_allowlist %}
+      "{{ repo }}"{{ "," if not loop.last }}
+{% endfor %}
+    ]
+  }
+  denied_parameters = {
+    "permissions" = []
+  }
+}
+
+# Write-lease lock records (claim/extend/release + metadata for
+# delete_version_after and CAS versioning). Scoped to the github-write lock
+# subtree only — no other KV path.
+path "{{ openbao_kv_mount }}/data/locks/github-write/*" {
+  capabilities = ["create", "read", "update", "delete"]
+}
+
+path "{{ openbao_kv_mount }}/metadata/locks/github-write/*" {
+  capabilities = ["create", "read", "update", "list", "delete"]
+}
