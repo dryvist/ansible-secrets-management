@@ -74,12 +74,12 @@ authelia_secret_files:
   session_secret: "{{ authelia_secrets_dir }}/session_secret"
   storage_key: "{{ authelia_secrets_dir }}/storage_encryption_key"
 
-# --- Notifier: the existing internal SMTP relay -------------------------------
-# Identity-verification mails (WebAuthn device registration, password reset)
-# land in the Mailpit UI.
-authelia_smtp_host: "mailpit.{{ tofu_data.domain }}"
-authelia_smtp_port: "{{ tofu_data.constants.notification_ports.mailpit_smtp }}"
-authelia_smtp_sender: "authelia@{{ tofu_data.domain }}"
+# --- Notifier: local filesystem, not SMTP -------------------------------------
+# One-time codes for passkey enrolment and password reset are written to this
+# file on the persistent mount, not emailed. Auth-critical flows must not depend
+# on mail/DNS reachability in a single-user homelab; the operator reads the code
+# directly. Lives on the persistent mount so it survives a rebuild.
+authelia_notification_file: "{{ authelia_data_dir }}/notification.txt"
 
 # --- Behaviour toggles ---------------------------------------------------------
 # false in CI/molecule contexts: skips systemd unit install/start and the live
