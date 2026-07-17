@@ -51,6 +51,9 @@ storage:
     path: "{{ authelia_db_path }}"
 
 notifier:
+  # crit-1 service must not crashloop when the SMTP relay/DNS is briefly
+  # unreachable at boot; passkey-first login never needs the notifier anyway.
+  disable_startup_check: true
   smtp:
     address: "smtp://{{ authelia_smtp_host }}:{{ authelia_smtp_port }}"
     sender: "Authelia <{{ authelia_smtp_sender }}>"
