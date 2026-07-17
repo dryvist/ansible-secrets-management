@@ -38,6 +38,15 @@ authelia_port: "{{ tofu_data.constants.service_ports.authelia_portal }}"
 authelia_cookie_domain: "{{ lookup('env', 'PROXMOX_SUBDOMAIN') }}"
 authelia_portal_url: "https://authelia.{{ authelia_cookie_domain }}"
 
+# Domains whose /api/ paths bypass the SSO gate. These apps enforce their own
+# API token auth on every /api request; the forwardAuth portal can never be
+# satisfied by a non-browser client, so without a bypass an sso-flagged route
+# blocks all machine consumers (a 401 from the app's own WWW-Authenticate,
+# observed on the first token client 2026-07-17). Browser UIs stay behind the
+# portal — the bypass matches only ^/api/.
+authelia_api_bypass_domains:
+  - "zammad.{{ authelia_cookie_domain }}"
+
 # --- Sessions: login once, stay signed in for a week --------------------------
 authelia_session_expiration: "12h"
 authelia_session_inactivity: "12h"
