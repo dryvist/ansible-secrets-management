@@ -360,6 +360,26 @@ openbao_terraform_apply_policy_name: terraform-apply
 openbao_terraform_apply_approle_name: terraform-apply
 openbao_flow_lock_policy_name: flow-lock
 openbao_flow_lock_approle_name: flow-lock
+# GitHub token providers for the workstation git/gh path — the OpenBao-backed
+# replacement for the local tiered-PAT keychain services. nix-darwin's
+# `openbao-github-creds` logs in with one of these and reads the stored token
+# from secret/github/<purpose>; the AppRole it picks IS the tier boundary:
+#
+#   github-read   -> secret/github/repo-write   default, secret-zero in the
+#                                               everyday Doppler config
+#   github-admin  -> secret/github/*            elevated (personal-admin,
+#                                               org-admin, actions-secrets,
+#                                               classic-admin, work-org);
+#                                               secret-zero only in the
+#                                               privileged Doppler config
+#
+# Deliberately NOT members of openbao_ai_domains: a standing PAT must never be
+# an AI-agent credential. Agents mint a per-run GitHub App token via
+# `github-mint` instead. See templates/github-token-policy.hcl.j2.
+openbao_github_read_policy_name: github-read
+openbao_github_read_approle_name: github-read
+openbao_github_admin_policy_name: github-admin
+openbao_github_admin_approle_name: github-admin
 # Terrakube native workload identity. The API signs a short-lived JWT per job;
 # OpenBao verifies it through internal OIDC discovery and binds the exact
 # organization/workspace `sub` claim before issuing a short-lived token.
@@ -574,6 +594,17 @@ openbao_base_approles:
     policy: "{{ openbao_hermes_write_policy_name }}"
   - name: "{{ openbao_public_approle_name }}"
     policy: "{{ openbao_public_policy_name }}"
+  # GitHub token providers: standing, ambient READ tiers consumed by
+  # nix-darwin's `openbao-github-creds` on the workstation. Their role_id /
+  # secret_id are operator-held in Doppler (github-read in the everyday config,
+  # github-admin only in the privileged one) and injected as ambient env, same
+  # shape as ai-orchestrator. manage_secret_id stays true (default): a git push
+  # must not need a human to wrap a secret_id first.
+  - name: "{{ openbao_github_read_approle_name }}"
+    policy: "{{ openbao_github_read_policy_name }}"
+  - name: "{{ openbao_github_admin_approle_name }}"
+    policy: "{{ openbao_github_admin_policy_name }}"
+    token_ttl: 30m  # elevated identity gets a short token TTL
   # ai-orchestrator: role_id/secret_id are operator-held in Doppler tier-0
   # (services BAO_AI_ORCHESTRATOR_ROLE_ID / _SECRET_ID), consumed as ambient env.
   # This AppRole already exists LIVE with a non-expiring secret_id in active
@@ -694,6 +725,14 @@ openbao_base_policies:
     template: hermes-write-policy.hcl.j2
   - name: "{{ openbao_public_policy_name }}"
     template: public-policy.hcl.j2
+  # GitHub token providers (workstation git/gh). One template, two tiers; the
+  # purpose_glob IS the privilege boundary — see github-token-policy.hcl.j2.
+  - name: "{{ openbao_github_read_policy_name }}"
+    template: github-token-policy.hcl.j2
+    purpose_glob: repo-write
+  - name: "{{ openbao_github_admin_policy_name }}"
+    template: github-token-policy.hcl.j2
+    purpose_glob: "*"
   - name: "{{ openbao_ai_orchestrator_policy_name }}"
     template: ai-orchestrator-policy.hcl.j2
   # ai-readonly / ai-elevated / ai-apply-<svc> no longer own standalone policies —
