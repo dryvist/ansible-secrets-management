@@ -213,3 +213,30 @@
   delay: 3
   changed_when: false
   when: authelia_manage_services | bool
+
+# The bootstrap password exists only to bootstrap the very first login before a
+# passkey is enrolled. Once the admin has a registered passkey it is dead weight
+# — a standing password credential on a passkey-first portal — so remove it.
+# Fail-safe by design: the file is removed ONLY on a positive credential match,
+# so a failed/absent list just keeps the (root-only 0600) file rather than
+# risking a lockout.
+- name: Check whether the admin has enrolled a passkey
+  ansible.builtin.command:
+    cmd: >-
+      {{ authelia_binary_path }} storage user webauthn list {{ authelia_admin_user }}
+      --config {{ authelia_config_file }}
+  environment:
+    AUTHELIA_STORAGE_ENCRYPTION_KEY_FILE: "{{ authelia_secret_files.storage_key }}"
+  register: authelia_webauthn_list
+  changed_when: false
+  failed_when: false
+  no_log: true
+  when: authelia_manage_services | bool
+
+- name: Remove the one-time bootstrap password once a passkey is enrolled
+  ansible.builtin.file:
+    path: "{{ authelia_bootstrap_password_file }}"
+    state: absent
+  when:
+    - authelia_manage_services | bool
+    - authelia_webauthn_list.stdout | default('') is regex('\n\s*\d+\s')
