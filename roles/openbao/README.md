@@ -6,6 +6,14 @@ static-key auto-unseal** (no cloud KMS). After the cluster is live the role
 provisions a KV v2 mount, the secret hierarchy, the RBAC policies, and one
 AppRole per resource-domain identity (see [Secret hierarchy & RBAC](#secret-hierarchy--rbac)).
 
+> **Before changing anything here, read
+> [`.claude/rules/openbao-plugins-first.md`](../../.claude/rules/openbao-plugins-first.md).**
+> Secrets engines are mandatory wherever one exists: GitHub tokens are minted
+> from `github/token/<permission_set>` (attach the existing `github-mint`
+> policy) and AWS credentials from `aws/sts/<role>`. A static PAT or access key
+> stored in KV is manual credential control and is rejected. KV is only for
+> values no engine can mint.
+
 ## Architecture
 
 - **5-voter Raft HA** (quorum 3): every node carries a `retry_join` for each peer
