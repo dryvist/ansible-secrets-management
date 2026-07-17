@@ -1,0 +1,7 @@
+---
+- name: Restart authelia
+  ansible.builtin.systemd:
+    name: authelia
+    state: restarted
+    daemon_reload: true
+  when: authelia_manage_services | bool

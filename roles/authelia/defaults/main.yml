@@ -1,0 +1,80 @@
+---
+# Authelia SSO portal / Traefik forwardAuth provider — a single native Go
+# binary. Every Traefik router whose tofu ingress row has sso=true redirects
+# unauthenticated browsers here; one passkey login opens every gated UI for
+# the session lifetime. Single instance: in-memory sessions + local SQLite
+# (one/two users — no Redis, no Postgres).
+
+# --- Version / controller-staged, checksum-verified download ----------------
+# LXCs in this repo are firewalled outbound-internal-only, so the release
+# tarball is downloaded and checksum-verified on the CONTROLLER, then the
+# extracted binary is copied to the target — same pattern as roles/vikunja.
+# renovate: datasource=github-releases depName=authelia/authelia
+authelia_version: "4.39.20"
+authelia_release_tgz: "authelia-v{{ authelia_version }}-linux-amd64.tar.gz"
+authelia_release_tgz_url: >-
+  https://github.com/authelia/authelia/releases/download/v{{ authelia_version }}/{{ authelia_release_tgz }}
+authelia_release_tgz_sha256: "1f122add61752d6ef54e64ae7116bec4e026f5c0a6493498288c5a9770d92088"
+authelia_binary_name: authelia
+
+# --- System user / paths ------------------------------------------------------
+authelia_user: authelia
+authelia_group: authelia
+authelia_install_dir: /opt/authelia
+authelia_binary_path: "{{ authelia_install_dir }}/authelia"
+authelia_config_dir: /etc/authelia
+authelia_config_file: "{{ authelia_config_dir }}/configuration.yml"
+authelia_users_file: "{{ authelia_config_dir }}/users.yml"
+# SQLite + notification state live on the persistent bind mount at
+# /var/lib/authelia (provisioned by terraform-proxmox), never the ephemeral
+# rootfs — WebAuthn credential registrations must survive a rebuild.
+authelia_data_dir: /var/lib/authelia
+authelia_db_path: "{{ authelia_data_dir }}/db.sqlite3"
+
+# --- Network / domains ---------------------------------------------------------
+authelia_port: "{{ tofu_data.constants.service_ports.authelia_portal }}"
+# The ingress base domain — the session cookie is scoped to it so ONE login
+# covers every <name>.<base> UI. Must match the Traefik router FQDNs.
+authelia_cookie_domain: "{{ lookup('env', 'PROXMOX_SUBDOMAIN') }}"
+authelia_portal_url: "https://authelia.{{ authelia_cookie_domain }}"
+
+# --- Sessions: login once, stay signed in for a week --------------------------
+authelia_session_expiration: "12h"
+authelia_session_inactivity: "12h"
+authelia_session_remember_me: "1w"
+
+# --- Users ---------------------------------------------------------------------
+# File backend, seeded once (create-if-absent — the live users.yml is never
+# overwritten, it accumulates WebAuthn state via the portal). The bootstrap
+# password is generated on the host at first converge (never in Doppler /
+# OpenBao — see the generate-at-source rule in AGENTS.md) and persisted
+# root-only for one-time retrieval; day-to-day login is the passkey.
+authelia_admin_user: jevans
+authelia_admin_display_name: "Jacob Evans"
+authelia_admin_email: "{{ authelia_admin_user }}@{{ tofu_data.domain }}"
+authelia_bootstrap_password_file: "{{ authelia_config_dir }}/.bootstrap_password"
+
+# --- Service secrets: generated at the source, no shared store ---------------
+# JWT / session / storage-encryption secrets have no second consumer, so per
+# the workspace generate-at-source rule they are generated-if-absent on the
+# guest's persistent mount and fed to Authelia via *_FILE env vars. They never
+# touch Doppler, OpenBao, or the rendered config.
+authelia_secrets_dir: "{{ authelia_data_dir }}/secrets"
+authelia_secret_files:
+  jwt_secret: "{{ authelia_secrets_dir }}/jwt_secret"
+  session_secret: "{{ authelia_secrets_dir }}/session_secret"
+  storage_key: "{{ authelia_secrets_dir }}/storage_encryption_key"
+
+# --- Notifier: the existing internal SMTP relay -------------------------------
+# Identity-verification mails (WebAuthn device registration, password reset)
+# land in the Mailpit UI.
+authelia_smtp_host: "mailpit.{{ tofu_data.domain }}"
+authelia_smtp_port: "{{ tofu_data.constants.notification_ports.mailpit_smtp }}"
+authelia_smtp_sender: "authelia@{{ tofu_data.domain }}"
+
+# --- Behaviour toggles ---------------------------------------------------------
+# false in CI/molecule contexts: skips systemd unit install/start and the live
+# health check only (binary staging and config render still run).
+authelia_manage_services: true
+
+authelia_api_timeout: 30

@@ -91,6 +91,10 @@ openbao_secrets_domains:
       # roles/openbao openbao_generated_app_secrets.postgres); consumed by the
       # postgres role on both the primary and the standby.
       - apps/postgres
+      # Hindsight agent-memory (ai VLAN): DB + replication credentials for its
+      # dedicated Postgres cluster and the Control Plane access key (generated
+      # at source by openbao_generated_app_secrets.hindsight; app-namespaced).
+      - apps/hindsight
   - name: local-llm
     role_id_env: LOCAL_LLM_VAULT_ROLE_ID
     secret_id_env: LOCAL_LLM_VAULT_SECRET_ID

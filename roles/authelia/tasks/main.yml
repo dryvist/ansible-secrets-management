@@ -1,0 +1,215 @@
+---
+# Authelia native install. The controller stages the checksum-verified release
+# tarball (LXCs here are firewalled outbound-internal-only and cannot reach
+# GitHub), extracts the single binary, and copies it to the target — same
+# controller-staging pattern as roles/vikunja and roles/openbao.
+
+- name: Create authelia system group
+  ansible.builtin.group:
+    name: "{{ authelia_group }}"
+    system: true
+    state: present
+
+- name: Create authelia system user
+  ansible.builtin.user:
+    name: "{{ authelia_user }}"
+    group: "{{ authelia_group }}"
+    system: true
+    shell: /usr/sbin/nologin
+    home: "{{ authelia_install_dir }}"
+    create_home: false
+    state: present
+
+- name: Create Authelia directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner }}"
+    group: "{{ authelia_group }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - { path: "{{ authelia_install_dir }}", owner: root, mode: "0755" }
+    - { path: "{{ authelia_config_dir }}", owner: root, mode: "0750" }
+    - { path: "{{ authelia_data_dir }}", owner: "{{ authelia_user }}", mode: "0750" }
+    - { path: "{{ authelia_secrets_dir }}", owner: "{{ authelia_user }}", mode: "0700" }
+  loop_control:
+    label: "{{ item.path }}"
+
+# --- Service secrets: generate-at-source, no shared store --------------------
+# force:false = create-if-absent; an existing secret is never rewritten, so
+# converges stay stable and the storage encryption key (immutable once the
+# SQLite db exists) can never be clobbered. Lives on the persistent mount.
+- name: Generate service secrets (create-if-absent, guest-local)
+  ansible.builtin.copy:
+    content: "{{ lookup('community.general.random_string', length=64, special=false) }}"
+    dest: "{{ item.value }}"
+    force: false
+    owner: "{{ authelia_user }}"
+    group: "{{ authelia_group }}"
+    mode: "0600"
+  loop: "{{ authelia_secret_files | dict2items }}"
+  loop_control:
+    label: "{{ item.value }}"
+  no_log: true
+
+# ansible_become: false on the delegated tasks is REQUIRED — Ansible inherits
+# the play's become: true on delegated tasks regardless of task-level become,
+# which fails with "sudo: a password is required" on the controller.
+- name: Stage the Authelia release tarball on controller (checksum-verified)
+  ansible.builtin.get_url:
+    url: "{{ authelia_release_tgz_url }}"
+    dest: "/tmp/{{ authelia_release_tgz }}"
+    checksum: "sha256:{{ authelia_release_tgz_sha256 }}"
+    mode: "0644"
+    force: true
+  delegate_to: localhost
+  connection: local
+  become: false
+  vars:
+    ansible_become: false
+  run_once: true
+
+# Extract into a VERSIONED staging dir: the tarball's binary is named bare
+# `authelia`, so an unversioned creates-guard would keep copying a stale
+# binary after a version bump (the vikunja role dodges this only because its
+# binary name embeds the version).
+- name: Create versioned staging dir on controller
+  ansible.builtin.file:
+    path: "/tmp/authelia-v{{ authelia_version }}"
+    state: directory
+    mode: "0755"
+  delegate_to: localhost
+  connection: local
+  become: false
+  vars:
+    ansible_become: false
+  run_once: true
+
+- name: Extract the Authelia binary on controller
+  ansible.builtin.unarchive:
+    src: "/tmp/{{ authelia_release_tgz }}"
+    dest: "/tmp/authelia-v{{ authelia_version }}"
+    remote_src: true
+    include:
+      - "{{ authelia_binary_name }}"
+    # unarchive re-extracts (and reports changed) every run without this guard;
+    # the tarball is checksum-pinned, so an existing extract is always current.
+    creates: "/tmp/authelia-v{{ authelia_version }}/{{ authelia_binary_name }}"
+  delegate_to: localhost
+  connection: local
+  become: false
+  vars:
+    ansible_become: false
+  run_once: true
+
+- name: Copy the Authelia binary to the target
+  ansible.builtin.copy:
+    src: "/tmp/authelia-v{{ authelia_version }}/{{ authelia_binary_name }}"
+    dest: "{{ authelia_binary_path }}"
+    owner: root
+    group: root
+    mode: "0755"
+  notify: Restart authelia
+
+- name: Render Authelia config
+  ansible.builtin.template:
+    src: configuration.yml.j2
+    dest: "{{ authelia_config_file }}"
+    owner: root
+    group: "{{ authelia_group }}"
+    mode: "0640"
+  no_log: true
+  notify: Restart authelia
+
+# --- Users file: seed once, never overwrite ----------------------------------
+# The live users.yml is bootstrap-only state: the portal appends WebAuthn
+# passkey registrations to the STORAGE (SQLite), but the password hash in
+# users.yml must not be clobbered on every converge (the hash is salted, so a
+# re-render would always differ). Create-if-absent, like the traefik dashboard
+# htpasswd: the bootstrap password is GENERATED here (never Doppler/OpenBao —
+# generate-at-source rule) and persisted root-only for one-time retrieval; the
+# operator may then keep it in their personal password manager. To rotate:
+# delete users.yml + the password file and re-converge.
+- name: Check whether the users database already exists
+  ansible.builtin.stat:
+    path: "{{ authelia_users_file }}"
+  register: authelia_users_stat
+
+- name: Seed the users database (first run only)
+  when: not authelia_users_stat.stat.exists
+  block:
+    - name: Generate the bootstrap password
+      ansible.builtin.set_fact:
+        authelia_bootstrap_password: "{{ lookup('community.general.random_string', length=24, special=false) }}"
+      no_log: true
+
+    - name: Persist the bootstrap password for one-time retrieval (root-only)
+      ansible.builtin.copy:
+        content: "{{ authelia_admin_user }}:{{ authelia_bootstrap_password }}\n"
+        dest: "{{ authelia_bootstrap_password_file }}"
+        owner: root
+        group: root
+        mode: "0600"
+      no_log: true
+
+    - name: Hash the bootstrap password
+      ansible.builtin.command:
+        argv:
+          - "{{ authelia_binary_path }}"
+          - crypto
+          - hash
+          - generate
+          - argon2
+          - --password
+          - "{{ authelia_bootstrap_password }}"
+      register: authelia_hash_out
+      changed_when: false
+      no_log: true
+
+    - name: Seed the users database (create-if-absent)
+      ansible.builtin.template:
+        src: users.yml.j2
+        dest: "{{ authelia_users_file }}"
+        owner: root
+        group: "{{ authelia_group }}"
+        mode: "0640"
+      vars:
+        # `authelia crypto hash generate` prints "Digest: <hash>".
+        authelia_admin_password_hash: "{{ authelia_hash_out.stdout | regex_replace('^Digest:\\s*', '') }}"
+      no_log: true
+      notify: Restart authelia
+
+- name: Install the authelia systemd unit
+  ansible.builtin.template:
+    src: authelia.service.j2
+    dest: /etc/systemd/system/authelia.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart authelia
+  when: authelia_manage_services | bool
+
+- name: Enable and start Authelia
+  ansible.builtin.systemd:
+    name: authelia
+    state: started
+    enabled: true
+    daemon_reload: true
+  when: authelia_manage_services | bool
+
+# Flush so a config/unit/binary change is live before the health check.
+- name: Apply any pending Authelia restart
+  ansible.builtin.meta: flush_handlers
+
+- name: Wait for Authelia to answer its health endpoint
+  ansible.builtin.uri:
+    url: "http://localhost:{{ authelia_port }}/api/health"
+    method: GET
+    status_code: [200]
+    timeout: "{{ authelia_api_timeout }}"
+  register: authelia_health
+  until: authelia_health.status == 200
+  retries: 10
+  delay: 3
+  changed_when: false
+  when: authelia_manage_services | bool

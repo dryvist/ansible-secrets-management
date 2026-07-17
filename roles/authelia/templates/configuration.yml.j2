@@ -1,0 +1,58 @@
+{{ ansible_managed | comment }}
+# Authelia configuration — passkey-first SSO portal + Traefik forwardAuth
+# provider. Single instance: in-memory session provider (a restart re-prompts
+# the browser; acceptable for a homelab) and local SQLite on the persistent
+# data mount. NO secrets live in this file — the JWT/session/storage secrets
+# are guest-generated files fed via AUTHELIA_*_FILE env vars in the systemd
+# unit (generate-at-source rule; no shared secret store involved).
+
+theme: auto
+
+server:
+  address: "tcp://0.0.0.0:{{ authelia_port }}"
+
+log:
+  level: info
+
+authentication_backend:
+  file:
+    path: "{{ authelia_users_file }}"
+
+# Passkey-first login: a discoverable WebAuthn credential is a full first
+# factor, so day-to-day login is one Touch ID prompt — no password typed.
+webauthn:
+  disable: false
+  enable_passkey_login: true
+
+access_control:
+  default_policy: deny
+  rules:
+    # Every Traefik-fronted UI under the ingress base domain. one_factor is
+    # the passkey (passkey login satisfies one_factor); step-up to
+    # two_factor per-domain later if wanted.
+    - domain: "*.{{ authelia_cookie_domain }}"
+      policy: one_factor
+
+session:
+  cookies:
+    - domain: "{{ authelia_cookie_domain }}"
+      authelia_url: "{{ authelia_portal_url }}"
+      expiration: "{{ authelia_session_expiration }}"
+      inactivity: "{{ authelia_session_inactivity }}"
+      remember_me: "{{ authelia_session_remember_me }}"
+
+regulation:
+  max_retries: 3
+  find_time: "2m"
+  ban_time: "5m"
+
+storage:
+  local:
+    path: "{{ authelia_db_path }}"
+
+notifier:
+  smtp:
+    address: "smtp://{{ authelia_smtp_host }}:{{ authelia_smtp_port }}"
+    sender: "Authelia <{{ authelia_smtp_sender }}>"
+    # The internal relay accepts unauthenticated plain SMTP.
+    disable_require_tls: true
