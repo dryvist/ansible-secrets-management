@@ -27,6 +27,14 @@ webauthn:
 access_control:
   default_policy: deny
   rules:
+{% for bypass_domain in authelia_api_bypass_domains %}
+    # {{ bypass_domain }} authenticates /api itself (per-request token); the
+    # portal cannot satisfy a non-browser client. UI paths stay gated below.
+    - domain: "{{ bypass_domain }}"
+      policy: bypass
+      resources:
+        - "^/api(?:/.*)?$"
+{% endfor %}
     # Every Traefik-fronted UI under the ingress base domain. one_factor is
     # the passkey (passkey login satisfies one_factor); step-up to
     # two_factor per-domain later if wanted.
@@ -51,6 +59,9 @@ storage:
     path: "{{ authelia_db_path }}"
 
 notifier:
+  # crit-1 service must not crashloop when the SMTP relay/DNS is briefly
+  # unreachable at boot; passkey-first login never needs the notifier anyway.
+  disable_startup_check: true
   smtp:
     address: "smtp://{{ authelia_smtp_host }}:{{ authelia_smtp_port }}"
     sender: "Authelia <{{ authelia_smtp_sender }}>"
