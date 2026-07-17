@@ -151,6 +151,12 @@ openbao_generated_app_secrets:
   # puts it in .pgpass). Bare name is safe in the flat bao_apps_secrets merge —
   # no other app path carries a replication_password field.
   postgres: [replication_password]
+  # Hindsight agent-memory service (ai VLAN): its dedicated ai-VLAN Postgres
+  # cluster's DB + replication credentials plus the Control Plane UI access
+  # key. App-namespaced for the flat bao_apps_secrets merge. The service's LLM
+  # key is NOT here — it reuses ai/llm's LLM_ROUTER_MASTER_KEY (local-llm
+  # domain), same router credential every ai-VLAN consumer uses.
+  hindsight: [hindsight_db_password, hindsight_replication_password, hindsight_cp_access_key]
 # Random length for generated app credentials (alnum). secret_key needs more
 # entropy than a login credential, so it gets its own length (matches the 64-char
 # key the nautobot role generates locally when none is supplied).
