@@ -1,0 +1,22 @@
+{{ ansible_managed | comment }}
+[Unit]
+Description=Authelia SSO portal / forwardAuth provider
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={{ authelia_user }}
+Group={{ authelia_group }}
+WorkingDirectory={{ authelia_install_dir }}
+# Secrets are guest-generated files (generate-at-source rule) — fed via the
+# *_FILE variables so the rendered config contains no secret material.
+Environment=AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET_FILE={{ authelia_secret_files.jwt_secret }}
+Environment=AUTHELIA_SESSION_SECRET_FILE={{ authelia_secret_files.session_secret }}
+Environment=AUTHELIA_STORAGE_ENCRYPTION_KEY_FILE={{ authelia_secret_files.storage_key }}
+ExecStart={{ authelia_binary_path }} --config {{ authelia_config_file }}
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

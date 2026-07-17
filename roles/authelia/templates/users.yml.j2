@@ -1,0 +1,12 @@
+{{ ansible_managed | comment }}
+# Bootstrap users database — SEEDED ONCE (create-if-absent; a converge never
+# overwrites it). Passkeys registered via the portal live in the SQLite
+# storage, not here. To rotate the password: delete this file and re-converge.
+users:
+  {{ authelia_admin_user }}:
+    disabled: false
+    displayname: "{{ authelia_admin_display_name }}"
+    password: "{{ authelia_admin_password_hash }}"
+    email: "{{ authelia_admin_email }}"
+    groups:
+      - admins

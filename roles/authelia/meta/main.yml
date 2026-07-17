@@ -1,0 +1,19 @@
+---
+galaxy_info:
+  author: JacobPEvans
+  description: >-
+    Authelia SSO portal / Traefik forwardAuth provider — native single Go
+    binary, passkey-first login, local SQLite state. Criticality-1 core
+    service: one login gates every sso-flagged ingress route.
+  license: Apache-2.0
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Debian
+      versions:
+        - bookworm
+        - trixie
+  galaxy_tags:
+    - authelia
+    - sso
+    - authentication
+dependencies: []
