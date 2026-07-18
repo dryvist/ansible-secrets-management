@@ -8,7 +8,7 @@
 # absent — a leaked github-read secret-zero can read, never change.
 {% for permission_set in openbao_github_permission_sets | selectattr('tier', 'equalto', 'read') %}
 path "{{ openbao_github_mount }}/token/{{ permission_set.name }}" {
-  capabilities = ["update"]
+  capabilities = ["create", "update"]
 }
 
 {% endfor %}

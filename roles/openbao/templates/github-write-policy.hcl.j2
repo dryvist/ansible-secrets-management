@@ -22,7 +22,12 @@
 # secret/locks/github-write/<installation_id>/<repo> before minting, so two
 # agents cannot hold the same repo. KV-v2 delete_version_after is the deadman.
 path "{{ openbao_github_mount }}/token" {
-  capabilities = ["update"]
+  # "create" is required, not belt-and-suspenders: the plugin's token paths
+  # have no existence check, so POST routes as CreateOperation — an
+  # update-only grant returns "permission denied" on every mint (verified
+  # live 2026-07-18; sys/capabilities-self still reports the path as usable,
+  # which makes the omission invisible until a real mint is attempted).
+  capabilities = ["create", "update"]
   required_parameters = ["installation_id", "repositories"]
   allowed_parameters = {
     "installation_id" = [
