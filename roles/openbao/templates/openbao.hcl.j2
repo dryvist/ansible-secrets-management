@@ -60,4 +60,19 @@ plugin_directory = "{{ openbao_plugin_dir }}"
 # deployment.json, so secrets cannot page to disk.
 # https://openbao.org/docs/install/#post-installation-hardening
 
+# Declarative audit device. This OpenBao build REJECTS `bao audit enable` /
+# `sys/audit` API writes ("cannot enable audit device via API; use
+# declarative, config-based audit device management instead" — verified live
+# 2026-07-18), so the config stanza is the ONLY way to enable auditing. The
+# active node materializes it on start/SIGHUP; the stanza must be identical on
+# every server. mode=0640: the device default 0600 would lock out the syslog
+# group that the rsyslog imfile shipper reads with (see tasks/audit.yml).
+audit "file" "{{ openbao_audit_device_name }}" {
+  description = "Local file audit log, shipped via rsyslog imfile"
+  options {
+    file_path = "{{ openbao_audit_log_path }}"
+    mode      = "0640"
+  }
+}
+
 ui = {{ openbao_enable_ui | ternary('true', 'false') }}

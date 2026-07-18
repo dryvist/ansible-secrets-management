@@ -903,10 +903,10 @@ openbao_audit_enabled: true
 openbao_audit_device_name: file
 openbao_audit_log_dir: /var/log/openbao
 openbao_audit_log_path: "{{ openbao_audit_log_dir }}/audit.log"
-# `bao audit enable` needs a privileged token (BAO_TOKEN via Doppler tier-0 /
-# break-glass, same as openbao_admin_token). When empty the enable step is
-# skipped cleanly — dir/logrotate/rsyslog still converge so the device starts
-# shipping the moment it is enabled.
+# The device is DECLARATIVE — an `audit` stanza in openbao.hcl (this OpenBao
+# build rejects `sys/audit` API writes). No token needed: the active node
+# materializes the stanza on start/SIGHUP; dir/logrotate/rsyslog converge
+# alongside so shipping starts the moment the device is live.
 openbao_audit_rsyslog_config_path: /etc/rsyslog.d/20-openbao-audit.conf
 openbao_audit_syslog_host: "syslog.{{ lookup('env', 'PROXMOX_SUBDOMAIN') }}"
 # openbao_audit AI ingest port from tofu constants; guarded default = the
