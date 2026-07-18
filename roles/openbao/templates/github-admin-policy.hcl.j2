@@ -1,0 +1,16 @@
+{{ ansible_managed | comment }}
+# github-admin — break-glass. Mints the admin-tier *-full-automation permission
+# sets: installation-wide tokens at the App's FULL permission ceiling
+# (administration:write on every repo of both accounts). Exactly why the
+# github-admin AppRole is provisioned INERT (manage_secret_id: false): no
+# standing secret_id exists, a human response-wraps a single-use secret_id per
+# elevation, and the resulting token lives minutes. Raw
+# {{ openbao_github_mount }}/token and the engine's config/* + permissionset/*
+# administration paths stay absent even here — engine administration is the
+# converge's job, not a tier's.
+{% for permission_set in openbao_github_permission_sets | selectattr('tier', 'equalto', 'admin') %}
+path "{{ openbao_github_mount }}/token/{{ permission_set.name }}" {
+  capabilities = ["create", "update"]
+}
+
+{% endfor %}

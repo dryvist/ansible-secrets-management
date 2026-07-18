@@ -1,0 +1,65 @@
+{{ ansible_managed | comment }}
+# github-write — per-repository WRITE minting, parameter-pinned. This is the
+# ONE policy allowed to touch the raw {{ openbao_github_mount }}/token endpoint,
+# and the parameter pinning is the entire privilege boundary:
+#
+#   * required_parameters forces every request to name an installation AND a
+#     repositories value — an unconstrained request (= full installation
+#     ceiling) is impossible.
+#   * allowed_parameters restricts installation_id to the two known
+#     installations and repositories to the administrator allowlist
+#     (openbao_github_write_repo_allowlist). STRING-FORM CONTRACT (verified
+#     live 2026-07-18): the ACL does not element-match LIST-valued request
+#     parameters, so callers MUST send `repositories` as a plain string (the
+#     plugin's TypeCommaStringSlice accepts it) and `installation_id` as a
+#     string. The allowlist is exact literals only — a glob would let
+#     "nix-a,evil" ride a "nix-*" prefix through the plugin's comma split.
+#     Listing any key denies all unlisted parameters, so org_name and
+#     repository_ids — both alternate selectors that would bypass the name
+#     allowlist — are denied by construction.
+#   * denied_parameters bans `permissions` outright (belt-and-suspenders on
+#     top of the allowlist gating): an omitted permissions map yields the App
+#     ceiling scoped to the ONE named repo, and map-valued parameter matching
+#     stays out of the trust path.
+#
+# The write-lease lock subtree implements claim-before-work (see
+# session-coordination): the wrapper CAS-acquires
+# secret/locks/github-write/<installation_id>/<repo> before minting, so two
+# agents cannot hold the same repo. KV-v2 delete_version_after is the deadman.
+path "{{ openbao_github_mount }}/token" {
+  # "create" is required, not belt-and-suspenders: the plugin's token paths
+  # have no existence check, so POST routes as CreateOperation — an
+  # update-only grant returns "permission denied" on every mint (verified
+  # live 2026-07-18; sys/capabilities-self still reports the path as usable,
+  # which makes the omission invisible until a real mint is attempted).
+  capabilities = ["create", "update"]
+  required_parameters = ["installation_id", "repositories"]
+  allowed_parameters = {
+    # String forms only: the JSON-number form matches neither a quoted nor an
+    # unquoted policy value, so listing numbers is dead weight that reads as
+    # a live grant.
+    "installation_id" = [
+      "{{ openbao_github_dryvist_installation_id }}",
+      "{{ openbao_github_personal_installation_id }}"
+    ]
+    "repositories" = [
+{% for repo in openbao_github_write_repo_allowlist %}
+      "{{ repo }}"{{ "," if not loop.last }}
+{% endfor %}
+    ]
+  }
+  denied_parameters = {
+    "permissions" = []
+  }
+}
+
+# Write-lease lock records (claim/extend/release + metadata for
+# delete_version_after and CAS versioning). Scoped to the github-write lock
+# subtree only — no other KV path.
+path "{{ openbao_kv_mount }}/data/locks/github-write/*" {
+  capabilities = ["create", "read", "update", "delete"]
+}
+
+path "{{ openbao_kv_mount }}/metadata/locks/github-write/*" {
+  capabilities = ["create", "read", "update", "list", "delete"]
+}

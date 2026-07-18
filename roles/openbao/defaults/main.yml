@@ -262,11 +262,40 @@ openbao_github_dryvist_installation_id: >-
   {{ lookup('env', 'OPENBAO_GITHUB_DRYVIST_INSTALLATION_ID') | default('', true) }}
 openbao_github_personal_installation_id: >-
   {{ lookup('env', 'OPENBAO_GITHUB_PERSONAL_INSTALLATION_ID') | default('', true) }}
+# Read-tier permission map: what a group-scoped read token may do. Applied to
+# ALL repos of the installation (no repositories list on the read sets — the
+# blast radius of a leaked read token is "can read", not "can change").
+openbao_github_read_permissions:
+  contents: read
+  metadata: read
+  pull_requests: read
+  issues: read
+  actions: read
+  checks: read
+  statuses: read
+# tier drives which identities may mint a set (see the github-*-policy
+# templates): `read` sets are ambient; `admin` sets (installation-wide, full
+# App ceiling) are minted only through the inert, human-gated github-admin
+# identity. Per-repo WRITE tokens intentionally have NO set here — they use
+# the raw github/token endpoint, parameter-pinned by the github-write policy
+# to exactly one allowlisted repository per request (a stored set cannot be
+# narrowed by the request body at plugin v2.3.2, so per-repo scoping must
+# ride the raw endpoint).
 openbao_github_permission_sets:
   - name: dryvist-full-automation
+    tier: admin
     installation_id: "{{ openbao_github_dryvist_installation_id }}"
   - name: personal-full-automation
+    tier: admin
     installation_id: "{{ openbao_github_personal_installation_id }}"
+  - name: read-dryvist-all
+    tier: read
+    installation_id: "{{ openbao_github_dryvist_installation_id }}"
+    permissions: "{{ openbao_github_read_permissions }}"
+  - name: read-personal-all
+    tier: read
+    installation_id: "{{ openbao_github_personal_installation_id }}"
+    permissions: "{{ openbao_github_read_permissions }}"
 
 # --- SSH secrets engine (signed client certificates — the SSH CA) -----------
 # Implements the ssh-certificate-authority ADR (docs-starlight): automation
@@ -360,26 +389,107 @@ openbao_terraform_apply_policy_name: terraform-apply
 openbao_terraform_apply_approle_name: terraform-apply
 openbao_flow_lock_policy_name: flow-lock
 openbao_flow_lock_approle_name: flow-lock
-# GitHub token providers for the workstation git/gh path — the OpenBao-backed
-# replacement for the local tiered-PAT keychain services. nix-darwin's
-# `openbao-github-creds` logs in with one of these and reads the stored token
-# from secret/github/<purpose>; the AppRole it picks IS the tier boundary:
+# GitHub token tiers for the workstation git/gh path — engine-minted App
+# installation tokens, NEVER stored PATs (there is no secret/github/* KV path;
+# see .claude/rules/openbao-plugins-first.md). nix-darwin's
+# `openbao-github-creds` logs in as one of these; the AppRole IS the tier:
 #
-#   github-read   -> secret/github/repo-write   default, secret-zero in the
-#                                               everyday Doppler config
-#   github-admin  -> secret/github/*            elevated (personal-admin,
-#                                               org-admin, actions-secrets,
-#                                               classic-admin, work-org);
-#                                               secret-zero only in the
-#                                               privileged Doppler config
+#   github-read  -> github/token/read-*        all-repo, read-only permission
+#                                              sets; standing ambient identity
+#   github-write -> github/token (raw)         ONE allowlisted repository per
+#                                              request (policy-pinned params) +
+#                                              the write-lease lock subtree;
+#                                              standing ambient identity
+#   github-admin -> github/token/*-full-automation  installation-wide, full
+#                                              App ceiling; INERT — minted only
+#                                              via a human response-wrapped
+#                                              single-use secret_id
 #
-# Deliberately NOT members of openbao_ai_domains: a standing PAT must never be
-# an AI-agent credential. Agents mint a per-run GitHub App token via
-# `github-mint` instead. See templates/github-token-policy.hcl.j2.
+# Deliberately NOT members of openbao_ai_domains: estate AI identities mint
+# via the `github-mint` capability policy (read-tier sets only) instead.
 openbao_github_read_policy_name: github-read
 openbao_github_read_approle_name: github-read
+openbao_github_write_policy_name: github-write
+openbao_github_write_approle_name: github-write
 openbao_github_admin_policy_name: github-admin
 openbao_github_admin_approle_name: github-admin
+# Repositories a github-write identity may name (exactly one per request; the
+# wrapper sends `repositories` as a plain STRING, `installation_id` as a
+# STRING). Values are repository NAMES resolved within whichever installation
+# the request names — a name existing in both accounts is therefore
+# allowlisted in both (accepted, documented). Editing this list + converging
+# IS the write-grant process; anything off-list needs the human-gated
+# github-admin tier.
+#
+# EXPLICIT LITERALS ONLY — never add a glob (verified live 2026-07-18):
+#   * OpenBao's ACL does not element-match LIST-valued request parameters, so
+#     the wrapper sends `repositories` as a comma-capable STRING the ACL can
+#     compare. Exact literals make comma smuggling impossible
+#     ("docs,evil" != "docs"), but a prefix glob like "nix-*" would match
+#     "nix-a,evil-repo" and hand the caller an off-list repo.
+#   * `installation_id` must be allowlisted (and sent) in STRING form — the
+#     JSON-number form matches neither a quoted nor an unquoted policy value.
+openbao_github_write_repo_allowlist:
+  # dryvist (org installation)
+  - ".github"
+  - ai-assistant-instructions
+  - ai-workflows
+  - ansible-proxmox
+  - ansible-proxmox-ai
+  - ansible-proxmox-apps
+  - ansible-splunk
+  - cc-edge-claude-code-io
+  - cc-edge-pack-template
+  - cc-edge-the-mac-pack-io
+  - claude-code-best-practice
+  - claude-code-plugins
+  - claude-code-routines
+  - cribl-migration
+  - docs
+  - docs-starlight
+  - homelab
+  - homelab-contracts
+  - iac-platform
+  - int_homelab
+  - mlx-benchmarks
+  - nix-agent-sandbox
+  - nix-ai
+  - nix-ai-open-harness
+  - nix-ai-server
+  - nix-claude-code
+  - nix-darwin
+  - nix-darwin-host
+  - nix-devenv
+  - nix-hermes
+  - nix-home
+  - nix-mac-performance
+  - nix-pxe-bootstrap
+  - nixos-ai
+  - orbstack-kubernetes
+  - python-template
+  - raycast-smart-issue
+  - routine-state
+  - splunk-ui-dev
+  - tofu-aws
+  - tofu-aws-templates
+  - tofu-github
+  - tofu-proxmox
+  - tofu-runs-on
+  - tofu-splunk-aws
+  - tofu-unifi
+  - unifi-config
+  # JacobPEvans-personal (user installation) — names not already above
+  - cc-edge-claude-code-otel
+  - cc-edge-copilot-otel
+  - cc-edge-gemini-antigravity-io
+  - cc-edge-vscode-io
+  - tofu-aws-bedrock
+  - tofu-aws-static-website
+  - tofu-static-website
+# Deadman TTL on the per-repo write lease (KV lock under
+# secret/locks/github-write/): a crashed holder's claim self-expires via KV-v2
+# delete_version_after — no janitor process.
+openbao_github_write_lock_ttl: 15m
 # Terrakube native workload identity. The API signs a short-lived JWT per job;
 # OpenBao verifies it through internal OIDC discovery and binds the exact
 # organization/workspace `sub` claim before issuing a short-lived token.
@@ -441,6 +551,13 @@ openbao_hermes_write_policy_name: hermes-write
 openbao_hermes_write_approle_name: hermes-write
 openbao_public_policy_name: public
 openbao_public_approle_name: public
+# ai-public: the fabric-brain runtime domain (secret/ai/public/*, field
+# active_model). Its OWN narrow read-only credential — NOT local-llm's broader
+# ai/* read — held by the hermes_agent / open_webui brain-sync timers to
+# re-point the brain from OpenBao without a converge. See ansible-proxmox-ai
+# roles/openbao_secrets (ai-public domain) + roles/hermes_agent brain-sync.
+openbao_ai_public_policy_name: ai-public
+openbao_ai_public_approle_name: ai-public
 openbao_ai_orchestrator_policy_name: ai-orchestrator
 openbao_ai_orchestrator_approle_name: ai-orchestrator
 # ai-readonly / ai-elevated are now ACTOR ROLES that ATTACH base capability
@@ -594,17 +711,30 @@ openbao_base_approles:
     policy: "{{ openbao_hermes_write_policy_name }}"
   - name: "{{ openbao_public_approle_name }}"
     policy: "{{ openbao_public_policy_name }}"
-  # GitHub token providers: standing, ambient READ tiers consumed by
-  # nix-darwin's `openbao-github-creds` on the workstation. Their role_id /
-  # secret_id are operator-held in Doppler (github-read in the everyday config,
-  # github-admin only in the privileged one) and injected as ambient env, same
-  # shape as ai-orchestrator. manage_secret_id stays true (default): a git push
-  # must not need a human to wrap a secret_id first.
+  # ai-public: read-only fabric-brain domain, its own narrow credential (see
+  # the name vars above) — held by the hermes / open_webui brain-sync timers.
+  - name: "{{ openbao_ai_public_approle_name }}"
+    policy: "{{ openbao_ai_public_policy_name }}"
+  # GitHub token tiers: engine mints, tokens never stored. github-read and
+  # github-write are standing ambient identities consumed by nix-darwin's
+  # `openbao-github-creds` (role_id/secret_id operator-held in Doppler,
+  # injected as ambient env, same shape as ai-orchestrator). github-write is
+  # bounded by the per-repo allowlist + the write-lease lock rather than a
+  # human gate (user decision 2026-07-17: ambient for allowlisted repos).
+  # github-admin is INERT break-glass like ai-admin: no standing secret_id; a
+  # human wraps a single-use secret_id per elevation.
   - name: "{{ openbao_github_read_approle_name }}"
     policy: "{{ openbao_github_read_policy_name }}"
+  - name: "{{ openbao_github_write_approle_name }}"
+    policy: "{{ openbao_github_write_policy_name }}"
+    token_ttl: 30m  # write identity gets a short token TTL
   - name: "{{ openbao_github_admin_approle_name }}"
     policy: "{{ openbao_github_admin_policy_name }}"
-    token_ttl: 30m  # elevated identity gets a short token TTL
+    token_ttl: "{{ openbao_ai_admin_token_ttl }}"
+    token_max_ttl: "{{ openbao_ai_admin_token_ttl }}"
+    manage_secret_id: false
+    secret_id_ttl: "{{ openbao_ai_elevated_secret_id_ttl }}"
+    secret_id_num_uses: 1
   # ai-orchestrator: role_id/secret_id are operator-held in Doppler tier-0
   # (services BAO_AI_ORCHESTRATOR_ROLE_ID / _SECRET_ID), consumed as ambient env.
   # This AppRole already exists LIVE with a non-expiring secret_id in active
@@ -725,14 +855,17 @@ openbao_base_policies:
     template: hermes-write-policy.hcl.j2
   - name: "{{ openbao_public_policy_name }}"
     template: public-policy.hcl.j2
-  # GitHub token providers (workstation git/gh). One template, two tiers; the
-  # purpose_glob IS the privilege boundary — see github-token-policy.hcl.j2.
+  - name: "{{ openbao_ai_public_policy_name }}"
+    template: ai-public-policy.hcl.j2
+  # GitHub token tiers (workstation git/gh). Engine mints only — each template
+  # names its own boundary: read-* sets, the parameter-pinned raw token path,
+  # or the human-gated *-full-automation sets.
   - name: "{{ openbao_github_read_policy_name }}"
-    template: github-token-policy.hcl.j2
-    purpose_glob: repo-write
+    template: github-read-policy.hcl.j2
+  - name: "{{ openbao_github_write_policy_name }}"
+    template: github-write-policy.hcl.j2
   - name: "{{ openbao_github_admin_policy_name }}"
-    template: github-token-policy.hcl.j2
-    purpose_glob: "*"
+    template: github-admin-policy.hcl.j2
   - name: "{{ openbao_ai_orchestrator_policy_name }}"
     template: ai-orchestrator-policy.hcl.j2
   # ai-readonly / ai-elevated / ai-apply-<svc> no longer own standalone policies —
@@ -827,10 +960,10 @@ openbao_audit_enabled: true
 openbao_audit_device_name: file
 openbao_audit_log_dir: /var/log/openbao
 openbao_audit_log_path: "{{ openbao_audit_log_dir }}/audit.log"
-# `bao audit enable` needs a privileged token (BAO_TOKEN via Doppler tier-0 /
-# break-glass, same as openbao_admin_token). When empty the enable step is
-# skipped cleanly — dir/logrotate/rsyslog still converge so the device starts
-# shipping the moment it is enabled.
+# The device is DECLARATIVE — an `audit` stanza in openbao.hcl (this OpenBao
+# build rejects `sys/audit` API writes). No token needed: the active node
+# materializes the stanza on start/SIGHUP; dir/logrotate/rsyslog converge
+# alongside so shipping starts the moment the device is live.
 openbao_audit_rsyslog_config_path: /etc/rsyslog.d/20-openbao-audit.conf
 openbao_audit_syslog_host: "syslog.{{ lookup('env', 'PROXMOX_SUBDOMAIN') }}"
 # openbao_audit AI ingest port from tofu constants; guarded default = the

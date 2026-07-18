@@ -1,0 +1,22 @@
+{{ ansible_managed | comment }}
+# OpenBao policy for the ai-public AppRole — the fabric-brain coordination
+# domain. Read-only on secret/ai/public/*: non-secret operational values that
+# no engine can mint (e.g. active_model, the fabric-brain id an operator picks).
+# Consumed by the hermes_agent / open_webui brain-sync timers in
+# ansible-proxmox-ai to re-point the brain from OpenBao alone, no converge —
+# see that repo's roles/openbao_secrets (ai-public domain) and
+# roles/hermes_agent brain-sync. Deliberately its OWN narrow credential, never
+# local-llm's broader ai/* read: a guest holding this reads only ai/public/*,
+# not the rest of ai/*.
+
+path "{{ openbao_kv_mount }}/data/ai/public/*" {
+  capabilities = ["read"]
+}
+
+# read only, no list: the brain-sync consumer reads one known key
+# (data/ai/public/brain) and never enumerates the subtree, so LIST is unused.
+# Dropping it also sidesteps the KV-v2 gotcha that a `metadata/ai/public/*`
+# glob does not match the bare `metadata/ai/public` a LIST actually targets.
+path "{{ openbao_kv_mount }}/metadata/ai/public/*" {
+  capabilities = ["read"]
+}

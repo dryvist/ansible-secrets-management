@@ -1,0 +1,14 @@
+{{ ansible_managed | comment }}
+# github-read — the workstation's standing, ambient READ tier. Mints ONLY the
+# read-tier permission sets (all-repo, read-only permission maps stored in the
+# set itself; the permission-set token path ignores request bodies at plugin
+# v2.3.2, so a holder cannot widen the stored scope). The raw
+# {{ openbao_github_mount }}/token endpoint, the *-full-automation admin sets,
+# and the engine's config/* + permissionset/* administration paths are all
+# absent — a leaked github-read secret-zero can read, never change.
+{% for permission_set in openbao_github_permission_sets | selectattr('tier', 'equalto', 'read') %}
+path "{{ openbao_github_mount }}/token/{{ permission_set.name }}" {
+  capabilities = ["create", "update"]
+}
+
+{% endfor %}
