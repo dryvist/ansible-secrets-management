@@ -551,6 +551,13 @@ openbao_hermes_write_policy_name: hermes-write
 openbao_hermes_write_approle_name: hermes-write
 openbao_public_policy_name: public
 openbao_public_approle_name: public
+# ai-public: the fabric-brain runtime domain (secret/ai/public/*, field
+# active_model). Its OWN narrow read-only credential — NOT local-llm's broader
+# ai/* read — held by the hermes_agent / open_webui brain-sync timers to
+# re-point the brain from OpenBao without a converge. See ansible-proxmox-ai
+# roles/openbao_secrets (ai-public domain) + roles/hermes_agent brain-sync.
+openbao_ai_public_policy_name: ai-public
+openbao_ai_public_approle_name: ai-public
 openbao_ai_orchestrator_policy_name: ai-orchestrator
 openbao_ai_orchestrator_approle_name: ai-orchestrator
 # ai-readonly / ai-elevated are now ACTOR ROLES that ATTACH base capability
@@ -704,6 +711,10 @@ openbao_base_approles:
     policy: "{{ openbao_hermes_write_policy_name }}"
   - name: "{{ openbao_public_approle_name }}"
     policy: "{{ openbao_public_policy_name }}"
+  # ai-public: read-only fabric-brain domain, its own narrow credential (see
+  # the name vars above) — held by the hermes / open_webui brain-sync timers.
+  - name: "{{ openbao_ai_public_approle_name }}"
+    policy: "{{ openbao_ai_public_policy_name }}"
   # GitHub token tiers: engine mints, tokens never stored. github-read and
   # github-write are standing ambient identities consumed by nix-darwin's
   # `openbao-github-creds` (role_id/secret_id operator-held in Doppler,
@@ -844,6 +855,8 @@ openbao_base_policies:
     template: hermes-write-policy.hcl.j2
   - name: "{{ openbao_public_policy_name }}"
     template: public-policy.hcl.j2
+  - name: "{{ openbao_ai_public_policy_name }}"
+    template: ai-public-policy.hcl.j2
   # GitHub token tiers (workstation git/gh). Engine mints only — each template
   # names its own boundary: read-* sets, the parameter-pinned raw token path,
   # or the human-gated *-full-automation sets.
