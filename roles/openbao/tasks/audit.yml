@@ -52,6 +52,16 @@
     BAO_TOKEN: "{{ openbao_admin_token }}"
   register: openbao_audit_enable
   changed_when: openbao_audit_enable.rc == 0
+  # The `bao audit list` guard above should already skip an enabled device, but
+  # tolerate the one benign race it cannot cover: a device enabled between the
+  # list and this task (or a list output the guard parsed as empty) makes
+  # `bao audit enable` exit non-zero with "path already in use". That is the
+  # desired end state, not a failure. Any OTHER non-zero exit (bad token,
+  # unwritable file_path, sealed node) still fails loudly.
+  failed_when:
+    - openbao_audit_enable.rc is defined
+    - openbao_audit_enable.rc != 0
+    - "'already in use' not in (openbao_audit_enable.stderr | default(''))"
   when:
     - openbao_admin_token | length > 0
     - inventory_hostname == openbao_bootstrap_host
