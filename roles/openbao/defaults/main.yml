@@ -414,34 +414,78 @@ openbao_github_write_approle_name: github-write
 openbao_github_admin_policy_name: github-admin
 openbao_github_admin_approle_name: github-admin
 # Repositories a github-write identity may name (exactly one per request; the
-# wrapper always sends a single-element list). Values are repository NAMES
-# resolved within whichever installation the request names — a name existing
-# in both accounts is therefore allowlisted in both (accepted, documented).
-# Prefix/suffix value globs are honored by the policy layer. Editing this
-# list + converging IS the write-grant process; anything off-list needs the
-# human-gated github-admin tier.
+# wrapper sends `repositories` as a plain STRING, `installation_id` as a
+# STRING). Values are repository NAMES resolved within whichever installation
+# the request names — a name existing in both accounts is therefore
+# allowlisted in both (accepted, documented). Editing this list + converging
+# IS the write-grant process; anything off-list needs the human-gated
+# github-admin tier.
+#
+# EXPLICIT LITERALS ONLY — never add a glob (verified live 2026-07-18):
+#   * OpenBao's ACL does not element-match LIST-valued request parameters, so
+#     the wrapper sends `repositories` as a comma-capable STRING the ACL can
+#     compare. Exact literals make comma smuggling impossible
+#     ("docs,evil" != "docs"), but a prefix glob like "nix-*" would match
+#     "nix-a,evil-repo" and hand the caller an off-list repo.
+#   * `installation_id` must be allowlisted (and sent) in STRING form — the
+#     JSON-number form matches neither a quoted nor an unquoted policy value.
 openbao_github_write_repo_allowlist:
-  - "nix-*"
-  - "ansible-*"
-  - "tofu-*"
-  - "claude-code-*"
-  - "ai-*"
-  - "mlx-*"
-  - "cc-edge-*"
-  - "homelab*"
-  - int_homelab
+  # dryvist (org installation)
+  - ".github"
+  - ai-assistant-instructions
+  - ai-workflows
+  - ansible-proxmox
+  - ansible-proxmox-ai
+  - ansible-proxmox-apps
+  - ansible-splunk
+  - cc-edge-claude-code-io
+  - cc-edge-pack-template
+  - cc-edge-the-mac-pack-io
+  - claude-code-best-practice
+  - claude-code-plugins
+  - claude-code-routines
+  - cribl-migration
   - docs
   - docs-starlight
-  - nixos-ai
-  - unifi-config
+  - homelab
+  - homelab-contracts
   - iac-platform
-  - python-template
+  - int_homelab
+  - mlx-benchmarks
+  - nix-agent-sandbox
+  - nix-ai
+  - nix-ai-open-harness
+  - nix-ai-server
+  - nix-claude-code
+  - nix-darwin
+  - nix-darwin-host
+  - nix-devenv
+  - nix-hermes
+  - nix-home
+  - nix-mac-performance
+  - nix-pxe-bootstrap
+  - nixos-ai
   - orbstack-kubernetes
-  - cribl-migration
+  - python-template
+  - raycast-smart-issue
   - routine-state
   - splunk-ui-dev
-  - raycast-smart-issue
-  - ".github"
+  - tofu-aws
+  - tofu-aws-templates
+  - tofu-github
+  - tofu-proxmox
+  - tofu-runs-on
+  - tofu-splunk-aws
+  - tofu-unifi
+  - unifi-config
+  # JacobPEvans-personal (user installation) — names not already above
+  - cc-edge-claude-code-otel
+  - cc-edge-copilot-otel
+  - cc-edge-gemini-antigravity-io
+  - cc-edge-vscode-io
+  - tofu-aws-bedrock
+  - tofu-aws-static-website
+  - tofu-static-website
 # Deadman TTL on the per-repo write lease (KV lock under
 # secret/locks/github-write/): a crashed holder's claim self-expires via KV-v2
 # delete_version_after — no janitor process.

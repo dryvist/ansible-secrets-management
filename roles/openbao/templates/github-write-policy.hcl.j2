@@ -4,14 +4,19 @@
 # and the parameter pinning is the entire privilege boundary:
 #
 #   * required_parameters forces every request to name an installation AND a
-#     repositories list — an unconstrained request (= full installation
+#     repositories value — an unconstrained request (= full installation
 #     ceiling) is impossible.
 #   * allowed_parameters restricts installation_id to the two known
-#     installations and every repositories element to the administrator
-#     allowlist (openbao_github_write_repo_allowlist; prefix/suffix value
-#     globs honored). Listing any key denies all unlisted parameters, so
-#     org_name and repository_ids — both alternate selectors that would
-#     bypass the name allowlist — are denied by construction.
+#     installations and repositories to the administrator allowlist
+#     (openbao_github_write_repo_allowlist). STRING-FORM CONTRACT (verified
+#     live 2026-07-18): the ACL does not element-match LIST-valued request
+#     parameters, so callers MUST send `repositories` as a plain string (the
+#     plugin's TypeCommaStringSlice accepts it) and `installation_id` as a
+#     string. The allowlist is exact literals only — a glob would let
+#     "nix-a,evil" ride a "nix-*" prefix through the plugin's comma split.
+#     Listing any key denies all unlisted parameters, so org_name and
+#     repository_ids — both alternate selectors that would bypass the name
+#     allowlist — are denied by construction.
 #   * denied_parameters bans `permissions` outright (belt-and-suspenders on
 #     top of the allowlist gating): an omitted permissions map yields the App
 #     ceiling scoped to the ONE named repo, and map-valued parameter matching
@@ -30,11 +35,12 @@ path "{{ openbao_github_mount }}/token" {
   capabilities = ["create", "update"]
   required_parameters = ["installation_id", "repositories"]
   allowed_parameters = {
+    # String forms only: the JSON-number form matches neither a quoted nor an
+    # unquoted policy value, so listing numbers is dead weight that reads as
+    # a live grant.
     "installation_id" = [
       "{{ openbao_github_dryvist_installation_id }}",
-      {{ openbao_github_dryvist_installation_id | int }},
-      "{{ openbao_github_personal_installation_id }}",
-      {{ openbao_github_personal_installation_id | int }}
+      "{{ openbao_github_personal_installation_id }}"
     ]
     "repositories" = [
 {% for repo in openbao_github_write_repo_allowlist %}
