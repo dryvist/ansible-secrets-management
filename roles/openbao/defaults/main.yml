@@ -132,6 +132,14 @@ openbao_vikunja_secrets:
   # App-namespaced DB password (matches the postgres_managed_databases +
   # vikunja_group.yml consumers reading bao_apps_secrets.vikunja_db_password).
   vikunja_db_password: VIKUNJA_DB_PASSWORD
+  # JWT signing secret + initial admin password (#17039). App-namespaced to
+  # match the vikunja_group.yml consumers reading bao_apps_secrets.
+  # vikunja_jwt_secret / .vikunja_admin_password. These are promoted from the
+  # live guest, not generated here — the JWT secret must stay stable (rotating
+  # it invalidates every issued session/API token), so they belong in this
+  # promotion map, never in openbao_generated_app_secrets.
+  vikunja_jwt_secret: VIKUNJA_JWT_SECRET
+  vikunja_admin_password: VIKUNJA_ADMIN_PASSWORD
 
 # App service secrets GENERATED (random, generate-if-absent) in OpenBao itself,
 # replacing the retired terraform-proxmox vault-secrets root. Each app maps to
