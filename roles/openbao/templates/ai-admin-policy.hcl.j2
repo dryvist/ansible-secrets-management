@@ -1,80 +1,37 @@
 {{ ansible_managed | comment }}
 # OpenBao policy for the ai-admin AppRole — BREAK-GLASS, the top tier of the
-# AI-agent access model. Intentionally root-ish: policy edits, AppRole/token
-# administration, all KV, the broad IaC AWS STS broker, and GitHub token mint.
+# AI-agent access model. COMPLETE FULL ADMINISTRATOR access: every path, every
+# capability, including `sudo` for the sudo-protected control endpoints (seal,
+# step-down, raft, rekey, rotate, audit devices, root-token generation). This is
+# the canonical OpenBao superuser policy — equivalent to root operationally.
 #
 #   ai-readonly   read/plan/scan            (default, ambient, standing)
-#   ai-apply-<d>  scoped WRITE to domain d  (per-task, human-minted, <=1h)
-#   ai-admin      break-glass root-ish      (per-task, human-minted, <=10m)   <-- this
+#   ai-apply-<d>  scoped WRITE to domain d  (per-window, human-unlocked, 6h/12h)
+#   ai-admin      break-glass FULL admin    (per-window, human-unlocked, <=1h)   <-- this
 #
-# NEVER STANDING. There is no stored secret_id (manage_secret_id:false); the
-# converge creates the inert role only. A token exists solely after a human
-# response-wraps a single-use secret_id on demand, and lives <=10 minutes
-# (token_ttl 10m). EVERY use is audited (file audit device -> Cribl ->
-# index=openbao_audit) and MUST fire an alert — this is the tier that can edit
-# the controls themselves, so its use is an incident by construction, not a
-# routine. See docs.dryvist.com AI Agent Access runbook for the grant flow and
-# the alerting contract.
+# This environment is AI-created, -managed, and -monitored: an AI agent must be
+# able to acquire complete administrative control of OpenBao itself. Containment
+# is DELIBERATELY not least-privilege capability scoping — it is:
+#   * TEMPORAL      — the token lives at most the admin window (token_ttl 1h);
+#                     when it expires the agent must be re-unlocked.
+#   * PROCEDURAL    — NEVER STANDING. manage_secret_id:false; the converge creates
+#                     the inert role only. A usable token exists solely after a
+#                     one-shot human "unlock" response-wraps a single-use
+#                     secret_id (`bao write -wrap-ttl=90s -f
+#                     auth/approle/role/ai-admin/secret-id`).
+#   * OBSERVATIONAL — EVERY use is audited (file audit device -> Cribl ->
+#                     index=openbao_audit) and MUST fire an alert. This is the
+#                     tier that can edit the controls themselves, so its use is
+#                     an incident by construction, monitored after the fact — the
+#                     audit trail, not a capability wall, is the control.
 #
-# This is the ONE AI identity permitted to self-modify the auth/policy surface.
-# It is not bounded by an enumerated-exclusion argument like the lower tiers —
-# its containment is entirely temporal (10m), procedural (human one-shot grant),
-# and observational (alerted + audited), NOT least-privilege capability scoping.
+# See docs.dryvist.com "AI Agent Access (OpenBao)" runbook for the unlock/grant
+# flow and the alerting contract.
 
-# --- OpenBao policy + auth administration ------------------------------------
-path "sys/policies/acl/*" {
-  capabilities = ["create", "read", "update", "delete", "list"]
+# --- Complete full administrator access --------------------------------------
+# Every path, every capability, plus sudo for the sudo-protected sys endpoints
+# (sys/seal, sys/step-down, sys/raft/*, sys/rekey, sys/rotate, audit devices,
+# root-token generation). The canonical OpenBao superuser policy.
+path "*" {
+  capabilities = ["create", "read", "update", "delete", "list", "patch", "sudo"]
 }
-
-path "auth/approle/role/*" {
-  capabilities = ["create", "read", "update", "delete", "list"]
-}
-
-# Mint (and response-wrap) single-use secret_ids for the ai-apply-<domain> and
-# other AppRoles — this is the mechanism a human/admin session uses to hand a
-# lower tier its per-task grant.
-path "auth/approle/role/*/secret-id" {
-  capabilities = ["create", "update"]
-}
-
-path "auth/token/create" {
-  capabilities = ["create", "update"]
-}
-
-# Enumerate the secrets engines it may administer/mount. sys/mounts governs KV +
-# the AWS/GitHub secrets engines.
-path "sys/mounts/*" {
-  capabilities = ["create", "read", "update", "delete", "list"]
-}
-
-path "sys/auth/*" {
-  capabilities = ["create", "read", "update", "delete", "list"]
-}
-
-# --- All KV, all domains (incl. the infra kernel) ----------------------------
-path "{{ openbao_kv_mount }}/data/*" {
-  capabilities = ["create", "read", "update", "delete"]
-}
-
-path "{{ openbao_kv_mount }}/metadata/*" {
-  capabilities = ["create", "read", "update", "delete", "list"]
-}
-
-# --- Broad IaC AWS STS broker (identity-fabric writes) -----------------------
-# The openbao-iac-admin assumed_role broker (capped by its own AWS permissions
-# boundary), not the tf-proxmox-scoped role the apply tier would use.
-path "{{ openbao_aws_mount }}/sts/{{ openbao_aws_iac_admin_role_name }}" {
-  capabilities = ["read", "update"]
-}
-
-path "{{ openbao_aws_mount }}/sts/{{ openbao_aws_role_name }}" {
-  capabilities = ["read", "update"]
-}
-
-# --- GitHub App token mint (all administrator-defined permission sets) --------
-{% for permission_set in openbao_github_permission_sets %}
-path "{{ openbao_github_mount }}/token/{{ permission_set.name }}" {
-  capabilities = ["update"]
-}
-
-{% endfor %}

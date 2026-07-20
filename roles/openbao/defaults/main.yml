@@ -132,6 +132,14 @@ openbao_vikunja_secrets:
   # App-namespaced DB password (matches the postgres_managed_databases +
   # vikunja_group.yml consumers reading bao_apps_secrets.vikunja_db_password).
   vikunja_db_password: VIKUNJA_DB_PASSWORD
+  # JWT signing secret + initial admin password (#17039). App-namespaced to
+  # match the vikunja_group.yml consumers reading bao_apps_secrets.
+  # vikunja_jwt_secret / .vikunja_admin_password. These are promoted from the
+  # live guest, not generated here — the JWT secret must stay stable (rotating
+  # it invalidates every issued session/API token), so they belong in this
+  # promotion map, never in openbao_generated_app_secrets.
+  vikunja_jwt_secret: VIKUNJA_JWT_SECRET
+  vikunja_admin_password: VIKUNJA_ADMIN_PASSWORD
 
 # App service secrets GENERATED (random, generate-if-absent) in OpenBao itself,
 # replacing the retired terraform-proxmox vault-secrets root. Each app maps to
@@ -581,16 +589,22 @@ openbao_ai_elevated_approle_name: ai-elevated
 #        allowed, plus actor mechanics (TTLs, inert human-gated secret_id):
 #        ai-readonly    -> [read-all]                       (standing, ambient)
 #        ai-elevated    -> [read-all + read-<extra>]        (standing, ambient)
-#        ai-apply-<svc> -> [read-<svc>, write-<svc>, github-mint]  (per-task, <=1h)
-#        ai-apply-all   -> [read-write-all, github-mint]           (per-task, <=1h)
-#        ai-admin       -> [ai-admin]                        (break-glass, <=10m)
-# Authorization is scoped by TASK / BLAST-RADIUS and gated by a HUMAN, never by
-# model capability; the model is an AUDIT claim, never a key. Every apply/admin
-# role is provisioned manage_secret_id:false below, so the converge creates the
-# INERT role but never mints/stores a standing secret_id — a token exists only
-# after a human response-wraps a single-use secret_id on demand
-# (`bao write -wrap-ttl=90s -f auth/approle/role/<role>/secret-id`). See the
-# docs.dryvist.com "AI Agent Access (OpenBao)" runbook for the full grant flow.
+#        ai-apply-<svc> -> [read-<svc>, write-<svc>, github-mint]  (per-window, 6h/12h)
+#        ai-apply-all   -> [read-write-all, github-mint]           (per-window, 1h/6h)
+#        ai-admin       -> [ai-admin]                    (COMPLETE full admin, 1h, alerted)
+# "Unlock window" model: authorization is scoped by TASK / BLAST-RADIUS and
+# gated by ONE human UNLOCK per window, never by model capability (the model is
+# an AUDIT claim, never a key). Every apply/admin role is provisioned
+# manage_secret_id:false below, so the converge creates the INERT role but never
+# mints/stores a standing secret_id — a usable token exists only after a human
+# response-wraps a single-use secret_id on demand
+# (`bao write -wrap-ttl=90s -f auth/approle/role/<role>/secret-id`); that ONE
+# unlock then yields a token that lives the window (above), so the agent runs
+# unattended for the window instead of a human minting per task. ai-admin grants
+# COMPLETE full administrator access (superuser) — its containment is temporal
+# (1h) + procedural (human unlock) + observational (alerted every use), NOT
+# capability scoping. See the docs.dryvist.com "AI Agent Access (OpenBao)"
+# runbook for the full unlock/grant flow.
 #
 # SINGLE SOURCE OF TRUTH: add a writable service = ONE entry here. It renders a
 # new read-<svc>+write-<svc> pair, which auto-joins read-all/read-write-all and
@@ -641,18 +655,35 @@ openbao_ssh_sign_policies: >-
 # read+write leaves plus per-run GitHub attribution and interactive SSH-cert
 # signing (ssh-sign-automation-ai — 1h certs, non-root principals, audited).
 # Inert (no standing secret_id).
+# token_ttl/token_max_ttl are the "unlock window": one human unlock (a wrapped,
+# single-use secret_id) yields ONE login whose token then lives the window, so
+# an agent runs unattended for the whole window instead of re-asking per task.
+# The literals here must stay in sync with openbao_ai_apply_token_ttl /
+# openbao_ai_apply_token_max_ttl below (regex_replace can't interpolate a var
+# inside its replacement string; the standalone vars document the intent).
 openbao_ai_apply_approles: >-
   {{ openbao_ai_domains | map('regex_replace', '^(.+)$',
        '{"name": "ai-apply-\1", "token_policies": ["read-\1", "write-\1", "github-mint", "ssh-sign-automation-ai"],
-         "token_ttl": "1h", "token_max_ttl": "1h",
+         "token_ttl": "6h", "token_max_ttl": "12h",
          "manage_secret_id": false, "secret_id_ttl": "15m", "secret_id_num_uses": 1}')
      | map('from_json') | list }}
 openbao_ai_admin_policy_name: ai-admin
 openbao_ai_admin_approle_name: ai-admin
-# Token/secret_id bounds for the elevated tiers. secret_id_ttl bounds an UNUSED
-# minted grant; num_uses=1 makes the wrapped secret_id single-login.
-openbao_ai_apply_token_ttl: 1h
-openbao_ai_admin_token_ttl: 10m
+# Token/secret_id bounds for the elevated tiers, as the "unlock window" model:
+# one human unlock (a wrapped, single-use secret_id) -> one login -> a token that
+# lives the window, so an agent works unattended for the window instead of a
+# human minting per task. secret_id_ttl bounds an UNUSED minted grant (the redeem
+# window); num_uses=1 makes the wrapped secret_id single-login.
+#   ai-apply-<svc>  6h default / 12h max   (single-domain write — routine workhorse)
+#   ai-apply-all    1h default / 6h max    (cross-domain write — wider, so tighter)
+#   ai-admin        1h                     (COMPLETE full admin — alerted every use)
+# ai-apply-<svc> literals live in the generated openbao_ai_apply_approles above
+# and must match openbao_ai_apply_token_ttl / _max_ttl here.
+openbao_ai_apply_token_ttl: 6h
+openbao_ai_apply_token_max_ttl: 12h
+openbao_ai_apply_all_token_ttl: 1h
+openbao_ai_apply_all_token_max_ttl: 6h
+openbao_ai_admin_token_ttl: 1h
 openbao_ai_elevated_secret_id_ttl: 15m
 openbao_snapshot_policy_name: snapshot
 openbao_snapshot_approle_name: snapshot
@@ -768,14 +799,14 @@ openbao_base_approles:
     token_policies: >-
       {{ openbao_read_write_all_policies + ['github-mint']
          + (['ssh-sign-automation-ai'] if openbao_ssh_engine_enabled else []) }}
-    token_ttl: "{{ openbao_ai_apply_token_ttl }}"
-    token_max_ttl: "{{ openbao_ai_apply_token_ttl }}"
+    token_ttl: "{{ openbao_ai_apply_all_token_ttl }}"
+    token_max_ttl: "{{ openbao_ai_apply_all_token_max_ttl }}"
     manage_secret_id: false
     secret_id_ttl: "{{ openbao_ai_elevated_secret_id_ttl }}"
     secret_id_num_uses: 1
-  # ai-admin: break-glass, the ONE self-modify-capable role (policy/auth/token
-  # admin). NO standing secret_id; a token exists only after a human one-shot grant
-  # and lives <=10m, alerted on every use.
+  # ai-admin: break-glass, COMPLETE full administrator (superuser — every path,
+  # every capability incl. sudo). NO standing secret_id; a token exists only after
+  # a human one-shot unlock and lives the admin window (1h), alerted on every use.
   - name: "{{ openbao_ai_admin_approle_name }}"
     policy: "{{ openbao_ai_admin_policy_name }}"
     token_ttl: "{{ openbao_ai_admin_token_ttl }}"
@@ -872,7 +903,8 @@ openbao_base_policies:
   # they are ACTOR roles that attach the base read-/write- capability leaves
   # (generated below into openbao_ai_capability_policies). ai-admin remains a
   # standalone policy: it is the sole self-modify tier and is NOT composed leaves.
-  # ai-admin: break-glass. Intentionally root-ish; contained by TTL + human grant.
+  # ai-admin: break-glass COMPLETE full admin (superuser). Contained by TTL (1h)
+  # + human unlock + alerting, NOT capability scoping.
   - name: "{{ openbao_ai_admin_policy_name }}"
     template: ai-admin-policy.hcl.j2
   - name: "{{ openbao_snapshot_policy_name }}"
