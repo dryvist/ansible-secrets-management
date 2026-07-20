@@ -425,9 +425,17 @@ openbao_github_admin_approle_name: github-admin
 # wrapper sends `repositories` as a plain STRING, `installation_id` as a
 # STRING). Values are repository NAMES resolved within whichever installation
 # the request names — a name existing in both accounts is therefore
-# allowlisted in both (accepted, documented). Editing this list + converging
-# IS the write-grant process; anything off-list needs the human-gated
+# allowlisted in both (accepted, documented). Editing the list + converging IS
+# the write-grant process; anything off-list needs the human-gated
 # github-admin tier.
+#
+# The names live in the iac secret store as OPENBAO_GITHUB_WRITE_REPOS (a
+# comma-separated string), NOT inline here: this repository is public and the
+# installations cover private repositories, so an inline list would disclose
+# private repository names to anyone reading it. Same reasoning as the other
+# lookup('env', ...) values above. Keep it in sync with the installations —
+# compare against `gh api /installation/repositories` for each owner. An unset
+# variable yields an empty list, which denies every write mint (fails closed).
 #
 # EXPLICIT LITERALS ONLY — never add a glob (verified live 2026-07-18):
 #   * OpenBao's ACL does not element-match LIST-valued request parameters, so
@@ -437,63 +445,9 @@ openbao_github_admin_approle_name: github-admin
 #     "nix-a,evil-repo" and hand the caller an off-list repo.
 #   * `installation_id` must be allowlisted (and sent) in STRING form — the
 #     JSON-number form matches neither a quoted nor an unquoted policy value.
-openbao_github_write_repo_allowlist:
-  # dryvist (org installation)
-  - ".github"
-  - ai-assistant-instructions
-  - ai-workflows
-  - ansible-proxmox
-  - ansible-proxmox-ai
-  - ansible-proxmox-apps
-  - ansible-splunk
-  - cc-edge-claude-code-io
-  - cc-edge-pack-template
-  - cc-edge-the-mac-pack-io
-  - claude-code-best-practice
-  - claude-code-plugins
-  - claude-code-routines
-  - cribl-migration
-  - docs
-  - docs-starlight
-  - homelab
-  - homelab-contracts
-  - iac-platform
-  - int_homelab
-  - mlx-benchmarks
-  - nix-agent-sandbox
-  - nix-ai
-  - nix-ai-open-harness
-  - nix-ai-server
-  - nix-claude-code
-  - nix-darwin
-  - nix-darwin-host
-  - nix-devenv
-  - nix-hermes
-  - nix-home
-  - nix-mac-performance
-  - nix-pxe-bootstrap
-  - nixos-ai
-  - orbstack-kubernetes
-  - python-template
-  - raycast-smart-issue
-  - routine-state
-  - splunk-ui-dev
-  - tofu-aws
-  - tofu-aws-templates
-  - tofu-github
-  - tofu-proxmox
-  - tofu-runs-on
-  - tofu-splunk-aws
-  - tofu-unifi
-  - unifi-config
-  # JacobPEvans-personal (user installation) — names not already above
-  - cc-edge-claude-code-otel
-  - cc-edge-copilot-otel
-  - cc-edge-gemini-antigravity-io
-  - cc-edge-vscode-io
-  - tofu-aws-bedrock
-  - tofu-aws-static-website
-  - tofu-static-website
+openbao_github_write_repo_allowlist: >-
+  {{ (lookup('env', 'OPENBAO_GITHUB_WRITE_REPOS') | default('', true)).split(',')
+     | map('trim') | reject('equalto', '') | list }}
 # Deadman TTL on the per-repo write lease (KV lock under
 # secret/locks/github-write/): a crashed holder's claim self-expires via KV-v2
 # delete_version_after — no janitor process.
