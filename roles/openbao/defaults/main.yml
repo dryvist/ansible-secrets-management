@@ -281,6 +281,14 @@ openbao_github_read_permissions:
   actions: read
   checks: read
   statuses: read
+  # Code-scanning and Dependabot findings. `checks`/`statuses` only expose the
+  # pass/fail rollup of an analysis, not the alerts themselves, so without
+  # these a read token gets 403 "Resource not accessible by integration" from
+  # the code-scanning and Dependabot alert endpoints — which is most of the
+  # point of a read tier for CI triage. Both are read-only here and well inside
+  # the App's ceiling (it is granted security_events: write).
+  security_events: read
+  vulnerability_alerts: read
 # tier drives which identities may mint a set (see the github-*-policy
 # templates): `read` sets are ambient; `admin` sets (installation-wide, full
 # App ceiling) are minted only through the inert, human-gated github-admin
