@@ -52,6 +52,37 @@
     label: "{{ item.value }}"
   no_log: true
 
+- name: Generate the OIDC signing key (create-if-absent, guest-local)
+  ansible.builtin.command:
+    argv:
+      - openssl
+      - genpkey
+      - -algorithm
+      - RSA
+      - -out
+      - "{{ authelia_oidc_jwks_key_file }}"
+      - -pkeyopt
+      - rsa_keygen_bits:2048
+    creates: "{{ authelia_oidc_jwks_key_file }}"
+  become: true
+  become_user: "{{ authelia_user }}"
+  no_log: true
+
+- name: Read guest-generated OIDC secrets for the protected config render
+  ansible.builtin.slurp:
+    src: "{{ item }}"
+  loop:
+    - "{{ authelia_secret_files.oidc_hmac_secret }}"
+    - "{{ authelia_oidc_jwks_key_file }}"
+  register: authelia_oidc_secret_files
+  no_log: true
+
+- name: Decode OIDC secrets for the protected config render
+  ansible.builtin.set_fact:
+    authelia_oidc_hmac_secret: "{{ authelia_oidc_secret_files.results[0].content | b64decode }}"
+    authelia_oidc_jwks_key: "{{ authelia_oidc_secret_files.results[1].content | b64decode }}"
+  no_log: true
+
 # ansible_become: false on the delegated tasks is REQUIRED — Ansible inherits
 # the play's become: true on delegated tasks regardless of task-level become,
 # which fails with "sudo: a password is required" on the controller.
