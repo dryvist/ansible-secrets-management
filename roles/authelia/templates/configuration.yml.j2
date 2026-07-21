@@ -28,6 +28,36 @@ webauthn:
   enable_passkey_login: true
   experimental_enable_passkey_uv_two_factors: true
 
+# Native OIDC is required by Hermes Dashboard before it will bind beyond
+# loopback. The client is public and PKCE-only; no reusable client secret exists.
+identity_providers:
+  oidc:
+    hmac_secret: '{{ authelia_oidc_hmac_secret }}'
+    jwks:
+      - algorithm: RS256
+        use: sig
+        key: |
+{{ authelia_oidc_jwks_key | indent(10, true) }}
+    enforce_pkce: public_clients_only
+    clients:
+      - client_id: '{{ authelia_oidc_hermes_client_id }}'
+        client_name: Hermes Dashboard
+        public: true
+        redirect_uris:
+          - '{{ authelia_oidc_hermes_redirect_uri }}'
+        scopes:
+          - openid
+          - profile
+          - email
+        grant_types:
+          - authorization_code
+        response_types:
+          - code
+        authorization_policy: two_factor
+        require_pkce: true
+        pkce_challenge_method: S256
+        token_endpoint_auth_method: none
+
 access_control:
   default_policy: deny
   rules:
