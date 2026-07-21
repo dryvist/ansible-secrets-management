@@ -7,6 +7,9 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 CANONICAL_DATA_PATH = 'path "{{ openbao_kv_mount }}/data/ai/mcp/splunk"'
+CANONICAL_UNDELETE_PATH = (
+    'path "{{ openbao_kv_mount }}/undelete/ai/mcp/splunk"'
+)
 
 
 def _read(relative_path: str) -> str:
@@ -51,6 +54,20 @@ def test_splunk_publisher_has_only_exact_transitional_write_paths():
     assert 'path "{{ openbao_kv_mount }}/data/ai/hermes"' in policy
     assert 'capabilities = ["create", "update", "read"]' in policy
     assert "/data/ai/*" not in policy
+
+
+def test_ansible_converge_can_undelete_only_exact_splunk_secret():
+    policy = _read("roles/openbao/templates/ansible-converge-policy.hcl.j2")
+
+    exact_grant = f'{CANONICAL_UNDELETE_PATH} {{\n  capabilities = ["update"]\n}}'
+    undelete_declarations = [
+        line
+        for line in policy.splitlines()
+        if line.startswith('path "') and "/undelete/" in line
+    ]
+
+    assert exact_grant in policy
+    assert undelete_declarations == [f"{CANONICAL_UNDELETE_PATH} {{"]
 
 
 def test_local_llm_fetch_contract_merges_canonical_splunk_fields():
