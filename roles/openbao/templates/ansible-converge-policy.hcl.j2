@@ -28,6 +28,12 @@ path "{{ openbao_kv_mount }}/metadata/ai/mcp/splunk" {
   capabilities = ["read"]
 }
 
+# KV v2 soft-delete recovery uses a separate update endpoint. Keep this grant
+# pinned to the same single secret; no other ai/* path can be undeleted.
+path "{{ openbao_kv_mount }}/undelete/ai/mcp/splunk" {
+  capabilities = ["update"]
+}
+
 # Transitional exact-path exception (Vikunja MCP): the converge publishes the
 # minted Vikunja MCP connection here. Same narrow create/update/read on the
 # SINGLE secret as the splunk grant above — deliberately NOT a wildcard.
