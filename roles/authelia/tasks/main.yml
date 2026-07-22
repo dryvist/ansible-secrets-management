@@ -55,6 +55,10 @@
 - name: Generate the OIDC signing key (create-if-absent, guest-local)
   ansible.builtin.command:
     argv:
+      - runuser
+      - -u
+      - "{{ authelia_user }}"
+      - --
       - openssl
       - genpkey
       - -algorithm
@@ -64,9 +68,21 @@
       - -pkeyopt
       - rsa_keygen_bits:2048
     creates: "{{ authelia_oidc_jwks_key_file }}"
-  become: true
-  become_user: "{{ authelia_user }}"
+  # Minimal Proxmox LXC templates do not include sudo. PCT already executes the
+  # module as guest root, so use util-linux runuser for the one de-escalated
+  # process instead of Ansible become_user (which would require guest sudo).
+  become: false
+  vars:
+    ansible_become: false
   no_log: true
+
+- name: Enforce OIDC signing key permissions
+  ansible.builtin.file:
+    path: "{{ authelia_oidc_jwks_key_file }}"
+    state: file
+    owner: "{{ authelia_user }}"
+    group: "{{ authelia_group }}"
+    mode: "0600"
 
 - name: Read guest-generated OIDC secrets for the protected config render
   ansible.builtin.slurp:
