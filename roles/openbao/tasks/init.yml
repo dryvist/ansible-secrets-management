@@ -936,8 +936,8 @@
       - openbao_oauthapp_slack_client_secret | length > 0
     fail_msg: >-
       OAuthapp is mounted but {{ openbao_oauthapp_slack_server_name }} is not
-      configured. Supply OPENBAO_SLACK_POC_CLIENT_ID and
-      OPENBAO_SLACK_POC_CLIENT_SECRET for this one-time sealed write.
+      configured. Supply SLACK_OPENBAO_CLIENT_ID and
+      SLACK_OPENBAO_CLIENT_SECRET for this one-time sealed write.
   when:
     - openbao_bootstrap_token is defined
     - openbao_oauthapp_engine_enabled | bool

@@ -396,8 +396,8 @@ query parameters from access logs. The browser URL still carries the one-time
 state value OpenBao generated. Do not put the callback behind Authelia; an SSO
 redirect would break the OAuth return.
 
-Initial server configuration needs `OPENBAO_SLACK_POC_CLIENT_ID` and
-`OPENBAO_SLACK_POC_CLIENT_SECRET` during one privileged convergence. They are
+Initial server configuration needs `SLACK_OPENBAO_CLIENT_ID` and
+`SLACK_OPENBAO_CLIENT_SECRET` during one privileged convergence. They are
 written into OAuthapp's encrypted configuration and are deliberately not
 rewritten by routine converges. Before a live POC, the upstream firewall owner
 must allow every OpenBao voter egress to `slack.com:443`; this role does not own
