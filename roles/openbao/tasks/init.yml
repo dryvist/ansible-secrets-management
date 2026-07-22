@@ -757,6 +757,239 @@
       or ((item.1.stdout | from_json).data.permissions | default({}, true))
          != (item.0.permissions | default({}, true))
 
+# --- OAuthapp secrets engine (external, Slack OAuth V2 POC) -----------------
+# The plugin binary was staged on every voter by main.yml. Its archive hash is
+# a documented POC-only integrity exception, not publisher authentication.
+- name: Read the staged OAuthapp plugin binary's sha256
+  ansible.builtin.stat:
+    path: "{{ openbao_plugin_dir }}/{{ openbao_oauthapp_plugin_command }}"
+    checksum_algorithm: sha256
+  register: openbao_oauthapp_plugin_stat
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_oauthapp_engine_enabled | bool
+
+- name: Assert the OAuthapp plugin binary is staged
+  ansible.builtin.assert:
+    that:
+      - openbao_oauthapp_plugin_stat.stat.exists
+    fail_msg: >-
+      {{ openbao_plugin_dir }}/{{ openbao_oauthapp_plugin_command }} is missing.
+      Re-run the full role so every Raft voter receives the plugin first.
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_oauthapp_engine_enabled | bool
+
+- name: Check whether the OAuthapp plugin version is registered
+  ansible.builtin.command:
+    cmd: >-
+      bao plugin info -format=json
+      -version={{ openbao_oauthapp_plugin_catalog_version }}
+      secret {{ openbao_oauthapp_plugin_name }}
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  register: openbao_oauthapp_plugin_check
+  no_log: true
+  changed_when: false
+  failed_when: false
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_oauthapp_engine_enabled | bool
+
+- name: Register the OAuthapp plugin version
+  ansible.builtin.command:
+    cmd: >-
+      bao plugin register
+      -sha256={{ openbao_oauthapp_plugin_stat.stat.checksum }}
+      -command={{ openbao_oauthapp_plugin_command }}
+      -version={{ openbao_oauthapp_plugin_catalog_version }}
+      secret {{ openbao_oauthapp_plugin_name }}
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  no_log: true
+  changed_when: true
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_oauthapp_engine_enabled | bool
+    - (openbao_oauthapp_plugin_check.rc | default(1)) != 0
+
+- name: Enable the OAuthapp secrets engine
+  ansible.builtin.command:
+    cmd: >-
+      bao secrets enable -path={{ openbao_oauthapp_mount }}
+      -plugin-version={{ openbao_oauthapp_plugin_catalog_version }}
+      {{ openbao_oauthapp_plugin_name }}
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  no_log: true
+  changed_when: true
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_oauthapp_engine_enabled | bool
+    - (openbao_oauthapp_mount ~ '/') not in (openbao_mounts_raw.stdout | from_json).keys()
+
+- name: Tune the existing OAuthapp mount to the declared plugin version
+  ansible.builtin.command:
+    cmd: >-
+      bao secrets tune -plugin-version={{ openbao_oauthapp_plugin_catalog_version }}
+      {{ openbao_oauthapp_mount }}/
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  register: openbao_oauthapp_plugin_tune
+  no_log: true
+  changed_when: true
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_oauthapp_engine_enabled | bool
+    - (openbao_oauthapp_mount ~ '/') in (openbao_mounts_raw.stdout | from_json).keys()
+    - >-
+      ((openbao_mounts_raw.stdout | from_json)[openbao_oauthapp_mount ~ '/'].plugin_version
+       | default('')) != openbao_oauthapp_plugin_catalog_version
+
+- name: Reload the OAuthapp plugin across the Raft cluster after an upgrade
+  ansible.builtin.command:
+    cmd: "bao plugin reload -plugin={{ openbao_oauthapp_plugin_name }} -scope=global"
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  no_log: true
+  changed_when: true
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_oauthapp_engine_enabled | bool
+    - openbao_oauthapp_plugin_tune is changed
+
+- name: Read the OAuthapp engine configuration
+  ansible.builtin.command:
+    cmd: "bao read -format=json {{ openbao_oauthapp_mount }}/config"
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  register: openbao_oauthapp_config_check
+  no_log: true
+  changed_when: false
+  failed_when: false
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_oauthapp_engine_enabled | bool
+
+- name: Configure OAuthapp refresh behavior and default Slack server
+  ansible.builtin.uri:
+    url: "{{ openbao_api_addr }}/v1/{{ openbao_oauthapp_mount }}/config"
+    method: POST
+    headers:
+      X-Vault-Token: "{{ openbao_bootstrap_token }}"
+    body_format: json
+    body:
+      default_server: "{{ openbao_oauthapp_slack_server_name }}"
+      tune_refresh_check_interval_seconds: "{{ openbao_oauthapp_refresh_check_interval_seconds | int }}"
+    status_code:
+      - 200
+      - 204
+  no_log: true
+  changed_when: true
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_oauthapp_engine_enabled | bool
+    - >-
+      (openbao_oauthapp_config_check.rc | default(1)) != 0
+      or ((openbao_oauthapp_config_check.stdout | default('{}', true) | from_json).data.default_server
+          | default('', true)) != openbao_oauthapp_slack_server_name
+      or ((openbao_oauthapp_config_check.stdout | default('{}', true)
+           | from_json).data.tune_refresh_check_interval_seconds
+          | default(0, true) | int) != (openbao_oauthapp_refresh_check_interval_seconds | int)
+
+- name: Read the Slack OAuthapp server configuration
+  ansible.builtin.command:
+    cmd: >-
+      bao read -format=json {{ openbao_oauthapp_mount }}/servers/{{ openbao_oauthapp_slack_server_name }}
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  register: openbao_oauthapp_slack_server_check
+  no_log: true
+  changed_when: false
+  failed_when: false
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_oauthapp_engine_enabled | bool
+
+- name: Assert the Slack POC scope remains chat write only
+  ansible.builtin.assert:
+    that:
+      - openbao_oauthapp_slack_bot_scopes == ['chat:write']
+    fail_msg: >-
+      This POC is intentionally restricted to Slack bot scope chat:write. Add
+      a separately reviewed credential and policy for any wider Slack access.
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_oauthapp_engine_enabled | bool
+
+- name: Require Slack OAuth client credentials for first OAuthapp configuration
+  ansible.builtin.assert:
+    that:
+      - openbao_oauthapp_slack_client_id | length > 0
+      - openbao_oauthapp_slack_client_secret | length > 0
+    fail_msg: >-
+      OAuthapp is mounted but {{ openbao_oauthapp_slack_server_name }} is not
+      configured. Supply OPENBAO_SLACK_POC_CLIENT_ID and
+      OPENBAO_SLACK_POC_CLIENT_SECRET for this one-time sealed write.
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_oauthapp_engine_enabled | bool
+    - (openbao_oauthapp_slack_server_check.rc | default(1)) != 0
+
+- name: Configure the Slack OAuthapp server (first configuration only)
+  ansible.builtin.uri:
+    url: >-
+      {{ openbao_api_addr }}/v1/{{ openbao_oauthapp_mount
+      }}/servers/{{ openbao_oauthapp_slack_server_name }}
+    method: POST
+    headers:
+      X-Vault-Token: "{{ openbao_bootstrap_token }}"
+    body_format: json
+    body:
+      provider: custom
+      client_id: "{{ openbao_oauthapp_slack_client_id }}"
+      client_secret: "{{ openbao_oauthapp_slack_client_secret }}"
+      provider_options: "{{ openbao_oauthapp_slack_provider_options }}"
+    status_code:
+      - 200
+      - 204
+  no_log: true
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_oauthapp_engine_enabled | bool
+    - (openbao_oauthapp_slack_server_check.rc | default(1)) != 0
+    - openbao_oauthapp_slack_client_id | length > 0
+    - openbao_oauthapp_slack_client_secret | length > 0
+
+- name: Refuse unexpected Slack OAuthapp server drift
+  ansible.builtin.assert:
+    that:
+      - >-
+        (openbao_oauthapp_slack_server_check.stdout | from_json).data.provider
+        | default('', true) == 'custom'
+      - >-
+        (openbao_oauthapp_slack_server_check.stdout | from_json).data.provider_options
+        | default({}, true) == openbao_oauthapp_slack_provider_options
+      - >-
+        openbao_oauthapp_slack_client_id | length == 0
+        or (openbao_oauthapp_slack_server_check.stdout | from_json).data.client_id
+           | default('', true) == openbao_oauthapp_slack_client_id
+    fail_msg: >-
+      The configured Slack OAuthapp server differs from the declared V2 OAuth
+      settings. Rotate its client secret deliberately; routine converge never
+      replaces a stored OAuth client secret or refresh token.
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_oauthapp_engine_enabled | bool
+    - (openbao_oauthapp_slack_server_check.rc | default(1)) == 0
+
 # --- SSH secrets engine (builtin — the SSH client CA) ------------------------
 # Signed short-TTL client certificates per the ssh-certificate-authority ADR.
 # Builtin engine: no plugin staging/registration, just enable + write-once CA

@@ -313,6 +313,60 @@ openbao_github_permission_sets:
     installation_id: "{{ openbao_github_personal_installation_id }}"
     permissions: "{{ openbao_github_read_permissions }}"
 
+# --- OAuth application secrets engine (Slack token-rotation POC) -----------
+# The upstream OAuthapp plugin is staged like every other external plugin, but
+# v3.3.0 publishes only an unsigned checksum file. The literal below is an
+# accepted POC-only exception: it detects transport corruption but does not
+# authenticate the publisher. Keep this engine disabled until the Slack app and
+# reviewed Slack egress rule are ready; production use remains blocked on
+# verifiable upstream provenance or a controlled signed build.
+openbao_oauthapp_engine_enabled: false
+openbao_oauthapp_mount: oauthapp
+openbao_oauthapp_plugin_name: oauthapp
+openbao_oauthapp_plugin_version: "3.3.0"
+openbao_oauthapp_plugin_catalog_version: "v{{ openbao_oauthapp_plugin_version }}"
+openbao_oauthapp_plugin_release_base_url: >-
+  https://github.com/openbao/openbao-plugin-secrets-oauthapp/releases/download
+openbao_oauthapp_plugin_release_tag: "v{{ openbao_oauthapp_plugin_version }}"
+openbao_oauthapp_plugin_tarball: >-
+  openbao-plugin-secrets-oauthapp-v{{ openbao_oauthapp_plugin_version }}-linux-amd64.tar.xz
+openbao_oauthapp_plugin_binary: >-
+  openbao-plugin-secrets-oauthapp-v{{ openbao_oauthapp_plugin_version }}-linux-amd64
+openbao_oauthapp_plugin_command: >-
+  {{ openbao_oauthapp_plugin_binary }}-v{{ openbao_oauthapp_plugin_version }}
+openbao_oauthapp_plugin_tarball_url: >-
+  {{ openbao_oauthapp_plugin_release_base_url }}/{{ openbao_oauthapp_plugin_release_tag
+  }}/{{ openbao_oauthapp_plugin_tarball }}
+openbao_oauthapp_plugin_tarball_sha256: 086b84e0199a63a05fc73dd198eadc962b10c413864980cafbd0a67f1487d082
+
+# OAuthapp's built-in Slack provider uses Slack's legacy OAuth endpoints. Use
+# the custom provider so a granular Slack app can use OAuth V2 + token rotation.
+# Client credentials are supplied only for initial configuration/intentional
+# rotation and are stored inside the engine, never in KV or the repository.
+openbao_oauthapp_slack_server_name: slack-poc
+openbao_oauthapp_slack_credential_name: slack-poc
+openbao_oauthapp_slack_client_id: >-
+  {{ lookup('env', 'OPENBAO_SLACK_POC_CLIENT_ID') | default('', true) }}
+openbao_oauthapp_slack_client_secret: >-
+  {{ lookup('env', 'OPENBAO_SLACK_POC_CLIENT_SECRET') | default('', true) }}
+openbao_oauthapp_slack_callback_url: >-
+  https://openbao.{{ lookup('env', 'PROXMOX_SUBDOMAIN') }}/oauth/slack/callback
+openbao_oauthapp_slack_provider_options:
+  auth_code_url: https://slack.com/oauth/v2/authorize
+  token_url: https://slack.com/api/oauth.v2.access
+  auth_style: in_params
+openbao_oauthapp_slack_bot_scopes:
+  - chat:write
+openbao_oauthapp_refresh_check_interval_seconds: 60
+
+# The POC consumer can read exactly one stored Slack credential. The returned
+# Slack token has Slack's 12-hour lifetime; this 15-minute AppRole TTL only
+# limits how long a requester can ask OpenBao for it.
+openbao_oauthapp_slack_poc_policy_name: oauthapp-slack-poc-read
+openbao_oauthapp_slack_poc_approle_name: oauthapp-slack-poc-read
+openbao_oauthapp_slack_poc_token_ttl: 15m
+openbao_oauthapp_slack_poc_secret_id_ttl: 15m
+
 # --- SSH secrets engine (signed client certificates — the SSH CA) -----------
 # Implements the ssh-certificate-authority ADR (docs-starlight): automation
 # authenticates to estate hosts with short-TTL SSH certificates signed by an
@@ -665,6 +719,16 @@ openbao_apps_seed_approle_name: apps-seed
 openbao_llm_gate_policy_name: llm-gate
 openbao_llm_gate_approle_name: llm-gate
 
+openbao_oauthapp_approles: >-
+  {{ ([{
+        'name': openbao_oauthapp_slack_poc_approle_name,
+        'policy': openbao_oauthapp_slack_poc_policy_name,
+        'token_ttl': openbao_oauthapp_slack_poc_token_ttl,
+        'token_max_ttl': openbao_oauthapp_slack_poc_token_ttl,
+        'secret_id_ttl': openbao_oauthapp_slack_poc_secret_id_ttl,
+        'secret_id_num_uses': 1
+      }] if openbao_oauthapp_engine_enabled | bool else []) }}
+
 # The set of non-root AppRoles to provision, each {name, policy}. Driving the
 # bootstrap from this list keeps init.yml DRY as groups are added. Per-identity
 # `secret_id_bound_cidrs` hardening is left as a tracked follow-up: the real
@@ -788,7 +852,7 @@ openbao_base_approles:
     policy: "{{ openbao_llm_gate_policy_name }}"
 # Full AppRole set = the static base above + the per-service ai-apply-<svc> actor
 # roles generated from openbao_ai_domains. init.yml loops this combined list.
-openbao_approles: "{{ openbao_base_approles + openbao_ai_apply_approles }}"
+openbao_approles: "{{ openbao_base_approles + openbao_oauthapp_approles + openbao_ai_apply_approles }}"
 # Policy templates rendered + written on the bootstrap host. Each entry maps a
 # policy name to its template; add a row to grow the RBAC surface.
 #
@@ -876,13 +940,19 @@ openbao_base_policies:
     template: apps-seed-policy.hcl.j2
   - name: "{{ openbao_llm_gate_policy_name }}"
     template: llm-gate-policy.hcl.j2
+openbao_oauthapp_policies: >-
+  {{ ([{
+        'name': openbao_oauthapp_slack_poc_policy_name,
+        'template': 'oauthapp-slack-poc-policy.hcl.j2'
+      }] if openbao_oauthapp_engine_enabled | bool else []) }}
 # Full policy set = the static base above + the base read-/write-/github-mint
 # capability leaves generated from openbao_ai_domains + the ssh-sign-<role>
 # leaves generated from openbao_ssh_roles. init.yml renders this list.
 # NOTE: ssh-sign-ci-runner is rendered but attached to no identity yet — no CI
 # AppRole/JWT identity exists in this role today; attach it when one does.
 openbao_policies: >-
-  {{ openbao_base_policies + openbao_ai_capability_policies + openbao_ssh_sign_policies }}
+  {{ openbao_base_policies + openbao_oauthapp_policies
+     + openbao_ai_capability_policies + openbao_ssh_sign_policies }}
 
 # --- External admin token (provisioning against an ALREADY-LIVE cluster) -----
 # The initial `bao operator init` only happens once; after that, adding new

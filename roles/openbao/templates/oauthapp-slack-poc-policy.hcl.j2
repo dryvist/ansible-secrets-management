@@ -1,0 +1,8 @@
+{{ ansible_managed | comment }}
+# POC Slack consumer: return the current access token for exactly one OAuth
+# credential. No list/config/server access and no write/delete capability means
+# this identity cannot replace its refresh token, widen Slack scope, or inspect
+# another OAuth application credential.
+path "{{ openbao_oauthapp_mount }}/creds/{{ openbao_oauthapp_slack_credential_name }}" {
+  capabilities = ["read"]
+}

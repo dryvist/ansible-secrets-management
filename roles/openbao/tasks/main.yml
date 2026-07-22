@@ -416,6 +416,65 @@
     mode: "0750"
   when: openbao_github_engine_enabled | bool
 
+# --- Phase 5e: stage OAuthapp (external, all voters) -----------------------
+# The release publishes an unsigned checksum only. Its pinned hash is an
+# explicitly accepted POC exception (see defaults); it is not signature
+# verification. The archive is staged on the controller and copied to every
+# voter because each node launches its own plugin process after failover.
+- name: Stage the OAuthapp plugin archive on controller (POC hash-pinned)
+  ansible.builtin.get_url:
+    url: "{{ openbao_oauthapp_plugin_tarball_url }}"
+    dest: "/tmp/{{ openbao_oauthapp_plugin_tarball }}"
+    checksum: "sha256:{{ openbao_oauthapp_plugin_tarball_sha256 }}"
+    mode: "0644"
+    force: true
+  delegate_to: localhost
+  connection: local
+  become: false
+  vars:
+    ansible_become: false
+  run_once: true
+  when: openbao_oauthapp_engine_enabled | bool
+
+- name: Extract the OAuthapp plugin binary into the plugin directory
+  ansible.builtin.unarchive:
+    src: "/tmp/{{ openbao_oauthapp_plugin_tarball }}"
+    dest: "{{ openbao_plugin_dir }}"
+    include:
+      - "{{ openbao_oauthapp_plugin_binary }}"
+    owner: root
+    group: "{{ openbao_group }}"
+    mode: "0750"
+  when: openbao_oauthapp_engine_enabled | bool
+
+- name: Verify the extracted OAuthapp plugin binary
+  ansible.builtin.stat:
+    path: "{{ openbao_plugin_dir }}/{{ openbao_oauthapp_plugin_binary }}"
+    checksum_algorithm: sha256
+  register: openbao_oauthapp_extracted_plugin
+  when: openbao_oauthapp_engine_enabled | bool
+
+- name: Assert the OAuthapp plugin binary is protected
+  ansible.builtin.assert:
+    that:
+      - openbao_oauthapp_extracted_plugin.stat.exists
+      - openbao_oauthapp_extracted_plugin.stat.pw_name == 'root'
+      - openbao_oauthapp_extracted_plugin.stat.mode == '0750'
+    fail_msg: >-
+      OAuthapp plugin binary is missing or has unsafe ownership/mode after
+      extracting {{ openbao_oauthapp_plugin_tarball }}.
+  when: openbao_oauthapp_engine_enabled | bool
+
+- name: Install the immutable OAuthapp plugin command
+  ansible.builtin.copy:
+    src: "{{ openbao_plugin_dir }}/{{ openbao_oauthapp_plugin_binary }}"
+    dest: "{{ openbao_plugin_dir }}/{{ openbao_oauthapp_plugin_command }}"
+    remote_src: true
+    owner: root
+    group: "{{ openbao_group }}"
+    mode: "0750"
+  when: openbao_oauthapp_engine_enabled | bool
+
 # --- Phase 6: configuration --------------------------------------------------
 - name: Render OpenBao server config
   ansible.builtin.template:
