@@ -370,6 +370,21 @@
           GitHub plugin binary missing or wrong owner/mode:
           {{ bao_github_plugin.stat | default({}) }}
 
+    - name: Stat the staged OAuthapp plugin binary
+      ansible.builtin.stat:
+        path: /opt/openbao/plugins/openbao-plugin-secrets-oauthapp-v3.3.0-linux-amd64-v3.3.0
+      register: bao_oauthapp_plugin
+
+    - name: Assert the OAuthapp plugin binary is staged and protected
+      ansible.builtin.assert:
+        that:
+          - bao_oauthapp_plugin.stat.exists
+          - bao_oauthapp_plugin.stat.pw_name == 'root'
+          - bao_oauthapp_plugin.stat.mode == '0750'
+        fail_msg: >-
+          OAuthapp plugin binary missing or wrong owner/mode:
+          {{ bao_oauthapp_plugin.stat | default({}) }}
+
     - name: Read the terraform-apply policy template source
       ansible.builtin.slurp:
         src: "{{ playbook_dir }}/../../roles/openbao/templates/terraform-apply-policy.hcl.j2"
@@ -387,6 +402,27 @@
     - name: Load OpenBao role defaults for policy rendering
       ansible.builtin.include_vars:
         file: "{{ playbook_dir }}/../../roles/openbao/defaults/main.yml"
+
+    - name: Render the Slack POC policy with role defaults
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../../roles/openbao/templates/oauthapp-slack-poc-policy.hcl.j2"
+        dest: /tmp/oauthapp-slack-poc-policy.hcl
+        mode: "0600"
+
+    - name: Read the rendered Slack POC policy
+      ansible.builtin.slurp:
+        src: /tmp/oauthapp-slack-poc-policy.hcl
+      register: bao_oauthapp_slack_poc_policy
+
+    - name: Assert the Slack POC policy can only read its one credential
+      ansible.builtin.assert:
+        that:
+          - "'path \"oauthapp/creds/slack-poc\"' in (bao_oauthapp_slack_poc_policy.content | b64decode)"
+          - "'capabilities = [\"read\"]' in (bao_oauthapp_slack_poc_policy.content | b64decode)"
+          - >-
+            (bao_oauthapp_slack_poc_policy.content | b64decode
+             | regex_findall('path "')) | length == 1
+        fail_msg: "OAuthapp Slack POC policy is wider than one read-only credential path"
 
     - name: Render the ai-orchestrator policy with role defaults
       ansible.builtin.template:
