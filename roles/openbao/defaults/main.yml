@@ -346,9 +346,9 @@ openbao_oauthapp_plugin_tarball_sha256: 086b84e0199a63a05fc73dd198eadc962b10c413
 openbao_oauthapp_slack_server_name: slack-poc
 openbao_oauthapp_slack_credential_name: slack-poc
 openbao_oauthapp_slack_client_id: >-
-  {{ lookup('env', 'OPENBAO_SLACK_POC_CLIENT_ID') | default('', true) }}
+  {{ lookup('env', 'SLACK_OPENBAO_CLIENT_ID') | default('', true) }}
 openbao_oauthapp_slack_client_secret: >-
-  {{ lookup('env', 'OPENBAO_SLACK_POC_CLIENT_SECRET') | default('', true) }}
+  {{ lookup('env', 'SLACK_OPENBAO_CLIENT_SECRET') | default('', true) }}
 openbao_oauthapp_slack_callback_url: >-
   https://openbao.{{ lookup('env', 'PROXMOX_SUBDOMAIN') }}/oauth/slack/callback
 openbao_oauthapp_slack_provider_options:
