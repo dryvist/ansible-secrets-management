@@ -1,8 +1,8 @@
 {{ ansible_managed | comment }}
 # OpenBao policy for the ansible-converge AppRole — config-management pulls
 # (was "ansible"). Read-only on the platform + apps subtrees (the credentials
-# roles consume); no access to the infra kernel (secret/infra/*). The single
-# exact-path write below is the only exception (see it for scope).
+# roles consume); no access to the infra kernel (secret/infra/*). The exact-path
+# MCP publication grants below are the only write exceptions.
 
 {% for sub in ['platform', 'apps'] %}
 path "{{ openbao_kv_mount }}/data/{{ sub }}/*" {
@@ -19,7 +19,7 @@ path "{{ openbao_kv_mount }}/metadata/{{ sub }}/*" {
 # here. Narrow create/update/read on the SINGLE secret — deliberately NOT a
 # wildcard and NOT blanket secret/ai/* write (that stays with ai-orchestrator).
 # `read` is required: the publisher does a read-modify-write to preserve sibling
-# fields. Mirrors the hermes-write exact-path precedent.
+# fields. This follows the same exact-path scoping pattern as hermes-write.
 path "{{ openbao_kv_mount }}/data/ai/mcp/splunk" {
   capabilities = ["create", "update", "read"]
 }

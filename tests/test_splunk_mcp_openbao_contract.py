@@ -7,6 +7,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 CANONICAL_DATA_PATH = 'path "{{ openbao_kv_mount }}/data/ai/mcp/splunk"'
+CANONICAL_METADATA_PATH = 'path "{{ openbao_kv_mount }}/metadata/ai/mcp/splunk"'
 CANONICAL_UNDELETE_PATH = (
     'path "{{ openbao_kv_mount }}/undelete/ai/mcp/splunk"'
 )
@@ -47,18 +48,38 @@ def test_unrelated_domain_identity_cannot_read_shared_splunk_secret():
     assert "/data/ai/" not in policy
 
 
-def test_splunk_publisher_has_only_exact_transitional_write_paths():
+def test_hermes_writer_is_scoped_to_only_the_hermes_secret():
     policy = _read("roles/openbao/templates/hermes-write-policy.hcl.j2")
 
-    assert CANONICAL_DATA_PATH in policy
-    assert 'path "{{ openbao_kv_mount }}/data/ai/hermes"' in policy
-    assert 'capabilities = ["create", "update", "read"]' in policy
-    assert "/data/ai/*" not in policy
+    data_grant = (
+        'path "{{ openbao_kv_mount }}/data/ai/hermes" {\n'
+        '  capabilities = ["create", "update", "read"]\n}'
+    )
+    metadata_grant = (
+        'path "{{ openbao_kv_mount }}/metadata/ai/hermes" {\n'
+        '  capabilities = ["read"]\n}'
+    )
+    policy_paths = [
+        line for line in policy.splitlines() if line.startswith('path "')
+    ]
+
+    assert policy_paths == [
+        'path "{{ openbao_kv_mount }}/data/ai/hermes" {',
+        'path "{{ openbao_kv_mount }}/metadata/ai/hermes" {',
+    ]
+    assert data_grant in policy
+    assert metadata_grant in policy
+    assert "ai/mcp/splunk" not in policy
 
 
-def test_ansible_converge_can_undelete_only_exact_splunk_secret():
+def test_ansible_converge_owns_the_exact_splunk_publisher_paths():
     policy = _read("roles/openbao/templates/ansible-converge-policy.hcl.j2")
 
+    data_grant = (
+        f'{CANONICAL_DATA_PATH} {{\n'
+        '  capabilities = ["create", "update", "read"]\n}'
+    )
+    metadata_grant = f'{CANONICAL_METADATA_PATH} {{\n  capabilities = ["read"]\n}}'
     exact_grant = f'{CANONICAL_UNDELETE_PATH} {{\n  capabilities = ["update"]\n}}'
     undelete_declarations = [
         line
@@ -66,6 +87,8 @@ def test_ansible_converge_can_undelete_only_exact_splunk_secret():
         if line.startswith('path "') and "/undelete/" in line
     ]
 
+    assert data_grant in policy
+    assert metadata_grant in policy
     assert exact_grant in policy
     assert undelete_declarations == [f"{CANONICAL_UNDELETE_PATH} {{"]
 
