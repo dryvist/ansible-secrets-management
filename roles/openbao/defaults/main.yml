@@ -367,8 +367,10 @@ openbao_ssh_source_address_cidrs: "{{ lookup('env', 'OPENBAO_SSH_SOURCE_CIDRS') 
 #                      secret/infra/* context for lock decisions
 #   Terrakube jobs authenticate through the exact-claim JWT roles below;
 #   there is no stored Terrakube AppRole credential.
-#   ansible-converge — config-management pulls (was "ansible"); read-only,
-#                      secret/platform/*, secret/apps/*
+#   ansible-converge — config-management pulls (was "ansible"); read-only on
+#                      secret/platform/* and secret/apps/*, plus exact
+#                      publication grants for secret/ai/mcp/{splunk,vikunja,
+#                      zammad}; no broad secret/ai/* access
 #   observability    — splunk + cribl; read-only, secret/platform/{splunk,cribl}
 #   local-cloud      — object-storage/S3/compute; read-only,
 #                      secret/platform/{object-storage,compute}
@@ -383,11 +385,10 @@ openbao_ssh_source_address_cidrs: "{{ lookup('env', 'OPENBAO_SSH_SOURCE_CIDRS') 
 #                      future providers get their own sibling policy.
 #   hermes           — Hermes AI agent; read-only, exact secret/ai/hermes and
 #                      secret/ai/mcp/splunk paths, NOT the broad ai subtree
-#   hermes-write     — least-privilege WRITE to exact secret/ai/hermes and
-#                      secret/ai/mcp/splunk paths (no wildcard, no other paths).
-#                      Used for ansible-splunk publication + one-time Hermes seed. A narrow
-#                      complement to the broad ai-orchestrator
-#                      writer — scoped down to just the Hermes secret.
+#   hermes-write     — least-privilege WRITE to exact secret/ai/hermes only
+#                      (no wildcard, no other paths). Used for the one-time
+#                      Hermes credential seed; ansible-converge owns shared MCP
+#                      publication.
 #   public           — anonymous, non-exploitable facts (domain/subdomain);
 #                      read-only, secret/public/*; needs no secret-zero —
 #                      shipped ambiently like other non-secret internal config

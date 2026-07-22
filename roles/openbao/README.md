@@ -199,14 +199,14 @@ plans):
 | `apps-seed` | `secret/apps/*` | `secret/apps/*` create/update | Doppler-published writer; Terraform `vault-secrets` seeds `secret/apps/<app>` at source |
 | `flow-lock` | `secret/locks/global`, `secret/infra/*` | `secret/locks/global` | Cross-repo apply lock; releases the lock via metadata delete |
 | `terrakube-<workspace>` JWT | Only that workspace's native paths | Workspace-specific | Short-lived; exact organization/workspace subject and audience |
-| `ansible-converge` | `secret/platform/*`, `secret/apps/*` | — | Config-management pulls |
+| `ansible-converge` | Platform, apps, exact MCP secrets | Exact MCP secrets | Config pulls and transitional MCP publishers; no broad AI access |
 | `observability` | `secret/platform/{splunk,cribl}` | — | Ingest pipeline (shared HEC tokens) |
 | `local-cloud` | `secret/platform/{object-storage,compute}` | — | RustFS + compute creds |
 | `monitoring` | `secret/apps/monitoring` | — | netmon/unifi_metrics/prometheus_stack |
 | `media` | `secret/apps/media` | — | *arr/qBittorrent/Plex stack |
 | `local-llm` | `secret/ai/*` | — | The LLM serving stack itself |
 | `hermes` | `secret/ai/hermes`, `secret/ai/mcp/splunk` | — | Dedicated least-privilege reader for Hermes; NO broad `secret/ai/*` |
-| `hermes-write` | exact Hermes + Splunk MCP paths | exact Hermes + Splunk MCP paths | Narrow publisher/seed writer; complements `ai-orchestrator` |
+| `hermes-write` | `secret/ai/hermes` | `secret/ai/hermes` | Narrow one-time credential seed writer; shared MCP publication belongs to `ansible-converge` |
 | `public` | `secret/public/*` | — | **Anonymous** — no secret-zero; shipped ambiently |
 | `ai-orchestrator` | `secret/ai/{hermes,agents}` | `secret/ai/{hermes,agents}` (create/update) | WRITE; Doppler tier-0; narrowed + 30m TTL at Phase-3 |
 | `ai-readonly` | `read-all` (= `read-<svc>` ∀ services) | — | **default AI agent; NO `secret/infra/*`**[^ai-tiers] |
