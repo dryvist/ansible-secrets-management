@@ -313,14 +313,12 @@ openbao_github_permission_sets:
     installation_id: "{{ openbao_github_personal_installation_id }}"
     permissions: "{{ openbao_github_read_permissions }}"
 
-# --- OAuth application secrets engine (Slack token-rotation POC) -----------
+# --- OAuth application secrets engine (Slack token rotation) ----------------
 # The upstream OAuthapp plugin is staged like every other external plugin, but
-# v3.3.0 publishes only an unsigned checksum file. The literal below is an
-# accepted POC-only exception: it detects transport corruption but does not
-# authenticate the publisher. Keep this engine disabled until the Slack app and
-# reviewed Slack egress rule are ready; production use remains blocked on
-# verifiable upstream provenance or a controlled signed build.
-openbao_oauthapp_engine_enabled: false
+# v3.3.0 publishes only an unsigned checksum file. The pinned SHA-256 detects
+# transport corruption but does not authenticate the publisher. Treat every
+# plugin upgrade as a reviewed supply-chain event.
+openbao_oauthapp_engine_enabled: true
 openbao_oauthapp_mount: oauthapp
 openbao_oauthapp_plugin_name: oauthapp
 openbao_oauthapp_plugin_version: "3.3.0"
@@ -357,11 +355,16 @@ openbao_oauthapp_slack_provider_options:
   auth_style: in_params
 openbao_oauthapp_slack_bot_scopes:
   - chat:write
+  - chat:write.public
+  - channels:read
+  - channels:history
+  - channels:join
+  - channels:manage
 openbao_oauthapp_refresh_check_interval_seconds: 60
 
-# The POC consumer can read exactly one stored Slack credential. The returned
-# Slack token has Slack's 12-hour lifetime; this 15-minute AppRole TTL only
-# limits how long a requester can ask OpenBao for it.
+# The JacobPEvans Slack workspace consumer can read exactly one stored Slack
+# credential. The returned Slack token has Slack's 12-hour lifetime; this
+# 15-minute AppRole TTL only limits how long a requester can ask OpenBao for it.
 openbao_oauthapp_slack_poc_policy_name: oauthapp-slack-poc-read
 openbao_oauthapp_slack_poc_approle_name: oauthapp-slack-poc-read
 openbao_oauthapp_slack_poc_token_ttl: 15m

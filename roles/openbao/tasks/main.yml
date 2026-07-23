@@ -418,10 +418,10 @@
 
 # --- Phase 5e: stage OAuthapp (external, all voters) -----------------------
 # The release publishes an unsigned checksum only. Its pinned hash is an
-# explicitly accepted POC exception (see defaults); it is not signature
+# integrity control (see defaults); it is not signature
 # verification. The archive is staged on the controller and copied to every
 # voter because each node launches its own plugin process after failover.
-- name: Stage the OAuthapp plugin archive on controller (POC hash-pinned)
+- name: Stage the OAuthapp plugin archive on controller (hash-pinned)
   ansible.builtin.get_url:
     url: "{{ openbao_oauthapp_plugin_tarball_url }}"
     dest: "/tmp/{{ openbao_oauthapp_plugin_tarball }}"

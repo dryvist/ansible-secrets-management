@@ -369,14 +369,14 @@ the drift refusal (issue #1079). A live acceptance run must issue and revoke
 one token from each permission set — and prove an off-allowlist `github/token`
 request is denied — before the engine is considered deployed.
 
-## OAuthapp Slack POC (OAuth V2 token rotation)
+## OAuthapp Slack workspace credential broker (OAuth V2 token rotation)
 
-The optional `oauthapp/` mount proves that OpenBao can broker a narrowly scoped
-Slack bot token without storing it in KV. It is disabled by default
-(`openbao_oauthapp_engine_enabled: false`). The POC pins OAuthapp v3.3.0 to its
-published archive SHA-256; upstream did not publish signed provenance for this
-release, so this is an explicit POC-only integrity exception, not an
-authenticated production supply-chain path.
+The `oauthapp/` mount brokers a short-lived JacobPEvans Slack workspace bot
+token without storing it in KV. It is enabled by default. OAuthapp v3.3.0 is
+pinned to its published archive SHA-256; upstream did not publish signed
+provenance for this release, so the hash detects transport corruption but does
+not authenticate the publisher. Treat an OAuthapp upgrade as a reviewed
+supply-chain event.
 
 The server uses `provider: custom`, not OAuthapp's built-in Slack provider:
 the custom configuration targets Slack OAuth V2 (`oauth/v2/authorize` and
@@ -385,9 +385,13 @@ a dedicated development app with these exact settings:
 
 - Redirect URL: `https://openbao.${PROXMOX_SUBDOMAIN}/oauth/slack/callback`
 - Token rotation: enabled
-- Bot scope: `chat:write` only
-- Test target: invite the bot to the dedicated `#openbao-oauth-test` channel
-  only; do not add it to any other channel
+- Bot scopes: `chat:write`, `chat:write.public`, `channels:read`,
+  `channels:history`, `channels:join`, and `channels:manage`
+
+This grants public-channel inventory, public-channel posting, joining existing
+public channels, reading the public channels it has joined, and public-channel
+management for channels it has joined or created. It does not grant access to
+private channels, workspace administration, or user administration.
 
 The Traefik callback route is an exact, high-priority `noop@internal` route:
 it returns a fixed 418 and persists no query parameters. Traefik also drops all
@@ -399,9 +403,8 @@ redirect would break the OAuth return.
 Initial server configuration needs `SLACK_OPENBAO_CLIENT_ID` and
 `SLACK_OPENBAO_CLIENT_SECRET` during one privileged convergence. They are
 written into OAuthapp's encrypted configuration and are deliberately not
-rewritten by routine converges. Before a live POC, the upstream firewall owner
-must allow every OpenBao voter egress to `slack.com:443`; this role does not own
-that policy.
+rewritten by routine converges. The upstream firewall owner must allow every
+OpenBao voter egress to `slack.com:443`; this role does not own that policy.
 
 After the engine is converged and the Slack app is configured, an operator
 performs the one-time authorization from a secure, no-history session:
@@ -409,27 +412,30 @@ performs the one-time authorization from a secure, no-history session:
 ```sh
 callback="https://openbao.${PROXMOX_SUBDOMAIN}/oauth/slack/callback"
 bao write -format=json oauthapp/auth-code-url \
-  server=slack-poc redirect_url="$callback" scopes=chat:write
+  server=slack-poc redirect_url="$callback" \
+  scopes=chat:write,chat:write.public,channels:read,channels:history,channels:join,channels:manage
 ```
 
-Open the returned URL, authorize the dedicated app for the test channel, and
-verify the browser-returned `state` is exactly the generated value. Then submit
-the one-time code without recording it in shell history or logs:
+First add the same six scopes under **Bot Token Scopes** in the existing Slack
+app's **OAuth & Permissions** page, then reinstall it to the JacobPEvans
+workspace. Open the returned URL, authorize the app, and verify the
+browser-returned `state` is exactly the generated value. Then submit the
+one-time code without recording it in shell history or logs:
 
 ```sh
 bao write oauthapp/creds/slack-poc \
   server=slack-poc code="$CODE" redirect_url="$callback"
 ```
 
-The sole POC consumer policy can only read
-`oauthapp/creds/slack-poc`; it cannot list credentials, configure a provider,
-or replace a refresh token. Its OpenBao AppRole and secret ID are each limited
-to 15 minutes and the secret ID is single-use. Slack access tokens themselves
-remain valid for Slack's 12-hour rotation period, so revoking the OpenBao token
-only prevents future reads—not use of a token already returned. Tear down by
-revoking the app/token in Slack first, then deleting the OAuthapp credential
-and disabling the mount; do not rely on OpenBao lease revocation to invalidate
-an already-issued Slack token.
+The workspace consumer policy can only read `oauthapp/creds/slack-poc`; it
+cannot list credentials, configure a provider, or replace a refresh token. Its
+OpenBao AppRole and secret ID are each limited to 15 minutes and the secret ID
+is single-use. Slack access tokens themselves remain valid for Slack's 12-hour
+rotation period, so revoking the OpenBao token only prevents future reads—not
+use of a token already returned. Reauthorizing the same credential replaces its
+stored Slack refresh state. Revoke the app/token in Slack first when retiring
+access; do not rely on OpenBao lease revocation to invalidate an already-issued
+Slack token.
 
 ## SSH secrets engine (signed client certificates — the SSH CA)
 
