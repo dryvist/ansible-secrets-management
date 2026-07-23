@@ -757,9 +757,9 @@
       or ((item.1.stdout | from_json).data.permissions | default({}, true))
          != (item.0.permissions | default({}, true))
 
-# --- OAuthapp secrets engine (external, Slack OAuth V2 POC) -----------------
+# --- OAuthapp secrets engine (external, Slack OAuth V2) ---------------------
 # The plugin binary was staged on every voter by main.yml. Its archive hash is
-# a documented POC-only integrity exception, not publisher authentication.
+# pinned for integrity but does not provide publisher authentication.
 - name: Read the staged OAuthapp plugin binary's sha256
   ansible.builtin.stat:
     path: "{{ openbao_plugin_dir }}/{{ openbao_oauthapp_plugin_command }}"
@@ -892,13 +892,18 @@
     - openbao_bootstrap_token is defined
     - openbao_oauthapp_engine_enabled | bool
 
-- name: Assert the Slack POC scope remains chat write only
+- name: Assert the declared Slack workspace bot scopes
   ansible.builtin.assert:
     that:
-      - openbao_oauthapp_slack_bot_scopes == ['chat:write']
+      - >-
+        openbao_oauthapp_slack_bot_scopes == [
+          'chat:write', 'chat:write.public', 'channels:read',
+          'channels:history', 'channels:join', 'channels:manage'
+        ]
     fail_msg: >-
-      This POC is intentionally restricted to Slack bot scope chat:write. Add
-      a separately reviewed credential and policy for any wider Slack access.
+      The JacobPEvans Slack workspace credential must request the reviewed
+      public-channel scope set. Add private-channel or organization-admin
+      scopes only through a separately reviewed credential and policy.
   when:
     - openbao_bootstrap_token is defined
     - openbao_oauthapp_engine_enabled | bool
