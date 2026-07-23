@@ -1435,6 +1435,18 @@
          != (openbao_terrakube_jwt_token_ttl | regex_replace('m$', '') | int) * 60
 
 # --- AppRoles (add-if-missing), one per RBAC group --------------------------
+- name: Warn when the ai-runner AppRole secret_id has no CIDR binding
+  ansible.builtin.debug:
+    msg: >-
+      OPENBAO_AI_RUNNER_SECRET_ID_CIDR is unset — the ai-runner AppRole's
+      secret_id will be accepted from ANY source address. Documented residual:
+      compensated by the runner guest's restrictive egress firewall profile
+      (tofu-proxmox ai-github tag). Set the env var (iac secret store) to bind
+      the secret_id to the runner guest's reservation CIDR.
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_ai_runner_secret_id_cidr | length == 0
+
 - name: Check whether each AppRole already exists
   ansible.builtin.command:
     cmd: "bao read -format=json auth/approle/role/{{ item.name }}"
@@ -1459,6 +1471,8 @@
       token_max_ttl={{ item.0.token_max_ttl | default(openbao_approle_token_max_ttl) }}
       secret_id_ttl={{ item.0.secret_id_ttl | default('0') }}
       secret_id_num_uses={{ item.0.secret_id_num_uses | default('0') }}
+      {{ ('secret_id_bound_cidrs=' ~ item.0.secret_id_bound_cidrs)
+         if (item.0.secret_id_bound_cidrs | default('') | length > 0) else '' }}
   environment:
     BAO_ADDR: "{{ openbao_api_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"

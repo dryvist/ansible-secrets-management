@@ -721,6 +721,23 @@ openbao_apps_seed_approle_name: apps-seed
 # by openbao-run (the doppler-free replacement for the gate's ~/.doppler token).
 openbao_llm_gate_policy_name: llm-gate
 openbao_llm_gate_approle_name: llm-gate
+# ai-runner — the headless AI job-runner guests (ai_runner role in
+# ansible-proxmox-ai, WS7A). Own least-privilege reader for EXACTLY the three
+# third-party KV secrets the runner's job worker consumes: the Vikunja
+# dispatch-queue token and the Anthropic + OpenAI model-provider keys. None of
+# the three has an OpenBao secrets engine (Vikunja is self-hosted; Anthropic
+# and OpenAI are third-party SaaS with no plugin), so KV is the correct tier
+# per .claude/rules/openbao-plugins-first.md — NOT a duplicate of local-llm's
+# broad ai/* read, and NOT any GitHub/AWS grant (the worker consumes neither).
+openbao_ai_runner_policy_name: ai-runner
+openbao_ai_runner_approle_name: ai-runner
+# secret_id CIDR binding for the runner guest's fixed reservation. Real CIDRs
+# are never committed (public repo) — delivered via env, the same channel and
+# pattern as OPENBAO_SSH_SOURCE_CIDRS. Empty => the AppRole is created WITHOUT a
+# secret_id CIDR bind, and the runner guest's restrictive egress firewall
+# profile (tofu-proxmox ai-github tag) is the compensating control.
+openbao_ai_runner_secret_id_cidr: >-
+  {{ lookup('env', 'OPENBAO_AI_RUNNER_SECRET_ID_CIDR') | default('', true) }}
 
 openbao_oauthapp_approles: >-
   {{ ([{
@@ -853,6 +870,16 @@ openbao_base_approles:
   # (openbao-run secret-zero); reads only the bearer + ACME creds it injects.
   - name: "{{ openbao_llm_gate_approle_name }}"
     policy: "{{ openbao_llm_gate_policy_name }}"
+  # ai-runner: standing, ambient READ identity like local-llm / hermes. The
+  # openbao_secrets prefetch play in ansible-proxmox-ai logs in each converge
+  # with AI_RUNNER_VAULT_ROLE_ID / _SECRET_ID and reads the dispatch-queue +
+  # model-provider keys. secret_id is CIDR-bound to the runner guest's
+  # reservation when openbao_ai_runner_secret_id_cidr is set (env-delivered,
+  # never committed); when unset, the create task leaves it unbound and warns,
+  # and the guest's egress firewall profile is the compensating control.
+  - name: "{{ openbao_ai_runner_approle_name }}"
+    policy: "{{ openbao_ai_runner_policy_name }}"
+    secret_id_bound_cidrs: "{{ openbao_ai_runner_secret_id_cidr }}"
 # Full AppRole set = the static base above + the per-service ai-apply-<svc> actor
 # roles generated from openbao_ai_domains. init.yml loops this combined list.
 openbao_approles: "{{ openbao_base_approles + openbao_oauthapp_approles + openbao_ai_apply_approles }}"
@@ -943,6 +970,8 @@ openbao_base_policies:
     template: apps-seed-policy.hcl.j2
   - name: "{{ openbao_llm_gate_policy_name }}"
     template: llm-gate-policy.hcl.j2
+  - name: "{{ openbao_ai_runner_policy_name }}"
+    template: ai-runner-policy.hcl.j2
 openbao_oauthapp_policies: >-
   {{ ([{
         'name': openbao_oauthapp_slack_poc_policy_name,
