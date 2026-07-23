@@ -877,32 +877,6 @@
     - openbao_bootstrap_token is defined
     - openbao_oauthapp_engine_enabled | bool
 
-- name: Configure OAuthapp refresh behavior and default Slack server
-  ansible.builtin.uri:
-    url: "{{ openbao_api_addr }}/v1/{{ openbao_oauthapp_mount }}/config"
-    method: POST
-    headers:
-      X-Vault-Token: "{{ openbao_bootstrap_token }}"
-    body_format: json
-    body:
-      default_server: "{{ openbao_oauthapp_slack_server_name }}"
-      tune_refresh_check_interval_seconds: "{{ openbao_oauthapp_refresh_check_interval_seconds | int }}"
-    status_code:
-      - 200
-      - 204
-  no_log: true
-  changed_when: true
-  when:
-    - openbao_bootstrap_token is defined
-    - openbao_oauthapp_engine_enabled | bool
-    - >-
-      (openbao_oauthapp_config_check.rc | default(1)) != 0
-      or ((openbao_oauthapp_config_check.stdout | default('{}', true) | from_json).data.default_server
-          | default('', true)) != openbao_oauthapp_slack_server_name
-      or ((openbao_oauthapp_config_check.stdout | default('{}', true)
-           | from_json).data.tune_refresh_check_interval_seconds
-          | default(0, true) | int) != (openbao_oauthapp_refresh_check_interval_seconds | int)
-
 - name: Read the Slack OAuthapp server configuration
   ansible.builtin.command:
     cmd: >-
@@ -967,6 +941,34 @@
     - (openbao_oauthapp_slack_server_check.rc | default(1)) != 0
     - openbao_oauthapp_slack_client_id | length > 0
     - openbao_oauthapp_slack_client_secret | length > 0
+
+# OAuthapp validates default_server against the configured server set. Create
+# the declared Slack server first, then select it as the default.
+- name: Configure OAuthapp refresh behavior and default Slack server
+  ansible.builtin.uri:
+    url: "{{ openbao_api_addr }}/v1/{{ openbao_oauthapp_mount }}/config"
+    method: POST
+    headers:
+      X-Vault-Token: "{{ openbao_bootstrap_token }}"
+    body_format: json
+    body:
+      default_server: "{{ openbao_oauthapp_slack_server_name }}"
+      tune_refresh_check_interval_seconds: "{{ openbao_oauthapp_refresh_check_interval_seconds | int }}"
+    status_code:
+      - 200
+      - 204
+  no_log: true
+  changed_when: true
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_oauthapp_engine_enabled | bool
+    - >-
+      (openbao_oauthapp_config_check.rc | default(1)) != 0
+      or ((openbao_oauthapp_config_check.stdout | default('{}', true) | from_json).data.default_server
+          | default('', true)) != openbao_oauthapp_slack_server_name
+      or ((openbao_oauthapp_config_check.stdout | default('{}', true)
+           | from_json).data.tune_refresh_check_interval_seconds
+          | default(0, true) | int) != (openbao_oauthapp_refresh_check_interval_seconds | int)
 
 - name: Refuse unexpected Slack OAuthapp server drift
   ansible.builtin.assert:
