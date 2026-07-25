@@ -1,0 +1,24 @@
+{{ ansible_managed | comment }}
+# OpenBao policy for the `ai-runner` AppRole — the headless AI job-runner
+# guest's dedicated, least-privilege reader (WS7A; consumed by the ai_runner
+# role's openbao_secrets `ai-runner` domain in ansible-proxmox-ai). Read-only
+# on EXACTLY the three third-party KV secrets the job worker needs, and nothing
+# else in the ai subtree or any other domain:
+#   ai/vikunja         dispatch-queue API token (VIKUNJA_API_TOKEN)
+#   ai/saas/anthropic  Anthropic model-provider key (ANTHROPIC_API_KEY)
+#   ai/saas/openai     OpenAI model-provider key (OPENAI_API_KEY)
+# All three are third-party secrets with no OpenBao secrets engine, so KV is
+# the correct tier (.claude/rules/openbao-plugins-first.md). Exact paths only —
+# no ai/* glob — so this credential can never widen to the rest of ai/* the way
+# local-llm's broad read does; it reads the same paid-SaaS provider area
+# (ai/saas/<provider>) local-llm denies, one exact provider leaf at a time.
+# The consumer reads known keys with vault_kv2_get and never enumerates, so no
+# metadata list is granted (same rationale as ai-public).
+{% for kv_path in ['ai/vikunja', 'ai/saas/anthropic', 'ai/saas/openai'] %}
+path "{{ openbao_kv_mount }}/data/{{ kv_path }}" {
+  capabilities = ["read"]
+}
+path "{{ openbao_kv_mount }}/metadata/{{ kv_path }}" {
+  capabilities = ["read"]
+}
+{% endfor %}
