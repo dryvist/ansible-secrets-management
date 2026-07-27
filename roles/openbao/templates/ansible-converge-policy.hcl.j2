@@ -1,15 +1,40 @@
 {{ ansible_managed | comment }}
 # OpenBao policy for the ansible-converge AppRole — config-management pulls
-# (was "ansible"). Read-only on the platform + apps subtrees (the credentials
-# roles consume); no access to the infra kernel (secret/infra/*). The exact-path
-# MCP publication grants below are the only write exceptions.
+# (was "ansible"). ENUMERATED exact paths only: there is deliberately NO
+# platform/* or apps/* wildcard, and no access to the infra kernel
+# (secret/infra/*). The exact-path MCP publication grants below are the only
+# write exceptions.
+#
+# THE LIST BELOW IS THE CONSUMER INVENTORY. Every entry is a KV path that a
+# converge actually reads with THIS AppRole's token, and each names the reading
+# call site. A path with no named consumer does not belong here; a new consumer
+# adds its path here and nowhere else. The per-resource-domain reads
+# (observability / local-cloud / monitoring / media / apps / local-llm) do NOT
+# use this identity — roles/openbao_secrets logs each domain in with its own
+# least-privilege AppRole, so those subtrees are intentionally absent.
+#
+#   platform/object-storage
+#     The shared `inventory_resolve` role (dryvist/homelab-contracts, pinned in
+#     each repo's requirements.yml) reads these object-storage credentials to
+#     fetch the tofu-published inventory artifact from RustFS. Call sites:
+#       ansible-proxmox        playbooks/load_tofu.yml
+#       ansible-proxmox-apps   inventory/load_tofu.yml
+#       ansible-proxmox-ai     inventory/load_tofu.yml
+#       ansible-splunk         inventory/load_tofu.yml
+#
+#   apps/nautobot
+#     roles/nautobot/tasks/readonly_token.yml reads the current secret before
+#     publishing the read-only inventory token, so the read-modify-write
+#     preserves the superuser siblings. READ ONLY on purpose: the publish half
+#     is opt-in (nautobot_token_publish_openbao, default false) and the write
+#     capability has never been granted here.
 
-{% for sub in ['platform', 'apps'] %}
-path "{{ openbao_kv_mount }}/data/{{ sub }}/*" {
+{% for kv_path in ['platform/object-storage', 'apps/nautobot'] %}
+path "{{ openbao_kv_mount }}/data/{{ kv_path }}" {
   capabilities = ["read"]
 }
 
-path "{{ openbao_kv_mount }}/metadata/{{ sub }}/*" {
+path "{{ openbao_kv_mount }}/metadata/{{ kv_path }}" {
   capabilities = ["read", "list"]
 }
 
