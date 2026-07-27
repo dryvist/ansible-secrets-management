@@ -83,6 +83,80 @@ does not depend on either):
   does not exist yet; OpenBao 2.5.x has no `snapshot inspect` subcommand, so
   `gzip -t` is the strongest safe on-box integrity check today.
 
+## Voter health scoring
+
+An on-box `openbao-voter-health.timer` (every `openbao_voter_health_interval`,
+default `5min`), deployed on every `openbao_group` member, samples every
+voter's own plain-HTTP `api_addr` — never the Traefik ingress VIP, since a
+backend has no loopback listener and an `https://` probe to it lies with a
+`000` (see [`.claude/rules/ip-addressing.md`](../../.claude/rules/ip-addressing.md)).
+Like the snapshot timer it leader-gates at runtime via `/v1/sys/leader`
+`is_self`, so exactly one voter performs the full cross-cluster sweep per
+cycle regardless of who holds leadership.
+
+**This is read-only telemetry.** It never joins/removes a Raft peer, never
+writes a policy or AppRole, and never mutates cluster state. Raft membership
+changes stay operator-gated — this feature only produces the evidence a human
+uses to decide whether one is warranted.
+
+Each cycle ships one Splunk HEC event per voter (`index=openbao`,
+`sourcetype=openbao:voter:health`) recording:
+
+| Field | Meaning |
+| --- | --- |
+| `voter` | inventory hostname of the sampled node |
+| `http_code` | raw `sys/health` HTTP status (200/429/472/473/501/503/000) |
+| `health_state` | decoded label: `active`, `standby`, `performance_standby`, `dr_secondary`, `uninitialized`, `sealed`, `unreachable`, `unknown` |
+| `latency_ms` | round-trip time of the `sys/health` probe |
+| `is_self` | whether this voter reports itself as the current Raft leader |
+| `leader_address` | the leader address this voter currently sees |
+| `raft_lag_ms` | apply-lag vs the leader — currently always `null`; see "Known gap" below |
+| `sampled_by` | which voter performed the sweep (the leader at sample time) |
+
+Reference SPL — a 7/30-day per-voter uptime and latency scorecard, a flap
+count, and an alert for a voter unhealthy for more than 24h — lives in
+[`docs/openbao-voter-health-spl.md`](../../docs/openbao-voter-health-spl.md).
+
+### Keep/demote evidence thresholds
+
+These are **evidence guidelines for a human decision**, not automation — this
+role never changes Raft membership itself. Treat a voter as safe to keep with
+no action when it clears all of:
+
+- 30-day uptime ≥ 99.5% (at a 5-minute sampling cadence, roughly ≤ 2h of
+  cumulative down time over 30 days)
+- flap count over the trailing 7 days ≤ 5 (occasional restarts/converges are
+  expected; frequent state churn is not)
+- p95 latency in family with its peers — no single voter should be a
+  consistent multi-x outlier without an explained cause (undersized guest,
+  contended host, network path)
+
+Treat a voter as **demote-evidence-positive** — i.e. there is now enough
+telemetry to justify an operator-gated Raft membership review — when either:
+
+- the 24h-unhealthy alert (see the SPL doc) has fired and the voter has not
+  recovered, or
+- 30-day uptime drops below 99.5% AND flap count over the same window exceeds
+  10, indicating a chronic rather than transient problem
+
+A voter that is merely a latency outlier, with uptime and flap count both
+within threshold, is not by itself evidence for demotion — investigate the
+host/network cause first. Any actual membership change (removing a voter,
+adding a replacement) remains a manually operator-run `bao operator raft`
+action; nothing in this repo automates it.
+
+### Known gap: raft apply-lag is not yet measured
+
+`raft_lag_ms` always ships as `null` today. Computing real apply-lag needs
+`sys/storage/raft/autopilot/state`, which requires a token with `sys/` read
+capability — every existing AppRole here is KV-scoped (see
+[Secret hierarchy & RBAC](#secret-hierarchy--rbac)), and minting a new
+least-privilege `voter-health` AppRole/policy was explicitly out of scope for
+the change that introduced this telemetry (telemetry-only, no OpenBao
+policy/AppRole edits). `openbao_voter_health_role_id` /
+`openbao_voter_health_secret_id` are wired through the script already — once
+that AppRole exists, the script will use it to include real lag figures.
+
 ## Apply order (important)
 
 This role brings OpenBao live **before** anything that reads secrets from it.
