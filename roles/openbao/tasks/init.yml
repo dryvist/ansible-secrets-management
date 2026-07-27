@@ -187,6 +187,23 @@
     - openbao_bootstrap_token is defined
     - (openbao_kv_mount ~ '/') not in (openbao_mounts_raw.stdout | from_json).keys()
 
+# External-SaaS mount (literal "secrets-external", not openbao_kv_mount — see
+# the secrets-policy split doc). Holds credentials for internet-reachable
+# vendor APIs (e.g. the Splunk frozen-archive Backblaze B2 credential),
+# separated from the internal-only secret/ mount so a leak here is scoped to
+# its own blast radius.
+- name: Enable KV v2 at the external-SaaS mount
+  ansible.builtin.command:
+    cmd: "bao secrets enable -path=secrets-external -version=2 kv"
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  no_log: true
+  changed_when: true
+  when:
+    - openbao_bootstrap_token is defined
+    - "'secrets-external/' not in (openbao_mounts_raw.stdout | from_json).keys()"
+
 # --- App-secret seeding (merge-preserving, write-if-changed) -----------------
 # Promote Vikunja service credentials (minted by the vikunja role, stored in
 # SOPS) into secret/apps/vikunja so OpenBao is their canonical home. Values come

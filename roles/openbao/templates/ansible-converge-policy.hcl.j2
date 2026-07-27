@@ -55,3 +55,17 @@ path "{{ openbao_kv_mount }}/data/ai/mcp/zammad" {
 path "{{ openbao_kv_mount }}/metadata/ai/mcp/zammad" {
   capabilities = ["read"]
 }
+
+# Transitional exact-path exception (Splunk frozen-archive B2 credential): the
+# ansible-splunk converge reads the Backblaze B2 credential for the frozen
+# archive on the external-SaaS mount. Narrow read on the SINGLE secret —
+# deliberately NOT a wildcard. The mount below is the external-SaaS KV v2
+# mount and is intentionally a literal path, not the openbao_kv_mount
+# variable — that variable names the internal mount, not this one.
+path "secrets-external/data/platform/backblaze-splunk" {
+  capabilities = ["read"]
+}
+
+path "secrets-external/metadata/platform/backblaze-splunk" {
+  capabilities = ["read"]
+}
