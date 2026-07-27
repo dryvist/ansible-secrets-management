@@ -539,6 +539,13 @@ openbao_terrakube_workspaces:
     kv_read: [platform/terrakube/main]
   - name: tofu-github
     kv_read: [infrastructure/github]
+    # infrastructure/github is an internet-reachable SaaS credential (a
+    # GitHub App key), so its canonical home is moving to the
+    # secrets-external mount; dual-granted here until the internal-mount
+    # entry above is deleted. kv_read only ever renders against the
+    # internal openbao_kv_mount (see terrakube-workspace-policy.hcl.j2), so
+    # this is a distinct list rather than a mount override on kv_read.
+    kv_read_external: [infrastructure/github]
   - name: tofu-unifi
     kv_read: [infrastructure/unifi]
   - name: tofu-aws-production
