@@ -1,0 +1,111 @@
+#!/usr/bin/env bash
+# {{ ansible_managed }}
+#
+# OpenBao Raft-voter health sampler. Rendered by the openbao role and run on a
+# systemd timer on every voter in openbao_group. READ-ONLY TELEMETRY: never
+# joins/removes a Raft peer, never writes a policy or AppRole, never mutates
+# cluster state — see README.md "Voter health scoring".
+#
+# Every probe below hits a voter's OWN plain-HTTP api_addr directly (its VLAN
+# IP) — never the Traefik ingress VIP: OpenBao has no loopback listener and an
+# https:// probe to a backend reads 000, lying about the node being down (see
+# .claude/rules/ip-addressing.md and openbao.hcl.j2's tls_disable=1 listener).
+#
+# Leader-gated (mirrors templates/openbao-snapshot.sh.j2): only the node that
+# is CURRENTLY the Raft leader performs the full cross-cluster sweep each
+# cycle, so exactly one set of events ships per cycle regardless of who holds
+# leadership. A standby exits 0 as a clean no-op.
+set -uo pipefail
+
+# shellcheck source=/dev/null
+[ -r "{{ openbao_voter_health_env_file }}" ] && source "{{ openbao_voter_health_env_file }}"
+
+SELF_ADDR="{{ openbao_api_addr }}"
+PORT="{{ openbao_api_port }}"
+TIMEOUT="{{ openbao_voter_health_timeout_seconds }}"
+HOST="$(hostname)"
+ship_count=0
+fail_count=0
+
+log() { logger -t openbao-voter-health "$*"; echo "openbao-voter-health: $*"; }
+
+# Map an OpenBao/Vault sys/health HTTP status code to a stable label.
+# https://openbao.org/api-docs/system/health/
+health_state() {
+  case "$1" in
+    200) echo "active" ;;
+    429) echo "standby" ;;
+    472) echo "dr_secondary" ;;
+    473) echo "performance_standby" ;;
+    501) echo "uninitialized" ;;
+    503) echo "sealed" ;;
+    000) echo "unreachable" ;;
+    *) echo "unknown" ;;
+  esac
+}
+
+json_escape() {
+  printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+}
+
+# Probe one voter and POST its event to Splunk HEC. $1=node name, $2=api_addr
+# (http://ip:port, this voter's OWN address — never the ingress VIP).
+sample_voter() {
+  local node="$1" addr="$2"
+  local t0 t1 latency_ms code state leader_resp is_self leader_addr raft_lag_json event
+
+  t0="$(date +%s%3N)"
+  code="$(curl -s -o /dev/null -w '%{http_code}' --max-time "${TIMEOUT}" \
+    "${addr}/v1/sys/health?standbyok=true&perfstandbyok=true" 2>/dev/null || echo 000)"
+  t1="$(date +%s%3N)"
+  latency_ms=$((t1 - t0))
+  state="$(health_state "${code}")"
+
+  leader_resp="$(curl -fsS --max-time "${TIMEOUT}" "${addr}/v1/sys/leader" 2>/dev/null || echo '{}')"
+  is_self="false"
+  echo "${leader_resp}" | grep -q '"is_self":true' && is_self="true"
+  leader_addr="$(echo "${leader_resp}" | grep -o '"leader_address":"[^"]*"' | cut -d'"' -f4)"
+
+  # Authenticated raft apply-lag: skipped until a least-privilege
+  # `voter-health` AppRole is provisioned (see README "Known gap"). Ships
+  # null rather than a fabricated value.
+  raft_lag_json="null"
+
+  [ "${code}" = "000" ] && fail_count=$((fail_count + 1))
+
+  event=$(cat <<EOF
+{"time": $(date +%s), "host": "$(json_escape "${HOST}")", "sourcetype": "${SPLUNK_SOURCETYPE}", "index": "${SPLUNK_INDEX}", "event": {"voter": "$(json_escape "${node}")", "http_code": "${code}", "health_state": "${state}", "latency_ms": ${latency_ms}, "is_self": ${is_self}, "leader_address": "$(json_escape "${leader_addr}")", "raft_lag_ms": ${raft_lag_json}, "sampled_by": "$(json_escape "${HOST}")"}}
+EOF
+)
+
+  if [ -n "${SPLUNK_HEC_URL:-}" ] && [ -n "${SPLUNK_HEC_TOKEN:-}" ]; then
+    if curl -fsS --max-time "${TIMEOUT}" \
+      -H "Authorization: Splunk ${SPLUNK_HEC_TOKEN}" \
+      -d "${event}" "${SPLUNK_HEC_URL}" >/dev/null 2>&1; then
+      ship_count=$((ship_count + 1))
+    else
+      log "HEC ship failed for voter ${node} (${addr})"
+    fi
+  else
+    log "SPLUNK_HEC_TOKEN/SPLUNK_HEC_URL unset — dry-run event for ${node}: ${event}"
+  fi
+}
+
+# 1. Leader-gate against THIS node's own API — is_self=true only on the
+#    active node. sys/leader is unauthenticated.
+self_leader="$(curl -fsS --max-time "${TIMEOUT}" "${SELF_ADDR}/v1/sys/leader" 2>/dev/null \
+  | grep -o '"is_self":true' || true)"
+if [ -z "${self_leader}" ]; then
+  log "not the active node — nothing to sweep"
+  exit 0
+fi
+
+# 2. Full cross-cluster sweep — the per-voter call list is template-rendered
+#    from the live openbao_group membership (container_ip, same source as
+#    openbao_raft_peer_ips), so it never drifts from inventory.
+{% for h in groups['openbao_group'] | default([]) %}
+sample_voter "{{ h }}" "http://{{ hostvars[h].container_ip | default(hostvars[h].ansible_host) }}:${PORT}"
+{% endfor %}
+
+log "sweep complete: shipped ${ship_count} voter events (${fail_count} unreachable)"
+exit 0

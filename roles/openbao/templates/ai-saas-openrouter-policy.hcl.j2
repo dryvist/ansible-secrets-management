@@ -8,11 +8,26 @@
 # to the local-llm AppRole so the llm_router converge can render per-model
 # keys; the exact path here out-precedences local-llm's ai/saas/* deny
 # (longest-prefix match).
+#
+# Dual-mount during the secrets-external migration: OpenRouter is an
+# internet-reachable SaaS credential, so its canonical home is moving to the
+# secrets-external mount — a literal path segment below, not the
+# openbao_kv_mount variable (that var is the internal mount). Both grants
+# stay live until the original internal-mount ai/saas/openrouter entry is
+# deleted, at which point the internal-mount block below is dropped.
 
 path "{{ openbao_kv_mount }}/data/ai/saas/openrouter" {
   capabilities = ["read"]
 }
 
 path "{{ openbao_kv_mount }}/metadata/ai/saas/openrouter" {
+  capabilities = ["read", "list"]
+}
+
+path "secrets-external/data/ai/saas/openrouter" {
+  capabilities = ["read"]
+}
+
+path "secrets-external/metadata/ai/saas/openrouter" {
   capabilities = ["read", "list"]
 }

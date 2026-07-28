@@ -3,8 +3,14 @@
 # gate. Least-privilege reader for EXACTLY the two secrets it injects into
 # Caddy at (re)start via openbao-run: the bearer token it enforces
 # (secret/ai/llm) and the Route53 ACME credentials for its Let's Encrypt cert
-# (secret/platform/acme, shared with the traefik ingress). Nothing else in the
+# (platform/acme, shared with the traefik ingress). Nothing else in the
 # ai subtree, the platform subtree, or any other domain.
+#
+# platform/acme is dual-mounted during the secrets-external migration: the
+# Route53 ACME credential is an internet-reachable SaaS credential, so its
+# canonical home is moving to the secrets-external mount (literal below, not
+# openbao_kv_mount — that var is the internal mount). Both grants stay live
+# until the original internal-mount platform/acme entry is deleted.
 path "{{ openbao_kv_mount }}/data/ai/llm" {
   capabilities = ["read"]
 }
@@ -15,5 +21,11 @@ path "{{ openbao_kv_mount }}/data/platform/acme" {
   capabilities = ["read"]
 }
 path "{{ openbao_kv_mount }}/metadata/platform/acme" {
+  capabilities = ["read", "list"]
+}
+path "secrets-external/data/platform/acme" {
+  capabilities = ["read"]
+}
+path "secrets-external/metadata/platform/acme" {
   capabilities = ["read", "list"]
 }

@@ -570,3 +570,13 @@
     - openbao_snapshot_enabled | bool
     - openbao_snapshot_role_id | length > 0
     - openbao_snapshot_secret_id | length > 0
+
+# --- Phase 12: voter health telemetry (all nodes; read-only, script leader-gates) -
+# Deployed on every openbao node so any voter can take over the sweep after a
+# leadership change. No AppRole creds are required (unauthenticated sys/health
+# + sys/leader only), so unlike the snapshot timer this has no credential gate.
+- name: Deploy the voter-health telemetry timer
+  ansible.builtin.include_tasks: voter_health.yml
+  when:
+    - openbao_voter_health_enabled | bool
+    - ansible_virtualization_type | default('') != 'docker'

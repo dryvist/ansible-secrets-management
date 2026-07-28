@@ -17,6 +17,14 @@ path "{{ openbao_kv_mount }}/data/{{ path }}" {
   capabilities = ["read"]
 }
 {% endfor %}
+{% for path in item.workspace.kv_read_external | default([]) %}
+
+# Dual-mount during the secrets-external migration — secrets-external is a
+# literal mount name here, not openbao_kv_mount (that var is internal-only).
+path "secrets-external/data/{{ path }}" {
+  capabilities = ["read"]
+}
+{% endfor %}
 {% for path in item.workspace.kv_write | default([]) %}
 
 path "{{ openbao_kv_mount }}/data/{{ path }}" {
