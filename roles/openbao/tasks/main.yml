@@ -51,8 +51,9 @@
          and openbao_version in (openbao_installed_version.stdout | default('')) }}
 
 # --- Phase 4: download + verify the .deb on the controller -------------------
-# Mirrors the minio role: stage on the controller (unrestricted egress), verify
-# the SHA256 against the upstream checksums file, then copy to the target. LXC
+# Mirrors the object_storage role: stage on the controller (unrestricted
+# egress), verify the SHA256 against the upstream checksums file, then copy to
+# the target. LXC
 # hosts in the outbound-internal firewall group cannot reach GitHub directly.
 #
 # ansible_become: false on the delegated tasks is REQUIRED — Ansible inherits

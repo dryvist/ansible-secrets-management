@@ -31,7 +31,7 @@
 # ansible_become: false on the delegated tasks below is REQUIRED — Ansible
 # inherits the play's become: true on delegated tasks regardless of
 # task-level become, which fails with "sudo: a password is required" on the
-# controller (same gotcha documented in roles/openbao, roles/minio,
+# controller (same gotcha documented in roles/openbao,
 # roles/object_storage, roles/cribl_packs). These are unauthenticated GETs
 # and local set_facts — none need root.
 - name: Probe OpenBao endpoints for a live, unsealed one (client failover)
