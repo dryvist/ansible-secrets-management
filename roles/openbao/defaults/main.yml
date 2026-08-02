@@ -430,7 +430,7 @@ openbao_ssh_source_address_cidrs: "{{ lookup('env', 'OPENBAO_SSH_SOURCE_CIDRS') 
 #                      apps/* wildcard) — see the consumer inventory at the top
 #                      of ansible-converge-policy.hcl.j2 — plus exact
 #                      publication grants for secret/ai/mcp/{splunk,vikunja,
-#                      zammad}; no broad secret/ai/* access
+#                      zammad,nautobot}; no broad secret/ai/* access
 #   observability    — splunk + cribl; read-only, secret/platform/{splunk,cribl}
 #   local-cloud      — object-storage/S3/compute; read-only,
 #                      secret/platform/{object-storage,compute}
