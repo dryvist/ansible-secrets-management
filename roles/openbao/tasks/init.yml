@@ -20,6 +20,39 @@
 # written into the repo or onto a target host, and the `bao` invocations that
 # touch them run with no_log: true.
 
+# --- Stale break-glass guard ------------------------------------------------
+# Every credential file this play writes ends with a "publish it, then DELETE
+# it" instruction. A debug message is not enforcement — leftovers accumulate
+# silently on the controller, each one a standing role_id/secret_id pair (or a
+# root token) sitting in a file nobody is watching. Fail the converge up front
+# instead, so the delete step is mandatory rather than advisory.
+- name: Find stale break-glass files left on the controller
+  ansible.builtin.find:
+    paths: "{{ playbook_dir }}"
+    patterns:
+      - ".openbao-approle-*.json"
+      - ".openbao-recovery-*.json"
+    hidden: true
+  delegate_to: localhost
+  connection: local
+  become: false
+  vars:
+    ansible_become: false
+  changed_when: false
+  register: openbao_stale_breakglass
+
+- name: Refuse to bootstrap with stale break-glass material on disk
+  ansible.builtin.assert:
+    that: openbao_stale_breakglass.files | length == 0
+    fail_msg: >-
+      Break-glass credential files from an earlier run are still on this
+      controller: {{ openbao_stale_breakglass.files | map(attribute='path') | join(', ') }}.
+      Each holds a live role_id/secret_id (or recovery shares + root token).
+      Publish anything not yet published to its store, then delete the files
+      and re-run. Destroy the superseded secret_id accessors in OpenBao too —
+      deleting the file does not revoke the credential.
+    quiet: true
+
 # `bao status` exit codes: 0 = unsealed, 2 = sealed, 1 = error. For an
 # uninitialized node the command still exits 0/2 with "initialized": false in
 # the JSON body, so we parse the body rather than trust the exit code alone.
