@@ -1,0 +1,57 @@
+---
+# OpenBao Raft-voter health telemetry — deploy a systemd timer that samples
+# every voter's unauthenticated sys/health + sys/leader endpoints and ships
+# one event per voter per cycle to Splunk HEC. Read-only: no Raft membership,
+# policy, or AppRole change. Skipped under Docker (molecule) — no functional
+# systemd init in the container, matching roles/openbao's own timer plays.
+
+- name: Render the OpenBao voter-health EnvironmentFile (HEC token + optional AppRole creds)
+  ansible.builtin.template:
+    src: openbao-voter-health.env.j2
+    dest: "{{ openbao_voter_health_env_file }}"
+    owner: root
+    group: "{{ openbao_group | default('openbao') }}"
+    mode: "0600"
+  no_log: true
+  notify: Restart openbao voter-health timer
+  when: openbao_voter_health_enabled | bool
+
+- name: Deploy the OpenBao voter-health sampling script
+  ansible.builtin.template:
+    src: openbao-voter-health.sh.j2
+    dest: "{{ openbao_voter_health_script_path }}"
+    owner: root
+    group: root
+    mode: "0755"
+  notify: Restart openbao voter-health timer
+  when: openbao_voter_health_enabled | bool
+
+- name: Deploy the OpenBao voter-health systemd service unit
+  ansible.builtin.template:
+    src: openbao-voter-health.service.j2
+    dest: "/etc/systemd/system/{{ openbao_voter_health_service_name }}.service"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart openbao voter-health timer
+  when: openbao_voter_health_enabled | bool
+
+- name: Deploy the OpenBao voter-health systemd timer unit
+  ansible.builtin.template:
+    src: openbao-voter-health.timer.j2
+    dest: "/etc/systemd/system/{{ openbao_voter_health_service_name }}.timer"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart openbao voter-health timer
+  when: openbao_voter_health_enabled | bool
+
+- name: Enable and start the OpenBao voter-health timer
+  ansible.builtin.systemd:
+    name: "{{ openbao_voter_health_service_name }}.timer"
+    state: started
+    enabled: true
+    daemon_reload: true
+  when:
+    - openbao_voter_health_enabled | bool
+    - ansible_virtualization_type | default('') != 'docker'

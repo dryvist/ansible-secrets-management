@@ -1,0 +1,22 @@
+---
+galaxy_info:
+  author: JacobPEvans
+  role_name: openbao_voter_health
+  description: >-
+    Read-only telemetry: periodically samples every OpenBao Raft voter's
+    unauthenticated sys/health + sys/leader endpoints and ships one event per
+    voter to Splunk HEC for longitudinal keep/demote scoring.
+  license: Apache-2.0
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Debian
+      versions:
+        - bookworm
+        - trixie
+  galaxy_tags:
+    - openbao
+    - vault
+    - secrets
+    - raft
+    - monitoring
+dependencies: []

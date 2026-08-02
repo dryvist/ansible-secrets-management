@@ -1,0 +1,49 @@
+---
+# OpenBao Raft-voter health telemetry — role defaults.
+#
+# This role is READ-ONLY telemetry: it never touches Raft membership, never
+# writes an OpenBao policy/AppRole, and never mutates the live cluster. Every
+# cycle probes each voter's unauthenticated sys/health + sys/leader endpoints
+# directly over plain HTTP (backends terminate TLS at the ingress proxy — an
+# https:// probe to a backend reads 000 and lies about the node being down)
+# and ships one event per voter to Splunk HEC. See README.md for the
+# keep/demote evidence model this telemetry feeds.
+openbao_voter_health_enabled: true
+
+# Deployed on every openbao_group member (same footprint as the snapshot
+# timer), but the script leader-gates at runtime via sys/leader so exactly
+# one voter performs the full cross-cluster sweep per cycle — a standby
+# exits 0 as a clean no-op. This mirrors roles/openbao/templates/
+# openbao-snapshot.sh.j2 and avoids every voter shipping duplicate events.
+openbao_voter_health_service_name: openbao-voter-health
+openbao_voter_health_script_path: /usr/local/sbin/openbao-voter-health.sh
+openbao_voter_health_env_file: /etc/openbao/openbao-voter-health.env
+
+# systemd OnUnitActiveSec cadence between sweeps.
+openbao_voter_health_interval: "5min"
+# Per-request curl timeout (seconds). A voter that doesn't answer within this
+# window is recorded as a timeout sample, not skipped.
+openbao_voter_health_timeout_seconds: 5
+
+# --- Splunk HEC shipping ------------------------------------------------
+# Host + port are never hardcoded (.claude/rules/ip-addressing.md): the FQDN
+# is derived from tofu_data.domain and the port from tofu_data.constants.
+# The token is delivered the same way every other HEC consumer in this repo
+# gets it (SPLUNK_HEC_TOKEN, Doppler/SOPS — see AGENTS.md env var table); this
+# role invents no new secret.
+openbao_voter_health_splunk_hec_token: "{{ lookup('env', 'SPLUNK_HEC_TOKEN') | default('', true) }}"
+openbao_voter_health_splunk_index: openbao
+openbao_voter_health_splunk_sourcetype: "openbao:voter:health"
+
+# --- Raft apply-lag (authenticated, currently unavailable) ---------------
+# sys/storage/raft/autopilot/state requires a token with `sys/` read
+# capability; no existing least-privilege AppRole grants that (they are all
+# KV-scoped — see roles/openbao/defaults/main.yml), and minting a new
+# AppRole/policy for this telemetry is explicitly out of scope for this
+# change (no OpenBao policy/AppRole edits here — see README.md "Known gap").
+# When role_id/secret_id for a future least-privilege `voter-health` AppRole
+# are supplied via these env vars, the script authenticates and includes
+# per-voter raft applied-index lag; until then it ships health/latency only
+# and the `raft_lag_ms` field is emitted as null.
+openbao_voter_health_role_id: "{{ lookup('env', 'OPENBAO_VOTER_HEALTH_ROLE_ID') | default('', true) }}"
+openbao_voter_health_secret_id: "{{ lookup('env', 'OPENBAO_VOTER_HEALTH_SECRET_ID') | default('', true) }}"

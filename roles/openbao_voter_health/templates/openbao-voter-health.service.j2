@@ -1,0 +1,16 @@
+[Unit]
+# {{ ansible_managed }}
+Description=OpenBao Raft-voter health sampler (read-only telemetry)
+After=network-online.target openbao.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=-{{ openbao_voter_health_env_file }}
+ExecStart={{ openbao_voter_health_script_path }}
+User=root
+Group={{ openbao_group | default('openbao') }}
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
