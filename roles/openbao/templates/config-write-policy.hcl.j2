@@ -1,0 +1,51 @@
+{{ ansible_managed | comment }}
+# OpenBao policy for authoring values into the non-secret `config` mount.
+#
+# NOT a standalone identity. This is a capability policy ATTACHED to the three
+# IaC systems that author config — OpenTofu (`terraform-apply`), Ansible
+# (`ansible-converge`), and Terrakube (its per-workspace JWT roles) — the same
+# way ansible-converge already composes `ssh-sign-automation-ansible`. Minting a
+# fourth AppRole would hand OpenTofu and Ansible a SECOND secret-zero to carry
+# for a mount that holds no secrets, and would still not serve Terrakube, which
+# authenticates by JWT workload identity and has no AppRole at all.
+#
+# `config-read` remains the default for everything that only consumes config.
+# Attach this one only to a system that genuinely authors values; a reader that
+# attaches it gains a write path it will never use.
+
+# Values. `patch` is granted deliberately alongside create/update: a whole-object
+# `kv put` silently drops any field the writer did not know about, which this
+# repo has already been bitten by (see the merge-preserving app-secret seed in
+# tasks/init.yml). With three independent authors on one mount, partial update
+# is the difference between two systems coexisting in a key and one clobbering
+# the other.
+path "{{ openbao_config_mount }}/data/*" {
+  capabilities = ["create", "read", "update", "patch", "delete"]
+}
+
+# `delete` above is KV v2's SOFT delete: it retires the current version and
+# leaves the history intact. Pair it with undelete so the identity that made a
+# mistake can reverse it without an admin.
+path "{{ openbao_config_mount }}/undelete/*" {
+  capabilities = ["update"]
+}
+
+# History, read-only — deliberately NOT writable.
+#
+# Two capabilities are withheld here on purpose, and both are the ones that
+# destroy the audit trail this mount exists to provide:
+#   * `destroy` on {{ openbao_config_mount }}/destroy/* permanently removes
+#     specific versions.
+#   * `delete` on {{ openbao_config_mount }}/metadata/* is worse still — it
+#     permanently removes the key AND its entire version history in one call.
+# A routine writer never needs either. Erasing history is an admin action, and
+# it should require reaching for an admin credential.
+path "{{ openbao_config_mount }}/metadata/*" {
+  capabilities = ["read", "list"]
+}
+
+# Listing the mount ROOT requests `<mount>/metadata` with no trailing segment,
+# which the glob above does not match.
+path "{{ openbao_config_mount }}/metadata" {
+  capabilities = ["list"]
+}

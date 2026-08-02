@@ -1,0 +1,35 @@
+{{ ansible_managed | comment }}
+# OpenBao policy for the config-read AppRole — the sole identity on the
+# non-secret `config` mount. Grants read + list across EVERY path in that
+# mount and nothing anywhere else: the mount holds operator selections,
+# tunables, thresholds and coordination facts, none of which are exploitable
+# on their own, so a single blanket reader is the whole RBAC surface.
+#
+# This is the one place a mount-wide wildcard is correct rather than a smell.
+# Wildcards are refused on the credential mounts precisely because a leak
+# there is exploitable; here there is nothing to scope down to. The control
+# that matters is the MOUNT boundary — this policy names `config` and can
+# reach neither `secret/` nor `secrets-external/`.
+#
+# READ-ONLY by design, and that is a known gap: writes to this mount fall to
+# the existing admin/converge path, so the "humans and agents can update it
+# without a git commit" half of the design is not delivered by this identity.
+# See roles/openbao/README.md.
+
+# KV v2 splits every secret across two API prefixes. `data/` carries the
+# values; `metadata/` carries the version history, and a policy that omits it
+# can neither list the mount nor see or roll back to an earlier version.
+path "{{ openbao_config_mount }}/data/*" {
+  capabilities = ["read"]
+}
+
+path "{{ openbao_config_mount }}/metadata/*" {
+  capabilities = ["read", "list"]
+}
+
+# Listing the mount ROOT requests `<mount>/metadata` with no trailing segment,
+# which the glob above does not match — without this rule a caller can list
+# every subtree but cannot discover the top-level keys to begin with.
+path "{{ openbao_config_mount }}/metadata" {
+  capabilities = ["list"]
+}

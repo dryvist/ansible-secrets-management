@@ -113,6 +113,44 @@ openbao_static_seal_previous_key: "{{ lookup('env', 'OPENBAO_STATIC_SEAL_PREVIOU
 #                      readable by a fixed, low-privilege AppRole
 #   secret/ci/*        CI/CD tokens
 openbao_kv_mount: secret
+# Non-secret configuration mount. Holds values that are sensitive-but-not-
+# exploitable — operator selections, tunables, thresholds, coordination and
+# inventory-ish facts — that today sit inside the credential mounts.
+#
+# It is a separate MOUNT, not a path prefix, for the same reason
+# secrets-external is: a prefix shares one policy namespace, so every wildcard
+# already granted on `secret/` reaches across it and the boundary is decorative.
+# A distinct mount is unreachable by any policy that does not name it.
+#
+# Named `config` rather than a `secret*` sibling deliberately: an operator
+# reading `bao secrets list` sees `secret/`, `secrets-external/`, `config/` and
+# can tell at a glance which mount is not a credential store. A name like
+# `secrets-internal-public` would blend into the credential mounts it must be
+# distinguished from.
+openbao_config_mount: config
+# KV v2 version retention for the config mount. Browsable history and rollback
+# are half the reason this mount exists, so retention is set explicitly rather
+# than left on the KV v2 default of 10. Config values are short strings that
+# change rarely, so 30 versions is years of history at negligible Raft cost,
+# while still bounding what a runaway writer can grow. delete_version_after is
+# deliberately left at its default (0 = versions never time-expire): history
+# that silently ages out is not history you can roll back to.
+openbao_config_mount_max_versions: 30
+# Every KV v2 mount this role provisions (add-if-missing, then tuned to the
+# declared retention). `max_versions` is optional — omit it to leave a mount on
+# the KV v2 default, which is what the two credential mounts do today.
+openbao_kv_mounts:
+  - path: "{{ openbao_kv_mount }}"
+  # External-SaaS credentials; a literal here for the same reason the policy
+  # templates use a literal (see tasks/init.yml).
+  - path: secrets-external
+  - path: "{{ openbao_config_mount }}"
+    max_versions: "{{ openbao_config_mount_max_versions }}"
+# Derived: the subset that declares retention. Defined once because init.yml
+# zips it against its own read results — the two loops must be the same list in
+# the same order, which two separate inline filters would not guarantee.
+openbao_kv_tuned_mounts: >-
+  {{ openbao_kv_mounts | selectattr('max_versions', 'defined') | list }}
 # Legacy demo subtree the terraform-proxmox vault-secrets proof writes to; kept
 # writable by the terraform-apply policy so that read/write proof keeps working.
 openbao_homelab_path: homelab
@@ -589,6 +627,24 @@ openbao_hermes_write_policy_name: hermes-write
 openbao_hermes_write_approle_name: hermes-write
 openbao_public_policy_name: public
 openbao_public_approle_name: public
+# config-read: THE DEFAULT identity on the non-secret `config` mount — read +
+# list across every path in it, and nothing anywhere else. Everything that only
+# consumes config uses this. Nothing in the mount is a secret, so per-path
+# least privilege would buy nothing and cost policy churn on every new key.
+openbao_config_read_policy_name: config-read
+openbao_config_read_approle_name: config-read
+# config-write: a capability policy ATTACHED to the three IaC systems that
+# author config (OpenTofu / Ansible / Terrakube), never a standalone AppRole —
+# see the template header for why a fourth credential would be the wrong shape.
+openbao_config_write_policy_name: config-write
+# Terrakube workspaces whose JWT role also carries config-write. Every declared
+# workspace by default, since Terrakube is named as a config author; narrowing
+# it is one edit here rather than a policy change. NOTE: Terrakube runs
+# VCS-driven, potentially untrusted plans, so this is the one config-write
+# grant whose blast radius is worth revisiting — it cannot reach a credential
+# mount, but it can rewrite config that other systems read.
+openbao_config_write_terrakube_workspaces: >-
+  {{ openbao_terrakube_workspaces | map(attribute='name') | list }}
 # ai-public: the fabric-brain runtime domain (secret/ai/public/*, field
 # active_model). Its OWN narrow read-only credential — NOT local-llm's broader
 # ai/* read — held by the hermes_agent / open_webui brain-sync timers to
@@ -766,15 +822,21 @@ openbao_oauthapp_approles: >-
 # repo (they live in terraform-proxmox's locals.tf), and a wrong CIDR would
 # silently break legitimate access — worse than the hardening it buys.
 openbao_base_approles:
+  # terraform-apply is the OpenTofu identity, and OpenTofu authors config —
+  # so it composes config-write onto its own policy rather than carrying a
+  # second credential for the same job.
   - name: "{{ openbao_terraform_apply_approle_name }}"
-    policy: "{{ openbao_terraform_apply_policy_name }}"
+    token_policies:
+      - "{{ openbao_terraform_apply_policy_name }}"
+      - "{{ openbao_config_write_policy_name }}"
   - name: "{{ openbao_flow_lock_approle_name }}"
     policy: "{{ openbao_flow_lock_policy_name }}"
   # ansible-converge additionally signs automation-ansible SSH certs: the
   # pre-play mint in each repo's run-ansible.sh replaces the shared static key.
+  # It is also the Ansible config author, so it composes config-write too.
   - name: "{{ openbao_ansible_converge_approle_name }}"
     token_policies: >-
-      {{ [openbao_ansible_converge_policy_name]
+      {{ [openbao_ansible_converge_policy_name, openbao_config_write_policy_name]
          + (['ssh-sign-automation-ansible'] if openbao_ssh_engine_enabled else []) }}
   - name: "{{ openbao_observability_approle_name }}"
     policy: "{{ openbao_observability_policy_name }}"
@@ -797,6 +859,12 @@ openbao_base_approles:
     policy: "{{ openbao_hermes_policy_name }}"
   - name: "{{ openbao_hermes_write_approle_name }}"
     policy: "{{ openbao_hermes_write_policy_name }}"
+  # config-read: sole consumer identity on the non-secret `config` mount.
+  # Read + list everywhere in that mount, nothing outside it. Like `public`,
+  # leaking it costs nothing — the mount holds no exploitable value by
+  # construction — so it is shipped ambiently rather than human-gated.
+  - name: "{{ openbao_config_read_approle_name }}"
+    policy: "{{ openbao_config_read_policy_name }}"
   - name: "{{ openbao_public_approle_name }}"
     policy: "{{ openbao_public_policy_name }}"
   # ai-public: read-only fabric-brain domain, its own narrow credential (see
@@ -953,6 +1021,10 @@ openbao_base_policies:
     template: hermes-write-policy.hcl.j2
   - name: "{{ openbao_public_policy_name }}"
     template: public-policy.hcl.j2
+  - name: "{{ openbao_config_read_policy_name }}"
+    template: config-read-policy.hcl.j2
+  - name: "{{ openbao_config_write_policy_name }}"
+    template: config-write-policy.hcl.j2
   - name: "{{ openbao_ai_public_policy_name }}"
     template: ai-public-policy.hcl.j2
   # GitHub token tiers (workstation git/gh). Engine mints only — each template

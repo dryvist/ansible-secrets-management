@@ -208,34 +208,85 @@
   changed_when: false
   when: openbao_bootstrap_token is defined
 
-- name: Enable KV v2 at the configured mount
-  ansible.builtin.command:
-    cmd: "bao secrets enable -path={{ openbao_kv_mount }} -version=2 kv"
-  environment:
-    BAO_ADDR: "{{ openbao_api_addr }}"
-    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
-  no_log: true
-  changed_when: true
-  when:
-    - openbao_bootstrap_token is defined
-    - (openbao_kv_mount ~ '/') not in (openbao_mounts_raw.stdout | from_json).keys()
+# Each tier is its OWN mount, never a path prefix inside another: a prefix
+# shares one policy namespace, so an existing wildcard grant reaches straight
+# across it. openbao_kv_mounts (defaults/main.yml) declares all three —
+#   secret            internal-only service credentials
+#   secrets-external  credentials for internet-reachable vendor APIs, so a leak
+#                     is scoped to its own blast radius (literal here and in the
+#                     policy templates — see the secrets-policy split doc)
+#   config            non-secret configuration, read by exactly one AppRole
+# — so adding a tier is a row of data, not another copy of this task.
+- name: Assert the declared KV mounts are distinct and outside the control plane
+  ansible.builtin.assert:
+    that:
+      - (openbao_kv_mounts | map(attribute='path') | list | unique | length)
+        == (openbao_kv_mounts | length)
+      - openbao_kv_mounts | map(attribute='path') | map('lower')
+        | select('in', openbao_ai_forbidden_subtrees) | list | length == 0
+    fail_msg: >-
+      openbao_kv_mounts declares a duplicate mount path, or names a
+      control-plane path ({{ openbao_ai_forbidden_subtrees | join(', ') }}).
+      Refusing to enable — a duplicate would make one tier's policies reach
+      another's data, which is the whole reason these are separate mounts.
+    success_msg: "KV mounts are distinct and outside the control plane."
+  when: openbao_bootstrap_token is defined
 
-# External-SaaS mount (literal "secrets-external", not openbao_kv_mount — see
-# the secrets-policy split doc). Holds credentials for internet-reachable
-# vendor APIs (e.g. the Splunk frozen-archive Backblaze B2 credential),
-# separated from the internal-only secret/ mount so a leak here is scoped to
-# its own blast radius.
-- name: Enable KV v2 at the external-SaaS mount
+- name: Enable the declared KV v2 mounts (add-if-missing)
   ansible.builtin.command:
-    cmd: "bao secrets enable -path=secrets-external -version=2 kv"
+    cmd: "bao secrets enable -path={{ item.path }} -version=2 kv"
   environment:
     BAO_ADDR: "{{ openbao_api_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  loop: "{{ openbao_kv_mounts }}"
+  loop_control:
+    label: "{{ item.path }}"
   no_log: true
   changed_when: true
   when:
     - openbao_bootstrap_token is defined
-    - "'secrets-external/' not in (openbao_mounts_raw.stdout | from_json).keys()"
+    - (item.path ~ '/') not in (openbao_mounts_raw.stdout | from_json).keys()
+
+# Version retention, for the mounts that declare one. Runs AFTER the enable
+# above so a mount created in this same run is tuned immediately rather than
+# spending its first converge on the KV v2 default.
+- name: Read the current version-retention config of each tuned KV mount
+  ansible.builtin.command:
+    cmd: "bao read -format=json {{ item.path }}/config"
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  loop: "{{ openbao_kv_tuned_mounts }}"
+  loop_control:
+    label: "{{ item.path }}"
+  register: openbao_kv_config_checks
+  no_log: true
+  changed_when: false
+  failed_when: false
+  when: openbao_bootstrap_token is defined
+
+# delete_version_after is left alone on purpose: its default of 0 means
+# versions never time-expire, and history that silently ages out cannot be
+# rolled back to. max_versions alone bounds the growth.
+- name: Set KV v2 version retention on the tuned mounts (write-if-changed)
+  ansible.builtin.command:
+    cmd: "bao write {{ item.0.path }}/config max_versions={{ item.0.max_versions | int }}"
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  loop: >-
+    {{ openbao_kv_tuned_mounts
+       | zip(openbao_kv_config_checks.results | default([])) | list }}
+  loop_control:
+    label: "{{ item.0.path }}"
+  no_log: true
+  changed_when: true
+  when:
+    - openbao_bootstrap_token is defined
+    - >-
+      (item.1.rc | default(1)) != 0
+      or ((item.1.stdout | default('{}', true) | from_json).data.max_versions
+          | default(0, true) | int) != (item.0.max_versions | int)
 
 # --- App-secret seeding (merge-preserving, write-if-changed) -----------------
 # Promote Vikunja service credentials (minted by the vikunja role, stored in
@@ -1447,6 +1498,12 @@
   failed_when: false
   when: openbao_bootstrap_token is defined
 
+# Terrakube authenticates by JWT workload identity, not AppRole, so it cannot
+# be handed a shared config-write AppRole the way a converge could be. The
+# grant therefore composes onto each workspace role's policy list — the same
+# attach-a-capability-policy model ansible-converge uses. Sorted on both sides
+# of the drift check below because OpenBao returns token_policies in its own
+# order, and an order-sensitive compare would rewrite the role every converge.
 - name: Reconcile exact-claim Terrakube workspace JWT roles
   ansible.builtin.command:
     cmd: "bao write auth/{{ openbao_terrakube_jwt_auth_path }}/role/terrakube-{{ item.0.name }} -"
@@ -1457,7 +1514,10 @@
               'sub': 'organization:' ~ openbao_terrakube_organization ~ ':workspace:' ~ item.0.name
             },
             'user_claim': 'sub',
-            'policies': ['terrakube-' ~ item.0.name],
+            'policies': (['terrakube-' ~ item.0.name]
+                         + ([openbao_config_write_policy_name]
+                            if item.0.name in openbao_config_write_terrakube_workspaces
+                            else [])) | sort,
             'token_ttl': openbao_terrakube_jwt_token_ttl} | to_json }}
   environment:
     BAO_ADDR: "{{ openbao_api_addr }}"
@@ -1477,9 +1537,12 @@
       or (((item.1.stdout | default('{}') | from_json).data
            | default({}, true)).bound_claims | default({}, true)).sub | default('')
          != 'organization:' ~ openbao_terrakube_organization ~ ':workspace:' ~ item.0.name
-      or ((item.1.stdout | default('{}') | from_json).data
-          | default({}, true)).token_policies | default([])
-         != ['terrakube-' ~ item.0.name]
+      or (((item.1.stdout | default('{}') | from_json).data
+           | default({}, true)).token_policies | default([]) | sort)
+         != ((['terrakube-' ~ item.0.name]
+              + ([openbao_config_write_policy_name]
+                 if item.0.name in openbao_config_write_terrakube_workspaces
+                 else [])) | sort)
       or ((item.1.stdout | default('{}') | from_json).data
           | default({}, true)).token_ttl | default(0) | int
          != (openbao_terrakube_jwt_token_ttl | regex_replace('m$', '') | int) * 60

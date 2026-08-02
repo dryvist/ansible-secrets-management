@@ -193,6 +193,8 @@
         - media-policy.hcl.j2
         - local-llm-policy.hcl.j2
         - public-policy.hcl.j2
+        - config-read-policy.hcl.j2
+        - config-write-policy.hcl.j2
         - kv-capability-policy.hcl.j2
         - github-mint-policy.hcl.j2
         - ai-admin-policy.hcl.j2
@@ -266,6 +268,146 @@
           A base read-/write- capability leaf gained a self-escalation grant
           (policy edit / auth mint / secret-id / token mint / infra kernel), so
           every rollup composed from the leaves would inherit it.
+
+    # --- config mount: isolation, read-only, and the KV v2 metadata grant ------
+    # The whole point of a separate `config` mount is that its policy cannot
+    # reach the credential mounts, and the whole point of its version retention
+    # is history you can list and roll back to — which needs the `metadata/`
+    # prefix as well as `data/`. A policy that grants only `data/` renders and
+    # writes cleanly, then silently cannot list a single key, so assert both.
+    - name: Render the config-read policy
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../../roles/openbao/templates/config-read-policy.hcl.j2"
+        dest: /tmp/cap-config-read.hcl
+        mode: "0600"
+      delegate_to: localhost
+      become: false
+
+    - name: Slurp the rendered config-read policy back
+      ansible.builtin.slurp:
+        src: /tmp/cap-config-read.hcl
+      register: bao_config_read_policy
+      delegate_to: localhost
+      become: false
+
+    - name: Assert the config-read policy is mount-isolated, read-only, and lists
+      vars:
+        # GRANT lines only — the `#` prose names the other mounts by design.
+        config_grants: >-
+          {{ bao_config_read_policy.content | b64decode
+             | regex_replace('(?m)^#.*$', '') }}
+      ansible.builtin.assert:
+        that:
+          # Reads the values, and reads AND lists the version history.
+          - "'\"' ~ openbao_config_mount ~ '/data/*\"' in config_grants"
+          - "'\"' ~ openbao_config_mount ~ '/metadata/*\"' in config_grants"
+          # Root listing requests `<mount>/metadata` with no trailing segment,
+          # which the glob above does not match.
+          - "'\"' ~ openbao_config_mount ~ '/metadata\"' in config_grants"
+          - "'list' in config_grants"
+          # Mount isolation: it cannot name either credential mount.
+          - "openbao_kv_mount ~ '/' not in config_grants"
+          - "'secrets-external/' not in config_grants"
+          # Read-only: no write verb anywhere in the grants.
+          - "'create' not in config_grants"
+          - "'update' not in config_grants"
+          - "'delete' not in config_grants"
+          - "'patch' not in config_grants"
+          - "'sudo' not in config_grants"
+        fail_msg: >-
+          The config-read policy lost its mount isolation, gained a write
+          capability, or dropped the KV v2 metadata grant it needs to list keys
+          and reach version history.
+
+    # config-write may write VALUES but must never erase HISTORY. The two
+    # capabilities that erase it are `destroy` (permanent removal of specific
+    # versions) and `delete` on metadata/* (permanent removal of the key AND
+    # its whole history). Both would render and apply silently, so pin the
+    # metadata block to exactly read+list rather than merely grepping for a verb.
+    - name: Render the config-write policy
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../../roles/openbao/templates/config-write-policy.hcl.j2"
+        dest: /tmp/cap-config-write.hcl
+        mode: "0600"
+      delegate_to: localhost
+      become: false
+
+    - name: Slurp the rendered config-write policy back
+      ansible.builtin.slurp:
+        src: /tmp/cap-config-write.hcl
+      register: bao_config_write_policy
+      delegate_to: localhost
+      become: false
+
+    - name: Assert config-write can author values but never erase history
+      vars:
+        write_grants: >-
+          {{ bao_config_write_policy.content | b64decode
+             | regex_replace('(?m)^#.*$', '') }}
+      ansible.builtin.assert:
+        that:
+          # Authors values, including partial update.
+          - "'create' in write_grants"
+          - "'update' in write_grants"
+          - "'patch' in write_grants"
+          # Soft delete is paired with the ability to reverse it.
+          - "'\"' ~ openbao_config_mount ~ '/undelete/*\"' in write_grants"
+          # History is READ-ONLY: the metadata block is exactly read + list.
+          - >-
+            write_grants is search('path "' ~ openbao_config_mount
+            ~ '/metadata/\\*" \\{\\s*capabilities = \\["read", "list"\\]\\s*\\}')
+          # Neither history-erasing capability appears anywhere.
+          - "'destroy' not in write_grants"
+          - "'sudo' not in write_grants"
+          # Mount isolation, same as the read policy.
+          - "openbao_kv_mount ~ '/' not in write_grants"
+          - "'secrets-external/' not in write_grants"
+        fail_msg: >-
+          config-write gained a history-erasing capability (destroy, or delete
+          on metadata/*), lost its mount isolation, or lost the patch grant that
+          keeps three independent authors from clobbering each other.
+
+    - name: Assert config-write is attached to all three IaC authors and nothing else
+      vars:
+        write_holders: >-
+          {{ openbao_approles
+             | selectattr('token_policies', 'defined')
+             | selectattr('token_policies', 'contains',
+                          openbao_config_write_policy_name)
+             | map(attribute='name') | list }}
+      ansible.builtin.assert:
+        that:
+          # OpenTofu and Ansible compose it onto their existing identity...
+          - openbao_terraform_apply_approle_name in write_holders
+          - openbao_ansible_converge_approle_name in write_holders
+          # ...and nothing else does.
+          - (write_holders | sort) == ([openbao_ansible_converge_approle_name,
+                                        openbao_terraform_apply_approle_name] | sort)
+          # Terrakube gets it through its JWT roles, not an AppRole — assert no
+          # standalone config-write AppRole was minted as a shortcut.
+          - openbao_config_write_policy_name
+            not in (openbao_approles | map(attribute='name') | list)
+          - openbao_config_write_terrakube_workspaces | length > 0
+          # config-read stays a pure reader: it must never hold the write policy.
+          - openbao_config_read_approle_name not in write_holders
+        fail_msg: >-
+          config-write attachment drifted: it must be composed onto exactly
+          terraform-apply and ansible-converge, reach Terrakube via its JWT
+          roles, and never exist as a standalone AppRole or land on config-read.
+
+    - name: Assert the declared KV mounts are distinct and the config mount is tuned
+      ansible.builtin.assert:
+        that:
+          - (openbao_kv_mounts | map(attribute='path') | list | unique | length)
+            == (openbao_kv_mounts | length)
+          - openbao_config_mount in (openbao_kv_mounts | map(attribute='path') | list)
+          - openbao_config_mount
+            in (openbao_kv_tuned_mounts | map(attribute='path') | list)
+          - (openbao_config_mount_max_versions | int) > 0
+        fail_msg: >-
+          openbao_kv_mounts has a duplicate path, or the config mount is missing
+          or left on the KV v2 default retention — browsable version history is
+          half the reason that mount exists.
 
     - name: Read OpenBao defaults source for the remaining structural assertions
       ansible.builtin.slurp:
