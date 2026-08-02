@@ -81,6 +81,17 @@ path "{{ openbao_kv_mount }}/metadata/ai/mcp/zammad" {
   capabilities = ["read"]
 }
 
+# Transitional exact-path exception (Nautobot MCP): the converge publishes the
+# minted Nautobot MCP connection here. Same narrow create/update/read on the
+# SINGLE secret as the splunk grant above — deliberately NOT a wildcard.
+path "{{ openbao_kv_mount }}/data/ai/mcp/nautobot" {
+  capabilities = ["create", "update", "read"]
+}
+
+path "{{ openbao_kv_mount }}/metadata/ai/mcp/nautobot" {
+  capabilities = ["read"]
+}
+
 # Transitional exact-path exception (Splunk frozen-archive B2 credential): the
 # ansible-splunk converge reads the Backblaze B2 credential for the frozen
 # archive on the external-SaaS mount. Narrow read on the SINGLE secret —
