@@ -1,0 +1,56 @@
+{{ ansible_managed | comment }}
+# {{ item.name }} — a WRITE realm. Identical in construction to github-write,
+# differing only in which repositories it pins: this one is limited to the
+# realm's own allowlist rather than the organisation-wide one.
+#
+# The point is the boundary, not the addition. A realm exists so that a holder
+# of ITS secret_id cannot mint for anything outside the realm, AND so that the
+# organisation-wide github-write identity cannot mint for anything inside it.
+# The second half only holds if the realm's repositories are REMOVED from
+# OPENBAO_GITHUB_WRITE_REPOS. Leaving them on both lists creates a second door
+# to the same room and narrows nothing.
+#
+# Every constraint below is inherited deliberately from github-write-policy;
+# read that template for the reasoning behind each, which applies unchanged:
+#
+#   * required_parameters makes an unconstrained (full-installation) request
+#     impossible.
+#   * allowed_parameters pins installation_id and repositories to exact string
+#     literals. NEVER a glob — the ACL cannot element-match list-valued
+#     parameters, so the wrapper sends a comma-capable STRING, and a prefix
+#     glob would let "<allowed>,<not-allowed>" ride through the plugin's comma
+#     split. Listing any key denies every unlisted one, so org_name and
+#     repository_ids are denied by construction.
+#   * denied_parameters bans `permissions`, keeping map-valued matching out of
+#     the trust path.
+path "{{ openbao_github_mount }}/token" {
+  capabilities = ["create", "update"]
+  required_parameters = ["installation_id", "repositories"]
+  allowed_parameters = {
+    "installation_id" = [
+      "{{ openbao_github_dryvist_installation_id }}",
+      "{{ openbao_github_personal_installation_id }}"
+    ]
+    "repositories" = [
+{% for repo in item.repos %}
+      "{{ repo }}"{{ "," if not loop.last }}
+{% endfor %}
+    ]
+  }
+  denied_parameters = {
+    "permissions" = []
+  }
+}
+
+# The write-lease lock subtree is shared with github-write rather than split
+# per realm. A lease is mutual-exclusion bookkeeping, not a privilege: the
+# minting boundary is the pinned `repositories` parameter above. Splitting the
+# subtree would let a realm holder and a github-write holder each believe they
+# hold the same repository's lease.
+path "{{ openbao_kv_mount }}/data/locks/github-write/*" {
+  capabilities = ["create", "read", "update", "delete"]
+}
+
+path "{{ openbao_kv_mount }}/metadata/locks/github-write/*" {
+  capabilities = ["create", "read", "update", "list", "delete"]
+}
