@@ -585,6 +585,25 @@
           - "'github/token/*' not in (bao_ai_orchestrator_policy.content | b64decode)"
         fail_msg: "ai-orchestrator policy does not preserve the named GitHub token boundary"
 
+    - name: Assert the maintenance-window credential grant stays read-only
+      vars:
+        bao_ai_orchestrator_rendered: >-
+          {{ bao_ai_orchestrator_policy.content | b64decode }}
+        bao_window_stanza: >-
+          {{ bao_ai_orchestrator_rendered
+             | regex_search('path "secret/data/ai/vikunja" \{[^}]*\}') }}
+      ansible.builtin.assert:
+        that:
+          - bao_window_stanza is not none
+          - "'read' in bao_window_stanza"
+          - "'create' not in bao_window_stanza"
+          - "'update' not in bao_window_stanza"
+          - "'delete' not in bao_window_stanza"
+          - "'secret/data/ai/vikunja/*' not in bao_ai_orchestrator_rendered"
+        fail_msg: >-
+          The maintenance-window grant must be an exact read-only path; an
+          agent reads window state and never writes it.
+
     # --- SSH CA (signed client certificates, ssh-certificate-authority ADR) ---
     # init.yml's engine/CA/role writes are live-server-only (bootstrap-token
     # guarded), so this scenario proves the STRUCTURAL invariants: the role
