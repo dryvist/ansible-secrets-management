@@ -249,6 +249,65 @@ bootstrap steps short-circuit on their existence checks.
 
 ## Secret hierarchy & RBAC
 
+Three KV v2 mounts, split by what a leak would cost. The split is a **mount**
+and never a path prefix: a prefix shares one policy namespace, so every
+wildcard already granted on `secret/` would reach across it.
+
+| Mount | Holds | A leak costs |
+| --- | --- | --- |
+| `secret/` | Credentials for services reachable only inside the network | Bounded by network access |
+| `secrets-external/` | Credentials for internet-reachable vendor APIs | Critical — exploitable by anyone, anywhere |
+| `config/` | Non-secret configuration: operator selections, tunables, thresholds, coordination facts | Nothing exploitable by construction |
+
+`config/` KV v2 retention is set explicitly
+(`openbao_config_mount_max_versions`, default 30) so version history and
+rollback are actually available. `delete_version_after` is left at its default
+of 0 — versions never time-expire, because history that silently ages out
+cannot be rolled back to.
+
+Nothing in this mount is a secret, so neither policy carves paths up: per-path
+least privilege would buy nothing and cost churn on every new key. Access is
+split by **verb**, not by path.
+
+- **`config-read` is the default.** One AppRole, mount-wide read + list,
+  nothing outside the mount. Everything that only *consumes* config uses it.
+- **`config-write` is a capability policy, not an identity.** It is attached to
+  the three IaC systems that *author* config, exactly the way
+  `ansible-converge` already composes `ssh-sign-automation-ansible`:
+
+  | Author | Identity | How it attaches |
+  | --- | --- | --- |
+  | OpenTofu | `terraform-apply` AppRole | `token_policies` |
+  | Ansible | `ansible-converge` AppRole | `token_policies` |
+  | Terrakube | per-workspace JWT roles | `policies` on each JWT role |
+
+  There is no `config-write` AppRole. Minting one would hand OpenTofu and
+  Ansible a *second* secret-zero to carry for a mount holding no secrets, and
+  would still not serve Terrakube, which authenticates by JWT workload identity
+  and has no AppRole at all. Attach `config-write` only to a system that
+  genuinely authors config — a consumer that attaches it gains a write path it
+  will never use.
+
+**What `config-write` deliberately cannot do.** It gets `create`/`read`/
+`update`/`patch` plus KV v2's *soft* `delete` on `data/*`, and `update` on
+`undelete/*` so the identity that made a mistake can reverse it. It does **not**
+get `destroy` (permanent removal of specific versions) or `delete` on
+`metadata/*` (which permanently removes a key *and* its whole history in one
+call). Both erase the audit trail this mount exists to provide; erasing history
+should require reaching for an admin credential.
+
+`patch` is granted on purpose. A whole-object `kv put` silently drops fields the
+writer did not know about — a bug this repo has already hit (see the
+merge-preserving app-secret seed in `tasks/init.yml`). With three independent
+authors on one mount, partial update is what lets them share a key instead of
+clobbering each other.
+
+Terrakube's grant covers every declared workspace by default
+(`openbao_config_write_terrakube_workspaces`; narrowing it is one edit). Worth
+revisiting: Terrakube runs VCS-driven, potentially untrusted plans, so it is the
+one `config-write` holder whose blast radius is non-obvious. It cannot reach a
+credential mount, but it can rewrite config other systems read.
+
 The KV v2 mount `secret/` is organized by category (canonical doc:
 `tofu-proxmox` `docs/SECRETS_HIERARCHY.md`):
 
@@ -282,6 +341,8 @@ plans):
 | `hermes` | `secret/ai/hermes`, `secret/ai/mcp/splunk` | — | Dedicated least-privilege reader for Hermes; NO broad `secret/ai/*` |
 | `hermes-write` | `secret/ai/hermes` | `secret/ai/hermes` | Narrow one-time credential seed writer; shared MCP publication belongs to `ansible-converge` |
 | `public` | `secret/public/*` | — | **Anonymous** — no secret-zero; shipped ambiently |
+| `config-read` | all of `config/` | — | **Default** reader; mount-wide wildcard is correct here; shipped ambiently |
+| `config-write` *(policy, no AppRole)* | all of `config/` | `config/` values: create/update/patch/soft-delete | Attached to the 3 IaC authors[^config-write] |
 | `ai-orchestrator` | `secret/ai/{hermes,agents}` | `secret/ai/{hermes,agents}` (create/update) | WRITE; Doppler tier-0; narrowed + 30m TTL at Phase-3 |
 | `ai-readonly` | `read-all` (= `read-<svc>` ∀ services) | — | **default AI agent; NO `secret/infra/*`**[^ai-tiers] |
 | `ai-elevated` | `read-all` + `read-platform` | — | trusted infra-touching agents; no write[^ai-tiers] |
@@ -311,6 +372,11 @@ policy. The role binds audience
 select another workspace's policy. Terrakube stores only the non-secret dynamic
 credential controls. Provider credentials remain in their native OpenBao KV or
 secrets-engine paths and are returned through a short-lived OpenBao token.
+
+[^config-write]: A capability policy, not an identity — attached to
+    `terraform-apply` (OpenTofu), `ansible-converge` (Ansible), and the
+    per-workspace Terrakube JWT roles. It withholds `destroy` and `delete` on
+    `metadata/*`, the two capabilities that permanently erase version history.
 
 [^ai-tiers]: Task-scoped AI actor roles. Authorization is by task/blast-radius
     and human-gated, never by model capability (model is an audit claim). Every
