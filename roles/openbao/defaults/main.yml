@@ -555,6 +555,61 @@ openbao_github_admin_approle_name: github-admin
 openbao_github_write_repo_allowlist: >-
   {{ (lookup('env', 'OPENBAO_GITHUB_WRITE_REPOS') | default('', true)).split(',')
      | map('trim') | reject('equalto', '') | list }}
+
+# Additional write realms, each an independent policy + AppRole with its own
+# repository allowlist. The default allowlist above is one shared blast radius:
+# any holder of the github-write secret_id may mint for any repository on it.
+# When a group of repositories warrants a narrower boundary than "everything
+# this organisation automates", it gets its own realm here and comes OFF the
+# shared list — a realm that merely ADDS a second path to the same repositories
+# widens access instead of narrowing it.
+#
+# Supplied as a JSON object in the iac secret store, NOT inline: this
+# repository is public, and both the realm names and the repository names can
+# disclose who or what a realm is for. Same reasoning as
+# OPENBAO_GITHUB_WRITE_REPOS above. An unset variable yields {}, which creates
+# no extra policies or AppRoles and leaves this role byte-identical to its
+# behaviour before realms existed — the mechanism is inert until data arrives.
+#
+#   OPENBAO_GITHUB_WRITE_SCOPES = {"<policy-and-approle-name>": ["repo", ...]}
+#
+# The key IS the policy and AppRole name, so the operator controls naming
+# entirely from the secret store and no name is inferred here. Each realm's
+# secret_id is operator-held in the same tier as github-write's, under
+# OPENBAO_APPROLE_<NAME>_ROLE_ID / _SECRET_ID with the name upper-cased and
+# non-alphanumerics replaced by underscores — the shape nix-darwin's
+# `openbao-github-creds` already uses to find any AppRole's secret-zero.
+#
+# The EXPLICIT-LITERALS-ONLY rule above applies identically to every realm: the
+# rendered policy pins `repositories` the same way, so a glob here would carry
+# the same comma-smuggling defect.
+openbao_github_write_scopes: >-
+  {{ (lookup('env', 'OPENBAO_GITHUB_WRITE_SCOPES') | default('{}', true)) | from_json }}
+
+# One policy row and one AppRole row per realm, appended to the composed
+# registries near the bottom of this file. `repos` rides on the policy row
+# because the render loop exposes `item` to the template.
+openbao_github_write_scope_policies: >-
+  {{ openbao_github_write_scopes
+     | dict2items(key_name='name', value_name='repos')
+     | map('combine', {'template': 'github-write-scoped-policy.hcl.j2'})
+     | list }}
+# Each realm attaches the policy of the same name, so the realm names are
+# mapped to themselves and then split into the {name, policy} pair the AppRole
+# registry expects. This is deliberately ONE expression: a `{% set %}` loop
+# renders to a string rather than a list, and concatenating that onto
+# openbao_approles below fails at template time (observed, not theorised).
+openbao_github_write_scope_approles: >-
+  {{ dict(openbao_github_write_scopes.keys() | sort
+          | zip(openbao_github_write_scopes.keys() | sort))
+     | dict2items(key_name='name', value_name='policy')
+     | map('combine', {'token_ttl': openbao_github_write_scope_token_ttl})
+     | list }}
+# Realms inherit github-write's short token TTL rather than defining their own
+# looser one; a narrower repository boundary is no reason for a longer-lived
+# token.
+openbao_github_write_scope_token_ttl: 30m
+
 # Deadman TTL on the per-repo write lease (KV lock under
 # secret/locks/github-write/): a crashed holder's claim self-expires via KV-v2
 # delete_version_after — no janitor process.
@@ -960,7 +1015,9 @@ openbao_base_approles:
     secret_id_bound_cidrs: "{{ openbao_ai_runner_secret_id_cidr }}"
 # Full AppRole set = the static base above + the per-service ai-apply-<svc> actor
 # roles generated from openbao_ai_domains. init.yml loops this combined list.
-openbao_approles: "{{ openbao_base_approles + openbao_oauthapp_approles + openbao_ai_apply_approles }}"
+openbao_approles: >-
+  {{ openbao_base_approles + openbao_oauthapp_approles + openbao_ai_apply_approles
+     + openbao_github_write_scope_approles }}
 # Policy templates rendered + written on the bootstrap host. Each entry maps a
 # policy name to its template; add a row to grow the RBAC surface.
 #
@@ -1066,7 +1123,8 @@ openbao_oauthapp_policies: >-
 # AppRole/JWT identity exists in this role today; attach it when one does.
 openbao_policies: >-
   {{ openbao_base_policies + openbao_oauthapp_policies
-     + openbao_ai_capability_policies + openbao_ssh_sign_policies }}
+     + openbao_ai_capability_policies + openbao_ssh_sign_policies
+     + openbao_github_write_scope_policies }}
 
 # --- External admin token (provisioning against an ALREADY-LIVE cluster) -----
 # The initial `bao operator init` only happens once; after that, adding new
