@@ -83,7 +83,7 @@ openbao_secrets_domains:
       # domain) so the one token has a single home shared by both sides.
       - apps/zammad
       # Vikunja task-management (issue #141). Fields come from the SOPS->bao
-      # promotion map (roles/openbao openbao_vikunja_secrets): vikunja_db_password
+      # promotion map (roles/openbao openbao_promoted_app_secrets.vikunja): vikunja_db_password
       # (app-namespaced, matches the postgres + vikunja_group consumers) plus the
       # MCP svc-account passwords + API tokens. Merged flat into bao_apps_secrets.
       - apps/vikunja
@@ -95,6 +95,12 @@ openbao_secrets_domains:
       # dedicated Postgres cluster and the Control Plane access key (generated
       # at source by openbao_generated_app_secrets.hindsight; app-namespaced).
       - apps/hindsight
+      # Workflow engine: n8n_db_password (generated at source for its role on
+      # the shared cluster) + n8n_encryption_key (PROMOTED — the key that
+      # decrypts the credentials already stored in its database, so it must
+      # never be regenerated). App-namespaced for the flat bao_apps_secrets
+      # merge. Consumed by inventory/group_vars/{n8n_group,postgres_group}.yml.
+      - apps/n8n
   - name: local-llm
     role_id_env: LOCAL_LLM_VAULT_ROLE_ID
     secret_id_env: LOCAL_LLM_VAULT_SECRET_ID
