@@ -288,69 +288,22 @@
       or ((item.1.stdout | default('{}', true) | from_json).data.max_versions
           | default(0, true) | int) != (item.0.max_versions | int)
 
-# --- App-secret seeding (merge-preserving, write-if-changed) -----------------
-# Promote Vikunja service credentials (minted by the vikunja role, stored in
-# SOPS) into secret/apps/vikunja so OpenBao is their canonical home. Values come
-# from the converge environment (SOPS via `sops exec-env`), mapped by
-# openbao_vikunja_secrets. Runs only on the bootstrap host under the admin token.
-#
-# MERGE-PRESERVING: the desired map is the CURRENTLY-STORED fields overlaid with
-# whatever env-derived keys this converge actually carries. A converge that
-# exposes only SOME of the mapped env vars therefore updates just those fields
-# and can never wipe the siblings a partial run doesn't know about (the old
-# whole-secret `kv put` from an env-only map would have dropped them). Idempotent:
-# no env var present, or all present values already stored -> desired == current,
-# so no write.
-- name: Read the current vikunja app secrets from OpenBao
-  ansible.builtin.command:
-    cmd: "bao kv get -format=json {{ openbao_kv_mount }}/apps/vikunja"
-  environment:
-    BAO_ADDR: "{{ openbao_api_addr }}"
-    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
-  register: openbao_vikunja_current
-  failed_when: false
-  changed_when: false
-  no_log: true
-  when:
-    - openbao_bootstrap_token is defined
-
-- name: Capture the current vikunja secret fields (empty map when the path is absent)
-  ansible.builtin.set_fact:
-    openbao_vikunja_current_data: >-
-      {{ (openbao_vikunja_current.stdout | default('{}', true) | from_json).data.data
-         | default({}, true)
-         if (openbao_vikunja_current.rc | default(1)) == 0 else {} }}
-  no_log: true
-  when: openbao_bootstrap_token is defined
-
-- name: Assemble the desired vikunja app-secret map (stored fields + converge-env overrides)
-  ansible.builtin.set_fact:
-    openbao_vikunja_desired: >-
-      {{ openbao_vikunja_desired | default(openbao_vikunja_current_data)
-         | combine({ item.key: lookup('env', item.value) }) }}
-  loop: "{{ openbao_vikunja_secrets | dict2items }}"
+# --- App-secret promotion (merge-preserving, write-if-changed) ---------------
+# Promote each app's EXISTING service credentials into secret/apps/<app> so
+# OpenBao is their canonical home. Values come from the converge environment,
+# mapped field -> env var by openbao_promoted_app_secrets. Runs only on the
+# bootstrap host under the admin token. See promote_app_secret.yml for the
+# merge-preserving contract.
+- name: Promote per-app service secrets into OpenBao (write-if-changed)
+  ansible.builtin.include_tasks: promote_app_secret.yml
+  loop: "{{ openbao_promoted_app_secrets | dict2items }}"
   loop_control:
-    label: "{{ item.key }}"
-  no_log: true
-  when:
-    - openbao_bootstrap_token is defined
-    - lookup('env', item.value) | length > 0
-
-- name: Seed or update the vikunja app secrets in OpenBao (merge-preserving, write-if-changed)
-  ansible.builtin.command:
-    argv: >-
-      {{ ['bao', 'kv', 'put', openbao_kv_mount ~ '/apps/vikunja']
-         + (openbao_vikunja_desired.keys() | zip(openbao_vikunja_desired.values())
-            | map('join', '=') | list) }}
-  environment:
-    BAO_ADDR: "{{ openbao_api_addr }}"
-    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
-  no_log: true
-  changed_when: true
-  when:
-    - openbao_bootstrap_token is defined
-    - openbao_vikunja_desired is defined
-    - openbao_vikunja_desired != openbao_vikunja_current_data
+    loop_var: openbao_promote_item
+    label: "{{ openbao_promote_item.key }}"
+  vars:
+    openbao_promote_app: "{{ openbao_promote_item.key }}"
+    openbao_promote_fields: "{{ openbao_promote_item.value }}"
+  when: openbao_bootstrap_token is defined
 
 # --- App-secret generation (generate-if-absent) -----------------------------
 # Generate + seed each app's service credentials directly in OpenBao, replacing

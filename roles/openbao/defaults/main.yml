@@ -155,30 +155,45 @@ openbao_kv_tuned_mounts: >-
 # writable by the terraform-apply policy so that read/write proof keeps working.
 openbao_homelab_path: homelab
 
-# App secrets promoted into secret/apps/vikunja so OpenBao is their canonical
-# home. Maps each KV key to the converge-env var that carries its value (the
-# vikunja role mints these and stores them in SOPS; a converge run under
-# `sops exec-env` exposes them). The seed step (init.yml) runs only on the
+# App secrets PROMOTED into secret/apps/<app> so OpenBao is their canonical
+# home. Each app maps each KV field to the converge-env var carrying its value.
+# The promote step (init.yml → promote_app_secret.yml) runs only on the
 # bootstrap host under the admin token, writes only when a value differs from
-# what is already stored, and skips any key whose env var is empty — so a
-# converge without the SOPS values (or with unchanged values) writes nothing.
-openbao_vikunja_secrets:
-  token_ro: VIKUNJA_MCP_TOKEN_RO
-  token_rw: VIKUNJA_MCP_TOKEN_RW
-  token_admin: VIKUNJA_MCP_TOKEN_ADMIN
-  svc_mcp_ro_password: VIKUNJA_SVC_MCP_RO_PASSWORD
-  svc_mcp_rw_password: VIKUNJA_SVC_MCP_RW_PASSWORD
-  # App-namespaced DB password (matches the postgres_managed_databases +
-  # vikunja_group.yml consumers reading bao_apps_secrets.vikunja_db_password).
-  vikunja_db_password: VIKUNJA_DB_PASSWORD
-  # JWT signing secret + initial admin password (#17039). App-namespaced to
-  # match the vikunja_group.yml consumers reading bao_apps_secrets.
-  # vikunja_jwt_secret / .vikunja_admin_password. These are promoted from the
-  # live guest, not generated here — the JWT secret must stay stable (rotating
-  # it invalidates every issued session/API token), so they belong in this
-  # promotion map, never in openbao_generated_app_secrets.
-  vikunja_jwt_secret: VIKUNJA_JWT_SECRET
-  vikunja_admin_password: VIKUNJA_ADMIN_PASSWORD
+# what is already stored, and skips any field whose env var is empty — so a
+# converge without those values (or with unchanged values) writes nothing.
+#
+# Promotion vs generation: a value that ALREADY EXISTS and must keep its current
+# value goes here. A value that may simply be created fresh goes in
+# openbao_generated_app_secrets below. Getting this backwards on a key that
+# decrypts stored data destroys that data silently.
+openbao_promoted_app_secrets:
+  vikunja:
+    token_ro: VIKUNJA_MCP_TOKEN_RO
+    token_rw: VIKUNJA_MCP_TOKEN_RW
+    token_admin: VIKUNJA_MCP_TOKEN_ADMIN
+    svc_mcp_ro_password: VIKUNJA_SVC_MCP_RO_PASSWORD
+    svc_mcp_rw_password: VIKUNJA_SVC_MCP_RW_PASSWORD
+    # App-namespaced DB password (matches the postgres_managed_databases +
+    # vikunja_group.yml consumers reading bao_apps_secrets.vikunja_db_password).
+    vikunja_db_password: VIKUNJA_DB_PASSWORD
+    # JWT signing secret + initial admin password (#17039). App-namespaced to
+    # match the vikunja_group.yml consumers reading bao_apps_secrets.
+    # vikunja_jwt_secret / .vikunja_admin_password. These are promoted from the
+    # live guest, not generated here — the JWT secret must stay stable (rotating
+    # it invalidates every issued session/API token), so they belong in this
+    # promotion map, never in openbao_generated_app_secrets.
+    vikunja_jwt_secret: VIKUNJA_JWT_SECRET
+    vikunja_admin_password: VIKUNJA_ADMIN_PASSWORD
+  n8n:
+    # The workflow engine's credential-encryption key. PROMOTED, never
+    # generated: it is the only thing that can decrypt the credentials already
+    # stored in the app's database, so a fresh value would leave a database
+    # that restores cleanly and whose every stored credential is permanently
+    # unreadable — a backup that looks like it worked. It also must not live
+    # only on the guest beside the data it unlocks, which is why it belongs
+    # here at all. Internal KV mount (openbao_kv_mount): the engine is not
+    # internet-reachable.
+    n8n_encryption_key: N8N_ENCRYPTION_KEY
 
 # App service secrets GENERATED (random, generate-if-absent) in OpenBao itself,
 # replacing the retired terraform-proxmox vault-secrets root. Each app maps to
@@ -204,6 +219,12 @@ openbao_generated_app_secrets:
   # key is NOT here — it reuses ai/llm's LLM_ROUTER_MASTER_KEY (local-llm
   # domain), same router credential every ai-VLAN consumer uses.
   hindsight: [hindsight_db_password, hindsight_replication_password, hindsight_cp_access_key]
+  # Workflow-engine login for the shared Postgres cluster. Generated, not
+  # promoted: the cutover creates a NEW role on the shared cluster, so nothing
+  # depends on the previous value. The encryption key for the same app is in
+  # openbao_promoted_app_secrets — the two must not be confused.
+  # App-namespaced for the flat bao_apps_secrets merge.
+  n8n: [n8n_db_password]
 # Random length for generated app credentials (alnum). secret_key needs more
 # entropy than a login credential, so it gets its own length (matches the 64-char
 # key the nautobot role generates locally when none is supplied).
@@ -668,11 +689,13 @@ openbao_media_approle_name: media
 # via APPS_VAULT_ROLE_ID / APPS_VAULT_SECRET_ID.
 openbao_apps_policy_name: apps
 openbao_apps_approle_name: apps
-# Apps the read-side `apps` policy grants read on = the generate-if-absent apps
-# (nautobot, zammad) PLUS vikunja, whose secret/apps/vikunja is seeded from the
-# SOPS->bao promotion map (openbao_vikunja_secrets), not generate-if-absent. The
-# apps-policy template loops this so vikunja's read grant is not silently missed.
-openbao_apps_read_apps: "{{ ((openbao_generated_app_secrets.keys() | list) + ['vikunja']) | sort }}"
+# Apps the read-side `apps` policy grants read on = the union of both seeding
+# maps, so an app that is only promoted (never generated) still gets its read
+# grant. Derived rather than listed: a hand-maintained list silently missed the
+# promoted apps, and the failure mode is a consumer resolving an empty secret.
+openbao_apps_read_apps: >-
+  {{ ((openbao_generated_app_secrets.keys() | list)
+      + (openbao_promoted_app_secrets.keys() | list)) | unique | sort }}
 openbao_local_llm_policy_name: local-llm
 openbao_local_llm_approle_name: local-llm
 openbao_ai_saas_openrouter_policy_name: ai-saas-openrouter
