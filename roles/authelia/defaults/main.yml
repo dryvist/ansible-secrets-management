@@ -38,14 +38,30 @@ authelia_port: "{{ tofu_data.constants.service_ports.authelia_portal }}"
 authelia_cookie_domain: "{{ lookup('env', 'PROXMOX_SUBDOMAIN') }}"
 authelia_portal_url: "https://authelia.{{ authelia_cookie_domain }}"
 
-# Domains whose /api/ paths bypass the SSO gate. These apps enforce their own
-# API token auth on every /api request; the forwardAuth portal can never be
+# Domains whose API paths bypass the SSO gate. These apps enforce their own
+# token auth on every API request; the forwardAuth portal can never be
 # satisfied by a non-browser client, so without a bypass an sso-flagged route
 # blocks all machine consumers (a 401 from the app's own WWW-Authenticate,
 # observed on the first token client 2026-07-17). Browser UIs stay behind the
-# portal — the bypass matches only ^/api/.
+# portal.
+#
+# The general rule this expresses: forwardAuth gates HUMAN paths; the app's own
+# credential gates its machine API. Authelia is for the operator (and later,
+# agents) — it must never sit in front of data ingestion.
+#
+# `resource` is per-entry because "the API" is not the same path prefix in
+# every app. The default below covers an app whose entire /api surface is
+# token-authenticated. An app that also serves its BROWSER auth endpoints under
+# /api (NextAuth's /api/auth/* being the common case) must narrow it, or the
+# bypass hands out its session/sign-in routes unauthenticated.
+authelia_api_bypass_default_resource: "^/api(?:/.*)?$"
 authelia_api_bypass_domains:
-  - "zammad.{{ authelia_cookie_domain }}"
+  - domain: "zammad.{{ authelia_cookie_domain }}"
+  # Langfuse serves OTLP trace ingestion under /api/public and its NextAuth
+  # browser session routes under /api/auth. Narrowed to /api/public so
+  # collectors can deliver spans while the console's auth surface stays gated.
+  - domain: "langfuse.{{ authelia_cookie_domain }}"
+    resource: "^/api/public(?:/.*)?$"
 
 # --- Sessions: login once, stay signed in for a week --------------------------
 authelia_session_expiration: "12h"
