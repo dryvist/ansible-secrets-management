@@ -1,0 +1,11 @@
+{{ ansible_managed | comment }}
+# OpenBao policy for the ai-donna AppRole — the Donna AI agent's dedicated,
+# least-privilege reader. Read-only on EXACTLY its own secret; nothing else
+# in the ai subtree or any other domain. Mirrors the hermes AppRole's
+# isolation (see hermes-policy.hcl.j2) so the two agents share no credential.
+path "{{ openbao_kv_mount }}/data/ai/donna" {
+  capabilities = ["read"]
+}
+path "{{ openbao_kv_mount }}/metadata/ai/donna" {
+  capabilities = ["read", "list"]
+}
