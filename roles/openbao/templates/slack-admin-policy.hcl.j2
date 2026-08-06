@@ -1,0 +1,15 @@
+{{ ansible_managed | comment }}
+# OpenBao policy for the slack-admin AppRole — read + update on exactly one
+# secrets-external KV-v2 entry (platform/slack-admin), the Slack app
+# configuration token pair (app_config_token, app_config_refresh_token,
+# rotated_at). Read-only would not suffice: the access token expires after
+# 12 hours, and rotating it consumes the refresh token (single-use) and
+# returns a brand-new pair that must be written back — without update, the
+# credential would work for 12 hours and then fail permanently with no way
+# to recover. No create (the entry is seeded once, out of band), no delete,
+# no list, and no wildcard: this identity can rotate the one secret it owns
+# and cannot see or touch any other path on either mount.
+
+path "secrets-external/data/platform/slack-admin" {
+  capabilities = ["read", "update"]
+}

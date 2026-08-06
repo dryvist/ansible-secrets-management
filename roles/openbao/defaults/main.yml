@@ -430,6 +430,15 @@ openbao_oauthapp_slack_poc_approle_name: oauthapp-slack-poc-read
 openbao_oauthapp_slack_poc_token_ttl: 15m
 openbao_oauthapp_slack_poc_secret_id_ttl: 15m
 
+# slack-admin: read+update on the single secrets-external KV-v2 entry holding
+# the Slack app configuration token pair (not an oauthapp credential — this
+# is app-config API access, not the workspace bot token above). Short TTLs
+# like slack-poc: this identity is held only for the duration of a rotation.
+openbao_slack_admin_policy_name: slack-admin
+openbao_slack_admin_approle_name: slack-admin
+openbao_slack_admin_token_ttl: 15m
+openbao_slack_admin_secret_id_ttl: 15m
+
 # --- SSH secrets engine (signed client certificates — the SSH CA) -----------
 # Implements the ssh-certificate-authority ADR (docs-starlight): automation
 # authenticates to estate hosts with short-TTL SSH certificates signed by an
@@ -1042,6 +1051,11 @@ openbao_base_approles:
   - name: "{{ openbao_ai_runner_approle_name }}"
     policy: "{{ openbao_ai_runner_policy_name }}"
     secret_id_bound_cidrs: "{{ openbao_ai_runner_secret_id_cidr }}"
+  - name: "{{ openbao_slack_admin_approle_name }}"
+    policy: "{{ openbao_slack_admin_policy_name }}"
+    token_ttl: "{{ openbao_slack_admin_token_ttl }}"
+    token_max_ttl: "{{ openbao_slack_admin_token_ttl }}"
+    secret_id_ttl: "{{ openbao_slack_admin_secret_id_ttl }}"
 # Full AppRole set = the static base above + the per-service ai-apply-<svc> actor
 # roles generated from openbao_ai_domains. init.yml loops this combined list.
 openbao_approles: >-
@@ -1142,6 +1156,8 @@ openbao_base_policies:
     template: llm-gate-policy.hcl.j2
   - name: "{{ openbao_ai_runner_policy_name }}"
     template: ai-runner-policy.hcl.j2
+  - name: "{{ openbao_slack_admin_policy_name }}"
+    template: slack-admin-policy.hcl.j2
 openbao_oauthapp_policies: >-
   {{ ([{
         'name': openbao_oauthapp_slack_poc_policy_name,
