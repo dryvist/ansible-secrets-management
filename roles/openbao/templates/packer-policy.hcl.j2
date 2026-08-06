@@ -1,0 +1,27 @@
+{{ ansible_managed | comment }}
+# OpenBao policy for the packer AppRole — Windows VDI template builds.
+#
+# Two reads, both exact paths, nothing else. Packer needs the Proxmox API
+# credential to create and capture the build VM, and the Windows local
+# Administrator credential because it is baked into both answer files and is
+# what Packer authenticates with over WinRM during the build.
+#
+# Deliberately NOT granted: any write anywhere, the SSH key fields' siblings by
+# wildcard, or platform/* generally. A template build creates infrastructure but
+# owns no secret, so it never needs to mint or rotate one.
+
+path "{{ openbao_kv_mount }}/data/infrastructure/proxmox" {
+  capabilities = ["read"]
+}
+
+path "{{ openbao_kv_mount }}/metadata/infrastructure/proxmox" {
+  capabilities = ["read", "list"]
+}
+
+path "{{ openbao_kv_mount }}/data/platform/windows-vdi/win11-admin" {
+  capabilities = ["read"]
+}
+
+path "{{ openbao_kv_mount }}/metadata/platform/windows-vdi/win11-admin" {
+  capabilities = ["read", "list"]
+}
