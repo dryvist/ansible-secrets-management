@@ -93,6 +93,43 @@
   register: authelia_oidc_secret_files
   no_log: true
 
+# Back the generated secrets up into OpenBao. These are create-if-absent and
+# guest-local, so the guest holds the only copy. The storage encryption key is
+# the one that matters most: it is immutable once the SQLite database exists,
+# and losing it makes that database unreadable rather than merely resettable.
+- name: Read the generated secrets for publishing
+  ansible.builtin.slurp:
+    src: "{{ item.value }}"
+  loop: >-
+    {{ (authelia_secret_files
+        | combine({'oidc_jwks_private_key': authelia_oidc_jwks_key_file}))
+       | dict2items }}
+  loop_control:
+    label: "{{ item.key }}"
+  register: authelia_publish_blobs
+  failed_when: false
+  no_log: true
+
+- name: Assemble the publish payload
+  ansible.builtin.set_fact:
+    authelia_publish_data: >-
+      {{ authelia_publish_data | default({}, true)
+         | combine({item.item.key: (item.content | b64decode | trim)}) }}
+  loop: "{{ authelia_publish_blobs.results }}"
+  loop_control:
+    label: "{{ item.item.key }}"
+  when: item.content is defined
+  no_log: true
+
+- name: Publish the generated Authelia secrets to OpenBao
+  ansible.builtin.include_role:
+    name: openbao_secrets
+    tasks_from: publish.yml
+  vars:
+    openbao_secrets_publish_app: authelia
+    openbao_secrets_publish_reason: (service secrets; storage key is unrecoverable if lost)
+    openbao_secrets_publish_data: "{{ authelia_publish_data | default({}, true) }}"
+
 - name: Decode OIDC secrets for the protected config render
   ansible.builtin.set_fact:
     authelia_oidc_hmac_secret: "{{ authelia_oidc_secret_files.results[0].content | b64decode }}"

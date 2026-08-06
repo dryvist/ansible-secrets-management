@@ -74,7 +74,13 @@ authelia_session_remember_me: "1w"
 # password is generated on the host at first converge (never in Doppler /
 # OpenBao — see the generate-at-source rule in AGENTS.md) and persisted
 # root-only for one-time retrieval; day-to-day login is the passkey.
-authelia_admin_user: jevans
+# The estate's operator identity, from the same DEFAULT_USERNAME env the vikunja
+# role provisions its operator from — one source, not a per-role literal. The
+# users template puts this user in the `admins` group, so setting it here is what
+# maps the operator to admin across every Authelia-gated service (now including
+# the Traefik dashboard). Falls back to the historical literal so an environment
+# without DEFAULT_USERNAME still converges instead of rendering an empty user.
+authelia_admin_user: "{{ lookup('env', 'DEFAULT_USERNAME') | default('', true) or 'jevans' }}"
 authelia_admin_display_name: "Jacob Evans"
 authelia_admin_email: "{{ authelia_admin_user }}@{{ tofu_data.domain }}"
 authelia_bootstrap_password_file: "{{ authelia_config_dir }}/.bootstrap_password"

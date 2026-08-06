@@ -1144,6 +1144,20 @@ openbao_oauthapp_policies: >-
 # leaves generated from openbao_ssh_roles. init.yml renders this list.
 # NOTE: ssh-sign-ci-runner is rendered but attached to no identity yet — no CI
 # AppRole/JWT identity exists in this role today; attach it when one does.
+# Apps whose roles generate a credential locally and publish it back to
+# secret/apps/<app> via roles/openbao_secrets/tasks/publish.yml. Each entry
+# becomes an EXACT-path create/update/read grant on the ansible-converge policy
+# (see ansible-converge-policy.hcl.j2) — never a wildcard. Adding a publishing
+# role means adding its name here; forgetting to makes the publish fail loudly
+# with a permission denied rather than silently skipping.
+openbao_credential_publish_apps:
+  - traefik
+  - authelia
+  - nautobot
+  - healthchecks
+  - n8n
+  - sortarr
+
 openbao_policies: >-
   {{ openbao_base_policies + openbao_oauthapp_policies
      + openbao_ai_capability_policies + openbao_ssh_sign_policies
