@@ -1,0 +1,26 @@
+{{ ansible_managed | comment }}
+# OpenBao policy for the AI session-archive backup job.
+#
+# The job pushes Claude/Codex/Gemini session history to the per-vendor object
+# buckets. It needs exactly one secret: the six scoped bucket keys. Nothing else.
+#
+# Deliberately NOT granted the shared object-store credential at
+# {{ openbao_kv_mount }}/data/infra/rustfs. That record holds the account-wide
+# admin key, so reading it merely to discover an endpoint would hand this job
+# the ability to touch every bucket in the store — the exact blast radius the
+# per-bucket keys exist to remove. The endpoint is not a secret and is composed
+# by the consumer from the internal domain, so it costs no grant at all.
+#
+# KV rather than an engine because no engine can mint these: the upstream
+# catalog (openbao/openbao-plugins) ships AWS, Azure, GCP, GCPKMS, Nomad and
+# Consul, and none of them speak to an S3-compatible store that is not AWS IAM.
+# This is the "values nothing can mint" case the plugins-first rule carves out,
+# the same reason infra/rustfs is KV today.
+
+path "{{ openbao_kv_mount }}/data/apps/ai-sessions" {
+  capabilities = ["read"]
+}
+
+path "{{ openbao_kv_mount }}/metadata/apps/ai-sessions" {
+  capabilities = ["read"]
+}

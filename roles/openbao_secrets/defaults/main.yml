@@ -35,6 +35,18 @@ openbao_secrets_bao_addr_candidates: >-
   {{ (([openbao_secrets_bao_addr] if openbao_secrets_bao_addr | length > 0 else [])
       + openbao_secrets_node_addrs) | unique }}
 
+# --- Credential PUBLISHING (tasks/publish.yml) ---------------------------------
+# Identity used to write guest-generated credentials back into OpenBao under
+# secret/apps/<app>. This is the ansible-converge AppRole, whose policy is
+# extended with create/update (NOT delete, NOT read of unrelated paths) on
+# secret/data/apps/* — see roles/openbao `openbao_policies`.
+#
+# Everything else in this role READS. This is the one write path, and it is
+# deliberately confined to a single path prefix so a converge can never rewrite
+# platform or external credentials.
+openbao_secrets_publish_role_id: "{{ lookup('env', 'OPENBAO_APPROLE_ANSIBLE_ROLE_ID') | default('', true) }}"
+openbao_secrets_publish_secret_id: "{{ lookup('env', 'OPENBAO_APPROLE_ANSIBLE_SECRET_ID') | default('', true) }}"
+
 # One entry per resource-domain identity this Ansible converge fetches for.
 # Each domain's role_id/secret_id come from its own env vars — sourced from
 # the operator's keychain-backed resolver on macOS, or a root-only systemd

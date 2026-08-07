@@ -61,13 +61,15 @@ identity_providers:
 access_control:
   default_policy: deny
   rules:
-{% for bypass_domain in authelia_api_bypass_domains %}
-    # {{ bypass_domain }} authenticates /api itself (per-request token); the
-    # portal cannot satisfy a non-browser client. UI paths stay gated below.
-    - domain: "{{ bypass_domain }}"
+{% for bypass in authelia_api_bypass_domains %}
+    # {{ bypass.domain }} authenticates this path prefix itself (per-request
+    # token); the portal cannot satisfy a non-browser client. UI paths stay
+    # gated below. The prefix is per-entry: an app that serves its browser auth
+    # routes under /api must narrow it so the bypass does not expose them.
+    - domain: "{{ bypass.domain }}"
       policy: bypass
       resources:
-        - "^/api(?:/.*)?$"
+        - "{{ bypass.resource | default(authelia_api_bypass_default_resource) }}"
 {% endfor %}
     # Every Traefik-fronted UI under the ingress base domain. two_factor is
     # required so Authelia exposes passkey/WebAuthn enrolment at all (it hides

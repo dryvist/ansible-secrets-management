@@ -1,0 +1,146 @@
+---
+# Publish a guest-generated credential INTO OpenBao, so a secret that a role
+# minted locally is no longer single-copy on one container's disk.
+#
+# WHY THIS EXISTS: several roles generate a credential create-if-absent and keep
+# the only copy in a guest-local file. That copy does not survive a rebuild, and
+# for some of these secrets the loss is not merely a password reset — an
+# application encryption key can make previously stored credentials permanently
+# undecryptable, and a rotated framework SECRET_KEY invalidates every session.
+#
+# Contract — the caller sets:
+#   openbao_secrets_publish_app    : app name; becomes secret/<mount>/apps/<app>
+#   openbao_secrets_publish_data   : dict of {key: value} to merge in
+#   openbao_secrets_publish_reason : short human string for the log (optional)
+#
+# Semantics: MERGE, never clobber. The existing secret version is read first and
+# the new keys are layered on top, so publishing one field cannot delete fields
+# another role (or a human) put there. Existing values for the same key ARE
+# overwritten — that is the point when a credential rotates.
+#
+# This runs on localhost: the converge host holds the AppRole secret-zero, and
+# the managed guest must never be handed OpenBao write credentials.
+
+- name: Validate publish inputs
+  ansible.builtin.assert:
+    that:
+      - openbao_secrets_publish_app | default('', true) | length > 0
+      - openbao_secrets_publish_data is defined
+      - openbao_secrets_publish_data is mapping
+      - openbao_secrets_publish_data | length > 0
+    fail_msg: >-
+      openbao_secrets/publish.yml requires openbao_secrets_publish_app
+      (non-empty) and openbao_secrets_publish_data (non-empty mapping).
+    quiet: true
+
+# An empty value must NEVER reach the write. The merge below layers the payload
+# over the stored secret, so publishing key=""  would overwrite a good credential
+# with nothing — the exact loss this task exists to prevent, caused by the task
+# meant to prevent it. Callers used to guard this themselves, which meant every
+# caller could forget; the check belongs here, once.
+- name: Drop empty values from the publish payload
+  ansible.builtin.set_fact:
+    openbao_secrets_publish_effective: >-
+      {{ openbao_secrets_publish_data | dict2items
+         | rejectattr('value', 'none')
+         | rejectattr('value', 'equalto', '')
+         | items2dict }}
+  no_log: true
+
+- name: Publish generated credentials to OpenBao
+  delegate_to: localhost
+  become: false
+  vars:
+    _addr: >-
+      {{ hostvars['localhost'].openbao_secrets_active_addr
+         | default(openbao_secrets_bao_addr, true) }}
+    _path: "apps/{{ openbao_secrets_publish_app }}"
+  block:
+    - name: Decide whether credential publishing is possible
+      ansible.builtin.set_fact:
+        openbao_secrets_publish_ready: >-
+          {{ (openbao_secrets_publish_effective | length > 0)
+             and (_addr | length > 0)
+             and (openbao_secrets_publish_role_id | length > 0)
+             and (openbao_secrets_publish_secret_id | length > 0) }}
+
+    # A publish that silently no-ops is the failure mode this whole change is
+    # meant to remove: the operator would believe the secret is backed up when
+    # it is not. So an unavailable OpenBao is a WARNING naming the reason, never
+    # a quiet skip — and never a green success.
+    - name: Warn that the credential was NOT published
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: '{{ openbao_secrets_publish_app }}' credentials were NOT
+          published to OpenBao — the generated secret exists ONLY on the guest
+          and is lost if that guest is rebuilt. Reason:
+          {{ 'every value in the payload was empty' if (openbao_secrets_publish_effective | length == 0)
+             else 'no reachable OpenBao endpoint' if (_addr | length == 0)
+             else 'publish AppRole credentials missing from the environment' }}.
+      when: not (openbao_secrets_publish_ready | bool)
+
+    - name: Write the credentials
+      when: openbao_secrets_publish_ready | bool
+      block:
+        - name: Log in with the publish AppRole
+          community.hashi_vault.vault_login:
+            url: "{{ _addr }}"
+            auth_method: approle
+            role_id: "{{ openbao_secrets_publish_role_id }}"
+            secret_id: "{{ openbao_secrets_publish_secret_id }}"
+            validate_certs: "{{ openbao_secrets_validate_certs }}"
+          register: openbao_secrets_publish_login
+          no_log: true
+
+        # Read-before-write so a single-field publish cannot drop sibling keys.
+        # A 404 (path not yet seeded) is expected and must not fail the run.
+        - name: Read the existing secret so the write merges rather than clobbers
+          community.hashi_vault.vault_kv2_get:
+            url: "{{ _addr }}"
+            auth_method: token
+            token: "{{ openbao_secrets_publish_login.login.auth.client_token }}"
+            engine_mount_point: "{{ openbao_secrets_kv_mount }}"
+            path: "{{ _path }}"
+            validate_certs: "{{ openbao_secrets_validate_certs }}"
+          register: openbao_secrets_publish_existing
+          failed_when: false
+          no_log: true
+
+        - name: Merge the new fields over the existing secret and write it back
+          community.hashi_vault.vault_write:
+            url: "{{ _addr }}"
+            auth_method: token
+            token: "{{ openbao_secrets_publish_login.login.auth.client_token }}"
+            path: "{{ openbao_secrets_kv_mount }}/data/{{ _path }}"
+            data:
+              data: >-
+                {{ (openbao_secrets_publish_existing.secret | default({}, true))
+                   | combine(openbao_secrets_publish_effective) }}
+            validate_certs: "{{ openbao_secrets_validate_certs }}"
+          no_log: true
+
+        - name: Report the publish
+          ansible.builtin.debug:
+            msg: >-
+              Published {{ openbao_secrets_publish_effective | length }} field(s) to
+              {{ openbao_secrets_kv_mount }}/{{ _path }}
+              {{ openbao_secrets_publish_reason | default('', true) }}
+
+      always:
+        # No token-revoke module exists in community.hashi_vault, so revoke via
+        # the API path. ansible-lint flags a missing module only as a WARNING
+        # ("invalid resolved_fqcn"), not a failure — it does not fail the lint,
+        # so a nonexistent module reaches runtime looking fully validated.
+        - name: Revoke the publish token
+          community.hashi_vault.vault_write:
+            url: "{{ _addr }}"
+            auth_method: token
+            token: "{{ openbao_secrets_publish_login.login.auth.client_token }}"
+            path: auth/token/revoke-self
+            data: {}
+            validate_certs: "{{ openbao_secrets_validate_certs }}"
+          when:
+            - openbao_secrets_publish_login is defined
+            - openbao_secrets_publish_login.login is defined
+          failed_when: false
+          no_log: true
