@@ -550,6 +550,12 @@ openbao_terraform_apply_policy_name: terraform-apply
 openbao_terraform_apply_approle_name: terraform-apply
 openbao_flow_lock_policy_name: flow-lock
 openbao_flow_lock_approle_name: flow-lock
+# Backup job for the AI session archive. Its own identity rather than a reused
+# one: flow-lock was the nearest existing role and its policy stops at
+# infra/* + the global lock, so the backup borrowed an operator token instead —
+# which is how a break-glass credential quietly becomes a scheduled dependency.
+openbao_ai_sessions_backup_policy_name: ai-sessions-backup
+openbao_ai_sessions_backup_approle_name: ai-sessions-backup
 # packer — Windows VDI template builds. Reads the Proxmox API credential and the
 # Windows local Administrator credential; writes nothing anywhere.
 openbao_packer_policy_name: packer
@@ -942,6 +948,8 @@ openbao_base_approles:
       - "{{ openbao_config_write_policy_name }}"
   - name: "{{ openbao_flow_lock_approle_name }}"
     policy: "{{ openbao_flow_lock_policy_name }}"
+  - name: "{{ openbao_ai_sessions_backup_approle_name }}"
+    policy: "{{ openbao_ai_sessions_backup_policy_name }}"
   - name: "{{ openbao_packer_approle_name }}"
     policy: "{{ openbao_packer_policy_name }}"
   # ansible-converge additionally signs automation-ansible SSH certs: the
@@ -1121,6 +1129,8 @@ openbao_base_policies:
     template: terraform-apply-policy.hcl.j2
   - name: "{{ openbao_flow_lock_policy_name }}"
     template: flow-lock-policy.hcl.j2
+  - name: "{{ openbao_ai_sessions_backup_policy_name }}"
+    template: ai-sessions-backup-policy.hcl.j2
   - name: "{{ openbao_packer_policy_name }}"
     template: packer-policy.hcl.j2
   - name: "{{ openbao_ansible_converge_policy_name }}"
