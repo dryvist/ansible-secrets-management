@@ -219,6 +219,22 @@ openbao_generated_app_secrets:
   # key is NOT here — it reuses ai/llm's LLM_ROUTER_MASTER_KEY (local-llm
   # domain), same router credential every ai-VLAN consumer uses.
   hindsight: [hindsight_db_password, hindsight_replication_password, hindsight_cp_access_key]
+  # AI session-history backup. One RustFS bucket per vendor
+  # (ai-sessions-{claude,codex,gemini}), each with a read-only and a
+  # read-write key, so a machine pushing its own history cannot read or write
+  # any other bucket — the writers are laptops, and an account-wide key on a
+  # laptop is exactly what the per-bucket split exists to prevent.
+  #
+  # Only the secrets are generated here; the access key IDs are the fixed
+  # names ai-sessions-<vendor>-{ro,rw}, created as RustFS users from these
+  # values. Fields are app-namespaced for the flat bao_apps_secrets merge.
+  ai-sessions:
+    - claude_ro_secret
+    - claude_rw_secret
+    - codex_ro_secret
+    - codex_rw_secret
+    - gemini_ro_secret
+    - gemini_rw_secret
   # Workflow-engine login for the shared Postgres cluster. Generated, not
   # promoted: the cutover creates a NEW role on the shared cluster, so nothing
   # depends on the previous value. The encryption key for the same app is in
