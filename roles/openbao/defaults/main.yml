@@ -446,14 +446,17 @@ openbao_oauthapp_slack_poc_approle_name: oauthapp-slack-poc-read
 openbao_oauthapp_slack_poc_token_ttl: 15m
 openbao_oauthapp_slack_poc_secret_id_ttl: 15m
 
-# slack-admin: read+update on the single secrets-external KV-v2 entry holding
-# the Slack app configuration token pair (not an oauthapp credential — this
-# is app-config API access, not the workspace bot token above). Short TTLs
-# like slack-poc: this identity is held only for the duration of a rotation.
+# slack-admin: read+update+create on the single secrets-external KV-v2 entry
+# holding the Slack app configuration token pair (not an oauthapp credential
+# — this is app-config API access, not the workspace bot token above).
 openbao_slack_admin_policy_name: slack-admin
 openbao_slack_admin_approle_name: slack-admin
+# Token TTL stays short-lived like slack-poc: each minted token is held only
+# for the duration of a rotation. secret_id_ttl is a separate, standing
+# credential — same non-expiring pattern as github-read/github-write/
+# flow-lock — so unattended rotation doesn't depend on someone re-minting it.
 openbao_slack_admin_token_ttl: 15m
-openbao_slack_admin_secret_id_ttl: 15m
+openbao_slack_admin_secret_id_ttl: 0
 
 # --- SSH secrets engine (signed client certificates — the SSH CA) -----------
 # Implements the ssh-certificate-authority ADR (docs-starlight): automation
