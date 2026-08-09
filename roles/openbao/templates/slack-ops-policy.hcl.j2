@@ -1,0 +1,11 @@
+{{ ansible_managed | comment }}
+# OpenBao policy for the slack-ops AppRole — read-only on exactly one
+# secrets-external KV-v2 entry (platform/slack-ops), the static homelabops
+# bot token used for Slack channel lifecycle operations
+# (conversations.*/chat.* scopes). This app has token rotation disabled, so
+# the stored value never changes and this identity only ever consumes it —
+# no update, no create, no delete, no list, and no wildcard.
+
+path "secrets-external/data/platform/slack-ops" {
+  capabilities = ["read"]
+}

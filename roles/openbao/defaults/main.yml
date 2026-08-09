@@ -413,47 +413,30 @@ openbao_oauthapp_plugin_tarball_url: >-
   }}/{{ openbao_oauthapp_plugin_tarball }}
 openbao_oauthapp_plugin_tarball_sha256: 086b84e0199a63a05fc73dd198eadc962b10c413864980cafbd0a67f1487d082
 
-# OAuthapp's built-in Slack provider uses Slack's legacy OAuth endpoints. Use
-# the custom provider so a granular Slack app can use OAuth V2 + token rotation.
-# Client credentials are supplied only for initial configuration/intentional
-# rotation and are stored inside the engine, never in KV or the repository.
-openbao_oauthapp_slack_server_name: slack-poc
-openbao_oauthapp_slack_credential_name: slack-poc
-openbao_oauthapp_slack_client_id: >-
-  {{ lookup('env', 'SLACK_OPENBAO_CLIENT_ID') | default('', true) }}
-openbao_oauthapp_slack_client_secret: >-
-  {{ lookup('env', 'SLACK_OPENBAO_CLIENT_SECRET') | default('', true) }}
-openbao_oauthapp_slack_callback_url: >-
-  https://openbao.{{ lookup('env', 'PROXMOX_SUBDOMAIN') }}/oauth/slack/callback
-openbao_oauthapp_slack_provider_options:
-  auth_code_url: https://slack.com/oauth/v2/authorize
-  token_url: https://slack.com/api/oauth.v2.access
-  auth_style: in_params
-openbao_oauthapp_slack_bot_scopes:
-  - chat:write
-  - chat:write.public
-  - channels:read
-  - channels:history
-  - channels:join
-  - channels:manage
-openbao_oauthapp_refresh_check_interval_seconds: 60
-
-# The JacobPEvans Slack workspace consumer can read exactly one stored Slack
-# credential. The returned Slack token has Slack's 12-hour lifetime; this
-# 15-minute AppRole TTL only limits how long a requester can ask OpenBao for it.
-openbao_oauthapp_slack_poc_policy_name: oauthapp-slack-poc-read
-openbao_oauthapp_slack_poc_approle_name: oauthapp-slack-poc-read
-openbao_oauthapp_slack_poc_token_ttl: 15m
-openbao_oauthapp_slack_poc_secret_id_ttl: 15m
-
-# slack-admin: read+update on the single secrets-external KV-v2 entry holding
-# the Slack app configuration token pair (not an oauthapp credential — this
-# is app-config API access, not the workspace bot token above). Short TTLs
-# like slack-poc: this identity is held only for the duration of a rotation.
+# slack-admin: read+update+create on the single secrets-external KV-v2 entry
+# holding the Slack app configuration token pair (not an oauthapp credential
+# — this is app-config API access, not a workspace bot token).
 openbao_slack_admin_policy_name: slack-admin
 openbao_slack_admin_approle_name: slack-admin
+# Token TTL stays short-lived: each minted token is held only for the
+# duration of a rotation. secret_id_ttl is a separate, standing credential —
+# same non-expiring pattern as github-read/github-write/flow-lock — so
+# unattended rotation doesn't depend on someone re-minting it.
 openbao_slack_admin_token_ttl: 15m
-openbao_slack_admin_secret_id_ttl: 15m
+openbao_slack_admin_secret_id_ttl: 0
+
+# slack-ops: read-only on the single secrets-external KV-v2 entry holding the
+# static, non-expiring homelabops bot token (conversations.*/chat.* scopes) —
+# not the app-config token above, and not an oauthapp credential.
+openbao_slack_ops_policy_name: slack-ops
+openbao_slack_ops_approle_name: slack-ops
+# Token TTL stays short-lived like slack-admin: each minted token is held
+# only for the duration of one request. secret_id_ttl is a separate,
+# standing credential — same non-expiring pattern as slack-admin/github-read/
+# github-write/flow-lock — so unattended use doesn't depend on someone
+# re-minting it.
+openbao_slack_ops_token_ttl: 15m
+openbao_slack_ops_secret_id_ttl: 0
 
 # --- SSH secrets engine (signed client certificates — the SSH CA) -----------
 # Implements the ssh-certificate-authority ADR (docs-starlight): automation
@@ -922,16 +905,6 @@ openbao_ai_runner_approle_name: ai-runner
 openbao_ai_runner_secret_id_cidr: >-
   {{ lookup('env', 'OPENBAO_AI_RUNNER_SECRET_ID_CIDR') | default('', true) }}
 
-openbao_oauthapp_approles: >-
-  {{ ([{
-        'name': openbao_oauthapp_slack_poc_approle_name,
-        'policy': openbao_oauthapp_slack_poc_policy_name,
-        'token_ttl': openbao_oauthapp_slack_poc_token_ttl,
-        'token_max_ttl': openbao_oauthapp_slack_poc_token_ttl,
-        'secret_id_ttl': openbao_oauthapp_slack_poc_secret_id_ttl,
-        'secret_id_num_uses': 1
-      }] if openbao_oauthapp_engine_enabled | bool else []) }}
-
 # The set of non-root AppRoles to provision, each {name, policy}. Driving the
 # bootstrap from this list keeps init.yml DRY as groups are added. Per-identity
 # `secret_id_bound_cidrs` hardening is left as a tracked follow-up: the real
@@ -1086,10 +1059,15 @@ openbao_base_approles:
     token_ttl: "{{ openbao_slack_admin_token_ttl }}"
     token_max_ttl: "{{ openbao_slack_admin_token_ttl }}"
     secret_id_ttl: "{{ openbao_slack_admin_secret_id_ttl }}"
+  - name: "{{ openbao_slack_ops_approle_name }}"
+    policy: "{{ openbao_slack_ops_policy_name }}"
+    token_ttl: "{{ openbao_slack_ops_token_ttl }}"
+    token_max_ttl: "{{ openbao_slack_ops_token_ttl }}"
+    secret_id_ttl: "{{ openbao_slack_ops_secret_id_ttl }}"
 # Full AppRole set = the static base above + the per-service ai-apply-<svc> actor
 # roles generated from openbao_ai_domains. init.yml loops this combined list.
 openbao_approles: >-
-  {{ openbao_base_approles + openbao_oauthapp_approles + openbao_ai_apply_approles
+  {{ openbao_base_approles + openbao_ai_apply_approles
      + openbao_github_write_scope_approles }}
 # Policy templates rendered + written on the bootstrap host. Each entry maps a
 # policy name to its template; add a row to grow the RBAC surface.
@@ -1192,11 +1170,8 @@ openbao_base_policies:
     template: ai-runner-policy.hcl.j2
   - name: "{{ openbao_slack_admin_policy_name }}"
     template: slack-admin-policy.hcl.j2
-openbao_oauthapp_policies: >-
-  {{ ([{
-        'name': openbao_oauthapp_slack_poc_policy_name,
-        'template': 'oauthapp-slack-poc-policy.hcl.j2'
-      }] if openbao_oauthapp_engine_enabled | bool else []) }}
+  - name: "{{ openbao_slack_ops_policy_name }}"
+    template: slack-ops-policy.hcl.j2
 # Full policy set = the static base above + the base read-/write-/github-mint
 # capability leaves generated from openbao_ai_domains + the ssh-sign-<role>
 # leaves generated from openbao_ssh_roles. init.yml renders this list.
@@ -1217,7 +1192,7 @@ openbao_credential_publish_apps:
   - sortarr
 
 openbao_policies: >-
-  {{ openbao_base_policies + openbao_oauthapp_policies
+  {{ openbao_base_policies
      + openbao_ai_capability_policies + openbao_ssh_sign_policies
      + openbao_github_write_scope_policies }}
 
@@ -1279,6 +1254,39 @@ openbao_snapshot_ntfy_url: >-
 # healthchecks deadman ping URL for the snapshot job; EMPTY => ping skipped
 # (ntfy + journal alert still fire). Set per-node from the healthchecks LXC.
 openbao_snapshot_healthcheck_url: "{{ lookup('env', 'OPENBAO_SNAPSHOT_HC_URL') | default('', true) }}"
+
+# --- Slack app-config token rotation (automated, on-box timer) --------------
+# An on-box systemd timer rotates the Slack app-configuration token pair
+# (secrets-external/platform/slack-admin) before it expires, using the
+# least-privilege `slack-admin` AppRole (read+update on exactly that entry).
+# This is the PRIMARY scheduled rotator; a macOS wrapper (nix-darwin
+# openbao-slack-creds) also rotates on-demand if the stored pair goes stale
+# between fires. The refresh token is single-use, so OpenBao's CAS write-back
+# is the only coordination needed between the two — no client-side lock.
+openbao_slack_rotate_enabled: true
+# Timer cadence (systemd OnUnitActiveSec) and how close to expiry (seconds
+# remaining) triggers a rotation. The 12h token life vs 6h cadence means the
+# timer normally sees ~6h or ~0h remaining — the margin only matters for
+# catching a fire that lands close to the boundary.
+openbao_slack_rotate_interval: "6h"
+openbao_slack_rotate_safety_margin: 14400 # 4h
+openbao_slack_rotate_script_path: /usr/local/bin/openbao-slack-rotate.sh
+openbao_slack_rotate_env_file: "{{ openbao_config_dir }}/openbao-slack-rotate.env"
+openbao_slack_rotate_service_name: openbao-slack-rotate
+# slack-admin AppRole creds the timer logs in with. Delivered the same way as
+# the snapshot AppRole above (injected at converge from tier-0, never
+# committed) and named identically to the env vars the macOS wrapper reads,
+# so one Doppler-held pair serves both consumers. When unset the timer is
+# skipped so a pre-provisioning converge stays green.
+openbao_slack_rotate_role_id: "{{ lookup('env', 'OPENBAO_APPROLE_SLACK_ADMIN_ROLE_ID') | default('', true) }}"
+openbao_slack_rotate_secret_id: "{{ lookup('env', 'OPENBAO_APPROLE_SLACK_ADMIN_SECRET_ID') | default('', true) }}"
+# ntfy alert target — FQDN-first, same topic as the snapshot job (this is
+# still openbao-owned automation).
+openbao_slack_rotate_ntfy_url: >-
+  https://ntfy.{{ tofu_data.domain }}/openbao
+# healthchecks deadman ping URL; EMPTY => ping skipped (ntfy + journal alert
+# still fire).
+openbao_slack_rotate_healthcheck_url: "{{ lookup('env', 'OPENBAO_SLACK_ROTATE_HC_URL') | default('', true) }}"
 
 # --- Audit device + shipping (file device -> rsyslog imfile -> AI listener) --
 # Enable the file audit device (every node writes its OWN local audit log —

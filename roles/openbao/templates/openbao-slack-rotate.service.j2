@@ -1,0 +1,19 @@
+{{ ansible_managed | comment }}
+# Slack app-config token rotation — one-shot, timer-driven. Rendered by the
+# openbao role. No leader-gate: the Slack refresh token is single-use, which
+# is already the mutex between nodes (see the script for the CAS adopt path).
+
+[Unit]
+Description=Rotate the Slack app-configuration token pair
+Documentation=https://github.com/JacobPEvans/ansible-proxmox-apps
+After=openbao.service
+Wants=openbao.service
+
+[Service]
+Type=oneshot
+User={{ openbao_user }}
+Group={{ openbao_group }}
+# slack-admin AppRole role_id/secret_id (0600, root:openbao).
+EnvironmentFile={{ openbao_slack_rotate_env_file }}
+ExecStart={{ openbao_slack_rotate_script_path }}
+NoNewPrivileges=yes

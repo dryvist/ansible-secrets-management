@@ -26,6 +26,13 @@
     openbao_snapshot_secret_id: "test-snapshot-secret-id"
     openbao_snapshot_ntfy_url: "http://ntfy.test/openbao"
     openbao_snapshot_healthcheck_url: ""
+    # Slack rotation AppRole creds + alert targets — same reasoning as the
+    # snapshot stubs above: the timer never starts under Docker, so these are
+    # inert placeholders that only need to make the templates render.
+    openbao_slack_rotate_role_id: "test-slack-rotate-role-id"
+    openbao_slack_rotate_secret_id: "test-slack-rotate-secret-id"
+    openbao_slack_rotate_ntfy_url: "http://ntfy.test/openbao"
+    openbao_slack_rotate_healthcheck_url: ""
     # Exercise the OAuthapp download/extract/immutable-command path. Bootstrap
     # is Docker-guarded, so no Slack client secret or live API is required.
     openbao_oauthapp_engine_enabled: true

@@ -1,0 +1,195 @@
+---
+# Behavioral verification for roles/openbao/templates/openbao-slack-rotate.sh.j2.
+# Renders the ACTUAL script, then executes it twice against a stub `curl` on
+# PATH (no live OpenBao, no live Slack) to prove the two load-bearing
+# decisions actually work, not just that the code text is present:
+#
+#   1. rotate-needed vs not-needed — a token well outside the safety margin
+#      must be a no-op that never calls Slack.
+#   2. the CAS-rejection adopt path — a token past the safety margin must
+#      call Slack, and a 400 on the write-back must be treated as a
+#      concurrent writer winning (adopt + exit 0), never a failure.
+#
+# GNU `date -u -d` is required (fixture computation below); CI-only, same as
+# the molecule scenarios — do not run locally on macOS (BSD date lacks -d).
+#
+# Usage: ansible-playbook tests/openbao_slack_rotate/verify_rotate_logic.yml -c local
+
+- name: Verify the Slack rotation script's rotate-decision and CAS-adopt logic
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    ansible_become: false
+    _template_dir: "../../roles/openbao/templates"
+    # Mirror roles/openbao/defaults/main.yml so the fixture matches production.
+    openbao_api_addr: "http://openbao-test:8200"
+    openbao_slack_rotate_interval: "6h"
+    openbao_slack_rotate_safety_margin: 14400 # 4h
+    openbao_slack_rotate_ntfy_url: ""
+    openbao_slack_rotate_healthcheck_url: ""
+
+  tasks:
+    - name: Create a directory unique to this run
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: verify_slack_rotate_
+      register: _tmp
+
+    - name: Publish the fixture directory
+      ansible.builtin.set_fact:
+        fixture_dir: "{{ _tmp.path }}"
+
+    - name: Render the actual openbao-slack-rotate.sh.j2 script
+      ansible.builtin.template:
+        src: "{{ _template_dir }}/openbao-slack-rotate.sh.j2"
+        dest: "{{ fixture_dir }}/openbao-slack-rotate.sh"
+        mode: "0755"
+
+    - name: Create the stub-curl bin directory
+      ansible.builtin.file:
+        path: "{{ fixture_dir }}/bin"
+        state: directory
+        mode: "0755"
+
+    # Stubs OpenBao AppRole login, the KV-v2 read/write, and Slack's rotate
+    # endpoint. Distinguishes a KV read from a KV write by the script's own
+    # curl flags (kv_write_cas always passes -o; kv_read never does) rather
+    # than parsing the request body — simpler and exactly matches how the
+    # script actually calls curl. Every URL hit is appended to STUB_CALL_LOG
+    # so the tests below can assert Slack was (or wasn't) called.
+    - name: Install the stub curl
+      ansible.builtin.copy:
+        dest: "{{ fixture_dir }}/bin/curl"
+        mode: "0755"
+        content: |
+          #!/usr/bin/env bash
+          url="${!#}"
+          printf '%s\n' "${url}" >> "${STUB_CALL_LOG:-/dev/null}"
+          is_write=0
+          for a in "$@"; do
+            [ "${a}" = "-o" ] && is_write=1
+          done
+          case "${url}" in
+            */auth/approle/login)
+              echo '{"auth":{"client_token":"test-vault-token"}}'
+              ;;
+            https://slack.com/api/tooling.tokens.rotate)
+              json="{\"ok\":true,\"token\":\"xoxe.xoxp-new\",\"refresh_token\":\"xoxe-newrefresh\","
+              json="${json}\"team_id\":\"T1\",\"user_id\":\"U1\",\"iat\":1000,\"exp\":${STUB_NEW_EXP:-0}}"
+              echo "${json}"
+              ;;
+            */secrets-external/data/platform/slack-admin)
+              if [ "${is_write}" = "1" ]; then
+                echo "${STUB_WRITE_CODE:-200}"
+              else
+                json="{\"data\":{\"data\":{\"app_config_token\":\"oldtok\",\"app_config_refresh_token\":\"oldrefresh\","
+                json="${json}\"rotated_at\":\"2020-01-01T00:00:00Z\",\"expires_at\":\"${STUB_EXPIRES_AT}\"},"
+                json="${json}\"metadata\":{\"version\":5}}}"
+                echo "${json}"
+              fi
+              ;;
+            *)
+              echo "stub curl: unhandled URL: ${url}" >&2
+              exit 1
+              ;;
+          esac
+
+    - name: Compute a future expires_at (well outside the safety margin)
+      ansible.builtin.command: date -u -d "+10 hours" +%Y-%m-%dT%H:%M:%SZ
+      register: _future_expiry
+      changed_when: false
+
+    - name: Compute a past expires_at (already expired)
+      ansible.builtin.command: date -u -d "-1 hour" +%Y-%m-%dT%H:%M:%SZ
+      register: _past_expiry
+      changed_when: false
+
+    - name: Compute a future exp epoch for the rotated Slack token
+      ansible.builtin.command: date -u -d "+12 hours" +%s
+      register: _new_exp_epoch
+      changed_when: false
+
+    # -------------------------------------------------------------------
+    # Case 1: well within the token's life -> no-op, Slack never called.
+    # -------------------------------------------------------------------
+    - name: "Case 1: run the script with a token far from expiry"
+      ansible.builtin.command: "{{ fixture_dir }}/openbao-slack-rotate.sh"
+      register: _case1
+      changed_when: false
+      environment:
+        # lookup('env', ...), not ansible_env.PATH — the latter is a fact and
+        # this play runs with gather_facts: false, so it's silently undefined
+        # and the whole PATH override gets dropped, leaving the stub
+        # unreachable and the script hitting a real (nonexistent) network host.
+        PATH: "{{ fixture_dir }}/bin:{{ lookup('env', 'PATH') }}"
+        OPENBAO_APPROLE_SLACK_ADMIN_ROLE_ID: test-role-id
+        OPENBAO_APPROLE_SLACK_ADMIN_SECRET_ID: test-secret-id
+        STUB_EXPIRES_AT: "{{ _future_expiry.stdout }}"
+        STUB_CALL_LOG: "{{ fixture_dir }}/case1-calls.log"
+
+    - name: "Case 1: read the stub call log"
+      ansible.builtin.slurp:
+        src: "{{ fixture_dir }}/case1-calls.log"
+      register: _case1_calls
+
+    - name: "Case 1: assert a clean no-op — success, logged, Slack never called"
+      ansible.builtin.assert:
+        that:
+          - _case1.rc == 0
+          - "'no rotation needed' in (_case1.stdout + _case1.stderr)"
+          - "'slack.com' not in (_case1_calls.content | b64decode)"
+        fail_msg: >-
+          Case 1 (token far from expiry) must exit 0, log a no-op decision,
+          and never call Slack. rc={{ _case1.rc }}
+          output={{ _case1.stdout }} {{ _case1.stderr }}
+
+    # -------------------------------------------------------------------
+    # Case 2: past the safety margin -> rotates; the write-back CAS is
+    # rejected (400), simulating a concurrent writer already won — the
+    # script must adopt that result and exit 0, not fail or retry-loop.
+    # -------------------------------------------------------------------
+    - name: "Case 2: run the script with an expired token and a CAS-rejected write"
+      ansible.builtin.command: "{{ fixture_dir }}/openbao-slack-rotate.sh"
+      register: _case2
+      changed_when: false
+      environment:
+        # lookup('env', ...), not ansible_env.PATH — the latter is a fact and
+        # this play runs with gather_facts: false, so it's silently undefined
+        # and the whole PATH override gets dropped, leaving the stub
+        # unreachable and the script hitting a real (nonexistent) network host.
+        PATH: "{{ fixture_dir }}/bin:{{ lookup('env', 'PATH') }}"
+        OPENBAO_APPROLE_SLACK_ADMIN_ROLE_ID: test-role-id
+        OPENBAO_APPROLE_SLACK_ADMIN_SECRET_ID: test-secret-id
+        STUB_EXPIRES_AT: "{{ _past_expiry.stdout }}"
+        STUB_NEW_EXP: "{{ _new_exp_epoch.stdout }}"
+        STUB_WRITE_CODE: "400"
+        STUB_CALL_LOG: "{{ fixture_dir }}/case2-calls.log"
+
+    - name: "Case 2: read the stub call log"
+      ansible.builtin.slurp:
+        src: "{{ fixture_dir }}/case2-calls.log"
+      register: _case2_calls
+
+    - name: "Case 2: assert it rotated, hit the CAS conflict, and adopted — not a failure"
+      ansible.builtin.assert:
+        that:
+          - _case2.rc == 0
+          - "'slack.com' in (_case2_calls.content | b64decode)"
+          - "'adopting the concurrent writer' in (_case2.stdout + _case2.stderr)"
+          - "'BRICKED' not in (_case2.stdout + _case2.stderr)"
+          - "'MANUAL REGENERATION' not in (_case2.stdout + _case2.stderr)"
+        fail_msg: >-
+          Case 2 (expired token, CAS-rejected write) must call Slack, adopt
+          the concurrent writer's result on the 400, and exit 0 — never
+          report a brick/manual-regeneration failure for a CAS conflict.
+          rc={{ _case2.rc }} output={{ _case2.stdout }} {{ _case2.stderr }}
+
+    - name: Slack rotation script logic verification PASSED
+      ansible.builtin.debug:
+        msg: |
+          openbao-slack-rotate.sh.j2 behavioral assertions passed:
+          - token far from expiry: no-op, Slack never called
+          - token past the safety margin + CAS-rejected write-back: rotates,
+            adopts the concurrent writer's result, exits 0 (never bricks)

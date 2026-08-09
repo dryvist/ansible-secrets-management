@@ -581,3 +581,15 @@
   when:
     - openbao_voter_health_enabled | bool
     - ansible_virtualization_type | default('') != 'docker'
+
+# --- Phase 13: Slack app-config token rotation (all nodes; deadman-covered) --
+# Deployed on every openbao node, same shape as the snapshot timer: gated on
+# the slack-admin AppRole creds being present so a first-bootstrap converge
+# (creds not yet minted) skips this cleanly instead of rendering an
+# empty-cred EnvironmentFile that would fail every cycle.
+- name: Deploy the Slack app-config token rotation timer
+  ansible.builtin.include_tasks: slack_rotate.yml
+  when:
+    - openbao_slack_rotate_enabled | bool
+    - openbao_slack_rotate_role_id | length > 0
+    - openbao_slack_rotate_secret_id | length > 0
