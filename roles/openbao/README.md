@@ -524,6 +524,31 @@ configuration, consumer AppRole/policy, and drift assertions to
 `.claude/rules/openbao-plugins-first.md` for the engine-first policy this
 mount exists to satisfy.
 
+## Slack app-config token rotation (on-box timer)
+
+An on-box `openbao-slack-rotate.timer` (every `openbao_slack_rotate_interval`,
+default `6h`, jittered) keeps the Slack **app-configuration** token pair
+(`secrets-external/platform/slack-admin` — distinct from the OAuthapp
+workspace bot token above; this one authorizes `apps.manifest.create`/`.validate`)
+rotated ahead of its ~12-hour expiry. It:
+
+- authenticates with the least-privilege **`slack-admin` AppRole** (read+update
+  on exactly that one KV-v2 entry);
+- rotates only when the stored token is within `openbao_slack_rotate_safety_margin`
+  (default 4h) of `expires_at` — every run logs its decision either way, including
+  the no-op case;
+- writes the new pair back with a CAS (check-and-set) request; on a CAS conflict
+  or a rejected (already-consumed) refresh token, it re-reads and **adopts**
+  whichever pair is newer instead of retrying — the refresh token is single-use,
+  so that is the only coordination two writers need.
+
+Deployed on **every** openbao node (no leader-gate needed — the single-use
+refresh token is already the mutex) and gated on the AppRole creds being
+present, same pre-provisioning-skip pattern as the snapshot timer above. A
+macOS wrapper (`nix-darwin` `openbao-slack-creds`) also rotates on-demand if a
+consumer sees a stale pair between fires; this timer is the primary, scheduled
+rotator — the two are safe to run concurrently because of the CAS-adopt logic.
+
 ## SSH secrets engine (signed client certificates — the SSH CA)
 
 Mounted at `ssh-client-ca/` (add-if-missing, in `tasks/init.yml`). Implements

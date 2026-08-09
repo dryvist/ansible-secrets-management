@@ -19,6 +19,13 @@
     daemon_reload: true
   when: ansible_virtualization_type | default('') != 'docker'
 
+- name: Restart openbao slack rotate timer
+  ansible.builtin.systemd:
+    name: "{{ openbao_slack_rotate_service_name }}.timer"
+    state: restarted
+    daemon_reload: true
+  when: ansible_virtualization_type | default('') != 'docker'
+
 - name: Restart openbao voter-health timer
   ansible.builtin.systemd:
     name: "{{ openbao_voter_health_service_name }}.timer"

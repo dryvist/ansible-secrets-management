@@ -1,0 +1,206 @@
+#!/usr/bin/env bash
+# {{ ansible_managed }}
+#
+# Slack app-configuration token rotator. Rendered by the openbao role and run
+# on a systemd timer (every {{ openbao_slack_rotate_interval }}). Deployed on
+# every openbao node — the Slack refresh token is single-use, which is
+# already the mutex between concurrent writers, so a losing node just adopts
+# the winner's result from OpenBao instead of needing a leader-gate (see
+# do_rotate below). A macOS wrapper (nix-darwin openbao-slack-creds) also
+# rotates on-demand if a consumer sees a stale pair between fires; this timer
+# is the primary, scheduled rotator.
+#
+# Manages the token pair Slack's tooling.tokens.rotate endpoint issues:
+#   app_config_token          xoxe.xoxp-…  short-lived (~12h) bearer token
+#   app_config_refresh_token  xoxe-…       SINGLE USE — rotating consumes it
+# stored at secrets-external/data/platform/slack-admin alongside rotated_at
+# and expires_at (both ISO8601 UTC; expires_at is derived from the rotate
+# response's `exp` epoch).
+#
+# NOT `set -e`: every failure is handled explicitly so it ALERTS (ntfy +
+# healthchecks + a non-zero exit systemd records) instead of aborting silently.
+# Never logs a token value — only remaining lifetime and KV version numbers.
+#
+# ponytail: grep/sed JSON extraction instead of jq — this node has no jq (see
+# openbao-snapshot.sh.j2, same reasoning); every field read here is a unique,
+# flat top-level key, so a field-by-field grep is exactly as reliable. Swap to
+# jq if it ever lands in the base image.
+set -uo pipefail
+
+BAO_ADDR="{{ openbao_api_addr }}"
+KV_PATH="secrets-external/data/platform/slack-admin"
+SAFETY_MARGIN={{ openbao_slack_rotate_safety_margin }}
+MAX_WRITE_RETRIES=5
+WRITE_RETRY_BACKOFF_SECONDS=1
+NTFY_URL="{{ openbao_slack_rotate_ntfy_url }}"
+HC_URL="{{ openbao_slack_rotate_healthcheck_url }}"
+HOST="$(hostname)"
+
+log() { logger -t openbao-slack-rotate "$*"; echo "openbao-slack-rotate: $*"; }
+
+# Ping a healthchecks endpoint if one is configured; no-op otherwise. $1 is
+# the suffix: "" for the OK ping, "/fail" to signal a breach.
+hc_ping() {
+  [ -n "${HC_URL}" ] || return 0
+  curl -fsS --max-time 8 "${HC_URL}$1" >/dev/null 2>&1 || true
+}
+
+# Alert + signal the deadman failure endpoint, then exit non-zero.
+fail() {
+  local msg="Slack app-config token rotation FAILED on ${HOST}: $*"
+  log "${msg}"
+  if [ -n "${NTFY_URL}" ]; then
+    curl -fsS --max-time 8 -H "Title: openbao slack rotate" -H "Priority: urgent" \
+      -H "Tags: rotating_light" -d "${msg}" "${NTFY_URL}" >/dev/null 2>&1 || true
+  fi
+  hc_ping /fail
+  exit 1
+}
+
+# Extract a top-level string field "key":"value" from a flat JSON blob.
+json_str() { printf '%s' "$1" | grep -o "\"$2\":\"[^\"]*\"" | head -1 | cut -d'"' -f4; }
+# Extract a top-level numeric field "key":123.
+json_num() { printf '%s' "$1" | grep -o "\"$2\":[0-9]*" | head -1 | cut -d: -f2; }
+# Extract a top-level boolean field "key":true|false (Slack's "ok" — an
+# unquoted JSON literal, not a string, so json_str never matches it).
+json_bool() { printf '%s' "$1" | grep -o "\"$2\":\(true\|false\)" | head -1 | cut -d: -f2; }
+
+# ISO8601 UTC -> epoch seconds. GNU date (this node's own OS, unlike the
+# macOS wrapper's BSD date) parses ISO8601 directly, no format string needed.
+epoch_of() { date -u -d "$1" +%s 2>/dev/null; }
+
+# AppRole login for the slack-admin identity; prints the client_token.
+bao_login() {
+  local resp token
+  resp="$(curl -sf --max-time 10 -X POST \
+    -d "{\"role_id\":\"${OPENBAO_APPROLE_SLACK_ADMIN_ROLE_ID}\",\"secret_id\":\"${OPENBAO_APPROLE_SLACK_ADMIN_SECRET_ID}\"}" \
+    "${BAO_ADDR}/v1/auth/approle/login")" || return 1
+  token="$(json_str "${resp}" client_token)"
+  [ -n "${token}" ] || return 1
+  printf '%s' "${token}"
+}
+
+# Prints the raw OpenBao response for the KV-v2 entry.
+kv_read() {
+  curl -sf --max-time 10 -H "X-Vault-Token: $1" "${BAO_ADDR}/v1/${KV_PATH}"
+}
+
+# CAS write-back. Prints the HTTP status code; 200 = written, 400 = a
+# concurrent writer beat us to this version.
+kv_write_cas() {
+  local bao_tok="$1" ver="$2" tok="$3" refresh="$4" rotated_at="$5" expires_at="$6" body
+  body="{\"options\":{\"cas\":${ver}},\"data\":{\"app_config_token\":\"${tok}\",\"app_config_refresh_token\":\"${refresh}\",\"rotated_at\":\"${rotated_at}\",\"expires_at\":\"${expires_at}\"}}"
+  curl -s -o /dev/null -w '%{http_code}' --max-time 10 -X POST \
+    -H "X-Vault-Token: ${bao_tok}" -d "${body}" "${BAO_ADDR}/v1/${KV_PATH}"
+}
+
+# POST to Slack's rotate endpoint. No Authorization header — the refresh
+# token in the body IS the credential. Slack answers 200 with {"ok":false,…}
+# on a rejected rotation, so -f alone would not catch a dead refresh token;
+# callers check .ok themselves.
+slack_rotate() {
+  curl -sf --max-time 15 -X POST \
+    -H 'Content-Type: application/x-www-form-urlencoded' \
+    --data-urlencode "refresh_token=$1" \
+    "https://slack.com/api/tooling.tokens.rotate"
+}
+
+# Performs one rotation attempt: fresh login + read, call Slack, write back
+# with CAS. On any concurrent-writer signal (CAS 400, or Slack rejecting our
+# refresh token because someone else already used it), adopts the newer
+# credential instead of retrying — never writes a stale pair, never fails
+# silently.
+do_rotate() {
+  local bao_tok entry cur_refresh cur_ver slack_resp ok
+
+  bao_tok="$(bao_login)" || fail "slack-admin AppRole login failed"
+  entry="$(kv_read "${bao_tok}")" || fail "reading ${KV_PATH} failed"
+  cur_refresh="$(json_str "${entry}" app_config_refresh_token)"
+  cur_ver="$(json_num "${entry}" version)"
+  [ -n "${cur_refresh}" ] || fail "no app_config_refresh_token at ${KV_PATH} — needs MANUAL REGENERATION at api.slack.com"
+  # Must know the CAS version before burning the single-use refresh token —
+  # otherwise the write-back body is malformed, OpenBao 400s it, and the
+  # 400-handler below mistakes "we never had a version" for "a concurrent
+  # writer won", silently dropping the freshly-rotated pair.
+  case "${cur_ver}" in '' | *[!0-9]*) fail "could not read a numeric KV version at ${KV_PATH} — refusing to rotate" ;; esac
+
+  slack_resp="$(slack_rotate "${cur_refresh}")" || fail "Slack tooling.tokens.rotate call failed"
+  ok="$(json_bool "${slack_resp}" ok)"
+
+  if [ "${ok}" != "true" ]; then
+    local err latest latest_ver
+    err="$(json_str "${slack_resp}" error)"
+    log "rotation rejected by Slack (${err:-unknown}) — checking whether another node already rotated"
+    latest="$(kv_read "${bao_tok}")" \
+      || fail "Slack rejected rotation (${err:-unknown}) and re-reading ${KV_PATH} also failed — needs MANUAL REGENERATION at api.slack.com"
+    latest_ver="$(json_num "${latest}" version)"
+    if [ -n "${latest_ver}" ] && [ "${latest_ver}" -gt "${cur_ver:-0}" ]; then
+      log "another node rotated first (version ${cur_ver} -> ${latest_ver}); adopting their result"
+      return 0
+    fi
+    fail "Slack rejected rotation (${err:-unknown}) and no newer credential appeared at ${KV_PATH} — the stored refresh token is dead; needs MANUAL REGENERATION at api.slack.com"
+  fi
+
+  local new_tok new_refresh exp_epoch rotated_at expires_at code tries=0 backoff="${WRITE_RETRY_BACKOFF_SECONDS}"
+  new_tok="$(json_str "${slack_resp}" token)"
+  new_refresh="$(json_str "${slack_resp}" refresh_token)"
+  exp_epoch="$(json_num "${slack_resp}" exp)"
+  [ -n "${new_tok}" ] && [ -n "${new_refresh}" ] && [ -n "${exp_epoch}" ] \
+    || fail "Slack rotation response missing token/refresh_token/exp"
+
+  rotated_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  expires_at="$(date -u -d "@${exp_epoch}" +%Y-%m-%dT%H:%M:%SZ)"
+
+  # Slack already burned the old refresh token by this point. Losing this
+  # write loses the only copy of the new pair, so retry it — bounded, with
+  # backoff — before admitting defeat.
+  while :; do
+    code="$(kv_write_cas "${bao_tok}" "${cur_ver}" "${new_tok}" "${new_refresh}" "${rotated_at}" "${expires_at}")"
+    if [ "${code}" = "200" ]; then
+      log "rotated Slack app config token (version ${cur_ver} -> $((cur_ver + 1))); new token expires ${expires_at}"
+      return 0
+    fi
+    if [ "${code}" = "400" ]; then
+      log "write-back CAS rejected (version ${cur_ver} already superseded); adopting the concurrent writer's result"
+      kv_read "${bao_tok}" >/dev/null || fail "CAS rejected and re-reading ${KV_PATH} failed"
+      return 0
+    fi
+    tries=$((tries + 1))
+    if [ "${tries}" -ge "${MAX_WRITE_RETRIES}" ]; then
+      fail "write-back to ${KV_PATH} failed after ${MAX_WRITE_RETRIES} attempts (HTTP ${code}) — Slack already rotated successfully but the fresh pair was never saved; the stored refresh token is now dead; needs MANUAL REGENERATION at api.slack.com"
+    fi
+    log "write-back to ${KV_PATH} failed (HTTP ${code}), retrying in ${backoff}s (attempt ${tries}/${MAX_WRITE_RETRIES})"
+    sleep "${backoff}"
+    backoff=$((backoff * 2))
+  done
+}
+
+# 1. Read the stored pair once to decide whether rotation is needed at all —
+#    the common case (well within the token's ~12h life) is a cheap no-op.
+token="$(bao_login)" || fail "slack-admin AppRole login failed"
+entry="$(kv_read "${token}")" || fail "reading ${KV_PATH} failed"
+expires_at="$(json_str "${entry}" expires_at)"
+
+if [ -n "${expires_at}" ] && exp_epoch="$(epoch_of "${expires_at}")"; then
+  now_epoch="$(date -u +%s)"
+  remaining=$((exp_epoch - now_epoch))
+  if [ "${remaining}" -gt "${SAFETY_MARGIN}" ]; then
+    log "token has $((remaining / 3600))h remaining (expires_at=${expires_at}); no rotation needed"
+    hc_ping ""
+    exit 0
+  fi
+  log "token has $((remaining / 3600))h remaining (expires_at=${expires_at}), within safety margin — rotating"
+elif [ -n "${expires_at}" ]; then
+  # Self-heal rather than fail loudly every fire — do_rotate() writes a fresh,
+  # parseable expires_at, same as the "no record at all" case below.
+  log "expires_at '${expires_at}' at ${KV_PATH} is unparseable — rotating to self-heal"
+else
+  log "no expires_at on record at ${KV_PATH} — rotating"
+fi
+
+# 2. Rotate. do_rotate() exits non-zero itself (via fail) on an unrecoverable
+#    failure, so reaching here means success — either our own rotation or an
+#    adopted concurrent writer's.
+do_rotate
+hc_ping ""
+exit 0
