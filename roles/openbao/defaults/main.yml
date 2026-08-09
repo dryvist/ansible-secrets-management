@@ -425,6 +425,19 @@ openbao_slack_admin_approle_name: slack-admin
 openbao_slack_admin_token_ttl: 15m
 openbao_slack_admin_secret_id_ttl: 0
 
+# slack-ops: read-only on the single secrets-external KV-v2 entry holding the
+# static, non-expiring homelabops bot token (conversations.*/chat.* scopes) —
+# not the app-config token above, and not an oauthapp credential.
+openbao_slack_ops_policy_name: slack-ops
+openbao_slack_ops_approle_name: slack-ops
+# Token TTL stays short-lived like slack-admin: each minted token is held
+# only for the duration of one request. secret_id_ttl is a separate,
+# standing credential — same non-expiring pattern as slack-admin/github-read/
+# github-write/flow-lock — so unattended use doesn't depend on someone
+# re-minting it.
+openbao_slack_ops_token_ttl: 15m
+openbao_slack_ops_secret_id_ttl: 0
+
 # --- SSH secrets engine (signed client certificates — the SSH CA) -----------
 # Implements the ssh-certificate-authority ADR (docs-starlight): automation
 # authenticates to estate hosts with short-TTL SSH certificates signed by an
@@ -1046,6 +1059,11 @@ openbao_base_approles:
     token_ttl: "{{ openbao_slack_admin_token_ttl }}"
     token_max_ttl: "{{ openbao_slack_admin_token_ttl }}"
     secret_id_ttl: "{{ openbao_slack_admin_secret_id_ttl }}"
+  - name: "{{ openbao_slack_ops_approle_name }}"
+    policy: "{{ openbao_slack_ops_policy_name }}"
+    token_ttl: "{{ openbao_slack_ops_token_ttl }}"
+    token_max_ttl: "{{ openbao_slack_ops_token_ttl }}"
+    secret_id_ttl: "{{ openbao_slack_ops_secret_id_ttl }}"
 # Full AppRole set = the static base above + the per-service ai-apply-<svc> actor
 # roles generated from openbao_ai_domains. init.yml loops this combined list.
 openbao_approles: >-
@@ -1152,6 +1170,8 @@ openbao_base_policies:
     template: ai-runner-policy.hcl.j2
   - name: "{{ openbao_slack_admin_policy_name }}"
     template: slack-admin-policy.hcl.j2
+  - name: "{{ openbao_slack_ops_policy_name }}"
+    template: slack-ops-policy.hcl.j2
 # Full policy set = the static base above + the base read-/write-/github-mint
 # capability leaves generated from openbao_ai_domains + the ssh-sign-<role>
 # leaves generated from openbao_ssh_roles. init.yml renders this list.
