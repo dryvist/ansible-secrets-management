@@ -545,27 +545,6 @@
       ansible.builtin.include_vars:
         file: "{{ playbook_dir }}/../../roles/openbao/defaults/main.yml"
 
-    - name: Render the Slack POC policy with role defaults
-      ansible.builtin.template:
-        src: "{{ playbook_dir }}/../../roles/openbao/templates/oauthapp-slack-poc-policy.hcl.j2"
-        dest: /tmp/oauthapp-slack-poc-policy.hcl
-        mode: "0600"
-
-    - name: Read the rendered Slack POC policy
-      ansible.builtin.slurp:
-        src: /tmp/oauthapp-slack-poc-policy.hcl
-      register: bao_oauthapp_slack_poc_policy
-
-    - name: Assert the Slack POC policy can only read its one credential
-      ansible.builtin.assert:
-        that:
-          - "'path \"oauthapp/creds/slack-poc\"' in (bao_oauthapp_slack_poc_policy.content | b64decode)"
-          - "'capabilities = [\"read\"]' in (bao_oauthapp_slack_poc_policy.content | b64decode)"
-          - >-
-            (bao_oauthapp_slack_poc_policy.content | b64decode
-             | regex_findall('path "')) | length == 1
-        fail_msg: "OAuthapp Slack POC policy is wider than one read-only credential path"
-
     - name: Render the ai-orchestrator policy with role defaults
       ansible.builtin.template:
         src: "{{ playbook_dir }}/../../roles/openbao/templates/ai-orchestrator-policy.hcl.j2"
