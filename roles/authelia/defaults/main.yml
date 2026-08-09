@@ -103,6 +103,13 @@ authelia_oidc_jwks_key_file: "{{ authelia_secrets_dir }}/oidc_jwks_rsa.pem"
 authelia_oidc_hermes_client_id: hermes-dashboard
 authelia_oidc_hermes_redirect_uri: "https://hermes.{{ authelia_cookie_domain }}/auth/callback"
 
+# Donna is a second, independently-identified Hermes agent instance with its
+# own Dashboard at its own vhost, so it needs its own OIDC client — sharing
+# Hermes's would let either dashboard's callback redeem the other's PKCE flow.
+# Same public-PKCE, no-client-secret shape as above.
+authelia_oidc_donna_client_id: hermes-donna-dashboard
+authelia_oidc_donna_redirect_uri: "https://hermes-donna.{{ authelia_cookie_domain }}/auth/callback"
+
 # --- Notifier: local filesystem, not SMTP -------------------------------------
 # One-time codes for passkey enrolment and password reset are written to this
 # file on the persistent mount, not emailed. Auth-critical flows must not depend
