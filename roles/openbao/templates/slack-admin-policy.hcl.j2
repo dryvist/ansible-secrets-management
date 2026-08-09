@@ -16,3 +16,14 @@
 path "secrets-external/data/platform/slack-admin" {
   capabilities = ["read", "update", "create"]
 }
+
+# create + read on platform/slack-app-* only — the per-app credential set
+# (client_id, client_secret, verification_token, signing_secret) issued once
+# by apps.manifest.create for a given app_id, one entry per app. Create only,
+# no update: these values are never rotated, so a second write to the same
+# app_id would only ever mean an accidental overwrite of a credential set
+# that cannot be recovered any other way. No delete, no list, and scoped to
+# this one path prefix — not the whole mount.
+path "secrets-external/data/platform/slack-app-*" {
+  capabilities = ["create", "read"]
+}
