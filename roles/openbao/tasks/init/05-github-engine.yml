@@ -1,0 +1,254 @@
+---
+- name: Read the staged GitHub plugin binary's sha256
+  ansible.builtin.stat:
+    path: "{{ openbao_plugin_dir }}/{{ openbao_github_plugin_command }}"
+    checksum_algorithm: sha256
+  register: openbao_github_plugin_stat
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_github_engine_enabled | bool
+
+- name: Assert the GitHub plugin binary is staged
+  ansible.builtin.assert:
+    that:
+      - openbao_github_plugin_stat.stat.exists
+    fail_msg: >-
+      {{ openbao_plugin_dir }}/{{ openbao_github_plugin_command }} is missing.
+      Re-run the full role so every Raft voter receives the plugin first.
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_github_engine_enabled | bool
+
+- name: Check whether the GitHub plugin version is registered
+  ansible.builtin.command:
+    cmd: >-
+      bao plugin info -format=json
+      -version={{ openbao_github_plugin_catalog_version }}
+      secret {{ openbao_github_plugin_name }}
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  register: openbao_github_plugin_check
+  no_log: true
+  changed_when: false
+  failed_when: false
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_github_engine_enabled | bool
+
+- name: Register the GitHub secrets plugin version
+  ansible.builtin.command:
+    cmd: >-
+      bao plugin register
+      -sha256={{ openbao_github_plugin_stat.stat.checksum }}
+      -command={{ openbao_github_plugin_command }}
+      -version={{ openbao_github_plugin_catalog_version }}
+      secret {{ openbao_github_plugin_name }}
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  register: openbao_github_plugin_register
+  no_log: true
+  changed_when: true
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_github_engine_enabled | bool
+    - (openbao_github_plugin_check.rc | default(1)) != 0
+
+- name: Enable the GitHub secrets engine
+  ansible.builtin.command:
+    cmd: >-
+      bao secrets enable -path={{ openbao_github_mount }}
+      -plugin-version={{ openbao_github_plugin_catalog_version }}
+      {{ openbao_github_plugin_name }}
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  no_log: true
+  changed_when: true
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_github_engine_enabled | bool
+    - (openbao_github_mount ~ '/') not in (openbao_mounts_raw.stdout | from_json).keys()
+
+- name: Tune the existing GitHub mount to the declared plugin version
+  ansible.builtin.command:
+    cmd: >-
+      bao secrets tune -plugin-version={{ openbao_github_plugin_catalog_version }}
+      {{ openbao_github_mount }}/
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  register: openbao_github_plugin_tune
+  no_log: true
+  changed_when: true
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_github_engine_enabled | bool
+    - (openbao_github_mount ~ '/') in (openbao_mounts_raw.stdout | from_json).keys()
+    - >-
+      ((openbao_mounts_raw.stdout | from_json)[openbao_github_mount ~ '/'].plugin_version
+       | default('')) != openbao_github_plugin_catalog_version
+
+- name: Reload the GitHub plugin across the Raft cluster after an upgrade
+  ansible.builtin.command:
+    cmd: "bao plugin reload -plugin={{ openbao_github_plugin_name }} -scope=global"
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  no_log: true
+  changed_when: true
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_github_engine_enabled | bool
+    - openbao_github_plugin_tune is changed
+
+- name: Read the GitHub engine configuration
+  ansible.builtin.command:
+    cmd: "bao read -format=json {{ openbao_github_mount }}/config"
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  register: openbao_github_config_check
+  no_log: true
+  changed_when: false
+  failed_when: false
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_github_engine_enabled | bool
+
+# A virgin mount answers the config read with rc=0 and app_id=0 — "endpoint
+# readable" is NOT "App configured" (issue #1079: gating first configuration
+# on rc alone made the first-config path unreachable and tripped the drift
+# assert against app_id 0). Configured means a non-zero app_id is stored.
+- name: Determine whether the GitHub App is actually configured
+  ansible.builtin.set_fact:
+    openbao_github_app_configured: >-
+      {{ (openbao_github_config_check.rc | default(1)) == 0
+         and ((openbao_github_config_check.stdout | default('{}', true)
+               | from_json).data.app_id | default(0, true) | int) != 0 }}
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_github_engine_enabled | bool
+
+- name: Require the GitHub App credentials for first configuration
+  ansible.builtin.assert:
+    that:
+      - openbao_github_app_id | length > 0
+      - openbao_github_app_private_key | length > 0
+    fail_msg: >-
+      The GitHub secrets engine is unconfigured. Supply OPENBAO_GITHUB_APP_ID
+      and OPENBAO_GITHUB_APP_PRIVATE_KEY for this one-time sealed write.
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_github_engine_enabled | bool
+    - not (openbao_github_app_configured | default(false) | bool)
+
+- name: Configure the GitHub App credentials (first configuration only)
+  ansible.builtin.uri:
+    url: "{{ openbao_api_addr }}/v1/{{ openbao_github_mount }}/config"
+    method: POST
+    headers:
+      X-Vault-Token: "{{ openbao_bootstrap_token }}"
+    body_format: json
+    body:
+      app_id: "{{ openbao_github_app_id | int }}"
+      prv_key: "{{ openbao_github_app_private_key }}"
+      exclude_repository_metadata: true
+    status_code:
+      - 200
+      - 204
+  no_log: true
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_github_engine_enabled | bool
+    - not (openbao_github_app_configured | default(false) | bool)
+    - openbao_github_app_id | length > 0
+    - openbao_github_app_private_key | length > 0
+
+- name: Refuse an unexpected GitHub App ID drift
+  ansible.builtin.assert:
+    that:
+      - >-
+        (openbao_github_config_check.stdout | from_json).data.app_id | string
+        == openbao_github_app_id | string
+    fail_msg: >-
+      The configured GitHub App ID differs from OPENBAO_GITHUB_APP_ID. Rotate
+      the App key deliberately; a routine converge will not replace it.
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_github_engine_enabled | bool
+    - openbao_github_app_configured | default(false) | bool
+    - openbao_github_app_id | length > 0
+
+- name: Require both GitHub App installation IDs
+  ansible.builtin.assert:
+    that:
+      - openbao_github_dryvist_installation_id | int > 0
+      - openbao_github_personal_installation_id | int > 0
+    fail_msg: >-
+      Supply OPENBAO_GITHUB_DRYVIST_INSTALLATION_ID and
+      OPENBAO_GITHUB_PERSONAL_INSTALLATION_ID after installing the dedicated
+      App on both accounts.
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_github_engine_enabled | bool
+
+- name: Read the GitHub token permission sets
+  ansible.builtin.command:
+    cmd: >-
+      bao read -format=json
+      {{ openbao_github_mount }}/permissionset/{{ item.name }}
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  loop: "{{ openbao_github_permission_sets }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: openbao_github_permission_set_checks
+  no_log: true
+  changed_when: false
+  failed_when: false
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_github_engine_enabled | bool
+
+# Body carries the stored token-request shape: installation_id always, plus
+# the read-only permissions map on read-tier sets. Admin-tier sets stay
+# permissions-less on purpose — an omitted map IS the full App ceiling, which
+# is what break-glass means. Drift on either field re-POSTs the set.
+- name: Reconcile the GitHub token permission sets
+  ansible.builtin.uri:
+    url: >-
+      {{ openbao_api_addr }}/v1/{{ openbao_github_mount
+      }}/permissionset/{{ item.0.name }}
+    method: POST
+    headers:
+      X-Vault-Token: "{{ openbao_bootstrap_token }}"
+    body_format: json
+    body: >-
+      {{ {'installation_id': item.0.installation_id | int}
+         | combine({'permissions': item.0.permissions}
+                   if item.0.permissions is defined else {}) }}
+    status_code:
+      - 200
+      - 204
+  loop: >-
+    {{ openbao_github_permission_sets
+       | zip(openbao_github_permission_set_checks.results | default([])) | list }}
+  loop_control:
+    label: "{{ item.0.name }}"
+  no_log: true
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_github_engine_enabled | bool
+    - >-
+      (item.1.rc | default(1)) != 0
+      or ((item.1.stdout | from_json).data.installation_id | int)
+         != (item.0.installation_id | int)
+      or ((item.1.stdout | from_json).data.permissions | default({}, true))
+         != (item.0.permissions | default({}, true))
+
+# --- OAuthapp secrets engine (external, mounted; no credential configured) --
+# The plugin binary was staged on every voter by main.yml. Its archive hash is
+# pinned for integrity but does not provide publisher authentication.

@@ -1,0 +1,49 @@
+---
+# --- OAuth application secrets engine (Slack token rotation) ----------------
+# The upstream OAuthapp plugin is staged like every other external plugin, but
+# v3.3.0 publishes only an unsigned checksum file. The pinned SHA-256 detects
+# transport corruption but does not authenticate the publisher. Treat every
+# plugin upgrade as a reviewed supply-chain event.
+openbao_oauthapp_engine_enabled: true
+openbao_oauthapp_mount: oauthapp
+openbao_oauthapp_plugin_name: oauthapp
+openbao_oauthapp_plugin_version: "3.3.0"
+openbao_oauthapp_plugin_catalog_version: "v{{ openbao_oauthapp_plugin_version }}"
+openbao_oauthapp_plugin_release_base_url: >-
+  https://github.com/openbao/openbao-plugin-secrets-oauthapp/releases/download
+openbao_oauthapp_plugin_release_tag: "v{{ openbao_oauthapp_plugin_version }}"
+openbao_oauthapp_plugin_tarball: >-
+  openbao-plugin-secrets-oauthapp-v{{ openbao_oauthapp_plugin_version }}-linux-amd64.tar.xz
+openbao_oauthapp_plugin_binary: >-
+  openbao-plugin-secrets-oauthapp-v{{ openbao_oauthapp_plugin_version }}-linux-amd64
+openbao_oauthapp_plugin_command: >-
+  {{ openbao_oauthapp_plugin_binary }}-v{{ openbao_oauthapp_plugin_version }}
+openbao_oauthapp_plugin_tarball_url: >-
+  {{ openbao_oauthapp_plugin_release_base_url }}/{{ openbao_oauthapp_plugin_release_tag
+  }}/{{ openbao_oauthapp_plugin_tarball }}
+openbao_oauthapp_plugin_tarball_sha256: 086b84e0199a63a05fc73dd198eadc962b10c413864980cafbd0a67f1487d082
+
+# slack-admin: read+update+create on the single secrets-external KV-v2 entry
+# holding the Slack app configuration token pair (not an oauthapp credential
+# — this is app-config API access, not a workspace bot token).
+openbao_slack_admin_policy_name: slack-admin
+openbao_slack_admin_approle_name: slack-admin
+# Token TTL stays short-lived: each minted token is held only for the
+# duration of a rotation. secret_id_ttl is a separate, standing credential —
+# same non-expiring pattern as github-read/github-write/flow-lock — so
+# unattended rotation doesn't depend on someone re-minting it.
+openbao_slack_admin_token_ttl: 15m
+openbao_slack_admin_secret_id_ttl: 0
+
+# slack-ops: read-only on the single secrets-external KV-v2 entry holding the
+# static, non-expiring homelabops bot token (conversations.*/chat.* scopes) —
+# not the app-config token above, and not an oauthapp credential.
+openbao_slack_ops_policy_name: slack-ops
+openbao_slack_ops_approle_name: slack-ops
+# Token TTL stays short-lived like slack-admin: each minted token is held
+# only for the duration of one request. secret_id_ttl is a separate,
+# standing credential — same non-expiring pattern as slack-admin/github-read/
+# github-write/flow-lock — so unattended use doesn't depend on someone
+# re-minting it.
+openbao_slack_ops_token_ttl: 15m
+openbao_slack_ops_secret_id_ttl: 0

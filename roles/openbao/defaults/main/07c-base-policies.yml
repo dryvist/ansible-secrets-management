@@ -1,0 +1,118 @@
+---
+openbao_base_policies:
+  - name: terrakube-iac-platform
+    template: terrakube-workspace-policy.hcl.j2
+    workspace: "{{ openbao_terrakube_workspaces[0] }}"
+  - name: terrakube-tofu-github
+    template: terrakube-workspace-policy.hcl.j2
+    workspace: "{{ openbao_terrakube_workspaces[1] }}"
+  - name: terrakube-tofu-unifi
+    template: terrakube-workspace-policy.hcl.j2
+    workspace: "{{ openbao_terrakube_workspaces[2] }}"
+  - name: terrakube-tofu-aws-production
+    template: terrakube-workspace-policy.hcl.j2
+    workspace: "{{ openbao_terrakube_workspaces[3] }}"
+  - name: terrakube-tofu-runs-on
+    template: terrakube-workspace-policy.hcl.j2
+    workspace: "{{ openbao_terrakube_workspaces[4] }}"
+  - name: terrakube-tofu-proxmox
+    template: terrakube-workspace-policy.hcl.j2
+    workspace: "{{ openbao_terrakube_workspaces[5] }}"
+  - name: terrakube-tofu-proxmox-aws-infra
+    template: terrakube-workspace-policy.hcl.j2
+    workspace: "{{ openbao_terrakube_workspaces[6] }}"
+  - name: terrakube-tofu-proxmox-servarr-config
+    template: terrakube-workspace-policy.hcl.j2
+    workspace: "{{ openbao_terrakube_workspaces[7] }}"
+  - name: "{{ openbao_terraform_apply_policy_name }}"
+    template: terraform-apply-policy.hcl.j2
+  - name: "{{ openbao_flow_lock_policy_name }}"
+    template: flow-lock-policy.hcl.j2
+  - name: "{{ openbao_ai_sessions_backup_policy_name }}"
+    template: ai-sessions-backup-policy.hcl.j2
+  - name: "{{ openbao_packer_policy_name }}"
+    template: packer-policy.hcl.j2
+  - name: "{{ openbao_ansible_converge_policy_name }}"
+    template: ansible-converge-policy.hcl.j2
+  - name: "{{ openbao_observability_policy_name }}"
+    template: observability-policy.hcl.j2
+  - name: "{{ openbao_local_cloud_policy_name }}"
+    template: local-cloud-policy.hcl.j2
+  - name: "{{ openbao_monitoring_policy_name }}"
+    template: monitoring-policy.hcl.j2
+  - name: "{{ openbao_media_policy_name }}"
+    template: media-policy.hcl.j2
+  - name: "{{ openbao_apps_policy_name }}"
+    template: apps-policy.hcl.j2
+  - name: "{{ openbao_local_llm_policy_name }}"
+    template: local-llm-policy.hcl.j2
+  - name: "{{ openbao_ai_saas_openrouter_policy_name }}"
+    template: ai-saas-openrouter-policy.hcl.j2
+  - name: "{{ openbao_hermes_policy_name }}"
+    template: hermes-policy.hcl.j2
+  - name: "{{ openbao_hermes_write_policy_name }}"
+    template: hermes-write-policy.hcl.j2
+  - name: "{{ openbao_ai_donna_policy_name }}"
+    template: ai-donna-policy.hcl.j2
+  - name: "{{ openbao_public_policy_name }}"
+    template: public-policy.hcl.j2
+  - name: "{{ openbao_config_read_policy_name }}"
+    template: config-read-policy.hcl.j2
+  - name: "{{ openbao_config_write_policy_name }}"
+    template: config-write-policy.hcl.j2
+  - name: "{{ openbao_ai_public_policy_name }}"
+    template: ai-public-policy.hcl.j2
+  # GitHub token tiers (workstation git/gh). Engine mints only — each template
+  # names its own boundary: read-* sets, the parameter-pinned raw token path,
+  # or the human-gated *-full-automation sets.
+  - name: "{{ openbao_github_read_policy_name }}"
+    template: github-read-policy.hcl.j2
+  - name: "{{ openbao_github_write_policy_name }}"
+    template: github-write-policy.hcl.j2
+  - name: "{{ openbao_github_admin_policy_name }}"
+    template: github-admin-policy.hcl.j2
+  - name: "{{ openbao_ai_orchestrator_policy_name }}"
+    template: ai-orchestrator-policy.hcl.j2
+  # ai-readonly / ai-elevated / ai-apply-<svc> no longer own standalone policies —
+  # they are ACTOR roles that attach the base read-/write- capability leaves
+  # (generated below into openbao_ai_capability_policies). ai-admin remains a
+  # standalone policy: it is the sole self-modify tier and is NOT composed leaves.
+  # ai-admin: break-glass COMPLETE full admin (superuser). Contained by TTL (1h)
+  # + human unlock + alerting, NOT capability scoping.
+  - name: "{{ openbao_ai_admin_policy_name }}"
+    template: ai-admin-policy.hcl.j2
+  - name: "{{ openbao_snapshot_policy_name }}"
+    template: snapshot-policy.hcl.j2
+  - name: "{{ openbao_apps_seed_policy_name }}"
+    template: apps-seed-policy.hcl.j2
+  - name: "{{ openbao_llm_gate_policy_name }}"
+    template: llm-gate-policy.hcl.j2
+  - name: "{{ openbao_ai_runner_policy_name }}"
+    template: ai-runner-policy.hcl.j2
+  - name: "{{ openbao_slack_admin_policy_name }}"
+    template: slack-admin-policy.hcl.j2
+  - name: "{{ openbao_slack_ops_policy_name }}"
+    template: slack-ops-policy.hcl.j2
+# Full policy set = the static base above + the base read-/write-/github-mint
+# capability leaves generated from openbao_ai_domains + the ssh-sign-<role>
+# leaves generated from openbao_ssh_roles. init.yml renders this list.
+# NOTE: ssh-sign-ci-runner is rendered but attached to no identity yet — no CI
+# AppRole/JWT identity exists in this role today; attach it when one does.
+# Apps whose roles generate a credential locally and publish it back to
+# secret/apps/<app> via roles/openbao_secrets/tasks/publish.yml. Each entry
+# becomes an EXACT-path create/update/read grant on the ansible-converge policy
+# (see ansible-converge-policy.hcl.j2) — never a wildcard. Adding a publishing
+# role means adding its name here; forgetting to makes the publish fail loudly
+# with a permission denied rather than silently skipping.
+openbao_credential_publish_apps:
+  - traefik
+  - authelia
+  - nautobot
+  - healthchecks
+  - n8n
+  - sortarr
+
+openbao_policies: >-
+  {{ openbao_base_policies
+     + openbao_ai_capability_policies + openbao_ssh_sign_policies
+     + openbao_github_write_scope_policies }}

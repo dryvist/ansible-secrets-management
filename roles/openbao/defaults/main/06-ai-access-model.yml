@@ -1,0 +1,49 @@
+---
+# --- AI-agent access model: CAPABILITY (actor-agnostic) vs ACTOR (ai-*) --------
+# Three layers, all driven by the single source-of-truth list below:
+#   1. BASE CAPABILITY policies (un-prefixed, reusable by ANY actor):
+#        read-<svc>  = read/list on secret/<svc>/*
+#        write-<svc> = create/update/delete/patch on secret/<svc>/*
+#        github-mint = mint the administrator-defined GitHub App permission sets
+#      One read+write pair is rendered per openbao_ai_domains entry; one read-only
+#      leaf per openbao_ai_readonly_extra_subtrees entry (see kv-capability-policy
+#      + github-mint templates). "Broad on services, specific on users."
+#   2. ROLLUP composition groups (lists of base policy NAMES — NOT new policy
+#        objects; OpenBao composes at the token layer, so there are no duplicated
+#        path rules): read-all, read-write-all (derived below).
+#   3. ACTOR ROLES (`ai-*` AppRoles) that ATTACH the capabilities/rollups they are
+#        allowed, plus actor mechanics (TTLs, inert human-gated secret_id):
+#        ai-readonly    -> [read-all]                       (standing, ambient)
+#        ai-elevated    -> [read-all + read-<extra>]        (standing, ambient)
+#        ai-apply-<svc> -> [read-<svc>, write-<svc>, github-mint]  (per-window, 6h/12h)
+#        ai-apply-all   -> [read-write-all, github-mint]           (per-window, 1h/6h)
+#        ai-admin       -> [ai-admin]                    (COMPLETE full admin, 1h, alerted)
+# "Unlock window" model: authorization is scoped by TASK / BLAST-RADIUS and
+# gated by ONE human UNLOCK per window, never by model capability (the model is
+# an AUDIT claim, never a key). Every apply/admin role is provisioned
+# manage_secret_id:false below, so the converge creates the INERT role but never
+# mints/stores a standing secret_id — a usable token exists only after a human
+# response-wraps a single-use secret_id on demand
+# (`bao write -wrap-ttl=90s -f auth/approle/role/<role>/secret-id`); that ONE
+# unlock then yields a token that lives the window (above), so the agent runs
+# unattended for the window instead of a human minting per task. ai-admin grants
+# COMPLETE full administrator access (superuser) — its containment is temporal
+# (1h) + procedural (human unlock) + observational (alerted every use), NOT
+# capability scoping. See the docs.dryvist.com "AI Agent Access (OpenBao)"
+# runbook for the full unlock/grant flow.
+#
+# SINGLE SOURCE OF TRUTH: add a writable service = ONE entry here. It renders a
+# new read-<svc>+write-<svc> pair, which auto-joins read-all/read-write-all and
+# every actor role that references them, and mints an ai-apply-<svc> role — no
+# other edit needed. (Formerly openbao_ai_apply_domains; renamed because the list
+# now drives read capabilities and rollups too, not only the apply tier.)
+openbao_ai_domains: [ai, apps]
+# Read-only subtrees the ELEVATED actor may additionally read but which are NOT
+# writable/applyable (they get a read-<svc> leaf only — no write leaf, no apply
+# role). One entry = one extra read leaf, auto-attached to ai-elevated.
+openbao_ai_readonly_extra_subtrees: [platform]
+# Fail-closed guard: no AI capability leaf may ever be minted for the IaC kernel
+# or a control-plane mount. init.yml asserts the two lists above contain none of
+# these before rendering anything. (Belt-and-braces with the enumerated-allowlist
+# proof; a typo like `infra` fails the converge instead of granting the kernel.)
+openbao_ai_forbidden_subtrees: [infra, sys, auth]

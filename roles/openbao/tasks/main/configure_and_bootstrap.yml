@@ -1,0 +1,117 @@
+---
+- name: Render OpenBao server config
+  ansible.builtin.template:
+    src: openbao.hcl.j2
+    dest: "{{ openbao_config_file }}"
+    owner: root
+    group: "{{ openbao_group }}"
+    mode: "0640"
+  notify: Restart openbao
+
+- name: Render OpenBao static-seal EnvironmentFile
+  ansible.builtin.template:
+    src: openbao.env.j2
+    dest: "{{ openbao_env_file }}"
+    owner: root
+    group: "{{ openbao_group }}"
+    mode: "0600"
+  no_log: true
+  notify: Restart openbao
+
+- name: Install OpenBao systemd unit
+  ansible.builtin.template:
+    src: openbao.service.j2
+    dest: /etc/systemd/system/openbao.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart openbao
+
+# --- Phase 7: enable + start -------------------------------------------------
+# Skipped under Docker so the role can be molecule-tested in containers without
+# a functional systemd init; the init/bootstrap phase is likewise gated.
+- name: Enable and start OpenBao
+  ansible.builtin.systemd:
+    name: openbao
+    state: "{{ openbao_service_state }}"
+    enabled: "{{ openbao_service_enabled }}"
+    daemon_reload: true
+  when: ansible_virtualization_type | default('') != 'docker'
+
+# Flush so the restart handler fires before init.yml probes the live socket.
+- name: Apply any pending OpenBao restart before bootstrap
+  ansible.builtin.meta: flush_handlers
+
+# --- Phase 8: wait for the API ----------------------------------------------
+# A sealed-but-up OpenBao still answers /v1/sys/health with 200/429/501/503.
+# With static-key auto-unseal a joined node reaches 200 (initialized+unsealed)
+# or 429 (standby); a fresh node returns 501 (not initialized). Any of those
+# means the listener is accepting connections, which is all we need before
+# init.yml runs (on the bootstrap host only).
+- name: Wait for the OpenBao listener to accept connections
+  ansible.builtin.uri:
+    url: "{{ openbao_api_addr }}/v1/sys/health"
+    method: GET
+    status_code: [200, 429, 472, 473, 501, 503]
+  register: openbao_health
+  until: openbao_health.status is defined
+  retries: 10
+  delay: 3
+  changed_when: false
+  when: ansible_virtualization_type | default('') != 'docker'
+
+# --- Phase 9: bootstrap (idempotent, bootstrap host only) -------------------
+# Only the bootstrap host runs init/provisioning. The other Raft peers join the
+# leader automatically (retry_join) and self-unseal via the static seal, so they
+# need nothing here.
+- name: Bootstrap OpenBao (init, KV, policies, AppRoles)
+  ansible.builtin.include_tasks: ../init.yml
+  when:
+    - ansible_virtualization_type | default('') != 'docker'
+    - inventory_hostname == openbao_bootstrap_host
+
+# --- Phase 10: audit device + shipping (all nodes) ---------------------------
+# File audit device (enable is token-gated + bootstrap-host-gated inside) plus
+# the rsyslog imfile ruleset that ships each node's audit log to the
+# openbao_audit AI ingest listener. Skipped under Docker (no systemd/live API),
+# matching the bootstrap/snapshot phases.
+- name: Enable the audit device and ship the audit log
+  ansible.builtin.include_tasks: ../audit.yml
+  when:
+    - openbao_audit_enabled | bool
+    - ansible_virtualization_type | default('') != 'docker'
+
+# --- Phase 11: automated raft snapshots (all nodes; script leader-gates) -----
+# Deployed on every openbao node so the surviving nodes keep snapshotting after
+# a leadership change. Gated on the snapshot AppRole creds being present: they
+# are emitted by init.yml at bootstrap and injected at converge from tier-0, so
+# a first-bootstrap converge (creds not yet minted) skips this cleanly instead
+# of rendering an empty-cred EnvironmentFile that would fail every cycle.
+- name: Deploy the automated raft snapshot timer
+  ansible.builtin.include_tasks: ../snapshot.yml
+  when:
+    - openbao_snapshot_enabled | bool
+    - openbao_snapshot_role_id | length > 0
+    - openbao_snapshot_secret_id | length > 0
+
+# --- Phase 12: voter health telemetry (all nodes; read-only, script leader-gates) -
+# Deployed on every openbao node so any voter can take over the sweep after a
+# leadership change. No AppRole creds are required (unauthenticated sys/health
+# + sys/leader only), so unlike the snapshot timer this has no credential gate.
+- name: Deploy the voter-health telemetry timer
+  ansible.builtin.include_tasks: ../voter_health.yml
+  when:
+    - openbao_voter_health_enabled | bool
+    - ansible_virtualization_type | default('') != 'docker'
+
+# --- Phase 13: Slack app-config token rotation (all nodes; deadman-covered) --
+# Deployed on every openbao node, same shape as the snapshot timer: gated on
+# the slack-admin AppRole creds being present so a first-bootstrap converge
+# (creds not yet minted) skips this cleanly instead of rendering an
+# empty-cred EnvironmentFile that would fail every cycle.
+- name: Deploy the Slack app-config token rotation timer
+  ansible.builtin.include_tasks: ../slack_rotate.yml
+  when:
+    - openbao_slack_rotate_enabled | bool
+    - openbao_slack_rotate_role_id | length > 0
+    - openbao_slack_rotate_secret_id | length > 0

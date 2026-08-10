@@ -1,0 +1,136 @@
+---
+- name: List enabled auth methods
+  ansible.builtin.command:
+    cmd: bao auth list -format=json
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  register: openbao_auth_raw
+  no_log: true
+  changed_when: false
+  when: openbao_bootstrap_token is defined
+
+- name: Enable the AppRole auth method
+  ansible.builtin.command:
+    cmd: bao auth enable approle
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  no_log: true
+  changed_when: true
+  when:
+    - openbao_bootstrap_token is defined
+    - "'approle/' not in (openbao_auth_raw.stdout | from_json).keys()"
+
+# --- Terrakube native JWT workload identity --------------------------------
+- name: Enable the Terrakube JWT auth method
+  ansible.builtin.command:
+    cmd: "bao auth enable -path={{ openbao_terrakube_jwt_auth_path }} jwt"
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  no_log: true
+  changed_when: true
+  when:
+    - openbao_bootstrap_token is defined
+    - (openbao_terrakube_jwt_auth_path ~ '/') not in (openbao_auth_raw.stdout | from_json).keys()
+
+- name: Read the Terrakube JWT auth configuration
+  ansible.builtin.command:
+    cmd: "bao read -format=json auth/{{ openbao_terrakube_jwt_auth_path }}/config"
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  register: openbao_terrakube_jwt_config_current
+  no_log: true
+  changed_when: false
+  failed_when: false
+  when: openbao_bootstrap_token is defined
+
+- name: Configure Terrakube as the JWT issuer
+  ansible.builtin.command:
+    cmd: "bao write auth/{{ openbao_terrakube_jwt_auth_path }}/config -"
+    stdin: >-
+      {{ {'oidc_discovery_url': openbao_terrakube_jwt_issuer,
+            'bound_issuer': openbao_terrakube_jwt_issuer} | to_json }}
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  no_log: true
+  changed_when: true
+  when:
+    - openbao_bootstrap_token is defined
+    - >-
+      (openbao_terrakube_jwt_config_current.rc | default(1)) != 0
+      or ((openbao_terrakube_jwt_config_current.stdout | default('{}') | from_json).data
+          | default({}, true)).oidc_discovery_url | default('')
+         != openbao_terrakube_jwt_issuer
+      or ((openbao_terrakube_jwt_config_current.stdout | default('{}') | from_json).data
+          | default({}, true)).bound_issuer | default('')
+         != openbao_terrakube_jwt_issuer
+
+- name: Read Terrakube workspace JWT roles
+  ansible.builtin.command:
+    cmd: "bao read -format=json auth/{{ openbao_terrakube_jwt_auth_path }}/role/terrakube-{{ item.name }}"
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  loop: "{{ openbao_terrakube_workspaces }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: openbao_terrakube_jwt_role_reads
+  no_log: true
+  changed_when: false
+  failed_when: false
+  when: openbao_bootstrap_token is defined
+
+# Terrakube authenticates by JWT workload identity, not AppRole, so it cannot
+# be handed a shared config-write AppRole the way a converge could be. The
+# grant therefore composes onto each workspace role's policy list — the same
+# attach-a-capability-policy model ansible-converge uses. Sorted on both sides
+# of the drift check below because OpenBao returns token_policies in its own
+# order, and an order-sensitive compare would rewrite the role every converge.
+- name: Reconcile exact-claim Terrakube workspace JWT roles
+  ansible.builtin.command:
+    cmd: "bao write auth/{{ openbao_terrakube_jwt_auth_path }}/role/terrakube-{{ item.0.name }} -"
+    stdin: >-
+      {{ {'role_type': 'jwt',
+            'bound_audiences': [openbao_terrakube_jwt_audience],
+            'bound_claims': {
+              'sub': 'organization:' ~ openbao_terrakube_organization ~ ':workspace:' ~ item.0.name
+            },
+            'user_claim': 'sub',
+            'policies': (['terrakube-' ~ item.0.name]
+                         + ([openbao_config_write_policy_name]
+                            if item.0.name in openbao_config_write_terrakube_workspaces
+                            else [])) | sort,
+            'token_ttl': openbao_terrakube_jwt_token_ttl} | to_json }}
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  loop: "{{ openbao_terrakube_workspaces | zip(openbao_terrakube_jwt_role_reads.results | default([])) | list }}"
+  loop_control:
+    label: "{{ item.0.name }}"
+  no_log: true
+  changed_when: true
+  when:
+    - openbao_bootstrap_token is defined
+    - >-
+      (item.1.rc | default(1)) != 0
+      or ((item.1.stdout | default('{}') | from_json).data
+          | default({}, true)).bound_audiences | default([])
+         != [openbao_terrakube_jwt_audience]
+      or (((item.1.stdout | default('{}') | from_json).data
+           | default({}, true)).bound_claims | default({}, true)).sub | default('')
+         != 'organization:' ~ openbao_terrakube_organization ~ ':workspace:' ~ item.0.name
+      or (((item.1.stdout | default('{}') | from_json).data
+           | default({}, true)).token_policies | default([]) | sort)
+         != ((['terrakube-' ~ item.0.name]
+              + ([openbao_config_write_policy_name]
+                 if item.0.name in openbao_config_write_terrakube_workspaces
+                 else [])) | sort)
+      or ((item.1.stdout | default('{}') | from_json).data
+          | default({}, true)).token_ttl | default(0) | int
+         != (openbao_terrakube_jwt_token_ttl | regex_replace('m$', '') | int) * 60
+
+# --- AppRoles (add-if-missing), one per RBAC group --------------------------

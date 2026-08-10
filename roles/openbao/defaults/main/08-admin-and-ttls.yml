@@ -1,0 +1,13 @@
+---
+# --- External admin token (provisioning against an ALREADY-LIVE cluster) -----
+# The initial `bao operator init` only happens once; after that, adding new
+# policies/AppRoles (e.g. growing openbao_approles/openbao_policies above)
+# needs a privileged token supplied out-of-band, since there is no longer a
+# fresh root token to mint one from. Set via env, never committed/logged.
+openbao_admin_token: "{{ lookup('env', 'BAO_TOKEN') | default('', true) }}"
+
+# --- AppRole token TTLs -------------------------------------------------------
+# Short-lived tokens; secret_id_ttl=0 means the secret_id itself does not expire
+# (rotate manually). Tune per-identity if needed.
+openbao_approle_token_ttl: 1h
+openbao_approle_token_max_ttl: 4h

@@ -17,6 +17,19 @@ def _read(relative_path: str) -> str:
     return (ROOT / relative_path).read_text(encoding="utf-8")
 
 
+def _read_role_defaults(role: str) -> dict:
+    """Load role defaults, merging defaults/main/*.yml like Ansible does."""
+    single = ROOT / "roles" / role / "defaults" / "main.yml"
+    if single.exists():
+        return yaml.safe_load(single.read_text(encoding="utf-8"))
+
+    merged: dict = {}
+    main_dir = ROOT / "roles" / role / "defaults" / "main"
+    for path in sorted(main_dir.glob("*.yml")):
+        merged.update(yaml.safe_load(path.read_text(encoding="utf-8")) or {})
+    return merged
+
+
 def test_hermes_can_read_own_bundle_and_shared_splunk_secret():
     policy = _read("roles/openbao/templates/hermes-policy.hcl.j2")
 
@@ -30,7 +43,7 @@ def test_default_ai_policies_can_read_shared_splunk_secret():
     # ai-readonly is now a composed actor role (#931): it attaches the read-ai
     # capability leaf, which the kv-capability template renders as read on
     # secret/data/ai/* — covering ai/mcp/splunk.
-    defaults = yaml.safe_load(_read("roles/openbao/defaults/main.yml"))
+    defaults = _read_role_defaults("openbao")
     leaf = _read("roles/openbao/templates/kv-capability-policy.hcl.j2")
     local_llm = _read("roles/openbao/templates/local-llm-policy.hcl.j2")
 

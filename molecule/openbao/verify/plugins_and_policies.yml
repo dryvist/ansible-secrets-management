@@ -1,0 +1,113 @@
+---
+# The AWS secrets engine registration/config only runs against a live
+# server (init.yml is entirely docker-guarded), so it can't be exercised
+# here either. What CAN be checked without a live server: the external
+# plugin binary actually staged, the server config pointing at it, and the
+# terraform-apply policy template source still granting the dynamic AWS
+# STS path — catches a future edit silently dropping any of them.
+- name: Assert the rendered config sets plugin_directory
+  ansible.builtin.assert:
+    that:
+      - "'plugin_directory' in (bao_cfg_content.content | b64decode)"
+    fail_msg: "openbao.hcl is missing plugin_directory (external plugins would be unloadable)"
+
+- name: Stat the staged AWS plugin binary
+  ansible.builtin.stat:
+    path: /opt/openbao/plugins/openbao-plugin-secrets-aws_linux_amd64_v1-v0.3.0
+  register: bao_aws_plugin
+
+- name: Assert the AWS plugin binary is staged, root-owned, and not world/group-writable
+  ansible.builtin.assert:
+    that:
+      - bao_aws_plugin.stat.exists
+      - bao_aws_plugin.stat.pw_name == 'root'
+      - bao_aws_plugin.stat.mode == '0750'
+    fail_msg: >-
+      AWS plugin binary missing or wrong owner/mode:
+      {{ bao_aws_plugin.stat | default({}) }}
+
+- name: Stat the staged GitHub plugin binary
+  ansible.builtin.stat:
+    path: /opt/openbao/plugins/vault-plugin-secrets-github-linux-amd64-v2.3.2
+  register: bao_github_plugin
+
+- name: Assert the GitHub plugin binary is staged and protected
+  ansible.builtin.assert:
+    that:
+      - bao_github_plugin.stat.exists
+      - bao_github_plugin.stat.pw_name == 'root'
+      - bao_github_plugin.stat.mode == '0750'
+    fail_msg: >-
+      GitHub plugin binary missing or wrong owner/mode:
+      {{ bao_github_plugin.stat | default({}) }}
+
+- name: Stat the staged OAuthapp plugin binary
+  ansible.builtin.stat:
+    path: /opt/openbao/plugins/openbao-plugin-secrets-oauthapp-v3.3.0-linux-amd64-v3.3.0
+  register: bao_oauthapp_plugin
+
+- name: Assert the OAuthapp plugin binary is staged and protected
+  ansible.builtin.assert:
+    that:
+      - bao_oauthapp_plugin.stat.exists
+      - bao_oauthapp_plugin.stat.pw_name == 'root'
+      - bao_oauthapp_plugin.stat.mode == '0750'
+    fail_msg: >-
+      OAuthapp plugin binary missing or wrong owner/mode:
+      {{ bao_oauthapp_plugin.stat | default({}) }}
+
+- name: Read the terraform-apply policy template source
+  ansible.builtin.slurp:
+    src: "{{ playbook_dir }}/../../roles/openbao/templates/terraform-apply-policy.hcl.j2"
+  register: bao_terraform_apply_policy_src
+  delegate_to: localhost
+  become: false
+
+- name: Assert the terraform-apply policy grants aws/sts/tf-proxmox
+  ansible.builtin.assert:
+    that:
+      - "'aws/sts/' in (bao_terraform_apply_policy_src.content | b64decode)"
+      - "'\"read\", \"update\"' in (bao_terraform_apply_policy_src.content | b64decode)"
+    fail_msg: "terraform-apply-policy.hcl.j2 is missing the dynamic AWS STS grant"
+
+- name: Load OpenBao role defaults for policy rendering
+  ansible.builtin.include_vars:
+    dir: "{{ playbook_dir }}/../../roles/openbao/defaults/main"
+
+- name: Render the ai-orchestrator policy with role defaults
+  ansible.builtin.template:
+    src: "{{ playbook_dir }}/../../roles/openbao/templates/ai-orchestrator-policy.hcl.j2"
+    dest: /tmp/ai-orchestrator-policy.hcl
+    mode: "0600"
+
+- name: Read the rendered ai-orchestrator policy
+  ansible.builtin.slurp:
+    src: /tmp/ai-orchestrator-policy.hcl
+  register: bao_ai_orchestrator_policy
+
+- name: Assert ai-orchestrator can mint only named GitHub permission sets
+  ansible.builtin.assert:
+    that:
+      - "'github/token/dryvist-full-automation' in (bao_ai_orchestrator_policy.content | b64decode)"
+      - "'github/token/personal-full-automation' in (bao_ai_orchestrator_policy.content | b64decode)"
+      - "'github/token/*' not in (bao_ai_orchestrator_policy.content | b64decode)"
+    fail_msg: "ai-orchestrator policy does not preserve the named GitHub token boundary"
+
+- name: Assert the maintenance-window credential grant stays read-only
+  vars:
+    bao_ai_orchestrator_rendered: >-
+      {{ bao_ai_orchestrator_policy.content | b64decode }}
+    bao_window_stanza: >-
+      {{ bao_ai_orchestrator_rendered
+         | regex_search('path "secret/data/ai/vikunja" \{[^}]*\}') }}
+  ansible.builtin.assert:
+    that:
+      - bao_window_stanza is not none
+      - "'read' in bao_window_stanza"
+      - "'create' not in bao_window_stanza"
+      - "'update' not in bao_window_stanza"
+      - "'delete' not in bao_window_stanza"
+      - "'secret/data/ai/vikunja/*' not in bao_ai_orchestrator_rendered"
+    fail_msg: >-
+      The maintenance-window grant must be an exact read-only path; an
+      agent reads window state and never writes it.

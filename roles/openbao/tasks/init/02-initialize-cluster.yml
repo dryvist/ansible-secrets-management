@@ -1,0 +1,73 @@
+---
+- name: Initialize OpenBao (recovery keys via static-key auto-unseal)
+  ansible.builtin.command:
+    cmd: >-
+      bao operator init
+      -recovery-shares={{ openbao_recovery_shares }}
+      -recovery-threshold={{ openbao_recovery_threshold }}
+      -format=json
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+  register: openbao_init_raw
+  no_log: true
+  changed_when: true
+  when: openbao_do_fresh_init
+
+- name: Capture init result
+  ansible.builtin.set_fact:
+    openbao_init: "{{ openbao_init_raw.stdout | from_json }}"
+  no_log: true
+  when: openbao_do_fresh_init
+
+# Break-glass: write recovery shares + root token to a 0600 file ON THE
+# CONTROLLER (gitignored), then shout at the operator to move it to paper.
+- name: Write break-glass recovery material to controller (0600)
+  ansible.builtin.copy:
+    content: "{{ openbao_init | to_nice_json }}\n"
+    dest: "{{ openbao_recovery_file }}"
+    mode: "0600"
+  delegate_to: localhost
+  connection: local
+  become: false
+  vars:
+    ansible_become: false
+  no_log: true
+  when: openbao_do_fresh_init
+
+- name: WARN — transcribe recovery material to paper, then delete the file
+  ansible.builtin.debug:
+    msg: >-
+      ============================================================
+      OpenBao cluster INITIALIZED on the bootstrap node
+      {{ inventory_hostname }}. Recovery shares + the initial root
+      token were written to:
+        {{ openbao_recovery_file }}
+      (0600, on this controller, gitignored). TRANSCRIBE the
+      recovery shares to PAPER, store them offline split across
+      custodians, then SECURELY DELETE this file. With static-key
+      auto-unseal the recovery shares are the break-glass path if
+      the seal key is ever lost. Do NOT commit it. Do NOT leave it
+      on disk.
+      ============================================================
+  when: openbao_do_fresh_init
+
+# Root token: from this run's init output on the FIRST bootstrap. On a cluster
+# that's already initialized, provisioning (new policies/AppRoles) only runs
+# if the operator supplies a privileged token out-of-band via BAO_TOKEN (see
+# openbao_admin_token in defaults) — without one, every step below skips
+# cleanly, so a routine converge that isn't adding RBAC stays a no-op.
+- name: Set the bootstrap token for provisioning (first init)
+  ansible.builtin.set_fact:
+    openbao_bootstrap_token: "{{ openbao_init.root_token }}"
+  no_log: true
+  when: openbao_do_fresh_init
+
+- name: Use the externally-supplied admin token for provisioning against a live cluster
+  ansible.builtin.set_fact:
+    openbao_bootstrap_token: "{{ openbao_admin_token }}"
+  no_log: true
+  when:
+    - openbao_status.initialized
+    - openbao_admin_token | length > 0
+
+# --- KV v2 mount (add-if-missing) -------------------------------------------

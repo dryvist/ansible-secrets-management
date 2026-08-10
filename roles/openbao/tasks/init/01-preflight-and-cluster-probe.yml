@@ -1,0 +1,106 @@
+---
+# --- Stale break-glass guard ------------------------------------------------
+# Every credential file this play writes ends with a "publish it, then DELETE
+# it" instruction. A debug message is not enforcement — leftovers accumulate
+# silently on the controller, each one a standing role_id/secret_id pair (or a
+# root token) sitting in a file nobody is watching. Fail the converge up front
+# instead, so the delete step is mandatory rather than advisory.
+- name: Find stale break-glass files left on the controller
+  ansible.builtin.find:
+    paths: "{{ playbook_dir }}"
+    patterns:
+      - ".openbao-approle-*.json"
+      - ".openbao-recovery-*.json"
+    hidden: true
+  delegate_to: localhost
+  connection: local
+  become: false
+  vars:
+    ansible_become: false
+  changed_when: false
+  register: openbao_stale_breakglass
+
+- name: Refuse to bootstrap with stale break-glass material on disk
+  ansible.builtin.assert:
+    that: openbao_stale_breakglass.files | length == 0
+    fail_msg: >-
+      Break-glass credential files from an earlier run are still on this
+      controller: {{ openbao_stale_breakglass.files | map(attribute='path') | join(', ') }}.
+      Each holds a live role_id/secret_id (or recovery shares + root token).
+      Publish anything not yet published to its store, then delete the files
+      and re-run. Destroy the superseded secret_id accessors in OpenBao too —
+      deleting the file does not revoke the credential.
+    quiet: true
+
+# `bao status` exit codes: 0 = unsealed, 2 = sealed, 1 = error. For an
+# uninitialized node the command still exits 0/2 with "initialized": false in
+# the JSON body, so we parse the body rather than trust the exit code alone.
+- name: Read OpenBao status
+  ansible.builtin.command:
+    cmd: bao status -format=json
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+  register: openbao_status_raw
+  changed_when: false
+  failed_when: openbao_status_raw.rc not in [0, 2]
+
+- name: Parse OpenBao status
+  ansible.builtin.set_fact:
+    openbao_status: "{{ openbao_status_raw.stdout | from_json }}"
+
+# --- Data-loss guard: never fresh-init on top of an existing cluster ---------
+# A rolling expansion of a LIVE cluster must JOIN, never re-init. Before the
+# bootstrap host would run `bao operator init`, probe every configured peer: if
+# ANY already reports initialized=true, a real cluster exists and its data must
+# be preserved, so we do NOT init (the peers' retry_join pulls this node in and
+# the data replicates). Fresh init is allowed ONLY when no peer is initialized
+# AND the operator explicitly opted in (openbao_allow_fresh_init) — so a
+# mis-scoped node list fails loudly instead of silently orphaning the secrets.
+- name: Probe peers for an already-initialized cluster
+  ansible.builtin.uri:
+    url: "http://{{ item }}:{{ openbao_api_port }}/v1/sys/health?standbyok=true&uninitcode=200&sealedcode=200"
+    method: GET
+    timeout: 5
+    return_content: true
+  loop: "{{ openbao_raft_peer_ips | reject('equalto', openbao_bind_address) | list }}"
+  loop_control:
+    label: "{{ item }}"
+  register: openbao_peer_health
+  changed_when: false
+  failed_when: false
+  when: not openbao_status.initialized
+
+- name: Determine whether a live cluster already exists among the peers
+  ansible.builtin.set_fact:
+    openbao_existing_cluster_present: >-
+      {{ (openbao_peer_health.results | default([]))
+         | selectattr('json', 'defined')
+         | map(attribute='json.initialized') | select('equalto', true)
+         | list | length > 0 }}
+  when: not openbao_status.initialized
+
+- name: Refuse to fresh-init when a cluster may already exist (data-loss guard)
+  ansible.builtin.fail:
+    msg: >-
+      This bootstrap host is not initialized, no already-initialized peer was
+      reachable, and openbao_allow_fresh_init is false. Refusing `bao operator
+      init` — it would create a NEW empty cluster and orphan any existing
+      secrets. If this is a genuine first bootstrap, re-run with
+      -e openbao_allow_fresh_init=true. If this is a rolling expansion, ensure
+      the existing openbao nodes are in openbao_group and reachable, then re-run.
+  when:
+    - not openbao_status.initialized
+    - not (openbao_existing_cluster_present | default(false))
+    - not (openbao_allow_fresh_init | bool)
+
+- name: Decide fresh-init vs join (join preserves an existing cluster's data)
+  ansible.builtin.set_fact:
+    openbao_do_fresh_init: >-
+      {{ (not openbao_status.initialized)
+         and (not (openbao_existing_cluster_present | default(false)))
+         and (openbao_allow_fresh_init | bool) }}
+
+# --- Initialization (only on a genuine first bootstrap) ---------------------
+# With an auto-unseal seal (static key) `bao operator init` produces RECOVERY
+# shares (not classic unseal keys); the static seal unwraps the root key on
+# every start, so the bootstrap node self-unseals and the peers do too on join.

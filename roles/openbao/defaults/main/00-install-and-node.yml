@@ -1,0 +1,92 @@
+---
+# --- Version ----------------------------------------------------------------
+# Pinned to a known-good upstream release. Version bumps follow the repo's
+# pinning convention (Renovate keeps the .deb/checksums pin fresh; see
+# renovate.json and AGENTS.md "Version management"). Do NOT scatter the
+# version across multiple files — change it here only.
+openbao_version: "2.5.5"
+
+# --- Download (checksum-verified .deb from GitHub releases) ------------------
+# The controller stages the .deb + the release checksums file, verifies the
+# SHA256, then the .deb is installed on the target. This mirrors the
+# object_storage role's controller-staging pattern so containers in the
+# outbound-internal firewall group (RFC1918-only egress) don't need direct
+# egress to GitHub.
+openbao_release_base_url: "https://github.com/openbao/openbao/releases/download"
+openbao_deb_filename: "openbao_{{ openbao_version }}_linux_amd64.deb"
+openbao_deb_url: >-
+  {{ openbao_release_base_url }}/v{{ openbao_version }}/{{ openbao_deb_filename }}
+# SHA256SUMS-format file ("<digest>  <filename>" per line) for the linux build.
+openbao_checksums_filename: "checksums-linux.txt"
+openbao_checksums_url: >-
+  {{ openbao_release_base_url }}/v{{ openbao_version }}/{{ openbao_checksums_filename }}
+
+# --- System user / group ----------------------------------------------------
+openbao_user: openbao
+openbao_group: openbao
+
+# --- Paths ------------------------------------------------------------------
+openbao_data_dir: /opt/openbao/data
+openbao_config_dir: /etc/openbao
+openbao_config_file: "{{ openbao_config_dir }}/openbao.hcl"
+# EnvironmentFile holding the static seal key for the systemd unit (0600).
+openbao_env_file: "{{ openbao_config_dir }}/openbao.env"
+# CLI talks to the local node over loopback by default for bootstrap tasks.
+openbao_install_dir: /usr/bin
+
+# --- Listener / cluster ports -----------------------------------------------
+openbao_api_port: 8200
+openbao_cluster_port: 8201
+
+# --- Node identity & addresses ----------------------------------------------
+# Raft node_id: stable per-node identifier. Defaults to the inventory hostname.
+openbao_node_id: "{{ inventory_hostname }}"
+# The node's VLAN IP. LXC hosts expose this as `container_ip` (set by
+# inventory/load_tofu.yml from the Terraform-exported inventory). Fall back to
+# ansible_host (VMs) so the role works on either. The listener binds to THIS
+# address, never 0.0.0.0 — TLS terminates at Traefik on the internal VLAN.
+openbao_bind_address: >-
+  {{ container_ip | default(ansible_host) | default(ansible_default_ipv4.address) }}
+# Advertised addresses other nodes / clients use to reach this node.
+# tls_disable=1 today (Traefik fronts TLS), so api_addr is http://. End-to-end
+# TLS is a later hardening step — see templates/openbao.hcl.j2.
+openbao_api_addr: "http://{{ openbao_bind_address }}:{{ openbao_api_port }}"
+openbao_cluster_addr: "https://{{ openbao_bind_address }}:{{ openbao_cluster_port }}"
+
+# --- Raft HA: peers + bootstrap election ------------------------------------
+# Every node carries a retry_join for each peer (built from the openbao_group
+# hostvars' container_ip), so a node that is not yet part of a cluster finds the
+# leader and joins automatically. Self in the list is harmless (ignored).
+openbao_raft_peer_ips: >-
+  {{ groups['openbao_group'] | default([])
+     | map('extract', hostvars)
+     | map(attribute='container_ip', default='')
+     | reject('equalto', '') | list }}
+# Exactly one node runs `bao operator init` — the bootstrap host (the
+# alphabetically-first group member, deterministic across runs). Every other
+# node only ever joins + auto-unseals; it never initializes. KV/policy/AppRole
+# provisioning is likewise gated to this host.
+openbao_bootstrap_host: >-
+  {{ (groups['openbao_group'] | default([inventory_hostname]) | sort | first) }}
+
+# DATA-LOSS GUARD. `bao operator init` creates a BRAND-NEW empty cluster. On a
+# homelab that already holds live secrets, a fresh init on a mis-scoped run (a
+# node list that dropped the existing members, or a bootstrap host that can't
+# reach them) would orphan the real data into a second, empty cluster. So fresh
+# init is OPT-IN. For a ROLLING EXPANSION of a live cluster (add nodes, preserve
+# data) leave this false — the new nodes join via retry_join and the existing
+# data replicates to them. Set true ONLY for the very first cluster creation.
+# See roles/openbao/README.md ("Rolling expansion / migration").
+openbao_allow_fresh_init: false
+
+# --- Seal: on-prem static-key auto-unseal (no cloud) ------------------------
+# A single 32-byte AES-256 key (base64), shared by all nodes, unwraps the root
+# key on every start so each node self-unseals without operator key entry and
+# without any cloud KMS. The key is injected at runtime from Doppler tier-0
+# (NOT hardcoded, NOT committed) and lands in the 0600 EnvironmentFile.
+# Generate once:  openssl rand -base64 32
+openbao_seal_key_id: "{{ lookup('env', 'OPENBAO_STATIC_SEAL_KEY_ID') | default('static-1', true) }}"
+openbao_static_seal_key: "{{ lookup('env', 'OPENBAO_STATIC_SEAL_KEY') }}"
+# Rotation (n-1 → n): set the previous key + id during a seal-rewrap, then clear.
+openbao_seal_previous_key_id: "{{ lookup('env', 'OPENBAO_STATIC_SEAL_PREVIOUS_KEY_ID') | default('', true) }}"
+openbao_static_seal_previous_key: "{{ lookup('env', 'OPENBAO_STATIC_SEAL_PREVIOUS_KEY') | default('', true) }}"

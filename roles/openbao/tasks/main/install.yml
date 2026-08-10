@@ -1,0 +1,159 @@
+---
+# --- Phase 1: prerequisites --------------------------------------------------
+# These containers have narrowly-scoped runtime HTTPS egress for the AWS and
+# GitHub APIs, but package installation remains controller-staged. Do not turn
+# runtime API access into a target-side apt dependency: every package is either
+# in the Debian base template or copied from the controller.
+- name: Ensure OpenBao base prerequisites are present (no WAN; base-template pkgs)
+  ansible.builtin.apt:
+    name:
+      - ca-certificates
+    state: present
+    update_cache: false
+
+# --- Phase 2: system user / group -------------------------------------------
+- name: Create openbao system group
+  ansible.builtin.group:
+    name: "{{ openbao_group }}"
+    system: true
+    state: present
+
+- name: Create openbao system user
+  ansible.builtin.user:
+    name: "{{ openbao_user }}"
+    group: "{{ openbao_group }}"
+    system: true
+    shell: /usr/sbin/nologin
+    home: "{{ openbao_data_dir }}"
+    create_home: false
+    state: present
+
+# --- Phase 3: detect an existing install ------------------------------------
+# The upstream .deb ships its own /etc/openbao (with package-owned perms) plus a
+# default unit/user. So we (a) gate the download/copy/install/remove on whether
+# the target version is already present, and (b) assert our own directories +
+# perms AFTER install. Together that keeps the role idempotent — no re-copy of
+# the .deb and no perms tug-of-war with the package on re-runs.
+- name: Check the installed OpenBao version
+  ansible.builtin.command: bao version
+  register: openbao_installed_version
+  changed_when: false
+  failed_when: false
+
+- name: Record whether the target OpenBao version is already installed
+  ansible.builtin.set_fact:
+    openbao_already_installed: >-
+      {{ openbao_installed_version.rc == 0
+         and openbao_version in (openbao_installed_version.stdout | default('')) }}
+
+# --- Phase 4: download + verify the .deb on the controller -------------------
+# Mirrors the object_storage role: stage on the controller (unrestricted
+# egress), verify the SHA256 against the upstream checksums file, then copy to
+# the target. LXC
+# hosts in the outbound-internal firewall group cannot reach GitHub directly.
+#
+# ansible_become: false on the delegated tasks is REQUIRED — Ansible inherits
+# the play's become: true on delegated tasks regardless of task-level become,
+# which fails with "sudo: a password is required" on the controller.
+- name: Stage OpenBao release checksums on controller
+  ansible.builtin.get_url:
+    url: "{{ openbao_checksums_url }}"
+    dest: "/tmp/openbao-{{ openbao_version }}-checksums-linux.txt"
+    mode: "0644"
+    force: true
+  delegate_to: localhost
+  connection: local
+  become: false
+  vars:
+    ansible_become: false
+  run_once: true
+
+- name: Read the expected SHA256 for the amd64 .deb
+  ansible.builtin.set_fact:
+    openbao_deb_sha256: >-
+      {{ (lookup('file', '/tmp/openbao-' ~ openbao_version ~ '-checksums-linux.txt')
+          | regex_search('([0-9a-f]{64})\s+' ~ (openbao_deb_filename | regex_escape), '\1')
+          | first) }}
+  run_once: true
+
+- name: Assert a checksum was found for the .deb
+  ansible.builtin.assert:
+    that:
+      - openbao_deb_sha256 is defined
+      - openbao_deb_sha256 | length == 64
+    fail_msg: >-
+      Could not find a SHA256 for {{ openbao_deb_filename }} in the upstream
+      checksums file. Did the asset naming change for v{{ openbao_version }}?
+  run_once: true
+
+- name: Stage the OpenBao .deb on controller (checksum-verified)
+  ansible.builtin.get_url:
+    url: "{{ openbao_deb_url }}"
+    dest: "/tmp/{{ openbao_deb_filename }}"
+    checksum: "sha256:{{ openbao_deb_sha256 }}"
+    mode: "0644"
+    force: true
+  delegate_to: localhost
+  connection: local
+  become: false
+  vars:
+    ansible_become: false
+  run_once: true
+
+- name: Copy the OpenBao .deb to the target
+  ansible.builtin.copy:
+    src: "/tmp/{{ openbao_deb_filename }}"
+    dest: "/tmp/{{ openbao_deb_filename }}"
+    owner: root
+    group: root
+    mode: "0644"
+  when: not openbao_already_installed
+
+# --- Phase 5: install the package -------------------------------------------
+# Installing the upstream .deb pulls in the `bao` binary. The package also ships
+# its own openbao user/unit; we override the config + unit below so the role
+# stays the single source of truth (User/Group already created above match).
+# Skipped when the target version is already present (idempotent re-runs).
+- name: Install OpenBao package
+  ansible.builtin.apt:
+    deb: "/tmp/{{ openbao_deb_filename }}"
+    state: present
+  when: not openbao_already_installed
+
+- name: Remove the staged .deb from the target
+  ansible.builtin.file:
+    path: "/tmp/{{ openbao_deb_filename }}"
+    state: absent
+  when: not openbao_already_installed
+
+# --- Phase 5b: directories (AFTER install so our perms are the final state) --
+# Created here, not before install, because the .deb ships /etc/openbao with
+# package-owned perms; asserting our perms afterwards means re-runs (which skip
+# install) find the directory already correct → no change.
+- name: Create OpenBao config directory
+  ansible.builtin.file:
+    path: "{{ openbao_config_dir }}"
+    state: directory
+    owner: root
+    group: "{{ openbao_group }}"
+    mode: "0750"
+
+- name: Create OpenBao data directory (0700, owned by openbao)
+  ansible.builtin.file:
+    path: "{{ openbao_data_dir }}"
+    state: directory
+    owner: "{{ openbao_user }}"
+    group: "{{ openbao_group }}"
+    mode: "0700"
+
+# Always created (openbao.hcl sets plugin_directory unconditionally, and the
+# server refuses to start if the configured path is absent). Root-owned and
+# never group-writable: the server validates each plugin launch against the
+# catalog sha256, but a writable directory would still invite tampering.
+- name: Create OpenBao plugin directory (0750, root-owned, openbao-exec)
+  ansible.builtin.file:
+    path: "{{ openbao_plugin_dir }}"
+    state: directory
+    owner: root
+    group: "{{ openbao_group }}"
+    mode: "0750"
