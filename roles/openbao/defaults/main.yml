@@ -219,6 +219,13 @@ openbao_generated_app_secrets:
   # key is NOT here — it reuses ai/llm's LLM_ROUTER_MASTER_KEY (local-llm
   # domain), same router credential every ai-VLAN consumer uses.
   hindsight: [hindsight_db_password, hindsight_replication_password, hindsight_cp_access_key]
+  # hermes-ui companion web guest (ai VLAN): hermes-workspace's bind password
+  # plus mission-control's auth pair. App-namespaced for the flat
+  # bao_apps_secrets merge. hermes_ui_hermes_api_token is deliberately NOT
+  # here — it must MATCH hermes_agent's HERMES_API_SERVER_KEY rather than be
+  # generated independently, and the consumer treats it as optional (empty
+  # just means the workspace UI dials the gateway unauthenticated).
+  hermes-ui: [hermes_ui_workspace_password, hermes_ui_mission_control_auth_user, hermes_ui_mission_control_auth_pass]
   # AI session-history backup. One RustFS bucket per vendor
   # (ai-sessions-{claude,codex,gemini}), each with a read-only and a
   # read-write key, so a machine pushing its own history cannot read or write
