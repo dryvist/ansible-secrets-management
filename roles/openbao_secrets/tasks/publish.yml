@@ -51,6 +51,11 @@
   delegate_to: localhost
   become: false
   vars:
+    # Required alongside become: false, for the same reason main.yml records:
+    # a delegated task inherits the play's become regardless of the task-level
+    # setting, so without this the delegated login attempts privilege
+    # escalation on the control node and fails when that is password-gated.
+    ansible_become: false
     _addr: >-
       {{ hostvars['localhost'].openbao_secrets_active_addr
          | default(openbao_secrets_bao_addr, true) }}
