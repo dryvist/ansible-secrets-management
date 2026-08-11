@@ -1,0 +1,234 @@
+---
+- name: Read the staged AWS plugin binary's sha256
+  ansible.builtin.stat:
+    path: "{{ openbao_plugin_dir }}/{{ openbao_aws_plugin_command }}"
+    checksum_algorithm: sha256
+  register: openbao_aws_plugin_stat
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_aws_engine_enabled | bool
+
+- name: Assert the AWS plugin binary is staged
+  ansible.builtin.assert:
+    that:
+      - openbao_aws_plugin_stat.stat.exists
+    fail_msg: >-
+      {{ openbao_plugin_dir }}/{{ openbao_aws_plugin_command }} is missing —
+      the staging phase in main.yml should have extracted it. Re-run the full
+      role (not init in isolation).
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_aws_engine_enabled | bool
+
+- name: Check whether the AWS plugin is already registered
+  ansible.builtin.command:
+    cmd: >-
+      bao plugin info -format=json
+      -version={{ openbao_aws_plugin_catalog_version }}
+      secret {{ openbao_aws_plugin_name }}
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  register: openbao_aws_plugin_check
+  no_log: true
+  changed_when: false
+  failed_when: false
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_aws_engine_enabled | bool
+
+- name: Register the AWS plugin (pinned to the staged binary's sha256)
+  ansible.builtin.command:
+    cmd: >-
+      bao plugin register
+      -sha256={{ openbao_aws_plugin_stat.stat.checksum }}
+      -command={{ openbao_aws_plugin_command }}
+      -version={{ openbao_aws_plugin_catalog_version }}
+      secret {{ openbao_aws_plugin_name }}
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  no_log: true
+  register: openbao_aws_plugin_register
+  changed_when: true
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_aws_engine_enabled | bool
+    - (openbao_aws_plugin_check.rc | default(1)) != 0
+
+- name: Enable the AWS secrets engine
+  ansible.builtin.command:
+    cmd: >-
+      bao secrets enable -path={{ openbao_aws_mount }}
+      -plugin-version={{ openbao_aws_plugin_catalog_version }}
+      {{ openbao_aws_plugin_name }}
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  no_log: true
+  changed_when: true
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_aws_engine_enabled | bool
+    - (openbao_aws_mount ~ '/') not in (openbao_mounts_raw.stdout | from_json).keys()
+
+- name: Tune the existing AWS mount to the declared plugin version
+  ansible.builtin.command:
+    cmd: >-
+      bao secrets tune -plugin-version={{ openbao_aws_plugin_catalog_version }}
+      {{ openbao_aws_mount }}/
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  no_log: true
+  register: openbao_aws_plugin_tune
+  changed_when: true
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_aws_engine_enabled | bool
+    - (openbao_aws_mount ~ '/') in (openbao_mounts_raw.stdout | from_json).keys()
+    - >-
+      ((openbao_mounts_raw.stdout | from_json)[openbao_aws_mount ~ '/'].plugin_version
+       | default('')) != openbao_aws_plugin_catalog_version
+
+- name: Reload the AWS plugin across the Raft cluster after an upgrade
+  ansible.builtin.command:
+    cmd: "bao plugin reload -plugin={{ openbao_aws_plugin_name }} -scope=global"
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  no_log: true
+  changed_when: true
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_aws_engine_enabled | bool
+    - openbao_aws_plugin_tune is changed
+
+# Root config holds the ONE long-lived AWS base-user key OpenBao uses to call
+# sts:AssumeRole. Checked via `bao read`, not the mounts list above — a mount
+# can exist with no root config yet configured (fresh `secrets enable`).
+- name: Check whether the AWS engine root config already exists
+  ansible.builtin.command:
+    cmd: "bao read -format=json {{ openbao_aws_mount }}/config/root"
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  register: openbao_aws_root_check
+  no_log: true
+  changed_when: false
+  failed_when: false
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_aws_engine_enabled | bool
+
+# Fail loudly rather than silently leave a mounted-but-unconfigured engine: a
+# skip here would make `bao read aws/sts/tf-proxmox` fail later with a much
+# more confusing error, and a routine converge that forgot the root key would
+# look green while doing nothing.
+- name: Refuse to leave the AWS engine mounted with no root config and no key supplied
+  ansible.builtin.fail:
+    msg: >-
+      The AWS secrets engine at {{ openbao_aws_mount }}/ has no root config yet,
+      and OPENBAO_AWS_ROOT_ACCESS_KEY_ID/OPENBAO_AWS_ROOT_SECRET_ACCESS_KEY are
+      unset. Seed the base-user key (minted via an independent admin path, NOT
+      the key being rotated out) into Doppler tier-0 and re-run with those env
+      vars set, or set openbao_aws_engine_enabled: false to skip AWS entirely.
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_aws_engine_enabled | bool
+    - (openbao_aws_root_check.rc | default(1)) != 0
+    - (openbao_aws_root_access_key_id | length == 0) or (openbao_aws_root_secret_access_key | length == 0)
+
+# Write-once: a routine converge with root already configured never
+# overwrites/rotates it silently (mirrors the seal-key pattern) — rotation is a
+# deliberate, separate operator action.
+- name: Configure the AWS engine root credentials (first configuration only)
+  ansible.builtin.uri:
+    url: "{{ openbao_api_addr }}/v1/{{ openbao_aws_mount }}/config/root"
+    method: POST
+    headers:
+      X-Vault-Token: "{{ openbao_bootstrap_token }}"
+    body_format: json
+    body:
+      access_key: "{{ openbao_aws_root_access_key_id }}"
+      secret_key: "{{ openbao_aws_root_secret_access_key }}"
+      region: "{{ openbao_aws_root_region }}"
+    status_code:
+      - 200
+      - 204
+  no_log: true
+  changed_when: true
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_aws_engine_enabled | bool
+    - (openbao_aws_root_check.rc | default(1)) != 0
+    - openbao_aws_root_access_key_id | length > 0
+    - openbao_aws_root_secret_access_key | length > 0
+
+- name: Check whether the tf-proxmox AWS role already exists
+  ansible.builtin.command:
+    cmd: "bao read -format=json {{ openbao_aws_mount }}/roles/{{ openbao_aws_role_name }}"
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  register: openbao_aws_role_check
+  no_log: true
+  changed_when: false
+  failed_when: false
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_aws_engine_enabled | bool
+
+- name: Create the tf-proxmox AWS role (assumed_role, add-if-missing)
+  ansible.builtin.command:
+    cmd: >-
+      bao write {{ openbao_aws_mount }}/roles/{{ openbao_aws_role_name }}
+      credential_type=assumed_role
+      role_arns={{ openbao_aws_role_arn }}
+      default_sts_ttl={{ openbao_aws_default_sts_ttl }}
+      max_sts_ttl={{ openbao_aws_max_sts_ttl }}
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  no_log: true
+  changed_when: true
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_aws_engine_enabled | bool
+    - (openbao_aws_role_check.rc | default(1)) != 0
+    - openbao_aws_role_arn | length > 0
+
+- name: Check whether the openbao-iac-admin AWS role already exists
+  ansible.builtin.command:
+    cmd: "bao read -format=json {{ openbao_aws_mount }}/roles/{{ openbao_aws_iac_admin_role_name }}"
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  register: openbao_aws_iac_admin_role_check
+  no_log: true
+  changed_when: false
+  failed_when: false
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_aws_engine_enabled | bool
+
+- name: Create the openbao-iac-admin AWS role (assumed_role, add-if-missing)
+  ansible.builtin.command:
+    cmd: >-
+      bao write {{ openbao_aws_mount }}/roles/{{ openbao_aws_iac_admin_role_name }}
+      credential_type=assumed_role
+      role_arns={{ openbao_aws_iac_admin_role_arn }}
+      default_sts_ttl={{ openbao_aws_iac_admin_default_sts_ttl }}
+      max_sts_ttl={{ openbao_aws_iac_admin_max_sts_ttl }}
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  no_log: true
+  changed_when: true
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_aws_engine_enabled | bool
+    - (openbao_aws_iac_admin_role_check.rc | default(1)) != 0
+    - openbao_aws_iac_admin_role_arn | length > 0
+
+# --- GitHub secrets engine (independent GitHub App token broker) ------------

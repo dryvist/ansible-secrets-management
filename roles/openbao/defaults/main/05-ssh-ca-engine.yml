@@ -1,0 +1,41 @@
+---
+# --- SSH secrets engine (signed client certificates — the SSH CA) -----------
+# Implements the ssh-certificate-authority ADR (docs-starlight): automation
+# authenticates to estate hosts with short-TTL SSH certificates signed by an
+# OpenBao CA; humans stay on static authorized_keys (a CA outage must never
+# lock humans out). SSH is a BUILTIN engine — no plugin staging, unlike
+# aws/github above. The CA keypair is generated INSIDE OpenBao on first
+# configuration and is never exported; a routine converge never regenerates it
+# (write-once, mirrors aws config/root). Host-side trust (TrustedUserCAKeys +
+# AuthorizedPrincipalsFile) is distributed by ansible-proxmox's ssh_ca_trust
+# role against a PINNED CA fingerprint recorded at mint time.
+openbao_ssh_engine_enabled: true
+openbao_ssh_mount: ssh-client-ca
+# CA key type per the ADR. If the deployed OpenBao rejects key_type on
+# config/ca, the converge fails loudly — override to '' to generate the
+# engine default (RSA) and track an ed25519 rotation via the multi-issuer API.
+openbao_ssh_ca_key_type: ed25519
+# Per-principal-class signing roles (ADR table). Cert TTL == max TTL; a sign
+# request may pass a SHORTER ttl per task, never longer. automation-ai signs
+# interactive agent certs (permit-pty); automation-ansible and ci-runner are
+# exec-channel only — NO extensions (a host that genuinely needs a tty for
+# become opts in via its own role data, not a blanket grant here).
+openbao_ssh_roles:
+  - name: automation-ai
+    principal: ai-agent
+    ttl: 1h
+    extensions: { "permit-pty": "" }
+  - name: automation-ansible
+    principal: ansible
+    ttl: 1h
+    extensions: {}
+  - name: ci-runner
+    principal: ci
+    ttl: 30m
+    extensions: {}
+# source-address critical option: comma-separated CIDRs certificates are valid
+# FROM (management + compute VLANs). Delivered via env (Doppler, same channel
+# as NETWORK_CIDR_*) because real CIDRs are never committed. Empty = the
+# converge warns loudly and the residual is compensated by the guest-firewall
+# default-deny layer (SSH ingress only from management paths).
+openbao_ssh_source_address_cidrs: "{{ lookup('env', 'OPENBAO_SSH_SOURCE_CIDRS') | default('', true) }}"

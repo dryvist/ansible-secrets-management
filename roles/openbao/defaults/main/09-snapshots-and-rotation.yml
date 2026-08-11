@@ -1,0 +1,79 @@
+---
+# --- Raft snapshots (automated, on-box timer) -------------------------------
+# An on-box systemd timer takes a raft snapshot on the ACTIVE node (leader-gated
+# at runtime via /v1/sys/leader is_self; standby nodes no-op), authenticating
+# with the least-privilege `snapshot` AppRole over the node's OWN api_addr (its
+# VLAN IP — there is no loopback listener; see openbao.hcl.j2), NOT the Traefik
+# ingress VIP. Each snapshot is integrity-checked (gzip -t, since raft snapshots
+# are gzipped tar) and written under the data volume, which sits on a ZFS/PBS-
+# backed dataset that replicates OFF-BOX; the newest N are kept. Success/failure
+# pings the healthchecks deadman + ntfy, reusing the service_deadman alert stack.
+#
+# Deliberately deferred (tracked follow-ups, see roles/openbao/README.md):
+#   * a SECOND off-box copy into the RustFS `openbao-snapshots` S3 bucket +
+#     HeadObject/size/sha256 verify — these WAN-firewalled (outbound-internal)
+#     nodes can't be handed a checksum-verifiable S3 client WAN-free the way the
+#     .deb is, and hand-rolling SigV4 is out; ZFS replication already carries
+#     snapshots off-box in the meantime.
+#   * a full restore-to-scratch-node drill (needs a scratch node that does not
+#     exist yet). gzip -t is the strongest safe on-box integrity check today.
+# "Never lost" already holds regardless: Raft HA live copies + recovery
+# shares (paper) + the seal key (Doppler tier-0) + the ZFS/PBS-backed data dir.
+openbao_snapshot_enabled: true
+# Reserved for the S3 follow-up above (bucket already created by object_storage).
+openbao_snapshot_s3_bucket: openbao-snapshots
+# Timer cadence (systemd OnUnitActiveSec) and how many local snapshots to keep.
+openbao_snapshot_interval: "6h"
+openbao_snapshot_retain: 14
+# Deployed paths. Staging lives under the data dir so it inherits the ZFS/PBS
+# off-box replication of the data volume.
+openbao_snapshot_dir: "{{ openbao_data_dir }}/snapshots"
+openbao_snapshot_script_path: /usr/local/bin/openbao-snapshot.sh
+openbao_snapshot_env_file: "{{ openbao_config_dir }}/openbao-snapshot.env"
+openbao_snapshot_service_name: openbao-snapshot
+# Snapshot AppRole creds the timer logs in with. Emitted by init.yml at
+# bootstrap; injected at converge from tier-0 (Doppler / break-glass file),
+# never committed. When unset the daemon is skipped so a pre-provisioning
+# converge stays green (see the include guard in tasks/main.yml).
+openbao_snapshot_role_id: "{{ lookup('env', 'OPENBAO_SNAPSHOT_ROLE_ID') | default('', true) }}"
+openbao_snapshot_secret_id: "{{ lookup('env', 'OPENBAO_SNAPSHOT_SECRET_ID') | default('', true) }}"
+# ntfy alert target — FQDN-first: the Traefik-fronted service name
+# (matching service_deadman). Topic 'openbao'.
+openbao_snapshot_ntfy_url: >-
+  https://ntfy.{{ tofu_data.domain }}/openbao
+# healthchecks deadman ping URL for the snapshot job; EMPTY => ping skipped
+# (ntfy + journal alert still fire). Set per-node from the healthchecks LXC.
+openbao_snapshot_healthcheck_url: "{{ lookup('env', 'OPENBAO_SNAPSHOT_HC_URL') | default('', true) }}"
+
+# --- Slack app-config token rotation (automated, on-box timer) --------------
+# An on-box systemd timer rotates the Slack app-configuration token pair
+# (secrets-external/platform/slack-admin) before it expires, using the
+# least-privilege `slack-admin` AppRole (read+update on exactly that entry).
+# This is the PRIMARY scheduled rotator; a macOS wrapper (nix-darwin
+# openbao-slack-creds) also rotates on-demand if the stored pair goes stale
+# between fires. The refresh token is single-use, so OpenBao's CAS write-back
+# is the only coordination needed between the two — no client-side lock.
+openbao_slack_rotate_enabled: true
+# Timer cadence (systemd OnUnitActiveSec) and how close to expiry (seconds
+# remaining) triggers a rotation. The 12h token life vs 6h cadence means the
+# timer normally sees ~6h or ~0h remaining — the margin only matters for
+# catching a fire that lands close to the boundary.
+openbao_slack_rotate_interval: "6h"
+openbao_slack_rotate_safety_margin: 14400 # 4h
+openbao_slack_rotate_script_path: /usr/local/bin/openbao-slack-rotate.sh
+openbao_slack_rotate_env_file: "{{ openbao_config_dir }}/openbao-slack-rotate.env"
+openbao_slack_rotate_service_name: openbao-slack-rotate
+# slack-admin AppRole creds the timer logs in with. Delivered the same way as
+# the snapshot AppRole above (injected at converge from tier-0, never
+# committed) and named identically to the env vars the macOS wrapper reads,
+# so one Doppler-held pair serves both consumers. When unset the timer is
+# skipped so a pre-provisioning converge stays green.
+openbao_slack_rotate_role_id: "{{ lookup('env', 'OPENBAO_APPROLE_SLACK_ADMIN_ROLE_ID') | default('', true) }}"
+openbao_slack_rotate_secret_id: "{{ lookup('env', 'OPENBAO_APPROLE_SLACK_ADMIN_SECRET_ID') | default('', true) }}"
+# ntfy alert target — FQDN-first, same topic as the snapshot job (this is
+# still openbao-owned automation).
+openbao_slack_rotate_ntfy_url: >-
+  https://ntfy.{{ tofu_data.domain }}/openbao
+# healthchecks deadman ping URL; EMPTY => ping skipped (ntfy + journal alert
+# still fire).
+openbao_slack_rotate_healthcheck_url: "{{ lookup('env', 'OPENBAO_SLACK_ROTATE_HC_URL') | default('', true) }}"

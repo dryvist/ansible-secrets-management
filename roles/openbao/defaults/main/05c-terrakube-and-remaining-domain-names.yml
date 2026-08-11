@@ -1,0 +1,104 @@
+---
+openbao_terrakube_jwt_auth_path: terrakube
+openbao_terrakube_jwt_issuer: "https://terrakube-api.{{ lookup('env', 'PROXMOX_SUBDOMAIN') | default('local', true) }}"
+openbao_terrakube_jwt_audience: openbao.workload.identity
+openbao_terrakube_jwt_token_ttl: 90m
+# Org login that Terrakube stamps into the JWT `sub`
+# (`organization:<name>:workspace:<name>`, from job.getOrganization().getName()).
+# Must equal the Terrakube organization name — set by iac-platform's
+# `organization_name` var (mirrors the GitHub org login). The tofu inventory
+# does not carry an `organization` key, so this is sourced directly here;
+# override in group_vars/host_vars for a different environment.
+openbao_terrakube_organization: dryvist
+openbao_terrakube_workspaces:
+  - name: iac-platform
+    kv_read: [platform/terrakube/main]
+  - name: tofu-github
+    kv_read: [infrastructure/github]
+    # infrastructure/github is an internet-reachable SaaS credential (a
+    # GitHub App key), so its canonical home is moving to the
+    # secrets-external mount; dual-granted here until the internal-mount
+    # entry above is deleted. kv_read only ever renders against the
+    # internal openbao_kv_mount (see terrakube-workspace-policy.hcl.j2), so
+    # this is a distinct list rather than a mount override on kv_read.
+    kv_read_external: [infrastructure/github]
+  - name: tofu-unifi
+    kv_read: [infrastructure/unifi]
+  - name: tofu-aws-production
+    api_update: [aws/sts/tofu-aws-production]
+  - name: tofu-runs-on
+    api_update: [aws/sts/tofu-runs-on]
+  - name: tofu-proxmox
+    kv_read: [infrastructure/proxmox, platform/object-storage]
+  - name: tofu-proxmox-aws-infra
+    api_update: [aws/sts/tf-proxmox]
+  - name: tofu-proxmox-servarr-config
+    kv_read: [apps/media]
+openbao_ansible_converge_policy_name: ansible-converge
+openbao_ansible_converge_approle_name: ansible-converge
+openbao_observability_policy_name: observability
+openbao_observability_approle_name: observability
+openbao_local_cloud_policy_name: local-cloud
+openbao_local_cloud_approle_name: local-cloud
+openbao_monitoring_policy_name: monitoring
+openbao_monitoring_approle_name: monitoring
+openbao_media_policy_name: media
+openbao_media_approle_name: media
+# apps — read-side AppRole for the shared-Postgres application tier
+# (openbao_secrets domain "apps": Nautobot, Zammad). apps-seed above is the
+# WRITER; this is the enumerated read-only consumer the converge logs in with
+# via APPS_VAULT_ROLE_ID / APPS_VAULT_SECRET_ID.
+openbao_apps_policy_name: apps
+openbao_apps_approle_name: apps
+# Apps the read-side `apps` policy grants read on = the union of both seeding
+# maps, so an app that is only promoted (never generated) still gets its read
+# grant. Derived rather than listed: a hand-maintained list silently missed the
+# promoted apps, and the failure mode is a consumer resolving an empty secret.
+openbao_apps_read_apps: >-
+  {{ ((openbao_generated_app_secrets.keys() | list)
+      + (openbao_promoted_app_secrets.keys() | list)) | unique | sort }}
+openbao_local_llm_policy_name: local-llm
+openbao_local_llm_approle_name: local-llm
+openbao_ai_saas_openrouter_policy_name: ai-saas-openrouter
+openbao_hermes_policy_name: hermes
+openbao_hermes_approle_name: hermes
+openbao_hermes_write_policy_name: hermes-write
+openbao_hermes_write_approle_name: hermes-write
+# ai-donna: a second Hermes agent's dedicated, least-privilege reader — its own
+# isolated credential domain (secret/ai/donna), sharing nothing with hermes.
+openbao_ai_donna_policy_name: ai-donna
+openbao_ai_donna_approle_name: ai-donna
+openbao_public_policy_name: public
+openbao_public_approle_name: public
+# config-read: THE DEFAULT identity on the non-secret `config` mount — read +
+# list across every path in it, and nothing anywhere else. Everything that only
+# consumes config uses this. Nothing in the mount is a secret, so per-path
+# least privilege would buy nothing and cost policy churn on every new key.
+openbao_config_read_policy_name: config-read
+openbao_config_read_approle_name: config-read
+# config-write: a capability policy ATTACHED to the three IaC systems that
+# author config (OpenTofu / Ansible / Terrakube), never a standalone AppRole —
+# see the template header for why a fourth credential would be the wrong shape.
+openbao_config_write_policy_name: config-write
+# Terrakube workspaces whose JWT role also carries config-write. Every declared
+# workspace by default, since Terrakube is named as a config author; narrowing
+# it is one edit here rather than a policy change. NOTE: Terrakube runs
+# VCS-driven, potentially untrusted plans, so this is the one config-write
+# grant whose blast radius is worth revisiting — it cannot reach a credential
+# mount, but it can rewrite config that other systems read.
+openbao_config_write_terrakube_workspaces: >-
+  {{ openbao_terrakube_workspaces | map(attribute='name') | list }}
+# ai-public: the fabric-brain runtime domain (secret/ai/public/*, field
+# active_model). Its OWN narrow read-only credential — NOT local-llm's broader
+# ai/* read — held by the hermes_agent / open_webui brain-sync timers to
+# re-point the brain from OpenBao without a converge. See ansible-proxmox-ai
+# roles/openbao_secrets (ai-public domain) + roles/hermes_agent brain-sync.
+openbao_ai_public_policy_name: ai-public
+openbao_ai_public_approle_name: ai-public
+openbao_ai_orchestrator_policy_name: ai-orchestrator
+openbao_ai_orchestrator_approle_name: ai-orchestrator
+# ai-readonly / ai-elevated are now ACTOR ROLES that ATTACH base capability
+# policies (below) — they no longer own a standalone `ai-*` policy object. Only
+# the AppRole names survive as vars; their token_policies are composed rollups.
+openbao_ai_readonly_approle_name: ai-readonly
+openbao_ai_elevated_approle_name: ai-elevated

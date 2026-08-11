@@ -1,0 +1,102 @@
+---
+- name: Render and verify the Authelia access-control rules
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    ansible_become: false
+    # The role defaults derive several values from tofu_data and the
+    # environment. Only access_control is asserted here, so these are minimal
+    # stand-ins that let the template render offline.
+    tofu_data:
+      domain: example.test
+      constants:
+        service_ports:
+          authelia_portal: 9091
+    authelia_oidc_hmac_secret: x
+    authelia_oidc_jwks_key: x
+    authelia_oidc_hermes_client_id: x
+    authelia_oidc_hermes_redirect_uri: "https://x.example.test/cb"
+
+  tasks:
+    - name: Load the authelia role defaults
+      ansible.builtin.include_vars:
+        file: "../../../roles/authelia/defaults/main.yml"
+
+    - name: Render the Authelia configuration
+      ansible.builtin.template:
+        src: "../../../roles/authelia/templates/configuration.yml.j2"
+        dest: "{{ render_tmp }}/authelia-configuration.yml"
+        mode: "0600"
+
+    - name: Read back the rendered access-control rules
+      ansible.builtin.slurp:
+        src: "{{ render_tmp }}/authelia-configuration.yml"
+      register: _authelia_raw
+
+    - name: Parse the rendered configuration
+      ansible.builtin.set_fact:
+        _authelia_rules: >-
+          {{ (_authelia_raw.content | b64decode | from_yaml)['access_control']['rules'] }}
+
+    - name: Assert every bypass rule is scoped to an API prefix, never the whole host
+      ansible.builtin.assert:
+        that:
+          # A bypass entry must never widen to the entire domain. `policy:
+          # bypass` with an unanchored or absent resource would hand the app's
+          # browser UI to anyone, which is the failure this guard exists for.
+          - _authelia_rules
+            | selectattr('policy', 'eq', 'bypass')
+            | rejectattr('resources', 'defined')
+            | list | length == 0
+          - _authelia_rules
+            | selectattr('policy', 'eq', 'bypass')
+            | map(attribute='resources') | flatten
+            | reject('match', '\\^/api') | list | length == 0
+        fail_msg: >-
+          an Authelia bypass rule is missing a resource scope or does not
+          anchor to an /api prefix: {{ _authelia_rules }}
+
+    - name: Assert Langfuse bypasses only /api/public, leaving /api/auth gated
+      ansible.builtin.assert:
+        that:
+          # Regression guard. Langfuse serves NextAuth browser session and
+          # sign-in routes under /api/auth. A blanket ^/api bypass — the value
+          # this template hardcoded for every domain before the resource became
+          # per-entry — would expose them unauthenticated.
+          - _langfuse_rule.resources == ['^/api/public(?:/.*)?$']
+          - "'^/api(?:/.*)?$' not in _langfuse_rule.resources"
+        fail_msg: >-
+          Langfuse bypass is not narrowed to /api/public
+          (got {{ _langfuse_rule.resources }}); /api/auth would be exposed
+      vars:
+        _langfuse_rule: >-
+          {{ _authelia_rules
+             | selectattr('policy', 'eq', 'bypass')
+             | selectattr('domain', 'search', 'langfuse')
+             | first }}
+
+    - name: Assert the default resource still applies to entries that omit it
+      ansible.builtin.assert:
+        that:
+          # Entries without an explicit `resource` must keep the historical
+          # value, so adding the per-entry knob changed no existing behaviour.
+          - _zammad_rule.resources == ['^/api(?:/.*)?$']
+        fail_msg: >-
+          the default bypass resource changed for entries that omit it
+          (got {{ _zammad_rule.resources }})
+      vars:
+        _zammad_rule: >-
+          {{ _authelia_rules
+             | selectattr('policy', 'eq', 'bypass')
+             | selectattr('domain', 'search', 'zammad')
+             | first }}
+
+    - name: Authelia access-control verification PASSED
+      ansible.builtin.debug:
+        msg: |
+          Authelia access-control assertions passed:
+          - every bypass rule is scoped to an /api prefix
+          - Langfuse is narrowed to /api/public, so /api/auth stays gated
+          - entries omitting `resource` keep the previous default

@@ -1,0 +1,105 @@
+---
+# --- Derived rollups + generated policy/approle fragments (do NOT edit; add a
+# service to openbao_ai_domains instead). read-all / read-write-all are lists of
+# base policy NAMES attached to actor roles' token_policies — composition, not
+# duplicated path rules. ---
+openbao_ai_read_subtrees: "{{ (openbao_ai_domains + openbao_ai_readonly_extra_subtrees) | unique }}"
+openbao_read_all_policies: "{{ openbao_ai_domains | map('regex_replace', '^(.+)$', 'read-\\1') | list }}"
+openbao_read_write_all_policies: >-
+  {{ (openbao_ai_domains | map('regex_replace', '^(.+)$', 'read-\1') | list)
+     + (openbao_ai_domains | map('regex_replace', '^(.+)$', 'write-\1') | list) }}
+# Base capability policy fragments for the render loop (one read leaf per read
+# subtree, one write leaf per writable domain, plus the shared github-mint leaf).
+openbao_ai_capability_policies: >-
+  {{ (openbao_ai_read_subtrees | map('regex_replace', '^(.+)$',
+        '{"name": "read-\1", "template": "kv-capability-policy.hcl.j2", "subtree": "\1", "mode": "read"}')
+      | map('from_json') | list)
+     + (openbao_ai_domains | map('regex_replace', '^(.+)$',
+        '{"name": "write-\1", "template": "kv-capability-policy.hcl.j2", "subtree": "\1", "mode": "write"}')
+      | map('from_json') | list)
+     + [{"name": "github-mint", "template": "github-mint-policy.hcl.j2"}] }}
+# ssh-sign-<role> capability leaves: one per SSH signing role, granting ONLY
+# the sign endpoint of that role. These are DELIBERATE enumerated grants
+# outside secret/ — the kv-leaf self-escalation proof still holds for the KV
+# rollups (read-all / read-write-all stay pure KV); an ssh-sign leaf adds
+# exactly one non-KV path (<mount>/sign/<role>) and nothing else, asserted
+# fail-closed in init.yml before rendering.
+openbao_ssh_sign_policies: >-
+  {{ openbao_ssh_roles | map(attribute='name') | map('regex_replace', '^(.+)$',
+       '{"name": "ssh-sign-\1", "template": "ssh-sign-policy.hcl.j2", "ssh_role": "\1"}')
+     | map('from_json') | list
+     if openbao_ssh_engine_enabled else [] }}
+# ai-apply-<svc> actor roles: one per writable domain, scoped to that service's
+# read+write leaves plus per-run GitHub attribution and interactive SSH-cert
+# signing (ssh-sign-automation-ai — 1h certs, non-root principals, audited).
+# Inert (no standing secret_id).
+# token_ttl/token_max_ttl are the "unlock window": one human unlock (a wrapped,
+# single-use secret_id) yields ONE login whose token then lives the window, so
+# an agent runs unattended for the whole window instead of re-asking per task.
+# The literals here must stay in sync with openbao_ai_apply_token_ttl /
+# openbao_ai_apply_token_max_ttl below (regex_replace can't interpolate a var
+# inside its replacement string; the standalone vars document the intent).
+openbao_ai_apply_approles: >-
+  {{ openbao_ai_domains | map('regex_replace', '^(.+)$',
+       '{"name": "ai-apply-\1", "token_policies": ["read-\1", "write-\1", "github-mint", "ssh-sign-automation-ai"],
+         "token_ttl": "6h", "token_max_ttl": "12h",
+         "manage_secret_id": false, "secret_id_ttl": "15m", "secret_id_num_uses": 1}')
+     | map('from_json') | list }}
+openbao_ai_admin_policy_name: ai-admin
+openbao_ai_admin_approle_name: ai-admin
+# Token/secret_id bounds for the elevated tiers, as the "unlock window" model:
+# one human unlock (a wrapped, single-use secret_id) -> one login -> a token that
+# lives the window, so an agent works unattended for the window instead of a
+# human minting per task. secret_id_ttl bounds an UNUSED minted grant (the redeem
+# window); num_uses=1 makes the wrapped secret_id single-login.
+#   ai-apply-<svc>  6h default / 12h max   (single-domain write — routine workhorse)
+#   ai-apply-all    1h default / 6h max    (cross-domain write — wider, so tighter)
+#   ai-admin        1h                     (COMPLETE full admin — alerted every use)
+# ai-apply-<svc> literals live in the generated openbao_ai_apply_approles above
+# and must match openbao_ai_apply_token_ttl / _max_ttl here.
+openbao_ai_apply_token_ttl: 6h
+openbao_ai_apply_token_max_ttl: 12h
+openbao_ai_apply_all_token_ttl: 1h
+openbao_ai_apply_all_token_max_ttl: 6h
+openbao_ai_admin_token_ttl: 1h
+openbao_ai_elevated_secret_id_ttl: 15m
+openbao_snapshot_policy_name: snapshot
+openbao_snapshot_approle_name: snapshot
+# apps-seed — the automated WRITER for per-app service secrets under
+# secret/apps/* (create/update/read only, no other domain). Terraform
+# (terraform-proxmox vault-secrets) authenticates as this role to generate +
+# store each app's credentials at the source. Doppler-published creds
+# (APPS_SEED_VAULT_ROLE_ID / _SECRET_ID), the same delivery as terraform-apply.
+openbao_apps_seed_policy_name: apps-seed
+openbao_apps_seed_approle_name: apps-seed
+# llm-gate — the Mac Studio's llm-large Caddy gate. Dedicated least-privilege
+# reader for EXACTLY the two secrets it injects into Caddy: the bearer token
+# (secret/ai/llm) and the Route53 ACME creds (secret/platform/acme). role_id/
+# secret_id are delivered to the Studio's auto-readable keychain and consumed
+# by openbao-run (the doppler-free replacement for the gate's ~/.doppler token).
+openbao_llm_gate_policy_name: llm-gate
+openbao_llm_gate_approle_name: llm-gate
+# ai-runner — the headless AI job-runner guests (ai_runner role in
+# ansible-proxmox-ai, WS7A). Own least-privilege reader for EXACTLY the three
+# third-party KV secrets the runner's job worker consumes: the Vikunja
+# dispatch-queue token and the Anthropic + OpenAI model-provider keys. None of
+# the three has an OpenBao secrets engine (Vikunja is self-hosted; Anthropic
+# and OpenAI are third-party SaaS with no plugin), so KV is the correct tier
+# per .claude/rules/openbao-plugins-first.md — NOT a duplicate of local-llm's
+# broad ai/* read, and NOT any GitHub/AWS grant (the worker consumes neither).
+openbao_ai_runner_policy_name: ai-runner
+openbao_ai_runner_approle_name: ai-runner
+# secret_id CIDR binding for the runner guest's fixed reservation. Real CIDRs
+# are never committed (public repo) — delivered via env, the same channel and
+# pattern as OPENBAO_SSH_SOURCE_CIDRS. Empty => the AppRole is created WITHOUT a
+# secret_id CIDR bind, and the runner guest's restrictive egress firewall
+# profile (tofu-proxmox ai-github tag) is the compensating control.
+openbao_ai_runner_secret_id_cidr: >-
+  {{ lookup('env', 'OPENBAO_AI_RUNNER_SECRET_ID_CIDR') | default('', true) }}
+
+# The set of non-root AppRoles to provision, each {name, policy}. Driving the
+# bootstrap from this list keeps init.yml DRY as groups are added. Per-identity
+# `secret_id_bound_cidrs` hardening is left as a tracked follow-up: the real
+# per-domain consumer VLAN CIDRs aren't yet surfaced as Ansible vars in this
+# repo (they live in terraform-proxmox's locals.tf), and a wrong CIDR would
+# silently break legitimate access — worse than the hardening it buys.

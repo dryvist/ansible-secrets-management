@@ -1,0 +1,152 @@
+---
+# --- KV hierarchy / RBAC policies + AppRoles ---------------------------------
+# Secret hierarchy (see terraform-proxmox docs/SECRETS_HIERARCHY.md):
+#   secret/infra/*     IaC kernel (proxmox/aws/network) — terraform-apply writes
+#   secret/platform/*  shared platform services (dns/traefik/terrakube/splunk/
+#                      cribl/object-storage/compute/...)
+#   secret/apps/*      application credentials (media/monitoring/home-automation)
+#   secret/ai/*        LLM stack + AI-agent creds
+#   secret/public/*    non-secret, non-exploitable facts (domain/subdomain) —
+#                      readable by a fixed, low-privilege AppRole
+#   secret/ci/*        CI/CD tokens
+openbao_kv_mount: secret
+# Non-secret configuration mount. Holds values that are sensitive-but-not-
+# exploitable — operator selections, tunables, thresholds, coordination and
+# inventory-ish facts — that today sit inside the credential mounts.
+#
+# It is a separate MOUNT, not a path prefix, for the same reason
+# secrets-external is: a prefix shares one policy namespace, so every wildcard
+# already granted on `secret/` reaches across it and the boundary is decorative.
+# A distinct mount is unreachable by any policy that does not name it.
+#
+# Named `config` rather than a `secret*` sibling deliberately: an operator
+# reading `bao secrets list` sees `secret/`, `secrets-external/`, `config/` and
+# can tell at a glance which mount is not a credential store. A name like
+# `secrets-internal-public` would blend into the credential mounts it must be
+# distinguished from.
+openbao_config_mount: config
+# KV v2 version retention for the config mount. Browsable history and rollback
+# are half the reason this mount exists, so retention is set explicitly rather
+# than left on the KV v2 default of 10. Config values are short strings that
+# change rarely, so 30 versions is years of history at negligible Raft cost,
+# while still bounding what a runaway writer can grow. delete_version_after is
+# deliberately left at its default (0 = versions never time-expire): history
+# that silently ages out is not history you can roll back to.
+openbao_config_mount_max_versions: 30
+# Every KV v2 mount this role provisions (add-if-missing, then tuned to the
+# declared retention). `max_versions` is optional — omit it to leave a mount on
+# the KV v2 default, which is what the two credential mounts do today.
+openbao_kv_mounts:
+  - path: "{{ openbao_kv_mount }}"
+  # External-SaaS credentials; a literal here for the same reason the policy
+  # templates use a literal (see tasks/init.yml).
+  - path: secrets-external
+  - path: "{{ openbao_config_mount }}"
+    max_versions: "{{ openbao_config_mount_max_versions }}"
+# Derived: the subset that declares retention. Defined once because init.yml
+# zips it against its own read results — the two loops must be the same list in
+# the same order, which two separate inline filters would not guarantee.
+openbao_kv_tuned_mounts: >-
+  {{ openbao_kv_mounts | selectattr('max_versions', 'defined') | list }}
+# Legacy demo subtree the terraform-proxmox vault-secrets proof writes to; kept
+# writable by the terraform-apply policy so that read/write proof keeps working.
+openbao_homelab_path: homelab
+
+# App secrets PROMOTED into secret/apps/<app> so OpenBao is their canonical
+# home. Each app maps each KV field to the converge-env var carrying its value.
+# The promote step (init.yml → promote_app_secret.yml) runs only on the
+# bootstrap host under the admin token, writes only when a value differs from
+# what is already stored, and skips any field whose env var is empty — so a
+# converge without those values (or with unchanged values) writes nothing.
+#
+# Promotion vs generation: a value that ALREADY EXISTS and must keep its current
+# value goes here. A value that may simply be created fresh goes in
+# openbao_generated_app_secrets below. Getting this backwards on a key that
+# decrypts stored data destroys that data silently.
+openbao_promoted_app_secrets:
+  vikunja:
+    token_ro: VIKUNJA_MCP_TOKEN_RO
+    token_rw: VIKUNJA_MCP_TOKEN_RW
+    token_admin: VIKUNJA_MCP_TOKEN_ADMIN
+    svc_mcp_ro_password: VIKUNJA_SVC_MCP_RO_PASSWORD
+    svc_mcp_rw_password: VIKUNJA_SVC_MCP_RW_PASSWORD
+    # App-namespaced DB password (matches the postgres_managed_databases +
+    # vikunja_group.yml consumers reading bao_apps_secrets.vikunja_db_password).
+    vikunja_db_password: VIKUNJA_DB_PASSWORD
+    # JWT signing secret + initial admin password (#17039). App-namespaced to
+    # match the vikunja_group.yml consumers reading bao_apps_secrets.
+    # vikunja_jwt_secret / .vikunja_admin_password. These are promoted from the
+    # live guest, not generated here — the JWT secret must stay stable (rotating
+    # it invalidates every issued session/API token), so they belong in this
+    # promotion map, never in openbao_generated_app_secrets.
+    vikunja_jwt_secret: VIKUNJA_JWT_SECRET
+    vikunja_admin_password: VIKUNJA_ADMIN_PASSWORD
+  n8n:
+    # The workflow engine's credential-encryption key. PROMOTED, never
+    # generated: it is the only thing that can decrypt the credentials already
+    # stored in the app's database, so a fresh value would leave a database
+    # that restores cleanly and whose every stored credential is permanently
+    # unreadable — a backup that looks like it worked. It also must not live
+    # only on the guest beside the data it unlocks, which is why it belongs
+    # here at all. Internal KV mount (openbao_kv_mount): the engine is not
+    # internet-reachable.
+    n8n_encryption_key: N8N_ENCRYPTION_KEY
+
+# App service secrets GENERATED (random, generate-if-absent) in OpenBao itself,
+# replacing the retired terraform-proxmox vault-secrets root. Each app maps to
+# its field list; every field gets a random alnum value created once at
+# secret/apps/<app> and never rotated (init.yml → seed_generated_app_secret.yml).
+# openbao_secrets then exposes these paths to the nautobot/zammad roles.
+openbao_generated_app_secrets:
+  nautobot: [db_password, secret_key, superuser_password]
+  # Zammad fields are app-namespaced (zammad_*) so the flat merge into
+  # bao_apps_secrets (openbao_secrets reads apps/nautobot + apps/zammad +
+  # apps/vikunja into one dict) never collides with Nautobot's bare
+  # db_password. The consumers already read the namespaced names
+  # (inventory/group_vars/{zammad_group,postgres_group}.yml).
+  zammad: [zammad_db_password, zammad_admin_password, zammad_hermes_api_token]
+  # Streaming-replication credential for the shared-apps Postgres pair (the
+  # postgres role's primary creates the replicator login with it; the standby
+  # puts it in .pgpass). Bare name is safe in the flat bao_apps_secrets merge —
+  # no other app path carries a replication_password field.
+  postgres: [replication_password]
+  # Hindsight agent-memory service (ai VLAN): its dedicated ai-VLAN Postgres
+  # cluster's DB + replication credentials plus the Control Plane UI access
+  # key. App-namespaced for the flat bao_apps_secrets merge. The service's LLM
+  # key is NOT here — it reuses ai/llm's LLM_ROUTER_MASTER_KEY (local-llm
+  # domain), same router credential every ai-VLAN consumer uses.
+  hindsight: [hindsight_db_password, hindsight_replication_password, hindsight_cp_access_key]
+  # hermes-ui companion web guest (ai VLAN): hermes-workspace's bind password
+  # plus mission-control's auth pair. App-namespaced for the flat
+  # bao_apps_secrets merge. hermes_ui_hermes_api_token is deliberately NOT
+  # here — it must MATCH hermes_agent's HERMES_API_SERVER_KEY rather than be
+  # generated independently, and the consumer treats it as optional (empty
+  # just means the workspace UI dials the gateway unauthenticated).
+  hermes-ui: [hermes_ui_workspace_password, hermes_ui_mission_control_auth_user, hermes_ui_mission_control_auth_pass]
+  # AI session-history backup. One RustFS bucket per vendor
+  # (ai-sessions-{claude,codex,gemini}), each with a read-only and a
+  # read-write key, so a machine pushing its own history cannot read or write
+  # any other bucket — the writers are laptops, and an account-wide key on a
+  # laptop is exactly what the per-bucket split exists to prevent.
+  #
+  # Only the secrets are generated here; the access key IDs are the fixed
+  # names ai-sessions-<vendor>-{ro,rw}, created as RustFS users from these
+  # values. Fields are app-namespaced for the flat bao_apps_secrets merge.
+  ai-sessions:
+    - claude_ro_secret
+    - claude_rw_secret
+    - codex_ro_secret
+    - codex_rw_secret
+    - gemini_ro_secret
+    - gemini_rw_secret
+  # Workflow-engine login for the shared Postgres cluster. Generated, not
+  # promoted: the cutover creates a NEW role on the shared cluster, so nothing
+  # depends on the previous value. The encryption key for the same app is in
+  # openbao_promoted_app_secrets — the two must not be confused.
+  # App-namespaced for the flat bao_apps_secrets merge.
+  n8n: [n8n_db_password]
+# Random length for generated app credentials (alnum). secret_key needs more
+# entropy than a login credential, so it gets its own length (matches the 64-char
+# key the nautobot role generates locally when none is supplied).
+openbao_app_secret_length: 40
+openbao_app_secret_key_length: 64

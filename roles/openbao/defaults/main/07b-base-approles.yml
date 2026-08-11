@@ -1,0 +1,168 @@
+---
+openbao_base_approles:
+  # terraform-apply is the OpenTofu identity, and OpenTofu authors config —
+  # so it composes config-write onto its own policy rather than carrying a
+  # second credential for the same job.
+  - name: "{{ openbao_terraform_apply_approle_name }}"
+    token_policies:
+      - "{{ openbao_terraform_apply_policy_name }}"
+      - "{{ openbao_config_write_policy_name }}"
+  - name: "{{ openbao_flow_lock_approle_name }}"
+    policy: "{{ openbao_flow_lock_policy_name }}"
+  - name: "{{ openbao_ai_sessions_backup_approle_name }}"
+    policy: "{{ openbao_ai_sessions_backup_policy_name }}"
+  - name: "{{ openbao_packer_approle_name }}"
+    policy: "{{ openbao_packer_policy_name }}"
+  # ansible-converge additionally signs automation-ansible SSH certs: the
+  # pre-play mint in each repo's run-ansible.sh replaces the shared static key.
+  # It is also the Ansible config author, so it composes config-write too.
+  - name: "{{ openbao_ansible_converge_approle_name }}"
+    token_policies: >-
+      {{ [openbao_ansible_converge_policy_name, openbao_config_write_policy_name]
+         + (['ssh-sign-automation-ansible'] if openbao_ssh_engine_enabled else []) }}
+  - name: "{{ openbao_observability_approle_name }}"
+    policy: "{{ openbao_observability_policy_name }}"
+  - name: "{{ openbao_local_cloud_approle_name }}"
+    policy: "{{ openbao_local_cloud_policy_name }}"
+  - name: "{{ openbao_monitoring_approle_name }}"
+    policy: "{{ openbao_monitoring_policy_name }}"
+  - name: "{{ openbao_media_approle_name }}"
+    policy: "{{ openbao_media_policy_name }}"
+  - name: "{{ openbao_apps_approle_name }}"
+    policy: "{{ openbao_apps_policy_name }}"
+  # local-llm additionally attaches the OpenRouter SaaS read leaf: the
+  # llm_router converge renders per-model OpenRouter keys, while the
+  # local-llm policy itself denies the rest of the ai/saas/* provider area.
+  - name: "{{ openbao_local_llm_approle_name }}"
+    token_policies:
+      - "{{ openbao_local_llm_policy_name }}"
+      - "{{ openbao_ai_saas_openrouter_policy_name }}"
+  - name: "{{ openbao_hermes_approle_name }}"
+    policy: "{{ openbao_hermes_policy_name }}"
+  - name: "{{ openbao_hermes_write_approle_name }}"
+    policy: "{{ openbao_hermes_write_policy_name }}"
+  - name: "{{ openbao_ai_donna_approle_name }}"
+    policy: "{{ openbao_ai_donna_policy_name }}"
+  # config-read: sole consumer identity on the non-secret `config` mount.
+  # Read + list everywhere in that mount, nothing outside it. Like `public`,
+  # leaking it costs nothing — the mount holds no exploitable value by
+  # construction — so it is shipped ambiently rather than human-gated.
+  - name: "{{ openbao_config_read_approle_name }}"
+    policy: "{{ openbao_config_read_policy_name }}"
+  - name: "{{ openbao_public_approle_name }}"
+    policy: "{{ openbao_public_policy_name }}"
+  # ai-public: read-only fabric-brain domain, its own narrow credential (see
+  # the name vars above) — held by the hermes / open_webui brain-sync timers.
+  - name: "{{ openbao_ai_public_approle_name }}"
+    policy: "{{ openbao_ai_public_policy_name }}"
+  # GitHub token tiers: engine mints, tokens never stored. github-read and
+  # github-write are standing ambient identities consumed by nix-darwin's
+  # `openbao-github-creds` (role_id/secret_id operator-held in Doppler,
+  # injected as ambient env, same shape as ai-orchestrator). github-write is
+  # bounded by the per-repo allowlist + the write-lease lock rather than a
+  # human gate (user decision 2026-07-17: ambient for allowlisted repos).
+  # github-admin is INERT break-glass like ai-admin: no standing secret_id; a
+  # human wraps a single-use secret_id per elevation.
+  - name: "{{ openbao_github_read_approle_name }}"
+    policy: "{{ openbao_github_read_policy_name }}"
+  - name: "{{ openbao_github_write_approle_name }}"
+    policy: "{{ openbao_github_write_policy_name }}"
+    token_ttl: 30m  # write identity gets a short token TTL
+  - name: "{{ openbao_github_admin_approle_name }}"
+    policy: "{{ openbao_github_admin_policy_name }}"
+    token_ttl: "{{ openbao_ai_admin_token_ttl }}"
+    token_max_ttl: "{{ openbao_ai_admin_token_ttl }}"
+    manage_secret_id: false
+    secret_id_ttl: "{{ openbao_ai_elevated_secret_id_ttl }}"
+    secret_id_num_uses: 1
+  # ai-orchestrator: role_id/secret_id are operator-held in Doppler tier-0
+  # (services BAO_AI_ORCHESTRATOR_ROLE_ID / _SECRET_ID), consumed as ambient env.
+  # This AppRole already exists LIVE with a non-expiring secret_id in active
+  # use; init.yml only creates + mints creds for AppRoles missing this run, so
+  # a converge leaves the live role and its secret_id untouched (existence-only).
+  - name: "{{ openbao_ai_orchestrator_approle_name }}"
+    policy: "{{ openbao_ai_orchestrator_policy_name }}"
+    token_ttl: 30m  # demoted: broad-write identity gets a short token TTL
+  # ai-readonly / ai-elevated ACTOR roles: standing (ambient) READ tiers. Their
+  # token_policies ATTACH composed rollups — no standalone ai-* policy object.
+  # ai-readonly = read-all (every read-<svc>); ai-elevated = read-all + the
+  # read-only extras (secret/platform/*). Adding a service to openbao_ai_domains
+  # auto-widens read-all, so both tiers grow from one list entry.
+  - name: "{{ openbao_ai_readonly_approle_name }}"
+    token_policies: "{{ openbao_read_all_policies }}"
+  # ai-elevated additionally attaches ssh-sign-automation-ai: the STANDING
+  # ability to mint 1h ai-agent SSH certs. Deliberate, documented tradeoff
+  # (agents must pull SSH access friction-free) — bounded by non-root
+  # principals, default-deny host opt-in, cert TTL, and audit-logged signs.
+  - name: "{{ openbao_ai_elevated_approle_name }}"
+    token_policies: >-
+      {{ openbao_read_all_policies
+         + (openbao_ai_readonly_extra_subtrees | map('regex_replace', '^(.+)$', 'read-\1') | list)
+         + (['ssh-sign-automation-ai'] if openbao_ssh_engine_enabled else []) }}
+  # ai-apply-all: the read-write-all rollup consumer — a scoped-but-broad WRITE
+  # actor for a genuinely cross-domain task. Composed ONLY of KV read+write base
+  # leaves (+ github-mint), so by construction it CANNOT touch sys/policies, auth,
+  # token/create, or the IaC kernel — the union of leaves has no control-plane
+  # path. Still human-gated + inert like every apply tier (no standing secret_id).
+  - name: ai-apply-all
+    token_policies: >-
+      {{ openbao_read_write_all_policies + ['github-mint']
+         + (['ssh-sign-automation-ai'] if openbao_ssh_engine_enabled else []) }}
+    token_ttl: "{{ openbao_ai_apply_all_token_ttl }}"
+    token_max_ttl: "{{ openbao_ai_apply_all_token_max_ttl }}"
+    manage_secret_id: false
+    secret_id_ttl: "{{ openbao_ai_elevated_secret_id_ttl }}"
+    secret_id_num_uses: 1
+  # ai-admin: break-glass, COMPLETE full administrator (superuser — every path,
+  # every capability incl. sudo). NO standing secret_id; a token exists only after
+  # a human one-shot unlock and lives the admin window (1h), alerted on every use.
+  - name: "{{ openbao_ai_admin_approle_name }}"
+    policy: "{{ openbao_ai_admin_policy_name }}"
+    token_ttl: "{{ openbao_ai_admin_token_ttl }}"
+    token_max_ttl: "{{ openbao_ai_admin_token_ttl }}"
+    manage_secret_id: false
+    secret_id_ttl: "{{ openbao_ai_elevated_secret_id_ttl }}"
+    secret_id_num_uses: 1
+  - name: "{{ openbao_snapshot_approle_name }}"
+    policy: "{{ openbao_snapshot_policy_name }}"
+  # apps-seed: Doppler-published writer for secret/apps/* (Terraform vault-secrets).
+  - name: "{{ openbao_apps_seed_approle_name }}"
+    policy: "{{ openbao_apps_seed_policy_name }}"
+  # llm-gate: role_id/secret_id delivered to the Studio's auto-readable keychain
+  # (openbao-run secret-zero); reads only the bearer + ACME creds it injects.
+  - name: "{{ openbao_llm_gate_approle_name }}"
+    policy: "{{ openbao_llm_gate_policy_name }}"
+  # ai-runner: standing, ambient READ identity like local-llm / hermes. The
+  # openbao_secrets prefetch play in ansible-proxmox-ai logs in each converge
+  # with AI_RUNNER_VAULT_ROLE_ID / _SECRET_ID and reads the dispatch-queue +
+  # model-provider keys. secret_id is CIDR-bound to the runner guest's
+  # reservation when openbao_ai_runner_secret_id_cidr is set (env-delivered,
+  # never committed); when unset, the create task leaves it unbound and warns,
+  # and the guest's egress firewall profile is the compensating control.
+  - name: "{{ openbao_ai_runner_approle_name }}"
+    policy: "{{ openbao_ai_runner_policy_name }}"
+    secret_id_bound_cidrs: "{{ openbao_ai_runner_secret_id_cidr }}"
+  - name: "{{ openbao_slack_admin_approle_name }}"
+    policy: "{{ openbao_slack_admin_policy_name }}"
+    token_ttl: "{{ openbao_slack_admin_token_ttl }}"
+    token_max_ttl: "{{ openbao_slack_admin_token_ttl }}"
+    secret_id_ttl: "{{ openbao_slack_admin_secret_id_ttl }}"
+  - name: "{{ openbao_slack_ops_approle_name }}"
+    policy: "{{ openbao_slack_ops_policy_name }}"
+    token_ttl: "{{ openbao_slack_ops_token_ttl }}"
+    token_max_ttl: "{{ openbao_slack_ops_token_ttl }}"
+    secret_id_ttl: "{{ openbao_slack_ops_secret_id_ttl }}"
+# Full AppRole set = the static base above + the per-service ai-apply-<svc> actor
+# roles generated from openbao_ai_domains. init.yml loops this combined list.
+openbao_approles: >-
+  {{ openbao_base_approles + openbao_ai_apply_approles
+     + openbao_github_write_scope_approles }}
+# Policy templates rendered + written on the bootstrap host. Each entry maps a
+# policy name to its template; add a row to grow the RBAC surface.
+#
+# BEFORE ADDING A ROW, read .claude/rules/openbao-plugins-first.md. A policy
+# granting KV read for a resource that has a secrets engine is manual credential
+# control and is rejected. GitHub has one (mount `github`) and AWS has one (mount
+# `aws`), both enabled by default. A GitHub token grant is ALWAYS the existing
+# `github-mint` capability policy attached via token_policies — never a new
+# template, never a secret/github/* path. AWS is always aws/sts/<role>.

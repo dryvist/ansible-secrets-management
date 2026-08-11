@@ -25,3 +25,21 @@ path "{{ openbao_kv_mount }}/data/platform/windows-vdi/win11-admin" {
 path "{{ openbao_kv_mount }}/metadata/platform/windows-vdi/win11-admin" {
   capabilities = ["read", "list"]
 }
+
+# Estate-wide defaults (admin_username, admin_password, and whatever later
+# joins them). A build bakes the default Administrator credential into the
+# answer file from here, so a freshly built template is reachable with the same
+# credential as every guest already running — rather than a per-build value
+# that has to be recorded somewhere and typed by hand.
+#
+# Exact path, not platform/defaults/*: a wildcard would hand every future
+# defaults sub-path to the builder the moment it is created, which is the
+# pattern the estate is moving away from. Adding a sub-path is one more stanza
+# here, deliberately.
+path "{{ openbao_kv_mount }}/data/platform/defaults" {
+  capabilities = ["read"]
+}
+
+path "{{ openbao_kv_mount }}/metadata/platform/defaults" {
+  capabilities = ["read", "list"]
+}

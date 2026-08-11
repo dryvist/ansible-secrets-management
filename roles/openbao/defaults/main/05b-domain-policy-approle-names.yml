@@ -1,0 +1,178 @@
+---
+# Policy + AppRole names, one per RBAC identity (see docs/SECRETS_HIERARCHY.md
+# for the full rationale). Split by resource domain, least-privilege:
+#   terraform-apply  — human-triggered IaC apply (was "terraform"); read+write
+#                      secret/infra/*, secret/platform/{dns,traefik}, narrow
+#                      secret/apps/nautobot/* seed grant for Nautobot P1, plus
+#                      read+update aws/sts/tf-proxmox (dynamic AWS STS creds for
+#                      the tf-proxmox IAM role — replaces the laptop's static
+#                      aws-vault base key)
+#   flow-lock        — cross-repo apply lock holder; read/write only the global
+#                      lock record, metadata-delete for release, and read-only
+#                      secret/infra/* context for lock decisions
+#   Terrakube jobs authenticate through the exact-claim JWT roles below;
+#   there is no stored Terrakube AppRole credential.
+#   ansible-converge — config-management pulls (was "ansible"); read-only on an
+#                      ENUMERATED list of exact KV paths (no platform/* or
+#                      apps/* wildcard) — see the consumer inventory at the top
+#                      of ansible-converge-policy.hcl.j2 — plus exact
+#                      publication grants for secret/ai/mcp/{splunk,vikunja,
+#                      zammad,nautobot}; no broad secret/ai/* access
+#   observability    — splunk + cribl; read-only, secret/platform/{splunk,cribl}
+#   local-cloud      — object-storage/S3/compute; read-only,
+#                      secret/platform/{object-storage,compute}
+#   monitoring       — read-only, secret/apps/monitoring
+#   media            — read-only, secret/apps/media
+#   local-llm        — LLM serving stack; read-only, secret/ai/* MINUS the
+#                      ai/saas/* carve-out (paid-SaaS provider keys)
+#   ai-saas-openrouter — per-provider read leaf for the paid-SaaS key area
+#                      secret/ai/saas/<provider> (anthropic/google/openai/
+#                      openrouter, one field per MODEL). Attached to local-llm
+#                      so the llm_router converge reads OpenRouter keys only;
+#                      future providers get their own sibling policy.
+#   hermes           — Hermes AI agent; read-only, exact secret/ai/hermes and
+#                      secret/ai/mcp/splunk paths, NOT the broad ai subtree
+#   hermes-write     — least-privilege WRITE to exact secret/ai/hermes only
+#                      (no wildcard, no other paths). Used for the one-time
+#                      Hermes credential seed; ansible-converge owns shared MCP
+#                      publication.
+#   public           — anonymous, non-exploitable facts (domain/subdomain);
+#                      read-only, secret/public/*; needs no secret-zero —
+#                      shipped ambiently like other non-secret internal config
+#   ai-orchestrator  — AI agent/orchestrator WRITE identity; read + create/update
+#                      secret/ai/* (the one AI identity that may write). Its
+#                      role_id/secret_id are operator-held in Doppler tier-0
+#                      (services BAO_AI_ORCHESTRATOR_ROLE_ID / _SECRET_ID),
+#                      consumed as ambient env under `doppler run`. The secret_id
+#                      is non-expiring and IN ACTIVE USE — converges must stay
+#                      idempotent-existence-only for it and must NEVER regenerate
+#                      it (init.yml only mints creds for AppRoles missing this
+#                      run, so an already-live ai-orchestrator is left untouched).
+#   ai-readonly / ai-elevated / snapshot — unchanged, kept as-is
+openbao_terraform_apply_policy_name: terraform-apply
+openbao_terraform_apply_approle_name: terraform-apply
+openbao_flow_lock_policy_name: flow-lock
+openbao_flow_lock_approle_name: flow-lock
+# Backup job for the AI session archive. Its own identity rather than a reused
+# one: flow-lock was the nearest existing role and its policy stops at
+# infra/* + the global lock, so the backup borrowed an operator token instead —
+# which is how a break-glass credential quietly becomes a scheduled dependency.
+openbao_ai_sessions_backup_policy_name: ai-sessions-backup
+openbao_ai_sessions_backup_approle_name: ai-sessions-backup
+# packer — Windows VDI template builds. Reads the Proxmox API credential and the
+# Windows local Administrator credential; writes nothing anywhere.
+openbao_packer_policy_name: packer
+openbao_packer_approle_name: packer
+# GitHub token tiers for the workstation git/gh path — engine-minted App
+# installation tokens, NEVER stored PATs (there is no secret/github/* KV path;
+# see .claude/rules/openbao-plugins-first.md). nix-darwin's
+# `openbao-github-creds` logs in as one of these; the AppRole IS the tier:
+#
+#   github-read  -> github/token/read-*        all-repo, read-only permission
+#                                              sets; standing ambient identity
+#   github-write -> github/token (raw)         ONE allowlisted repository per
+#                                              request (policy-pinned params) +
+#                                              the write-lease lock subtree;
+#                                              standing ambient identity
+#   github-admin -> github/token/*-full-automation  installation-wide, full
+#                                              App ceiling; INERT — minted only
+#                                              via a human response-wrapped
+#                                              single-use secret_id
+#
+# Deliberately NOT members of openbao_ai_domains: estate AI identities mint
+# via the `github-mint` capability policy (read-tier sets only) instead.
+openbao_github_read_policy_name: github-read
+openbao_github_read_approle_name: github-read
+openbao_github_write_policy_name: github-write
+openbao_github_write_approle_name: github-write
+openbao_github_admin_policy_name: github-admin
+openbao_github_admin_approle_name: github-admin
+# Repositories a github-write identity may name (exactly one per request; the
+# wrapper sends `repositories` as a plain STRING, `installation_id` as a
+# STRING). Values are repository NAMES resolved within whichever installation
+# the request names — a name existing in both accounts is therefore
+# allowlisted in both (accepted, documented). Editing the list + converging IS
+# the write-grant process; anything off-list needs the human-gated
+# github-admin tier.
+#
+# The names live in the iac secret store as OPENBAO_GITHUB_WRITE_REPOS (a
+# comma-separated string), NOT inline here: this repository is public and the
+# installations cover private repositories, so an inline list would disclose
+# private repository names to anyone reading it. Same reasoning as the other
+# lookup('env', ...) values above. Keep it in sync with the installations —
+# compare against `gh api /installation/repositories` for each owner. An unset
+# variable yields an empty list, which denies every write mint (fails closed).
+#
+# EXPLICIT LITERALS ONLY — never add a glob (verified live 2026-07-18):
+#   * OpenBao's ACL does not element-match LIST-valued request parameters, so
+#     the wrapper sends `repositories` as a comma-capable STRING the ACL can
+#     compare. Exact literals make comma smuggling impossible
+#     ("docs,evil" != "docs"), but a prefix glob like "nix-*" would match
+#     "nix-a,evil-repo" and hand the caller an off-list repo.
+#   * `installation_id` must be allowlisted (and sent) in STRING form — the
+#     JSON-number form matches neither a quoted nor an unquoted policy value.
+openbao_github_write_repo_allowlist: >-
+  {{ (lookup('env', 'OPENBAO_GITHUB_WRITE_REPOS') | default('', true)).split(',')
+     | map('trim') | reject('equalto', '') | list }}
+
+# Additional write realms, each an independent policy + AppRole with its own
+# repository allowlist. The default allowlist above is one shared blast radius:
+# any holder of the github-write secret_id may mint for any repository on it.
+# When a group of repositories warrants a narrower boundary than "everything
+# this organisation automates", it gets its own realm here and comes OFF the
+# shared list — a realm that merely ADDS a second path to the same repositories
+# widens access instead of narrowing it.
+#
+# Supplied as a JSON object in the iac secret store, NOT inline: this
+# repository is public, and both the realm names and the repository names can
+# disclose who or what a realm is for. Same reasoning as
+# OPENBAO_GITHUB_WRITE_REPOS above. An unset variable yields {}, which creates
+# no extra policies or AppRoles and leaves this role byte-identical to its
+# behaviour before realms existed — the mechanism is inert until data arrives.
+#
+#   OPENBAO_GITHUB_WRITE_SCOPES = {"<policy-and-approle-name>": ["repo", ...]}
+#
+# The key IS the policy and AppRole name, so the operator controls naming
+# entirely from the secret store and no name is inferred here. Each realm's
+# secret_id is operator-held in the same tier as github-write's, under
+# OPENBAO_APPROLE_<NAME>_ROLE_ID / _SECRET_ID with the name upper-cased and
+# non-alphanumerics replaced by underscores — the shape nix-darwin's
+# `openbao-github-creds` already uses to find any AppRole's secret-zero.
+#
+# The EXPLICIT-LITERALS-ONLY rule above applies identically to every realm: the
+# rendered policy pins `repositories` the same way, so a glob here would carry
+# the same comma-smuggling defect.
+openbao_github_write_scopes: >-
+  {{ (lookup('env', 'OPENBAO_GITHUB_WRITE_SCOPES') | default('{}', true)) | from_json }}
+
+# One policy row and one AppRole row per realm, appended to the composed
+# registries near the bottom of this file. `repos` rides on the policy row
+# because the render loop exposes `item` to the template.
+openbao_github_write_scope_policies: >-
+  {{ openbao_github_write_scopes
+     | dict2items(key_name='name', value_name='repos')
+     | map('combine', {'template': 'github-write-scoped-policy.hcl.j2'})
+     | list }}
+# Each realm attaches the policy of the same name, so the realm names are
+# mapped to themselves and then split into the {name, policy} pair the AppRole
+# registry expects. This is deliberately ONE expression: a `{% set %}` loop
+# renders to a string rather than a list, and concatenating that onto
+# openbao_approles below fails at template time (observed, not theorised).
+openbao_github_write_scope_approles: >-
+  {{ dict(openbao_github_write_scopes.keys() | sort
+          | zip(openbao_github_write_scopes.keys() | sort))
+     | dict2items(key_name='name', value_name='policy')
+     | map('combine', {'token_ttl': openbao_github_write_scope_token_ttl})
+     | list }}
+# Realms inherit github-write's short token TTL rather than defining their own
+# looser one; a narrower repository boundary is no reason for a longer-lived
+# token.
+openbao_github_write_scope_token_ttl: 30m
+
+# Deadman TTL on the per-repo write lease (KV lock under
+# secret/locks/github-write/): a crashed holder's claim self-expires via KV-v2
+# delete_version_after — no janitor process.
+openbao_github_write_lock_ttl: 15m
+# Terrakube native workload identity. The API signs a short-lived JWT per job;
+# OpenBao verifies it through internal OIDC discovery and binds the exact
+# organization/workspace `sub` claim before issuing a short-lived token.

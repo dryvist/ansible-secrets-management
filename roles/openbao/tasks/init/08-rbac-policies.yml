@@ -1,0 +1,108 @@
+---
+- name: Render the RBAC policies to the target
+  ansible.builtin.template:
+    src: "{{ item.template }}"
+    dest: "{{ openbao_config_dir }}/.policy-{{ item.name }}.hcl"
+    mode: "0600"
+  loop: "{{ openbao_policies }}"
+  loop_control:
+    label: "{{ item.name }}"
+  changed_when: false
+  when: openbao_bootstrap_token is defined
+
+- name: List existing policies
+  ansible.builtin.command:
+    cmd: bao policy list -format=json
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  register: openbao_policies_raw
+  no_log: true
+  changed_when: false
+  when: openbao_bootstrap_token is defined
+
+- name: Read rendered RBAC policy contents from the target
+  ansible.builtin.slurp:
+    src: "{{ openbao_config_dir }}/.policy-{{ item.name }}.hcl"
+  loop: "{{ openbao_policies }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: openbao_rendered_policy_reads
+  changed_when: false
+  when: openbao_bootstrap_token is defined
+
+- name: Build the rendered RBAC policy content map
+  ansible.builtin.set_fact:
+    openbao_rendered_policy_map: >-
+      {{ openbao_rendered_policy_map | default({})
+         | combine({ item.item.name: (item.content | default('') | b64decode) }) }}
+  loop: "{{ openbao_rendered_policy_reads.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+  when:
+    - openbao_bootstrap_token is defined
+    - not (item.skipped | default(false))
+
+- name: Read existing RBAC policy contents
+  ansible.builtin.command:
+    cmd: "bao policy read -format=json {{ item.name }}"
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  loop: "{{ openbao_policies }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: openbao_existing_policy_reads
+  no_log: true
+  changed_when: false
+  when:
+    - openbao_bootstrap_token is defined
+    - item.name in (openbao_policies_raw.stdout | from_json)
+
+- name: Build the existing RBAC policy content map
+  ansible.builtin.set_fact:
+    openbao_existing_policy_map: >-
+      {{ openbao_existing_policy_map | default({})
+         | combine({ item.item.name: ((item.stdout | default('{}') | from_json).data.policy | default('')) }) }}
+  loop: "{{ openbao_existing_policy_reads.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+  no_log: true
+  when:
+    - openbao_bootstrap_token is defined
+    - not (item.skipped | default(false))
+    - (item.rc | default(1)) == 0
+
+- name: Write the RBAC policies that are missing or changed
+  ansible.builtin.command:
+    cmd: >-
+      bao policy write {{ item.name }}
+      {{ openbao_config_dir }}/.policy-{{ item.name }}.hcl
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  loop: "{{ openbao_policies }}"
+  loop_control:
+    label: "{{ item.name }}"
+  no_log: true
+  changed_when: true
+  when:
+    - openbao_bootstrap_token is defined
+    - >-
+      item.name not in (openbao_policies_raw.stdout | from_json)
+      or
+      (openbao_existing_policy_map | default({})).get(item.name, '')
+      !=
+      (openbao_rendered_policy_map | default({})).get(item.name, '')
+
+- name: Remove the rendered policies from the target
+  ansible.builtin.file:
+    path: "{{ openbao_config_dir }}/.policy-{{ item.name }}.hcl"
+    state: absent
+  loop: "{{ openbao_policies }}"
+  loop_control:
+    label: "{{ item.name }}"
+  changed_when: false
+  when: openbao_bootstrap_token is defined
+
+# --- AppRole auth method (add-if-missing) -----------------------------------
