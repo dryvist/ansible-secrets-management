@@ -29,12 +29,23 @@
 #     authenticates with. READ ONLY: the credential is minted elsewhere and a
 #     converge must never rewrite it.
 #
+#   platform/defaults
+#     Estate-wide defaults, one KV object with a key per default:
+#     admin_username / admin_password today, more later (limits, ports,
+#     retention). It is a namespace rather than one password path because a
+#     second default would otherwise need a second grant and a second lookup.
+#     roles/windows_baseline reads admin_password to set the local
+#     Administrator credential on VDI guests, so a human can type it at an RDP
+#     or console prompt where copy/paste is unavailable. Sub-paths
+#     (platform/defaults/<domain>) are NOT granted by wildcard — each one is a
+#     deliberate addition to the list below.
+#
 #   apps/nautobot is NOT listed here. It is granted once, below, by the
 #   credential-publication loop — which is a superset of the read it used to
 #   carry. Two stanzas for one path is ambiguous at policy-parse time, so the
 #   path must appear exactly once in this file.
 
-{% for kv_path in ['platform/object-storage', 'platform/windows-vdi/win11-admin'] %}
+{% for kv_path in ['platform/object-storage', 'platform/windows-vdi/win11-admin', 'platform/defaults'] %}
 path "{{ openbao_kv_mount }}/data/{{ kv_path }}" {
   capabilities = ["read"]
 }
