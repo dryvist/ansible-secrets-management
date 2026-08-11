@@ -23,7 +23,11 @@ openbao_terrakube_workspaces:
     # this is a distinct list rather than a mount override on kv_read.
     kv_read_external: [infrastructure/github]
   - name: tofu-unifi
-    kv_read: [infrastructure/unifi]
+    # platform/object-storage: that workspace reads the published inventory and
+    # the desired-state object out of the store to derive its DNS records and
+    # every subnet it configures, so it needs the same store credential
+    # tofu-proxmox holds. Its plans failed at the ephemeral read without it.
+    kv_read: [infrastructure/unifi, platform/object-storage]
   - name: tofu-aws-production
     api_update: [aws/sts/tofu-aws-production]
   - name: tofu-runs-on
