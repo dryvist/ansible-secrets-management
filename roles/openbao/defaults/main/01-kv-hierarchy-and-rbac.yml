@@ -145,6 +145,19 @@ openbao_generated_app_secrets:
   # openbao_promoted_app_secrets — the two must not be confused.
   # App-namespaced for the flat bao_apps_secrets merge.
   n8n: [n8n_db_password]
+  # Homarr dashboard. Only the admin password is generated: it is the service
+  # account the homarr role uses to mint an API key, and Homarr's own API key
+  # cannot be minted without a session. The other two fields at this path
+  # (homarr_api_key, homarr_encryption_key) are PUBLISHED by the role rather
+  # than seeded here — the API key is issued by Homarr, and the encryption key
+  # is adopted from whatever the app already has on disk, because it decrypts
+  # every stored integration credential and a fresh one would not invalidate
+  # them, it would make them permanently unreadable.
+  #
+  # Listing the app here is also what grants the `apps` AppRole read on
+  # secret/apps/homarr at all (openbao_apps_read_apps derives the grant from
+  # these maps' keys), which is what the published fields are read back through.
+  homarr: [homarr_admin_password]
 # Random length for generated app credentials (alnum). secret_key needs more
 # entropy than a login credential, so it gets its own length (matches the 64-char
 # key the nautobot role generates locally when none is supplied).

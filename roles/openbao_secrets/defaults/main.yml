@@ -75,7 +75,19 @@ openbao_secrets_domains:
     role_id_env: MEDIA_VAULT_ROLE_ID
     secret_id_env: MEDIA_VAULT_SECRET_ID
     paths:
+      # One path per KV ENTRY. `vault_kv2_get` reads a single entry and does not
+      # walk a subtree, and the media policy grants `apps/media/*` — which does
+      # NOT match the bare `apps/media`. So the original single entry below
+      # resolved nothing at all, silently, because the whole fetch is
+      # `failed_when: false`. It is kept only because a flat `apps/media` entry
+      # does still exist and is read by the servarr-config tofu workspace.
       - apps/media
+      - apps/media/sonarr
+      - apps/media/radarr
+      - apps/media/seerr
+      - apps/media/plex
+      - apps/media/prowlarr
+      - apps/media/qbittorrent
   - name: apps
     role_id_env: APPS_VAULT_ROLE_ID
     secret_id_env: APPS_VAULT_SECRET_ID
@@ -113,6 +125,14 @@ openbao_secrets_domains:
       # never be regenerated). App-namespaced for the flat bao_apps_secrets
       # merge. Consumed by inventory/group_vars/{n8n_group,postgres_group}.yml.
       - apps/n8n
+      # Homarr dashboard: its own admin service account, API key and — most
+      # importantly — homarr_encryption_key, which is PROMOTED, not generated.
+      # That key decrypts every stored integration credential; regenerating it
+      # does not invalidate them, it makes them permanently unreadable. All
+      # fields are app-namespaced for the flat merge. The API keys of the
+      # services Homarr integrates WITH are not here: they stay in the media
+      # domain, owned by ansible-servarr.
+      - apps/homarr
   - name: local-llm
     role_id_env: LOCAL_LLM_VAULT_ROLE_ID
     secret_id_env: LOCAL_LLM_VAULT_SECRET_ID

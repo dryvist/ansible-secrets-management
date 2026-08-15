@@ -111,6 +111,11 @@ openbao_credential_publish_apps:
   - healthchecks
   - n8n
   - sortarr
+  # Homarr publishes back its API key (issued by the app, so it cannot be
+  # seeded) and its integration-secret encryption key. The latter is exactly
+  # the case the comment above describes: losing it does not invalidate the
+  # stored integration credentials, it makes them permanently undecryptable.
+  - homarr
 
 openbao_policies: >-
   {{ openbao_base_policies
