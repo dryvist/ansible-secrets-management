@@ -1,0 +1,56 @@
+---
+
+- name: Assert the provider-key policy inventory is complete and derived
+  ansible.builtin.assert:
+    that:
+      - openbao_ai_api_key_providers == expected_api_key_providers
+      - openbao_ai_api_key_policy_names
+        == (expected_api_key_providers
+            | map('regex_replace', '^(.+)$', 'ai-api-key-\1') | list)
+      - openbao_ai_api_key_policies | length == expected_api_key_providers | length
+      - >-
+        (openbao_approles
+         | selectattr('name', 'equalto', openbao_local_llm_approle_name)
+         | first).token_policies
+        == [openbao_local_llm_policy_name] + openbao_ai_api_key_policy_names
+    fail_msg: Provider API-key policy composition drifted from its inventory.
+  vars:
+    expected_api_key_providers:
+      - openrouter
+      - gemini
+      - alibaba
+      - openai
+      - anthropic
+      - grok
+      - deepseek
+      - zai
+      - nvidia
+      - moonshotai
+
+- name: Render every provider-key policy in memory
+  ansible.builtin.set_fact:
+    bao_api_key_policy_renders: >-
+      {{ bao_api_key_policy_renders | default({})
+         | combine({item.provider:
+             lookup('ansible.builtin.template',
+                    playbook_dir ~ '/../../roles/openbao/templates/' ~ item.template)}) }}
+  loop: "{{ openbao_ai_api_key_policies }}"
+  loop_control:
+    label: "{{ item.provider }}"
+
+- name: Assert every provider policy is exact and read-only
+  ansible.builtin.assert:
+    that:
+      - "openbao_ai_api_key_mount ~ '/data/' ~ openbao_ai_api_key_path_prefix ~ '/' ~ item in policy"
+      - "openbao_ai_api_key_mount ~ '/metadata/' ~ openbao_ai_api_key_path_prefix ~ '/' ~ item in policy"
+      - "'ai/saas/' not in policy"
+      - "openbao_kv_mount ~ '/' not in policy"
+      - "'create' not in policy"
+      - "'update' not in policy"
+      - "'delete' not in policy"
+    fail_msg: Provider API-key policy escaped its exact read boundary.
+  vars:
+    policy: "{{ bao_api_key_policy_renders[item] }}"
+  loop: "{{ openbao_ai_api_key_providers }}"
+  loop_control:
+    label: "{{ item }}"

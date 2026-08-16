@@ -1,0 +1,11 @@
+{{ ansible_managed | comment }}
+# Exact read-only policy for one provider-level API credential. Model access,
+# allowlists, and budgets remain in LiteLLM rather than credential identity.
+
+path "{{ openbao_ai_api_key_mount }}/data/{{ openbao_ai_api_key_path_prefix }}/{{ item.provider }}" {
+  capabilities = ["read"]
+}
+
+path "{{ openbao_ai_api_key_mount }}/metadata/{{ openbao_ai_api_key_path_prefix }}/{{ item.provider }}" {
+  capabilities = ["read", "list"]
+}

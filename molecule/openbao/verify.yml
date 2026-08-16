@@ -13,6 +13,8 @@
     openbao_config_dir: /etc/openbao
     openbao_config_file: /etc/openbao/openbao.hcl
     openbao_env_file: /etc/openbao/openbao.env
+    openbao_ai_api_key_mount: test-external
+    openbao_ai_api_key_path_prefix: test/provider-keys
     openbao_terrakube_workspace_names:
       - iac-platform
       - tofu-github
@@ -32,6 +34,9 @@
 
     - name: Verify RBAC policy templates and the generated-policy composition invariants
       ansible.builtin.include_tasks: verify/rbac_composition.yml
+
+    - name: Verify provider API-key policy composition
+      ansible.builtin.include_tasks: verify/provider_api_keys.yml
 
     - name: Verify staged plugin binaries and specific policy grants (terraform-apply, ai-orchestrator)
       ansible.builtin.include_tasks: verify/plugins_and_policies.yml

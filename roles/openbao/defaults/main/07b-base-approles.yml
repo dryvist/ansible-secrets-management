@@ -30,13 +30,13 @@ openbao_base_approles:
     policy: "{{ openbao_media_policy_name }}"
   - name: "{{ openbao_apps_approle_name }}"
     policy: "{{ openbao_apps_policy_name }}"
-  # local-llm additionally attaches the OpenRouter SaaS read leaf: the
-  # llm_router converge renders per-model OpenRouter keys, while the
-  # local-llm policy itself denies the rest of the ai/saas/* provider area.
+  # local-llm additionally attaches the exact external provider-key leaves.
+  # Model selection and limits remain in LiteLLM configuration; adding a
+  # provider to the inventory does not enable a model or require the leaf to
+  # be seeded.
   - name: "{{ openbao_local_llm_approle_name }}"
-    token_policies:
-      - "{{ openbao_local_llm_policy_name }}"
-      - "{{ openbao_ai_saas_openrouter_policy_name }}"
+    token_policies: >-
+      {{ [openbao_local_llm_policy_name] + openbao_ai_api_key_policy_names }}
   - name: "{{ openbao_hermes_approle_name }}"
     policy: "{{ openbao_hermes_policy_name }}"
   - name: "{{ openbao_hermes_write_approle_name }}"
