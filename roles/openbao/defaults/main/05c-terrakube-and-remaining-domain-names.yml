@@ -63,7 +63,28 @@ openbao_apps_read_apps: >-
       + (openbao_promoted_app_secrets.keys() | list)) | unique | sort }}
 openbao_local_llm_policy_name: local-llm
 openbao_local_llm_approle_name: local-llm
-openbao_ai_saas_openrouter_policy_name: ai-saas-openrouter
+# Provider-level API credentials live on exact leaves under a separately
+# supplied external KV location. Public configuration carries no path literal.
+openbao_ai_api_key_mount: >-
+  {{ lookup('ansible.builtin.env', 'OPENBAO_AI_API_KEY_MOUNT')
+     | default(undef('OPENBAO_AI_API_KEY_MOUNT is empty'), true)
+     | mandatory('OPENBAO_AI_API_KEY_MOUNT must be supplied by private configuration') }}
+openbao_ai_api_key_path_prefix: >-
+  {{ lookup('ansible.builtin.env', 'OPENBAO_AI_API_KEY_PATH_PREFIX')
+     | default(undef('OPENBAO_AI_API_KEY_PATH_PREFIX is empty'), true)
+     | mandatory('OPENBAO_AI_API_KEY_PATH_PREFIX must be supplied by private configuration') }}
+# One data list derives both policy objects and AppRole attachments.
+openbao_ai_api_key_providers:
+  - openrouter
+  - gemini
+  - alibaba
+  - openai
+  - anthropic
+  - grok
+  - deepseek
+  - zai
+  - nvidia
+  - moonshotai
 openbao_hermes_policy_name: hermes
 openbao_hermes_approle_name: hermes
 openbao_hermes_write_policy_name: hermes-write

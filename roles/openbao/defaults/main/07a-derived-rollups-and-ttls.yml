@@ -29,6 +29,15 @@ openbao_ssh_sign_policies: >-
        '{"name": "ssh-sign-\1", "template": "ssh-sign-policy.hcl.j2", "ssh_role": "\1"}')
      | map('from_json') | list
      if openbao_ssh_engine_enabled else [] }}
+# Exact provider-key leaves. The provider list is the sole inventory; names,
+# render rows, and AppRole attachments derive from it.
+openbao_ai_api_key_policy_names: >-
+  {{ openbao_ai_api_key_providers
+     | map('regex_replace', '^(.+)$', 'ai-api-key-\1') | list }}
+openbao_ai_api_key_policies: >-
+  {{ openbao_ai_api_key_providers | map('regex_replace', '^(.+)$',
+       '{"name": "ai-api-key-\1", "template": "ai-api-key-provider-policy.hcl.j2", "provider": "\1"}')
+     | map('from_json') | list }}
 # ai-apply-<svc> actor roles: one per writable domain, scoped to that service's
 # read+write leaves plus per-run GitHub attribution and interactive SSH-cert
 # signing (ssh-sign-automation-ai — 1h certs, non-root principals, audited).
