@@ -10,6 +10,10 @@
   gather_facts: true
 
   vars:
+    # Provider locations are required private inputs in production. Molecule
+    # uses inert values so policy composition can be exercised offline.
+    openbao_ai_api_key_mount: test-external
+    openbao_ai_api_key_path_prefix: test/provider-keys
     # container_ip is supplied as a HOSTVAR via molecule.yml (mirrors production
     # load_tofu.yml) so the role can build the Raft peer list from hostvars.
     # The static seal key is injected from Doppler tier-0 at runtime; stub it so
