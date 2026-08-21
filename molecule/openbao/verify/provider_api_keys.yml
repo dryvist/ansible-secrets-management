@@ -1,12 +1,23 @@
 ---
 
+- name: Restore the scenario's inert provider-location stubs
+  # verify.yml sets these as PLAY vars, but verify/rbac_composition.yml runs
+  # earlier in this same play and loads the role's defaults/ via include_vars —
+  # which OUTRANKS play vars in Ansible's precedence order. That re-introduces
+  # the production definitions, whose mandatory() lookup of
+  # OPENBAO_AI_API_KEY_MOUNT / _PATH_PREFIX fails in CI by design: the real
+  # values are private configuration and must never live in this repo.
+  # set_fact outranks include_vars, so this restores the inert values the
+  # renders below need. Kept identical to verify.yml's stubs on purpose.
+  ansible.builtin.set_fact:
+    openbao_ai_api_key_mount: test-external
+    openbao_ai_api_key_path_prefix: test/provider-keys
+
 - name: Assert the provider-key policy inventory is complete and derived
   ansible.builtin.assert:
     that:
       - openbao_ai_api_key_providers == expected_api_key_providers
-      - openbao_ai_api_key_policy_names
-        == (expected_api_key_providers
-            | map('regex_replace', '^(.+)$', 'ai-api-key-\1') | list)
+      - openbao_ai_api_key_policy_names == expected_policy_names
       - openbao_ai_api_key_policies | length == expected_api_key_providers | length
       - >-
         (openbao_approles
@@ -15,6 +26,16 @@
         == [openbao_local_llm_policy_name] + openbao_ai_api_key_policy_names
     fail_msg: Provider API-key policy composition drifted from its inventory.
   vars:
+    # Derived here in `vars:` rather than inline in `that:` ON PURPOSE. A bare
+    # Jinja conditional (assert.that / when:) compiles via a path that decodes
+    # the single-quoted literal 'ai-api-key-\1' as a Python OCTAL escape, so
+    # `\1` becomes chr(1) before regex_replace ever sees it and every element
+    # collapses to the same "ai-api-key-\x01". The identical expression inside
+    # a `{{ }}` template renders correctly. Keep the regex_replace out of the
+    # conditional so this compares two already-native lists.
+    expected_policy_names: >-
+      {{ expected_api_key_providers
+         | map('regex_replace', '^(.+)$', 'ai-api-key-\1') | list }}
     expected_api_key_providers:
       - openrouter
       - gemini
