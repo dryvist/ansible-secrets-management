@@ -12,9 +12,9 @@
     that:
       - openbao_ssh_mount == 'ssh-client-ca'
       - "ssh_roles_by_name == {'automation-ai': 'ai-agent', 'automation-ansible': 'ansible', 'ci-runner': 'ci'}"
-      - (openbao_ssh_roles | selectattr('name', 'equalto', 'automation-ai') | first).ttl == '1h'
-      - (openbao_ssh_roles | selectattr('name', 'equalto', 'automation-ansible') | first).ttl == '1h'
-      - (openbao_ssh_roles | selectattr('name', 'equalto', 'ci-runner') | first).ttl == '30m'
+      - (openbao_ssh_roles | selectattr('name', 'equalto', 'automation-ai') | first).ttl == 7200
+      - (openbao_ssh_roles | selectattr('name', 'equalto', 'automation-ansible') | first).ttl == 7200
+      - (openbao_ssh_roles | selectattr('name', 'equalto', 'ci-runner') | first).ttl == 1800
       # No wildcard principals, ever (documented upstream wildcard bug +
       # per-principal-class design).
       - openbao_ssh_roles | map(attribute='principal') | select('equalto', '*') | list | length == 0

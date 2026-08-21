@@ -53,8 +53,8 @@
 
 # Root token: from this run's init output on the FIRST bootstrap. On a cluster
 # that's already initialized, provisioning (new policies/AppRoles) only runs
-# if the operator supplies a privileged token out-of-band via BAO_TOKEN (see
-# openbao_admin_token in defaults) — without one, every step below skips
+# if the operator supplies a privileged token out-of-band via
+# OPENBAO_PROVISIONING_TOKEN — without one, every step below skips
 # cleanly, so a routine converge that isn't adding RBAC stays a no-op.
 - name: Set the bootstrap token for provisioning (first init)
   ansible.builtin.set_fact:
@@ -62,12 +62,12 @@
   no_log: true
   when: openbao_do_fresh_init
 
-- name: Use the externally-supplied admin token for provisioning against a live cluster
+- name: Use the supplied provisioning token against a live cluster
   ansible.builtin.set_fact:
-    openbao_bootstrap_token: "{{ openbao_admin_token }}"
+    openbao_bootstrap_token: "{{ openbao_provisioning_token }}"
   no_log: true
   when:
     - openbao_status.initialized
-    - openbao_admin_token | length > 0
+    - openbao_provisioning_token | length > 0
 
 # --- KV v2 mount (add-if-missing) -------------------------------------------

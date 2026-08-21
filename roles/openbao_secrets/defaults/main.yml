@@ -75,7 +75,19 @@ openbao_secrets_domains:
     role_id_env: MEDIA_VAULT_ROLE_ID
     secret_id_env: MEDIA_VAULT_SECRET_ID
     paths:
+      # One path per KV ENTRY. `vault_kv2_get` reads a single entry and does not
+      # walk a subtree, and the media policy grants `apps/media/*` — which does
+      # NOT match the bare `apps/media`. So the original single entry below
+      # resolved nothing at all, silently, because the whole fetch is
+      # `failed_when: false`. It is kept only because a flat `apps/media` entry
+      # does still exist and is read by the servarr-config tofu workspace.
       - apps/media
+      - apps/media/sonarr
+      - apps/media/radarr
+      - apps/media/seerr
+      - apps/media/plex
+      - apps/media/prowlarr
+      - apps/media/qbittorrent
   - name: apps
     role_id_env: APPS_VAULT_ROLE_ID
     secret_id_env: APPS_VAULT_SECRET_ID
@@ -113,6 +125,21 @@ openbao_secrets_domains:
       # never be regenerated). App-namespaced for the flat bao_apps_secrets
       # merge. Consumed by inventory/group_vars/{n8n_group,postgres_group}.yml.
       - apps/n8n
+      # Homarr dashboard: its own admin service account, API key and — most
+      # importantly — homarr_encryption_key, which is PROMOTED, not generated.
+      # That key decrypts every stored integration credential; regenerating it
+      # does not invalidate them, it makes them permanently unreadable. All
+      # fields are app-namespaced for the flat merge. The API keys of the
+      # services Homarr integrates WITH are not here: they stay in the media
+      # domain, owned by ansible-servarr.
+      - apps/homarr
+      # Authelia: the OIDC client secrets it shares with its relying parties
+      # (authelia_oidc_{homarr,langfuse}_client_secret). The secret's home is
+      # Authelia — it hashes the plaintext into its own config while Homarr and
+      # Langfuse consume the plaintext — so it is seeded and read here rather
+      # than under each consumer. Without this path the fields never reach
+      # bao_apps_secrets and Authelia's mandatory() default fails the converge.
+      - apps/authelia
   - name: local-llm
     role_id_env: LOCAL_LLM_VAULT_ROLE_ID
     secret_id_env: LOCAL_LLM_VAULT_SECRET_ID
@@ -121,24 +148,7 @@ openbao_secrets_domains:
       - ai/qdrant      # QDRANT_API_KEY
       - ai/open-webui  # OPEN_WEBUI_SECRET_KEY, OPEN_WEBUI_OPENAI_API_KEY
       - ai/hermes      # GH_PAT_WRITE_PROJECT_ISSUES, HERMES_GITHUB_APP_{ID,INSTALLATION_ID,
-                       #   PRIVATE_KEY}. The old account-wide OPENROUTER_API_KEY
-                       #   was transferred to the deepseek-deepseek-v4-flash
-                       #   per-model field in ai/saas/openrouter and removed
-                       #   from this path (2026-07-16).
-      - ai/saas/openrouter  # Paid-SaaS provider key area (ai/saas/<provider>).
-                       #   One field per OpenRouter MODEL (field name = model
-                       #   slug, e.g. nvidia-nemotron-3-ultra-550b-a55b-free),
-                       #   consumed by llm_router's OpenRouter egress tier.
-                       #   Readable via the ai-saas-openrouter policy leaf only —
-                       #   local-llm's broad ai/* read explicitly denies the rest
-                       #   of ai/saas/* (sibling providers: anthropic/google/
-                       #   openai seeded later for workstation consumers).
-                       #   Canonical home is the secrets-external mount (an
-                       #   internet-reachable SaaS credential); this path is
-                       #   still read against the internal mount
-                       #   (openbao_secrets_kv_mount) during the dual-mount
-                       #   transition and will move once the internal
-                       #   ai/saas/openrouter entry is deleted.
+                       #   PRIVATE_KEY}.
       - ai/mcp/splunk  # SPLUNK_MCP_URL, SPLUNK_MCP_TOKEN; merged into the same
                        #   bao_local_llm_secrets fact consumed by Hermes
       - ai/langfuse    # LANGFUSE_{POSTGRES_PASSWORD,CLICKHOUSE_PASSWORD,REDIS_AUTH,

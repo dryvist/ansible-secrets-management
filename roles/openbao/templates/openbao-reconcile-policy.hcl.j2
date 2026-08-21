@@ -1,0 +1,107 @@
+{{ ansible_managed | comment }}
+# openbao-reconcile — the identity an unattended converge uses to keep this
+# cluster's declared RBAC in step with the repository.
+#
+# It is NOT an admin tier and must never become one. The grants below are
+# enumerated by NAME from the role's own declarations, never wildcarded across
+# sys/policies/acl/*, because a wildcard there is escalation: anything that can
+# write an arbitrary policy can write itself a better one.
+#
+# Two exclusions are what make that true, and both are load-bearing:
+#
+#   1. The break-glass tiers are excluded. This identity cannot create or
+#      rewrite them, so it can never mint itself break-glass.
+#   2. Its OWN policy is excluded. It cannot widen its own grant.
+#
+# The consequence is deliberate: adding a NEW policy or AppRole name is not a
+# routine converge. The name has to be added to this template first, and that
+# edit only takes effect through a break-glass run, which is a human decision.
+# Routine converges — every change that touches only already-declared names —
+# need no operator and no token in anyone's environment.
+#
+# If this identity is revoked, provisioning skips cleanly rather than failing;
+# the cluster keeps serving, it just stops reconciling until someone restores it.
+
+{% set breakglass = openbao_reconcile_excluded_policies | default([]) %}
+{% set managed_policies = openbao_policies
+     | map(attribute='name')
+     | reject('in', breakglass)
+     | list %}
+{% set managed_approles = openbao_approles
+     | rejectattr('manage_secret_id', 'defined')
+     | map(attribute='name')
+     | reject('in', breakglass)
+     | list %}
+
+# --- Policies this converge owns, by name --------------------------------
+# Excluded and therefore unreachable from here: {{ breakglass | join(', ') }}
+{% for policy_name in managed_policies %}
+path "sys/policies/acl/{{ policy_name }}" {
+  capabilities = ["create", "read", "update"]
+}
+{% endfor %}
+# Listing is read-only and makes drift visible without granting a write.
+path "sys/policies/acl" {
+  capabilities = ["list"]
+}
+
+# --- AppRoles this converge owns, by name --------------------------------
+# Roles carrying manage_secret_id: false are the inert, human-gated tiers and
+# are omitted above by that marker rather than by a second hand-kept list —
+# one declaration, so a new inert tier cannot be forgotten here.
+{% for approle_name in managed_approles %}
+path "auth/approle/role/{{ approle_name }}" {
+  capabilities = ["create", "read", "update"]
+}
+path "auth/approle/role/{{ approle_name }}/role-id" {
+  capabilities = ["read"]
+}
+path "auth/approle/role/{{ approle_name }}/secret-id" {
+  capabilities = ["create", "update"]
+}
+path "auth/approle/role/{{ approle_name }}/policies" {
+  capabilities = ["create", "update"]
+}
+{% endfor %}
+
+# --- SSH signing roles, by name ------------------------------------------
+# Without these the identity cannot perform the SSH-role reconcile, which is
+# one of the jobs it exists to do — and the omission would only surface as a
+# 403 partway through a converge nobody was watching. Enumerated by name for
+# the same reason as everything else here: `{{ openbao_ssh_mount }}/roles/*`
+# would let it invent a role with any principal it liked, including one the
+# host CA trusts for root.
+{% for ssh_role in openbao_ssh_roles %}
+path "{{ openbao_ssh_mount }}/roles/{{ ssh_role.name }}" {
+  capabilities = ["create", "read", "update"]
+}
+{% endfor %}
+
+# --- SSH signing roles, by name ------------------------------------------
+{% for ssh_role in openbao_ssh_roles %}
+path "{{ openbao_ssh_mount }}/roles/{{ ssh_role.name }}" {
+  capabilities = ["create", "read", "update"]
+}
+{% endfor %}
+
+# --- Mounts, by name -----------------------------------------------------
+# Read-only on the mount table: the converge needs to see what exists to be
+# add-if-missing. Creating or tuning a mount needs sudo, which is break-glass.
+path "sys/mounts" {
+  capabilities = ["read", "list"]
+}
+path "sys/auth" {
+  capabilities = ["read", "list"]
+}
+
+# --- Engine content the converge seeds -----------------------------------
+{% for mount in openbao_kv_mounts | default([]) %}
+path "{{ mount.path | default(mount) }}/*" {
+  capabilities = ["create", "read", "update", "list"]
+}
+{% endfor %}
+# Permission sets are named objects on the GitHub engine, not the raw token
+# endpoint — minting a token is a consumer's job, never the reconciler's.
+path "{{ openbao_github_mount }}/permissionset/*" {
+  capabilities = ["create", "read", "update", "list"]
+}

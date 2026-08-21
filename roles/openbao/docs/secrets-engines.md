@@ -158,11 +158,12 @@ apparatus; the block is enable + write-once CA + add-if-missing roles.
   (committed, human-reviewed) so host trust distribution can never
   trust-on-first-use a substituted endpoint.
 - Signing roles are the ADR's per-principal-class table
-  (`openbao_ssh_roles`): `automation-ai` (principal `ai-agent`, 1h,
-  `permit-pty`), `automation-ansible` (`ansible`, 1h, no extensions),
-  `ci-runner` (`ci`, 30m, no extensions). `ttl == max_ttl`; a sign request
-  may shorten a cert's life, never extend it. Principals are always explicit
-  — never `*`.
+  (`openbao_ssh_roles`): `automation-ai` (principal `ai-agent`, 2h,
+  `permit-pty`), `automation-ansible` (`ansible`, 2h, no extensions),
+  `ci-runner` (`ci`, 30m, no extensions). TTLs are declared in seconds so the
+  reconcile can compare them against the API without normalizing.
+  `ttl == max_ttl`; a sign request may shorten a cert's life, never extend it.
+  Principals are always explicit — never `*`.
 - One `ssh-sign-<role>` policy leaf per role grants exactly that role's
   `sign/` endpoint. Attachment follows the security decisions:
   `ssh-sign-automation-ai` → `ai-elevated` (standing, a documented tradeoff:
@@ -176,4 +177,3 @@ apparatus; the block is enable + write-once CA + add-if-missing roles.
 - **ai-agent is never a hypervisor root principal** — PVE nodes map
   `root: [ansible]` only; `ai-agent` reaches guest-level accounts on hosts
   that opt in (see `ssh_ca_trust`).
-

@@ -25,11 +25,10 @@
 #   media            — read-only, secret/apps/media
 #   local-llm        — LLM serving stack; read-only, secret/ai/* MINUS the
 #                      ai/saas/* carve-out (paid-SaaS provider keys)
-#   ai-saas-openrouter — per-provider read leaf for the paid-SaaS key area
-#                      secret/ai/saas/<provider> (anthropic/google/openai/
-#                      openrouter, one field per MODEL). Attached to local-llm
-#                      so the llm_router converge reads OpenRouter keys only;
-#                      future providers get their own sibling policy.
+#   ai-saas-<provider> — exact read leaf for one paid-SaaS provider entry at
+#                      secret/ai/saas/<provider>. Each entry supplies one
+#                      provider-level API key to LiteLLM. The local-llm role
+#                      attaches only the OpenRouter, Google, and Alibaba leaves.
 #   hermes           — Hermes AI agent; read-only, exact secret/ai/hermes and
 #                      secret/ai/mcp/splunk paths, NOT the broad ai subtree
 #   hermes-write     — least-privilege WRITE to exact secret/ai/hermes only
@@ -87,6 +86,15 @@ openbao_github_write_policy_name: github-write
 openbao_github_write_approle_name: github-write
 openbao_github_admin_policy_name: github-admin
 openbao_github_admin_approle_name: github-admin
+openbao_github_runner_policy_name: github-runner
+openbao_github_runner_approle_name: github-runner
+openbao_reconcile_policy_name: openbao-reconcile
+openbao_reconcile_approle_name: openbao-reconcile
+openbao_reconcile_excluded_policies:
+  - "{{ openbao_ai_admin_policy_name }}"
+  - "{{ openbao_github_admin_policy_name }}"
+  - "{{ openbao_slack_admin_policy_name }}"
+  - "{{ openbao_reconcile_policy_name }}"
 # Repositories a github-write identity may name (exactly one per request; the
 # wrapper sends `repositories` as a plain STRING, `installation_id` as a
 # STRING). Values are repository NAMES resolved within whichever installation

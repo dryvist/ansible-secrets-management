@@ -4,7 +4,8 @@
 # policies/AppRoles (e.g. growing openbao_approles/openbao_policies above)
 # needs a privileged token supplied out-of-band, since there is no longer a
 # fresh root token to mint one from. Set via env, never committed/logged.
-openbao_admin_token: "{{ lookup('env', 'BAO_TOKEN') | default('', true) }}"
+openbao_provisioning_token: >-
+  {{ lookup('env', 'OPENBAO_PROVISIONING_TOKEN') | default('', true) }}
 
 # --- AppRole token TTLs -------------------------------------------------------
 # Short-lived tokens; secret_id_ttl=0 means the secret_id itself does not expire

@@ -110,6 +110,31 @@ authelia_oidc_hermes_redirect_uri: "https://hermes.{{ authelia_cookie_domain }}/
 authelia_oidc_donna_client_id: hermes-donna-dashboard
 authelia_oidc_donna_redirect_uri: "https://hermes-donna.{{ authelia_cookie_domain }}/auth/callback"
 
+# Homarr and Langfuse are confidential clients (server-side NextAuth apps that
+# can hold a secret), unlike Hermes/Donna's public-PKCE pattern — per
+# Authelia's own documented Homarr integration (pbkdf2-sha512 digest,
+# client_secret_basic, no PKCE). The plaintext is generated once in OpenBao
+# (openbao_generated_app_secrets.authelia) and read back via bao_apps_secrets;
+# Authelia hashes it into its own config in tasks/main.yml and never stores
+# the plaintext itself. mandatory() fails loudly if the OpenBao pre-fetch
+# wiring (playbooks/site/00-load-and-telemetry.yml hosts list) is missing,
+# rather than silently rendering an empty-secret client.
+authelia_oidc_homarr_client_id: homarr
+authelia_oidc_homarr_redirect_uri: "https://homarr.{{ authelia_cookie_domain }}/api/auth/callback/oidc"
+authelia_oidc_homarr_client_secret_plain: >-
+  {{ bao_apps_secrets.authelia_oidc_homarr_client_secret
+     | default('', true)
+     | mandatory('authelia_oidc_homarr_client_secret missing from OpenBao secret/apps/authelia') }}
+authelia_oidc_homarr_client_secret_hash_file: "{{ authelia_secrets_dir }}/oidc_homarr_client_secret_hash"
+
+authelia_oidc_langfuse_client_id: langfuse
+authelia_oidc_langfuse_redirect_uri: "https://langfuse.{{ authelia_cookie_domain }}/api/auth/callback/custom"
+authelia_oidc_langfuse_client_secret_plain: >-
+  {{ bao_apps_secrets.authelia_oidc_langfuse_client_secret
+     | default('', true)
+     | mandatory('authelia_oidc_langfuse_client_secret missing from OpenBao secret/apps/authelia') }}
+authelia_oidc_langfuse_client_secret_hash_file: "{{ authelia_secrets_dir }}/oidc_langfuse_client_secret_hash"
+
 # --- Notifier: local filesystem, not SMTP -------------------------------------
 # One-time codes for passkey enrolment and password reset are written to this
 # file on the persistent mount, not emailed. Auth-critical flows must not depend

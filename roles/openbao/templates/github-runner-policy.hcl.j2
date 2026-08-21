@@ -1,0 +1,21 @@
+{{ ansible_managed | comment }}
+# github-runner — the CI fleet's standing identity. Mints ONLY the runner-tier
+# permission sets, whose stored map is organization_self_hosted_runners:write
+# and nothing else (the permission-set token path ignores request bodies at
+# plugin v2.3.2, so a holder cannot widen the stored scope).
+#
+# This tier exists so the runner containers hold no personal access token. A
+# registration token expires in an hour and the containers restart, so the
+# capability to mint one has to be standing; making it an AppRole makes it
+# revocable, audited, and scoped to a single GitHub permission.
+#
+# The raw {{ openbao_github_mount }}/token endpoint, the *-full-automation
+# admin sets, the read-* sets, and the engine's config/* + permissionset/*
+# administration paths are all absent: a leaked runner secret-zero can add or
+# remove a self-hosted runner and can read no repository content at all.
+{% for permission_set in openbao_github_permission_sets | selectattr('tier', 'equalto', 'runner') %}
+path "{{ openbao_github_mount }}/token/{{ permission_set.name }}" {
+  capabilities = ["create", "update"]
+}
+
+{% endfor %}

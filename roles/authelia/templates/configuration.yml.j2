@@ -74,6 +74,48 @@ identity_providers:
         require_pkce: true
         pkce_challenge_method: S256
         token_endpoint_auth_method: none
+      # Homarr and Langfuse are confidential clients (server-side apps that
+      # can hold a secret), so client_secret carries a pbkdf2-sha512 digest
+      # (never plaintext) and there is no PKCE. Homarr additionally disables
+      # signed token/userinfo responses per Authelia's own documented Homarr
+      # integration — its OIDC client does not support OpenID Connect's
+      # signed-response mode.
+      - client_id: '{{ authelia_oidc_homarr_client_id }}'
+        client_name: Homarr
+        client_secret: '{{ authelia_oidc_homarr_client_secret_hash }}'
+        public: false
+        redirect_uris:
+          - '{{ authelia_oidc_homarr_redirect_uri }}'
+        scopes:
+          - openid
+          - profile
+          - email
+        grant_types:
+          - authorization_code
+        response_types:
+          - code
+        authorization_policy: two_factor
+        require_pkce: false
+        token_endpoint_auth_method: client_secret_basic
+        access_token_signed_response_alg: none
+        userinfo_signed_response_alg: none
+      - client_id: '{{ authelia_oidc_langfuse_client_id }}'
+        client_name: Langfuse
+        client_secret: '{{ authelia_oidc_langfuse_client_secret_hash }}'
+        public: false
+        redirect_uris:
+          - '{{ authelia_oidc_langfuse_redirect_uri }}'
+        scopes:
+          - openid
+          - profile
+          - email
+        grant_types:
+          - authorization_code
+        response_types:
+          - code
+        authorization_policy: two_factor
+        require_pkce: false
+        token_endpoint_auth_method: client_secret_basic
 
 access_control:
   default_policy: deny

@@ -23,15 +23,15 @@ openbao_ssh_ca_key_type: ed25519
 openbao_ssh_roles:
   - name: automation-ai
     principal: ai-agent
-    ttl: 1h
+    ttl: 7200
     extensions: { "permit-pty": "" }
   - name: automation-ansible
     principal: ansible
-    ttl: 1h
+    ttl: 7200
     extensions: {}
   - name: ci-runner
     principal: ci
-    ttl: 30m
+    ttl: 1800
     extensions: {}
 # source-address critical option: comma-separated CIDRs certificates are valid
 # FROM (management + compute VLANs). Delivered via env (Doppler, same channel

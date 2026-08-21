@@ -41,12 +41,12 @@ shred -u <playbook_dir>/.openbao-approle-*-<host>.json
   each policy, the AppRole auth method, and each AppRole are guarded so re-runs
   are no-ops for anything already present and unchanged.
 - **Growing the RBAC surface on an already-live cluster is supported**: set
-  `openbao_admin_token` (env `BAO_TOKEN`) to a privileged token so the role can
+  `openbao_provisioning_token` (env `OPENBAO_PROVISIONING_TOKEN`) to a privileged token so the role can
   authenticate without a fresh init; add rows to `openbao_policies` /
   `openbao_approles`; re-run. Missing or changed policies are written, only
   genuinely new AppRoles are created, and `role_id`/`secret_id` are surfaced
   **only for those** — existing identities and their credentials are never
-  touched or re-emitted, so a routine converge without `BAO_TOKEN` set stays a
+  touched or re-emitted, so a routine converge without that variable set stays a
   complete no-op for this section.
 
 ## Seal-key rotation
@@ -82,4 +82,3 @@ added, removed, or changes default. Keep the OpenBao version bump flowing throug
 ## License
 
 Apache-2.0 — same as the parent repository.
-

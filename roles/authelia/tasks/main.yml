@@ -195,6 +195,14 @@
     mode: "0755"
   notify: Restart authelia
 
+# Confidential OIDC client-secret digests (Homarr, Langfuse). Split into its
+# own file to keep this one inside the repo's per-file token budget — see
+# .token-limits.yaml: a file over budget is doing too many jobs, and the remedy
+# is an atomic, well-named file rather than a raised budget. import_tasks, not
+# include_tasks, so the inner tasks stay visible to --tags.
+- name: Provision the confidential OIDC client-secret digests
+  ansible.builtin.import_tasks: oidc_client_secrets.yml
+
 - name: Render Authelia config
   ansible.builtin.template:
     src: configuration.yml.j2
