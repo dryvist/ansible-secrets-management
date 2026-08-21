@@ -30,11 +30,11 @@ openbao_voter_health_interval: "5min"
 # window is recorded as an unreachable sample, not skipped.
 openbao_voter_health_timeout_seconds: 5
 
-# Splunk HEC shipping. Host/port come from tofu_data (never hardcoded — see
-# .claude/rules/ip-addressing.md); the token is delivered the same way every
-# other HEC consumer in this repo gets it (SPLUNK_HEC_TOKEN).
-openbao_voter_health_hec_url: >-
-  https://splunk.{{ tofu_data.domain }}:{{ tofu_data.constants.service_ports.splunk_hec }}/services/collector/event
+# Splunk HEC shipping. Host comes from the one shared splunk_hec_base_url
+# (inventory/group_vars/all.yml), never reconstructed here; the token is
+# delivered the same way every other HEC consumer in this repo gets it
+# (SPLUNK_HEC_TOKEN).
+openbao_voter_health_hec_url: "{{ splunk_hec_base_url }}/services/collector/event"
 openbao_voter_health_hec_token: "{{ lookup('env', 'SPLUNK_HEC_TOKEN') | default('', true) }}"
 openbao_voter_health_splunk_index: openbao
 openbao_voter_health_splunk_sourcetype: "openbao:voter:health"
