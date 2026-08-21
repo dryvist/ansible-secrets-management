@@ -86,6 +86,15 @@ openbao_github_write_policy_name: github-write
 openbao_github_write_approle_name: github-write
 openbao_github_admin_policy_name: github-admin
 openbao_github_admin_approle_name: github-admin
+openbao_github_runner_policy_name: github-runner
+openbao_github_runner_approle_name: github-runner
+openbao_reconcile_policy_name: openbao-reconcile
+openbao_reconcile_approle_name: openbao-reconcile
+openbao_reconcile_excluded_policies:
+  - "{{ openbao_ai_admin_policy_name }}"
+  - "{{ openbao_github_admin_policy_name }}"
+  - "{{ openbao_slack_admin_policy_name }}"
+  - "{{ openbao_reconcile_policy_name }}"
 # Repositories a github-write identity may name (exactly one per request; the
 # wrapper sends `repositories` as a plain STRING, `installation_id` as a
 # STRING). Values are repository NAMES resolved within whichever installation

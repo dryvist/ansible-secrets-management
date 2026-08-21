@@ -75,6 +75,13 @@ openbao_base_approles:
     manage_secret_id: false
     secret_id_ttl: "{{ openbao_ai_elevated_secret_id_ttl }}"
     secret_id_num_uses: 1
+  - name: "{{ openbao_github_runner_approle_name }}"
+    policy: "{{ openbao_github_runner_policy_name }}"
+    token_ttl: 15m
+  - name: "{{ openbao_reconcile_approle_name }}"
+    policy: "{{ openbao_reconcile_policy_name }}"
+    token_ttl: 30m
+    token_max_ttl: 2h
   # ai-orchestrator: role_id/secret_id are operator-held in Doppler tier-0
   # (services BAO_AI_ORCHESTRATOR_ROLE_ID / _SECRET_ID), consumed as ambient env.
   # This AppRole already exists LIVE with a non-expiring secret_id in active

@@ -69,6 +69,10 @@ openbao_base_policies:
     template: github-write-policy.hcl.j2
   - name: "{{ openbao_github_admin_policy_name }}"
     template: github-admin-policy.hcl.j2
+  - name: "{{ openbao_github_runner_policy_name }}"
+    template: github-runner-policy.hcl.j2
+  - name: "{{ openbao_reconcile_policy_name }}"
+    template: openbao-reconcile-policy.hcl.j2
   - name: "{{ openbao_ai_orchestrator_policy_name }}"
     template: ai-orchestrator-policy.hcl.j2
   # ai-readonly / ai-elevated / ai-apply-<svc> no longer own standalone policies —

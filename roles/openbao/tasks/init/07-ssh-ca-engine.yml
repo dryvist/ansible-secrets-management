@@ -119,7 +119,7 @@
 # Explicit principals only — never allowed_users="*" (documented upstream
 # wildcard bug, and a wildcard would defeat the per-principal-class design).
 # ttl == max_ttl: a sign request may shorten a cert's life, never extend it.
-- name: Create the SSH signing roles (add-if-missing)
+- name: Reconcile the SSH signing roles
   ansible.builtin.uri:
     url: "{{ openbao_api_addr }}/v1/{{ openbao_ssh_mount }}/roles/{{ item.0.name }}"
     method: POST
@@ -149,11 +149,12 @@
   loop_control:
     label: "{{ item.0.name }}"
   no_log: true
-  changed_when: true
+  changed_when: >-
+    (item.1.rc | default(1)) != 0
+    or (item.1.stdout | from_json).data.max_ttl != item.0.ttl
   when:
     - openbao_bootstrap_token is defined
     - openbao_ssh_engine_enabled | bool
-    - (item.1.rc | default(1)) != 0
 
 # --- Fail-closed guard: no AI capability leaf for the control plane / kernel --
 # The base read-/write- leaves are rendered blindly from openbao_ai_domains +
