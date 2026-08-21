@@ -133,6 +133,13 @@ openbao_secrets_domains:
       # services Homarr integrates WITH are not here: they stay in the media
       # domain, owned by ansible-servarr.
       - apps/homarr
+      # Authelia: the OIDC client secrets it shares with its relying parties
+      # (authelia_oidc_{homarr,langfuse}_client_secret). The secret's home is
+      # Authelia — it hashes the plaintext into its own config while Homarr and
+      # Langfuse consume the plaintext — so it is seeded and read here rather
+      # than under each consumer. Without this path the fields never reach
+      # bao_apps_secrets and Authelia's mandatory() default fails the converge.
+      - apps/authelia
   - name: local-llm
     role_id_env: LOCAL_LLM_VAULT_ROLE_ID
     secret_id_env: LOCAL_LLM_VAULT_SECRET_ID

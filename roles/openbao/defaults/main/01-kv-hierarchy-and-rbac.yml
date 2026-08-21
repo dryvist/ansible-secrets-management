@@ -158,6 +158,13 @@ openbao_generated_app_secrets:
   # secret/apps/homarr at all (openbao_apps_read_apps derives the grant from
   # these maps' keys), which is what the published fields are read back through.
   homarr: [homarr_admin_password]
+  # Confidential OIDC client secrets for apps that need a real shared secret
+  # rather than Hermes/Donna's public-PKCE pattern (Homarr, Langfuse — both
+  # NextAuth-based server apps). Authelia's role hashes the plaintext into its
+  # own config; the consuming app's role reads the same plaintext back via
+  # bao_apps_secrets. Listing the app here grants the `apps` AppRole read on
+  # secret/apps/authelia (same mechanism as the homarr note above).
+  authelia: [authelia_oidc_homarr_client_secret, authelia_oidc_langfuse_client_secret]
 # Random length for generated app credentials (alnum). secret_key needs more
 # entropy than a login credential, so it gets its own length (matches the 64-char
 # key the nautobot role generates locally when none is supplied).
