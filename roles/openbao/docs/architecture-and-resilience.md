@@ -5,7 +5,7 @@
 - **5-voter Raft HA** (quorum 3): every node carries a `retry_join` for each peer
   (built from `openbao_group` hostvars' `container_ip`), so a node that is not
   yet part of a cluster finds the leader and joins automatically. The target
-  placement is pve1:1, pve2:2, pve3:2, so a whole Proxmox server outage still
+  placement is 1/2/2 across three nodes, so a whole Proxmox server outage still
   leaves quorum.
 - **On-prem static-key auto-unseal**: a single 32-byte AES-256 key (base64),
   shared by all nodes, unwraps the root key on every start — each node
