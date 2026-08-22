@@ -70,4 +70,26 @@
     - openbao_status.initialized
     - openbao_provisioning_token | length > 0
 
+# Skipping provisioning is the intended default for a routine converge, but it
+# is indistinguishable from having provisioned: every gated step below reports
+# neither ok nor changed, and the play recap is green either way. That silence
+# is what makes a NEWLY DECLARED policy, AppRole or generated app secret look
+# applied when it was never written -- the consumer then fails somewhere else
+# entirely, pointing at OpenBao rather than at the converge that skipped.
+#
+# One line, always, naming what was not reconciled. Cheap on a routine run and
+# the only signal on the run that mattered.
+- name: Report that provisioning was skipped for want of a token
+  ansible.builtin.debug:
+    msg: >-
+      OpenBao provisioning SKIPPED on {{ inventory_hostname }}: no
+      OPENBAO_PROVISIONING_TOKEN and this is not a fresh init, so policies,
+      AppRoles and app secrets were NOT reconciled
+      ({{ openbao_generated_app_secrets | default({}) | length }} generated-secret
+      apps, {{ openbao_promoted_app_secrets | default({}) | length }} promoted,
+      {{ openbao_policies | default([]) | length }} policies left untouched).
+      This is normal for a routine converge. If you just declared one of the
+      above, it has NOT been created -- re-run with a provisioning token.
+  when: openbao_bootstrap_token is not defined
+
 # --- KV v2 mount (add-if-missing) -------------------------------------------
