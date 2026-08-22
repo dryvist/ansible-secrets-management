@@ -116,6 +116,15 @@ openbao_generated_app_secrets:
   # key is NOT here — it reuses ai/llm's LLM_ROUTER_MASTER_KEY (local-llm
   # domain), same router credential every ai-VLAN consumer uses.
   hindsight: [hindsight_db_password, hindsight_replication_password, hindsight_cp_access_key]
+  # LiteLLM router login on the SAME ai-VLAN cluster Hindsight uses. The router
+  # keeps its learned per-model quality estimates in Postgres; without them it
+  # restarts onto cold-start priors and behaves like a working router that is
+  # permanently worse. GENERATED, not promoted: this creates a new role on an
+  # existing cluster, so no stored data depends on the previous value.
+  # App-namespaced for the flat bao_apps_secrets merge. The router's master key
+  # and Redis password are NOT here — they live at ai/llm and ai/llm-router in
+  # the local-llm domain, hand-seeded, and must keep their current values.
+  llm-router: [llm_router_db_password]
   # hermes-ui companion web guest (ai VLAN): hermes-workspace's bind password
   # plus mission-control's auth pair. App-namespaced for the flat
   # bao_apps_secrets merge. hermes_ui_hermes_api_token is deliberately NOT
