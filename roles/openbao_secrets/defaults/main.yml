@@ -119,6 +119,12 @@ openbao_secrets_domains:
       # dedicated Postgres cluster and the Control Plane access key (generated
       # at source by openbao_generated_app_secrets.hindsight; app-namespaced).
       - apps/hindsight
+      # LiteLLM router DB login on the ai-VLAN cluster (llm_router_db_password,
+      # generated at source by openbao_generated_app_secrets.llm-router).
+      # Consumed here by inventory/group_vars/postgres_ai_group.yml, and in
+      # ansible-proxmox-ai by roles/llm_router — one field, both ends, so the
+      # two cannot drift.
+      - apps/llm-router
       # Workflow engine: n8n_db_password (generated at source for its role on
       # the shared cluster) + n8n_encryption_key (PROMOTED — the key that
       # decrypts the credentials already stored in its database, so it must

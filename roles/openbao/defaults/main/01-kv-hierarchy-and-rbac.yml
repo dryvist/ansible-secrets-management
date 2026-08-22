@@ -116,6 +116,15 @@ openbao_generated_app_secrets:
   # key is NOT here — it reuses ai/llm's LLM_ROUTER_MASTER_KEY (local-llm
   # domain), same router credential every ai-VLAN consumer uses.
   hindsight: [hindsight_db_password, hindsight_replication_password, hindsight_cp_access_key]
+  # LiteLLM router login on the SAME ai-VLAN cluster Hindsight uses. The router
+  # keeps its learned per-model quality estimates in Postgres; without them it
+  # restarts onto cold-start priors and behaves like a working router that is
+  # permanently worse. GENERATED, not promoted: this creates a new role on an
+  # existing cluster, so no stored data depends on the previous value.
+  # App-namespaced for the flat bao_apps_secrets merge. The router's master key
+  # and Redis password are NOT here — they live at ai/llm and ai/llm-router in
+  # the local-llm domain, hand-seeded, and must keep their current values.
+  llm-router: [llm_router_db_password]
   # hermes-ui companion web guest (ai VLAN): hermes-workspace's bind password
   # plus mission-control's auth pair. App-namespaced for the flat
   # bao_apps_secrets merge. hermes_ui_hermes_api_token is deliberately NOT
@@ -158,6 +167,20 @@ openbao_generated_app_secrets:
   # secret/apps/homarr at all (openbao_apps_read_apps derives the grant from
   # these maps' keys), which is what the published fields are read back through.
   homarr: [homarr_admin_password]
+  # Samba accounts for the per-node SMB shares (ansible-proxmox nas_storage).
+  # Two accounts, named by ROLE rather than by person: a service account and a
+  # human-facing one. BOTH the username and the password are generated, because
+  # a login name is half of a credential and cannot be rotated once published --
+  # so it is never written into the desired-state object or into converge logs,
+  # and the role resolves it from here at converge time.
+  #
+  # The *_username fields take the login-safe alphabet and length (see
+  # openbao_app_secret_username_suffix); the passwords take the normal one.
+  nas:
+    - smb_service_account_username
+    - smb_service_account_password
+    - smb_user_username
+    - smb_user_password
   # Confidential OIDC client secrets for apps that need a real shared secret
   # rather than Hermes/Donna's public-PKCE pattern (Homarr, Langfuse — both
   # NextAuth-based server apps). Authelia's role hashes the plaintext into its
@@ -170,3 +193,8 @@ openbao_generated_app_secrets:
 # key the nautobot role generates locally when none is supplied).
 openbao_app_secret_length: 40
 openbao_app_secret_key_length: 64
+# A generated *_username is a real login name, so it is lowercase-only and
+# short enough for the 32-character limit Linux enforces. 16 lowercase letters
+# is ~75 bits, which is far more than a login name needs to be unguessable.
+openbao_app_secret_username_suffix: _username
+openbao_app_secret_username_length: 16
