@@ -40,12 +40,24 @@
 #     (platform/defaults/<domain>) are NOT granted by wildcard — each one is a
 #     deliberate addition to the list below.
 #
+#   apps/nas
+#     roles/nas_storage resolves the managed Samba accounts of a node that
+#     declares an SMB share. Each account is selected by ROLE rather than by
+#     name and reads two fields, <secret_prefix>_username and
+#     <secret_prefix>_password -- a login name is half a credential and is not
+#     rotatable once published, so it lives here and not in the desired state.
+#     Call sites:
+#       ansible-proxmox        roles/nas_storage/tasks/main.yml
+#       ansible-proxmox        playbooks/validate-nas.yml
+#     READ ONLY: the credential is provisioned out of band, and a converge
+#     must never rewrite the account it authenticates as.
+#
 #   apps/nautobot is NOT listed here. It is granted once, below, by the
 #   credential-publication loop — which is a superset of the read it used to
 #   carry. Two stanzas for one path is ambiguous at policy-parse time, so the
 #   path must appear exactly once in this file.
 
-{% for kv_path in ['platform/object-storage', 'platform/windows-vdi/win11-admin', 'platform/defaults'] %}
+{% for kv_path in ['platform/object-storage', 'platform/windows-vdi/win11-admin', 'platform/defaults', 'apps/nas'] %}
 path "{{ openbao_kv_mount }}/data/{{ kv_path }}" {
   capabilities = ["read"]
 }
