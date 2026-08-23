@@ -1,0 +1,17 @@
+{{ ansible_managed | comment }}
+# OpenBao policy for the llm-router-write AppRole — a single-purpose writer
+# scoped to the exact llm-router Redis credential secret and nothing else:
+# the one-time Redis credential seed writes ai/llm-router, while ansible-converge
+# owns publication to the separate shared spend-store consumers. Deliberately NO
+# wildcard, NO other ai/* paths, and NO infra/platform/apps. Update-in-place is
+# a read-modify-write on a known path, so `read` on the exact secret is enough —
+# no `list`.
+# See terraform-proxmox docs/SECRETS_HIERARCHY.md.
+
+path "{{ openbao_kv_mount }}/data/ai/llm-router" {
+  capabilities = ["create", "update", "read"]
+}
+
+path "{{ openbao_kv_mount }}/metadata/ai/llm-router" {
+  capabilities = ["read"]
+}

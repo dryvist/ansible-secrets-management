@@ -41,6 +41,11 @@ openbao_base_approles:
     policy: "{{ openbao_hermes_policy_name }}"
   - name: "{{ openbao_hermes_write_approle_name }}"
     policy: "{{ openbao_hermes_write_policy_name }}"
+  # llm-router-write: single-purpose writer for the llm-router Redis credential,
+  # same shape as hermes-write above — standing secret_id in Doppler (NOT inert),
+  # so the seed mints a short-lived writer token without a superuser unlock.
+  - name: "{{ openbao_llm_router_write_approle_name }}"
+    policy: "{{ openbao_llm_router_write_policy_name }}"
   - name: "{{ openbao_ai_donna_approle_name }}"
     policy: "{{ openbao_ai_donna_policy_name }}"
   # config-read: sole consumer identity on the non-secret `config` mount.

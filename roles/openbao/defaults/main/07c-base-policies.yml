@@ -50,6 +50,8 @@ openbao_base_policies:
     template: hermes-policy.hcl.j2
   - name: "{{ openbao_hermes_write_policy_name }}"
     template: hermes-write-policy.hcl.j2
+  - name: "{{ openbao_llm_router_write_policy_name }}"
+    template: llm-router-write-policy.hcl.j2
   - name: "{{ openbao_ai_donna_policy_name }}"
     template: ai-donna-policy.hcl.j2
   - name: "{{ openbao_public_policy_name }}"
