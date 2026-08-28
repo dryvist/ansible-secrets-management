@@ -104,7 +104,8 @@ openbao_generated_app_secrets:
   # apps/vikunja into one dict) never collides with Nautobot's bare
   # db_password. The consumers already read the namespaced names
   # (inventory/group_vars/{zammad_group,postgres_group}.yml).
-  zammad: [zammad_db_password, zammad_admin_password, zammad_hermes_api_token]
+  zammad: [zammad_db_password, zammad_admin_password, zammad_hermes_api_token,
+           zammad_splunk_api_token]
   # Streaming-replication credential for the shared-apps Postgres pair (the
   # postgres role's primary creates the replicator login with it; the standby
   # puts it in .pgpass). Bare name is safe in the flat bao_apps_secrets merge —
