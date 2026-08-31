@@ -40,7 +40,7 @@ openbao_snapshot_secret_id: "{{ lookup('env', 'OPENBAO_SNAPSHOT_SECRET_ID') | de
 # ntfy alert target — FQDN-first: the Traefik-fronted service name
 # (matching service_deadman). Topic 'openbao'.
 openbao_snapshot_ntfy_url: >-
-  https://ntfy.{{ tofu_data.domain }}/openbao
+  https://ntfy.{{ ingress_domain }}/openbao
 # healthchecks deadman ping URL for the snapshot job; EMPTY => ping skipped
 # (ntfy + journal alert still fire). Set per-node from the healthchecks LXC.
 openbao_snapshot_healthcheck_url: "{{ lookup('env', 'OPENBAO_SNAPSHOT_HC_URL') | default('', true) }}"
@@ -73,7 +73,7 @@ openbao_slack_rotate_secret_id: "{{ lookup('env', 'OPENBAO_APPROLE_SLACK_ADMIN_S
 # ntfy alert target — FQDN-first, same topic as the snapshot job (this is
 # still openbao-owned automation).
 openbao_slack_rotate_ntfy_url: >-
-  https://ntfy.{{ tofu_data.domain }}/openbao
+  https://ntfy.{{ ingress_domain }}/openbao
 # healthchecks deadman ping URL; EMPTY => ping skipped (ntfy + journal alert
 # still fire).
 openbao_slack_rotate_healthcheck_url: "{{ lookup('env', 'OPENBAO_SLACK_ROTATE_HC_URL') | default('', true) }}"

@@ -1,0 +1,99 @@
+---
+# Part of the authelia role's defaults. Ansible loads every file in
+# defaults/main/ as one namespace, so these split purely by subject --
+# a single main.yml grew past the repo's per-file token gate.
+# Subject: OIDC relying parties (client ids, redirect URIs, secrets).
+
+# Hermes Dashboard is a public PKCE client. It has no client secret; its exact
+# HTTPS callback is the client credential and is intentionally declarative.
+authelia_oidc_hermes_client_id: hermes-dashboard
+authelia_oidc_hermes_redirect_uri: "https://hermes.{{ authelia_cookie_domain }}/auth/callback"
+
+# Donna is a second, independently-identified Hermes agent instance with its
+# own Dashboard at its own vhost, so it needs its own OIDC client — sharing
+# Hermes's would let either dashboard's callback redeem the other's PKCE flow.
+# Same public-PKCE, no-client-secret shape as above.
+authelia_oidc_donna_client_id: hermes-donna-dashboard
+authelia_oidc_donna_redirect_uri: "https://hermes-donna.{{ authelia_cookie_domain }}/auth/callback"
+
+# Homarr and Langfuse are confidential clients (server-side NextAuth apps that
+# can hold a secret), unlike Hermes/Donna's public-PKCE pattern — per
+# Authelia's own documented Homarr integration (pbkdf2-sha512 digest,
+# client_secret_basic, no PKCE). The plaintext is generated once in OpenBao
+# (openbao_generated_app_secrets.authelia) and read back via bao_apps_secrets;
+# Authelia hashes it into its own config in tasks/main.yml and never stores
+# the plaintext itself. mandatory() fails loudly if the OpenBao pre-fetch
+# wiring (playbooks/site/00-load-and-telemetry.yml hosts list) is missing,
+# rather than silently rendering an empty-secret client.
+authelia_oidc_homarr_client_id: homarr
+authelia_oidc_homarr_redirect_uri: "https://homarr.{{ authelia_cookie_domain }}/api/auth/callback/oidc"
+
+# NOTE on the guard shape below. It used to read
+# `| default('', true) | mandatory('...')`, which NEVER FIRES: mandatory raises
+# only on an UNDEFINED value, and the default to the left has already turned a
+# missing key into an empty string by the time it runs. Verified directly —
+# `undef_map.key | default('', true) | mandatory('SHOULD FIRE')` returns "".
+# The effect was that a secret absent from the store rendered as an empty
+# client secret, got hashed into the config, and left the relying party with a
+# credential that can never match — a converge reporting success over a broken
+# login. `or undef(hint=...)` raises on both the empty and the undefined case
+# and carries the same message.
+authelia_oidc_homarr_client_secret_plain: >-
+  {{ (bao_apps_secrets.authelia_oidc_homarr_client_secret | default('', true))
+     or undef(hint='authelia_oidc_homarr_client_secret missing from OpenBao secret/apps/authelia') }}
+authelia_oidc_homarr_client_secret_hash_file: "{{ authelia_secrets_dir }}/oidc_homarr_client_secret_hash"
+
+authelia_oidc_langfuse_client_id: langfuse
+authelia_oidc_langfuse_redirect_uri: "https://langfuse.{{ authelia_cookie_domain }}/api/auth/callback/custom"
+authelia_oidc_langfuse_client_secret_plain: >-
+  {{ (bao_apps_secrets.authelia_oidc_langfuse_client_secret | default('', true))
+     or undef(hint='authelia_oidc_langfuse_client_secret missing from OpenBao secret/apps/authelia') }}
+authelia_oidc_langfuse_client_secret_hash_file: "{{ authelia_secrets_dir }}/oidc_langfuse_client_secret_hash"
+
+# Semaphore (Ansible/Terraform run UI) and terrakube-dex (the Dex instance
+# Terrakube federates through) are confidential clients too — same
+# pbkdf2-sha512/client_secret_basic/no-PKCE shape as Homarr and Langfuse above.
+authelia_oidc_semaphore_client_id: semaphore
+authelia_oidc_semaphore_redirect_uri: "https://semaphore.{{ authelia_cookie_domain }}/api/auth/oidc/authelia/redirect"
+authelia_oidc_semaphore_client_secret_plain: >-
+  {{ (bao_apps_secrets.authelia_oidc_semaphore_client_secret | default('', true))
+     or undef(hint='authelia_oidc_semaphore_client_secret missing from OpenBao secret/apps/authelia') }}
+authelia_oidc_semaphore_client_secret_hash_file: "{{ authelia_secrets_dir }}/oidc_semaphore_client_secret_hash"
+
+authelia_oidc_terrakube_dex_client_id: terrakube-dex
+authelia_oidc_terrakube_dex_redirect_uri: "https://terrakube-dex.{{ authelia_cookie_domain }}/dex/callback"
+authelia_oidc_terrakube_dex_client_secret_plain: >-
+  {{ (bao_apps_secrets.authelia_oidc_terrakube_dex_client_secret | default('', true))
+     or undef(hint='authelia_oidc_terrakube_dex_client_secret missing from OpenBao secret/apps/authelia') }}
+authelia_oidc_terrakube_dex_client_secret_hash_file: "{{ authelia_secrets_dir }}/oidc_terrakube_dex_client_secret_hash"
+
+# Grafana OSS uses its generic_oauth backend — a confidential client with the
+# same shape as the others above. client_id and the redirect host both come from
+# grafana_hostname (inventory/group_vars/all.yml, read from the deployment
+# object) so the name is defined once, never spelled into a URL.
+authelia_oidc_grafana_client_id: "{{ grafana_hostname }}"
+authelia_oidc_grafana_redirect_uri: "https://{{ grafana_hostname }}.{{ authelia_cookie_domain }}/login/generic_oauth"
+authelia_oidc_grafana_client_secret_plain: >-
+  {{ (bao_apps_secrets.authelia_oidc_grafana_client_secret | default('', true))
+     or undef(hint='authelia_oidc_grafana_client_secret missing from OpenBao secret/apps/authelia') }}
+authelia_oidc_grafana_client_secret_hash_file: "{{ authelia_secrets_dir }}/oidc_grafana_client_secret_hash"
+
+# Drives tasks/oidc_client_secrets.yml's create-if-absent hash loop and
+# configuration.yml.j2's lookup of the resulting digests. Add a confidential
+# client by appending here — never by editing the task file.
+authelia_oidc_confidential_clients:
+  - name: homarr
+    secret_plain: "{{ authelia_oidc_homarr_client_secret_plain }}"
+    hash_file: "{{ authelia_oidc_homarr_client_secret_hash_file }}"
+  - name: langfuse
+    secret_plain: "{{ authelia_oidc_langfuse_client_secret_plain }}"
+    hash_file: "{{ authelia_oidc_langfuse_client_secret_hash_file }}"
+  - name: semaphore
+    secret_plain: "{{ authelia_oidc_semaphore_client_secret_plain }}"
+    hash_file: "{{ authelia_oidc_semaphore_client_secret_hash_file }}"
+  - name: terrakube_dex
+    secret_plain: "{{ authelia_oidc_terrakube_dex_client_secret_plain }}"
+    hash_file: "{{ authelia_oidc_terrakube_dex_client_secret_hash_file }}"
+  - name: grafana
+    secret_plain: "{{ authelia_oidc_grafana_client_secret_plain }}"
+    hash_file: "{{ authelia_oidc_grafana_client_secret_hash_file }}"

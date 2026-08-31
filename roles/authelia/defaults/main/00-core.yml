@@ -1,0 +1,115 @@
+---
+# Authelia SSO portal / Traefik forwardAuth provider — a single native Go
+# binary. Every Traefik router whose tofu ingress row has sso=true redirects
+# unauthenticated browsers here; one passkey login opens every gated UI for
+# the session lifetime. Single instance: in-memory sessions + local SQLite
+# (one/two users — no Redis, no Postgres).
+
+# --- Version / controller-staged, checksum-verified download ----------------
+# LXCs in this repo are firewalled outbound-internal-only, so the release
+# tarball is downloaded and checksum-verified on the CONTROLLER, then the
+# extracted binary is copied to the target — same pattern as roles/vikunja.
+# renovate: datasource=github-releases depName=authelia/authelia
+authelia_version: "4.39.20"
+authelia_release_tgz: "authelia-v{{ authelia_version }}-linux-amd64.tar.gz"
+authelia_release_tgz_url: >-
+  https://github.com/authelia/authelia/releases/download/v{{ authelia_version }}/{{ authelia_release_tgz }}
+authelia_release_tgz_sha256: "1f122add61752d6ef54e64ae7116bec4e026f5c0a6493498288c5a9770d92088"
+authelia_binary_name: authelia
+
+# --- System user / paths ------------------------------------------------------
+authelia_user: authelia
+authelia_group: authelia
+authelia_install_dir: /opt/authelia
+authelia_binary_path: "{{ authelia_install_dir }}/authelia"
+authelia_config_dir: /etc/authelia
+authelia_config_file: "{{ authelia_config_dir }}/configuration.yml"
+authelia_users_file: "{{ authelia_config_dir }}/users.yml"
+# SQLite + notification state live on the persistent bind mount at
+# /var/lib/authelia (provisioned by terraform-proxmox), never the ephemeral
+# rootfs — WebAuthn credential registrations must survive a rebuild.
+authelia_data_dir: /var/lib/authelia
+authelia_db_path: "{{ authelia_data_dir }}/db.sqlite3"
+
+# --- Network / domains ---------------------------------------------------------
+authelia_port: "{{ tofu_data.constants.service_ports.authelia_portal }}"
+# The ingress base domain — the session cookie is scoped to it so ONE login
+# covers every <name>.<base> UI. Must match the Traefik router FQDNs.
+authelia_cookie_domain: "{{ ingress_domain }}"
+authelia_portal_url: "https://authelia.{{ authelia_cookie_domain }}"
+
+# Domains whose API paths bypass the SSO gate. These apps enforce their own
+# token auth on every API request; the forwardAuth portal can never be
+# satisfied by a non-browser client, so without a bypass an sso-flagged route
+# blocks all machine consumers (a 401 from the app's own WWW-Authenticate,
+# observed on the first token client 2026-07-17). Browser UIs stay behind the
+# portal.
+#
+# The general rule this expresses: forwardAuth gates HUMAN paths; the app's own
+# credential gates its machine API. Authelia is for the operator (and later,
+# agents) — it must never sit in front of data ingestion.
+#
+# `resource` is per-entry because "the API" is not the same path prefix in
+# every app. The default below covers an app whose entire /api surface is
+# token-authenticated. An app that also serves its BROWSER auth endpoints under
+# /api (NextAuth's /api/auth/* being the common case) must narrow it, or the
+# bypass hands out its session/sign-in routes unauthenticated.
+authelia_api_bypass_default_resource: "^/api(?:/.*)?$"
+authelia_api_bypass_domains:
+  - domain: "zammad.{{ authelia_cookie_domain }}"
+  # Langfuse serves OTLP trace ingestion under /api/public and its NextAuth
+  # browser session routes under /api/auth. Narrowed to /api/public so
+  # collectors can deliver spans while the console's auth surface stays gated.
+  - domain: "langfuse.{{ authelia_cookie_domain }}"
+    resource: "^/api/public(?:/.*)?$"
+  # Sonarr and Radarr enforce their API key across their whole /api surface --
+  # probed live, every path under it answers 401 without a key, including
+  # /api/v3/auth and /api/login. Their browser login is /login, outside the
+  # prefix, so the default resource exposes nothing the app does not already
+  # guard. Homarr reaches both with an apiKey credential.
+  - domain: "sonarr.{{ authelia_cookie_domain }}"
+  - domain: "radarr.{{ authelia_cookie_domain }}"
+  # Jellyseerr (seerr) is deliberately ABSENT. It serves its browser auth under
+  # the same prefix -- /api/v1/auth/me answers 401 and /api/v1/auth/local answers
+  # 405 to a GET, i.e. a reachable login POST -- so the default resource would
+  # hand out its sign-in and session routes. Authelia's regex is Go RE2 with no
+  # negative lookahead, so a bypass here has to be a positive allowlist of the
+  # endpoints its consumers actually call; that list has not been established.
+  # Until it is, seerr stays gated and its consumer keeps addressing the guest
+  # directly. Narrowing on a guess would either break the integration or open
+  # the login route.
+
+# --- Sessions: login once, stay signed in for a week --------------------------
+authelia_session_expiration: "12h"
+authelia_session_inactivity: "12h"
+authelia_session_remember_me: "1w"
+
+# --- Users ---------------------------------------------------------------------
+# File backend, seeded once (create-if-absent — the live users.yml is never
+# overwritten, it accumulates WebAuthn state via the portal). The bootstrap
+# password is generated on the host at first converge (never in Doppler /
+# OpenBao — see the generate-at-source rule in AGENTS.md) and persisted
+# root-only for one-time retrieval; day-to-day login is the passkey.
+# The estate's operator identity, from the same DEFAULT_USERNAME env the vikunja
+# role provisions its operator from — one source, not a per-role literal. The
+# users template puts this user in the `admins` group, so setting it here is what
+# maps the operator to admin across every Authelia-gated service (now including
+# the Traefik dashboard). Falls back to the historical literal so an environment
+# without DEFAULT_USERNAME still converges instead of rendering an empty user.
+authelia_admin_user: "{{ lookup('env', 'DEFAULT_USERNAME') | default('', true) or 'jevans' }}"
+authelia_admin_display_name: "Jacob Evans"
+authelia_admin_email: "{{ authelia_admin_user }}@{{ tofu_data.domain }}"
+authelia_bootstrap_password_file: "{{ authelia_config_dir }}/.bootstrap_password"
+
+# --- Service secrets: generated at the source, no shared store ---------------
+# JWT / session / storage-encryption secrets have no second consumer, so per
+# the workspace generate-at-source rule they are generated-if-absent on the
+# guest's persistent mount and fed to Authelia via *_FILE env vars. They never
+# touch Doppler, OpenBao, or the rendered config.
+authelia_secrets_dir: "{{ authelia_data_dir }}/secrets"
+authelia_secret_files:
+  jwt_secret: "{{ authelia_secrets_dir }}/jwt_secret"
+  session_secret: "{{ authelia_secrets_dir }}/session_secret"
+  storage_key: "{{ authelia_secrets_dir }}/storage_encryption_key"
+  oidc_hmac_secret: "{{ authelia_secrets_dir }}/oidc_hmac_secret"
+authelia_oidc_jwks_key_file: "{{ authelia_secrets_dir }}/oidc_jwks_rsa.pem"
