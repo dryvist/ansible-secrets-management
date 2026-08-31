@@ -62,6 +62,14 @@
 
 - name: Enable AppRole/JWT auth and reconcile Terrakube workspace JWT roles
   ansible.builtin.include_tasks: init/09-auth-methods-and-terrakube-jwt.yml
+  # sys/auth and auth/terrakube/* are outside the reconcile identity's policy
+  # (it grants sys/policies/acl, auth/approle/role/<name> and <ssh>/roles/<name>
+  # only), so every write here 403s under a reconcile-mode run. These are all
+  # add-if-missing against a live listing, and a denied READ returns rc != 0
+  # under failed_when: false — which reads as "absent" and triggers exactly the
+  # privileged create that cannot succeed. Enabling an auth method is bootstrap
+  # work; it needs OPENBAO_PROVISIONING_TOKEN.
+  when: not (openbao_reconcile_mode | default(false))
 
 - name: Create the AppRoles and write their break-glass material
   ansible.builtin.include_tasks: init/10-approles.yml
