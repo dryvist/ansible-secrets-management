@@ -135,7 +135,7 @@
   ansible.builtin.set_fact:
     openbao_rendered_policy_map: >-
       {{ openbao_rendered_policy_map | default({})
-         | combine({ item.name: lookup('template', item.template) }) }}
+         | combine({ item.name: lookup('template', item.template) | trim }) }}
   loop: "{{ openbao_manageable_policies }}"
   loop_control:
     label: "{{ item.name }}"
@@ -175,11 +175,25 @@
     - openbao_bootstrap_token is defined
     - item.name in (openbao_policies_raw.stdout | from_json)
 
+# Both sides are `trim`ed and read from the CORRECT key, because the write below
+# is a no-op only when the two compare equal -- and it was never equal:
+#
+#   * `bao policy read -format=json` returns {"policy": ...} at TOP LEVEL. The
+#     old expression read `.data.policy`, which does not exist, so every entry
+#     resolved to '' and every policy looked changed on every converge.
+#   * The server appends a trailing newline on write, so even with the right key
+#     the stored text is the rendered text plus "\n" and an exact != is always
+#     true.
+#
+# Measured live: rendered 475 bytes vs stored 476, differing only in that
+# newline, `stripped_equal` true on every sampled policy. Either defect alone
+# rewrites all 56 policies on every run while honestly reporting "changed", so
+# fixing only one would have looked like a fix and changed nothing.
 - name: Build the existing RBAC policy content map
   ansible.builtin.set_fact:
     openbao_existing_policy_map: >-
       {{ openbao_existing_policy_map | default({})
-         | combine({ item.item.name: ((item.stdout | default('{}') | from_json).data.policy | default('')) }) }}
+         | combine({ item.item.name: ((item.stdout | default('{}') | from_json).policy | default('')) | trim }) }}
   loop: "{{ openbao_existing_policy_reads.results | default([]) }}"
   loop_control:
     label: "{{ item.item.name }}"
