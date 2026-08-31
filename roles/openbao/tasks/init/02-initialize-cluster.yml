@@ -70,6 +70,97 @@
     - openbao_status.initialized
     - openbao_provisioning_token | length > 0
 
+# Routine reconciliation. A change to the CONTENT of an already-declared policy
+# needs no operator: openbao-reconcile owns exactly the names this repo declares
+# and cannot reach the break-glass tiers or its own policy. Trying it here is
+# what removes the "declared two weeks ago, never actually live" failure.
+#
+# A failure is NOT fatal -- on a cluster that has never had a privileged run the
+# identity does not exist yet -- but it MUST be loud, because a silent failure
+# here reproduces the exact false green this block exists to remove.
+- name: Log in as the reconcile identity for routine RBAC reconciliation
+  community.hashi_vault.vault_login:
+    url: "{{ openbao_api_addr }}"
+    auth_method: approle
+    role_id: "{{ openbao_reconcile_role_id }}"
+    secret_id: "{{ openbao_reconcile_secret_id }}"
+  register: openbao_reconcile_login
+  no_log: true
+  failed_when: false
+  when:
+    - openbao_status.initialized
+    - openbao_provisioning_token | length == 0
+    - openbao_reconcile_role_id | length > 0
+    - openbao_reconcile_secret_id | length > 0
+
+- name: Use the reconcile token when it authenticated
+  ansible.builtin.set_fact:
+    openbao_bootstrap_token: "{{ openbao_reconcile_login.login.auth.client_token }}"
+    openbao_reconcile_mode: true
+  no_log: true
+  when:
+    - openbao_reconcile_login is defined
+    - not (openbao_reconcile_login.skipped | default(false))
+    - (openbao_reconcile_login.login | default({})).auth is defined
+
+# Secret-zero presence IS the discriminator, so no marker file is needed:
+#   creds absent  -> never bootstrapped        -> skip loudly (debug, below)
+#   creds present -> login MUST succeed        -> anything else is a regression
+# Failing red here is the point. A warn-and-continue leaves RBAC silently
+# unreconciled while the recap still reads failed=0 — the exact false green
+# this whole path exists to remove.
+- name: FAIL — the reconcile identity was configured but could not authenticate
+  ansible.builtin.fail:
+    msg: >-
+      OpenBao reconcile login FAILED on {{ inventory_hostname }}. Secret-zero
+      for the openbao-reconcile AppRole is present in the environment but the
+      login did not return a token, so RBAC would NOT have been reconciled.
+      Because the credentials ARE published, this is a regression, not a
+      bootstrap gap: the AppRole was deleted, or its secret_id was rotated
+      without republishing. Re-issue it (a privileged run recreates the role)
+      and republish role_id/secret_id, or unset
+      OPENBAO_APPROLE_OPENBAO_RECONCILE_{ROLE,SECRET}_ID to deliberately fall
+      back to the loud skip.
+  when:
+    - openbao_reconcile_login is defined
+    - not (openbao_reconcile_login.skipped | default(false))
+    - (openbao_reconcile_login.login | default({})).auth is not defined
+
+# The reconcile identity is deliberately narrower than a provisioning token: it
+# cannot write the break-glass policies, nor create the inert human-gated
+# AppRoles. Filter the managed set to what this run's identity may actually
+# touch, so a routine converge reconciles everything it owns instead of failing
+# on the first path it was never granted.
+- name: Resolve the RBAC set this run's identity may manage
+  ansible.builtin.set_fact:
+    openbao_manageable_policies: >-
+      {{ openbao_policies
+         if not (openbao_reconcile_mode | default(false))
+         else (openbao_policies
+               | rejectattr('name', 'in', openbao_reconcile_excluded_policies)
+               | list) }}
+    openbao_manageable_approles: >-
+      {{ openbao_approles
+         if not (openbao_reconcile_mode | default(false))
+         else (openbao_approles
+               | rejectattr('manage_secret_id', 'defined')
+               | rejectattr('name', 'in', openbao_reconcile_excluded_policies)
+               | list) }}
+  when: openbao_bootstrap_token is defined
+
+- name: Report that this run reconciles as the least-privilege identity
+  ansible.builtin.debug:
+    msg: >-
+      OpenBao RBAC reconciling on {{ inventory_hostname }} as openbao-reconcile
+      (no operator token): {{ openbao_manageable_policies | length }} of
+      {{ openbao_policies | length }} policies and
+      {{ openbao_manageable_approles | length }} of
+      {{ openbao_approles | length }} AppRoles are in scope. The remainder are
+      the break-glass and inert human-gated tiers, which this identity cannot
+      write BY DESIGN -- a change to one of those needs a run with
+      OPENBAO_PROVISIONING_TOKEN.
+  when: openbao_reconcile_mode | default(false)
+
 # Skipping provisioning is the intended default for a routine converge, but it
 # is indistinguishable from having provisioned: every gated step below reports
 # neither ok nor changed, and the play recap is green either way. That silence
@@ -88,8 +179,11 @@
       ({{ openbao_generated_app_secrets | default({}) | length }} generated-secret
       apps, {{ openbao_promoted_app_secrets | default({}) | length }} promoted,
       {{ openbao_policies | default([]) | length }} policies left untouched).
-      This is normal for a routine converge. If you just declared one of the
-      above, it has NOT been created -- re-run with a provisioning token.
+      Routine reconciliation is supposed to happen WITHOUT a token, as the
+      openbao-reconcile identity -- reaching this message means its secret-zero
+      (OPENBAO_APPROLE_OPENBAO_RECONCILE_ROLE_ID / _SECRET_ID) is absent from
+      the environment. Publish it, or re-run once with a provisioning token to
+      create the AppRole. Until then a declared policy change does NOT land.
   when: openbao_bootstrap_token is not defined
 
 # --- KV v2 mount (add-if-missing) -------------------------------------------
