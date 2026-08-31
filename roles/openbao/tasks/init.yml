@@ -26,17 +26,33 @@
 - name: Initialize the cluster and resolve the provisioning token
   ansible.builtin.include_tasks: init/02-initialize-cluster.yml
 
+# Plugin registration is deliberately OUTSIDE the openbao-reconcile grant: its
+# policy carries no sys/plugins/catalog path at all, because registering a
+# plugin is break-glass.
+#
+# These three files probe with `bao plugin read` under `failed_when: false` and
+# treat a non-zero rc as "not registered". Under reconcile that read is DENIED,
+# which is also non-zero, so the probe concludes the plugin is absent and
+# attempts the privileged register -- failing the run partway through. A denied
+# read is not an absent object.
+#
+# 03 and 09 are NOT gated: their add-if-missing steps key off a real sys/mounts
+# and sys/auth listing, which reconcile may read, and the KV content they seed
+# is inside its grant. Only the plugin-registering engines are excluded.
 - name: Enable the KV mounts and seed per-app service secrets
   ansible.builtin.include_tasks: init/03-kv-mounts-and-seed-secrets.yml
 
 - name: Register and configure the AWS secrets engine
   ansible.builtin.include_tasks: init/04-aws-engine.yml
+  when: not (openbao_reconcile_mode | default(false))
 
 - name: Register and configure the GitHub secrets engine
   ansible.builtin.include_tasks: init/05-github-engine.yml
+  when: not (openbao_reconcile_mode | default(false))
 
 - name: Register and configure the OAuthapp secrets engine
   ansible.builtin.include_tasks: init/06-oauth-engine.yml
+  when: not (openbao_reconcile_mode | default(false))
 
 - name: Configure the SSH CA and its signing roles
   ansible.builtin.include_tasks: init/07-ssh-ca-engine.yml
