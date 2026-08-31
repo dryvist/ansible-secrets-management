@@ -56,15 +56,28 @@
     - (openbao_policy_capabilities.rc | default(1)) == 0
     - _unwritable | length > 0
 
-- name: Render the RBAC policies to the target
-  ansible.builtin.template:
-    src: "{{ item.template }}"
-    dest: "{{ openbao_config_dir }}/.policy-{{ item.name }}.hcl"
-    mode: "0600"
+# Rendered on the CONTROLLER, not the target. The previous shape wrote each
+# policy to the guest with `template`, read it back with `slurp`, and deleted it
+# again -- three remote round trips per policy purely to move content this
+# process already had in memory. Over 60 policies that is 180 operations on a
+# proxmox_pct_remote connection, and each one is a full paramiko connect plus a
+# `pct exec`: the render step alone measured 776 SECONDS (12.9 min, ~13s per
+# policy) writing a few KB per file.
+#
+# `lookup('template', ...)` resolves against the same role templates/ directory
+# the module used and renders with the same variable context, so the content is
+# identical -- it just never leaves the controller. The write below feeds it to
+# `bao policy write` on stdin, so no file is created and none has to be cleaned
+# up. Remote operations for this phase: 180 -> 0.
+- name: Render the RBAC policies on the controller
+  ansible.builtin.set_fact:
+    openbao_rendered_policy_map: >-
+      {{ openbao_rendered_policy_map | default({})
+         | combine({ item.name: lookup('template', item.template) }) }}
   loop: "{{ openbao_manageable_policies }}"
   loop_control:
     label: "{{ item.name }}"
-  changed_when: false
+  no_log: true
   when: openbao_bootstrap_token is defined
 
 - name: List existing policies
@@ -77,28 +90,6 @@
   no_log: true
   changed_when: false
   when: openbao_bootstrap_token is defined
-
-- name: Read rendered RBAC policy contents from the target
-  ansible.builtin.slurp:
-    src: "{{ openbao_config_dir }}/.policy-{{ item.name }}.hcl"
-  loop: "{{ openbao_manageable_policies }}"
-  loop_control:
-    label: "{{ item.name }}"
-  register: openbao_rendered_policy_reads
-  changed_when: false
-  when: openbao_bootstrap_token is defined
-
-- name: Build the rendered RBAC policy content map
-  ansible.builtin.set_fact:
-    openbao_rendered_policy_map: >-
-      {{ openbao_rendered_policy_map | default({})
-         | combine({ item.item.name: (item.content | default('') | b64decode) }) }}
-  loop: "{{ openbao_rendered_policy_reads.results | default([]) }}"
-  loop_control:
-    label: "{{ item.item.name }}"
-  when:
-    - openbao_bootstrap_token is defined
-    - not (item.skipped | default(false))
 
 - name: Read existing RBAC policy contents
   ansible.builtin.command:
@@ -138,9 +129,8 @@
 
 - name: Write the RBAC policies that are missing or changed
   ansible.builtin.command:
-    cmd: >-
-      bao policy write {{ item.name }}
-      {{ openbao_config_dir }}/.policy-{{ item.name }}.hcl
+    cmd: "bao policy write {{ item.name }} -"
+    stdin: "{{ (openbao_rendered_policy_map | default({}))[item.name] }}"
   environment:
     BAO_ADDR: "{{ openbao_api_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
@@ -157,15 +147,5 @@
       (openbao_existing_policy_map | default({})).get(item.name, '')
       !=
       (openbao_rendered_policy_map | default({})).get(item.name, '')
-
-- name: Remove the rendered policies from the target
-  ansible.builtin.file:
-    path: "{{ openbao_config_dir }}/.policy-{{ item.name }}.hcl"
-    state: absent
-  loop: "{{ openbao_manageable_policies }}"
-  loop_control:
-    label: "{{ item.name }}"
-  changed_when: false
-  when: openbao_bootstrap_token is defined
 
 # --- AppRole auth method (add-if-missing) -----------------------------------
