@@ -12,7 +12,11 @@ openbao_terrakube_jwt_token_ttl: 90m
 openbao_terrakube_organization: dryvist
 openbao_terrakube_workspaces:
   - name: iac-platform
-    kv_read: [platform/terrakube/main]
+    # apps/authelia: the deploy script needs the plaintext semaphore /
+    # terrakube-dex OIDC client secrets to configure those two apps —
+    # Authelia's role only ever writes the pbkdf2 digest into its own config,
+    # never the plaintext, so the consumer reads it back from OpenBao directly.
+    kv_read: [platform/terrakube/main, apps/authelia]
   - name: tofu-github
     kv_read: [infrastructure/github]
     # infrastructure/github is an internet-reachable SaaS credential (a

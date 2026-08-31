@@ -2,6 +2,11 @@
 # Bootstrap users database — SEEDED ONCE (create-if-absent; a converge never
 # overwrites it). Passkeys registered via the portal live in the SQLite
 # storage, not here. To rotate the password: delete this file and re-converge.
+#
+# Group membership is NOT bootstrap-only: because this file is seed-once, a
+# group added here alone would never reach an already-deployed Authelia. The
+# groups below are reconciled on every converge by tasks/admin_groups.yml,
+# which edits the live file in place and leaves the password hash untouched.
 users:
   {{ authelia_admin_user }}:
     disabled: false
@@ -9,4 +14,6 @@ users:
     password: "{{ authelia_admin_password_hash }}"
     email: "{{ authelia_admin_email }}"
     groups:
-      - admins
+{% for group in authelia_admin_groups %}
+      - {{ group }}
+{% endfor %}

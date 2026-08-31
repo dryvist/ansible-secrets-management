@@ -1,0 +1,71 @@
+---
+# Reconcile the operator account's group membership on EVERY converge.
+#
+# users.yml is seeded create-if-absent (the argon2 hash is salted, so
+# re-rendering it would rotate the password on every run). That is correct for
+# the credential and wrong for group membership: a group added to the template
+# alone reaches a fresh deployment only, and on an existing one the converge
+# reports changed=0 while the group the operator needs is simply absent. Adding
+# `terrakube-admins` to the template was exactly that — a change that read as
+# applied and granted nothing.
+#
+# So membership is merged into the live file here instead. Additive by design:
+# groups present on the guest but not in authelia_admin_groups are left alone,
+# because the portal and any hand-grant are also writers of this file. Nothing
+# but the groups list is rewritten, and the task is a no-op once converged.
+
+- name: Read the live users database
+  ansible.builtin.slurp:
+    src: "{{ authelia_users_file }}"
+  register: authelia_users_raw
+  no_log: true
+
+- name: Resolve the operator's current and required groups
+  ansible.builtin.set_fact:
+    # `| default([], true)` on the groups read: a user block with `groups:` and
+    # nothing under it parses as null, not as an empty list, and union() on null
+    # raises rather than returning the required set.
+    authelia_admin_groups_current: >-
+      {{ ((authelia_users_raw.content | b64decode | from_yaml).users[authelia_admin_user].groups
+          | default([], true)) }}
+  no_log: true
+
+- name: Fail when Terrakube SSO is enabled but its admin group did not resolve
+  ansible.builtin.assert:
+    that:
+      - authelia_terrakube_admin_group | length > 0
+    fail_msg: >-
+      authelia_terrakube_sso_enabled is true but DEX_GITHUB_ORG / DEX_GITHUB_TEAM
+      are not both set in the converge environment, so the org-qualified Terrakube
+      admin group could not be composed. Authelia would emit no Terrakube group at
+      all and the operator would authenticate to Terrakube with no rights. Set both
+      (they are the same two values the Terrakube compose file composes
+      TERRAKUBE_ADMIN_GROUP from) or leave authelia_terrakube_sso_enabled false.
+    success_msg: "Terrakube admin group resolved."
+  when: authelia_terrakube_sso_enabled | bool
+
+- name: Grant the operator any required group it is missing
+  ansible.builtin.set_fact:
+    authelia_admin_groups_merged: >-
+      {{ authelia_admin_groups_current | union(authelia_admin_groups) }}
+  no_log: true
+
+- name: Update the operator's group membership
+  when: authelia_admin_groups_merged | symmetric_difference(authelia_admin_groups_current) | length > 0
+  # lineinfile is deliberately not used: the groups list is multi-line, and a
+  # regex edit of a YAML sequence is how these files get corrupted. The whole
+  # document is re-emitted from the parsed structure with only the groups key
+  # replaced, so the password hash is carried through verbatim rather than
+  # re-generated.
+  ansible.builtin.copy:
+    content: >-
+      {{ (authelia_users_raw.content | b64decode | from_yaml)
+         | combine({'users': {authelia_admin_user: {'groups': authelia_admin_groups_merged}}},
+                   recursive=True)
+         | to_nice_yaml(indent=2) }}
+    dest: "{{ authelia_users_file }}"
+    owner: "{{ authelia_users_file_owner }}"
+    group: "{{ authelia_group }}"
+    mode: "0640"
+  no_log: true
+  notify: Restart authelia

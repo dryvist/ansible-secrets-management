@@ -18,8 +18,24 @@
     authelia_oidc_jwks_key: x
     authelia_oidc_hermes_client_id: x
     authelia_oidc_hermes_redirect_uri: "https://x.example.test/cb"
-    authelia_oidc_homarr_client_secret_hash: x
-    authelia_oidc_langfuse_client_secret_hash: x
+    # One digest per confidential client, keyed by name. The role builds this
+    # at converge time from the persisted digest files; the template looks a
+    # name up, so a stand-in per client is all the render needs.
+    #
+    # Listed literally, NOT derived from authelia_oidc_confidential_clients:
+    # that list carries each client's plaintext, which now raises when the
+    # secret store is absent (as it is here). Listing the names is also
+    # self-policing — a client added to the template without a stub here fails
+    # this render, which is exactly how the previous two stale names surfaced.
+    authelia_oidc_client_secret_hashes:
+      homarr: x
+      langfuse: x
+      semaphore: x
+      terrakube_dex: x
+      grafana: x
+    # Supplied by inventory/group_vars/all.yml at run time.
+    ingress_domain: example.test
+    grafana_hostname: grafana
 
   tasks:
     - name: Load the authelia role defaults

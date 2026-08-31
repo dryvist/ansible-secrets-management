@@ -1,0 +1,66 @@
+---
+# Proves the group reconcile actually changes an ALREADY-SEEDED users.yml, which
+# is the case the seed-once template cannot reach, and that it leaves the
+# password hash byte-identical. Run:
+#   ansible-playbook -i localhost, -c local tests/authelia_admin_groups/verify_admin_groups.yml
+- name: Verify authelia admin group reconcile
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    authelia_users_file: /tmp/tk_users_under_test.yml
+    authelia_admin_user: jevans
+    authelia_users_file_owner: "{{ lookup('env', 'USER') }}"
+    authelia_group: staff
+    authelia_terrakube_sso_enabled: true
+    authelia_terrakube_github_org: example-org
+    authelia_terrakube_github_team: terrakube-admins
+    authelia_terrakube_admin_group: >-
+      {{ (authelia_terrakube_github_org ~ ':' ~ authelia_terrakube_github_team)
+         if (authelia_terrakube_github_org and authelia_terrakube_github_team)
+         else '' }}
+    authelia_admin_groups: >-
+      {{ ['admins']
+         + ([authelia_terrakube_admin_group] if authelia_terrakube_admin_group else []) }}
+  handlers:
+    - name: Restart authelia
+      ansible.builtin.debug:
+        msg: "restart notified"
+  tasks:
+    - name: Seed a fixture that already exists (the case the template cannot reach)
+      ansible.builtin.copy:
+        src: /tmp/tk_users_fixture.yml
+        dest: "{{ authelia_users_file }}"
+        mode: "0640"
+
+    - name: Record the password hash before
+      ansible.builtin.set_fact:
+        pw_before: "{{ (lookup('file', authelia_users_file) | from_yaml).users[authelia_admin_user].password }}"
+
+    - name: Run the reconcile
+      ansible.builtin.include_tasks: ../../roles/authelia/tasks/admin_groups.yml
+
+    - name: Re-read the result
+      ansible.builtin.set_fact:
+        after: "{{ lookup('file', authelia_users_file) | from_yaml }}"
+
+    - name: Assert the org-qualified group landed and the credential survived
+      ansible.builtin.assert:
+        that:
+          - authelia_terrakube_admin_group == 'example-org:terrakube-admins'
+          - authelia_admin_groups | type_debug == 'list'
+          - "'example-org:terrakube-admins' in after.users[authelia_admin_user].groups"
+          - "'admins' in after.users[authelia_admin_user].groups"
+          - after.users[authelia_admin_user].password == pw_before
+          - after.users[authelia_admin_user].email == 'op@example.invalid'
+          - after.users[authelia_admin_user].disabled is false
+        fail_msg: "reconcile did not grant the group or damaged the record"
+
+    - name: Run the reconcile a second time (idempotence)
+      ansible.builtin.include_tasks: ../../roles/authelia/tasks/admin_groups.yml
+
+    - name: Assert the second run made no change
+      ansible.builtin.assert:
+        that:
+          - authelia_admin_groups_merged | symmetric_difference(authelia_admin_groups_current) | length == 0
+        fail_msg: "reconcile is not idempotent — it would restart authelia every converge"

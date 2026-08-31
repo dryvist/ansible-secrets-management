@@ -8,13 +8,20 @@
 # the declared set, and fail LOUDLY naming the shortfall. Silently narrowing to
 # what happens to work is the exact false green this block exists to prevent:
 # a declared policy would never be written and nothing would say so.
+# The prefix is added by matching '^' rather than capturing the whole name and
+# substituting \1. A backreference does not survive the trip: YAML, Jinja and
+# `command`'s shlex.split each get a say in what a backslash means, and the net
+# effect was that all 60 paths rendered as the single literal
+# `sys/policies/acl/1` -- a policy that does not exist, so the server answered
+# `deny` and the gate concluded the identity could write nothing. It had never
+# once asked about a real path.
 - name: Ask the server which declared policies this identity may actually write
   ansible.builtin.command:
     cmd: >-
       bao write -format=json sys/capabilities-self
       {{ openbao_manageable_policies
          | map(attribute='name')
-         | map('regex_replace', '^(.+)$', 'paths=sys/policies/acl/\\1')
+         | map('regex_replace', '^', 'paths=sys/policies/acl/')
          | join(' ') }}
   environment:
     BAO_ADDR: "{{ openbao_api_addr }}"
@@ -27,10 +34,65 @@
     - openbao_bootstrap_token is defined
     - openbao_reconcile_mode | default(false)
 
+# sys/capabilities-self returns the per-path capability lists BOTH at the top
+# level and under `data`, and which of the two a given client surfaces is not
+# something to bet a hard failure on. Reading only `data` yielded an empty dict
+# against a live policy that demonstrably grants create/read/update on every
+# path asked about -- and an empty dict reads as "denied everything", so the
+# gate blocked a converge that should have proceeded.
+- name: Resolve what the server said this identity may write
+  ansible.builtin.set_fact:
+    openbao_policy_caps: >-
+      {{ (_body.get('data', {}) | combine(_body)) | dict2items
+         | selectattr('key', 'match', '^sys/policies/acl/') | items2dict }}
+  vars:
+    _body: "{{ openbao_policy_capabilities.stdout | default('{}') | from_json }}"
+  # Keep only real policy paths, rather than removing a hand-listed set of
+  # envelope keys. The response also carries `capabilities`, `mount_type`,
+  # `mount_class` and friends, and any future field would join them -- a
+  # denylist would have to grow to stay correct. A stray key surviving here
+  # would be compared against declared policy NAMES below (the prefix is
+  # stripped, not filtered, at that point), so a collision would mark a policy
+  # writable that is not: a false green in the guard built to prevent one.
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_reconcile_mode | default(false)
+    - (openbao_policy_capabilities.rc | default(1)) == 0
+
+# An uninformative probe is NOT a denial. If the response carried capability
+# entries for FEWER paths than were asked about, the probe itself is broken (a
+# shape change, a malformed request) and reading the gap as a permission finding
+# would be a confident false red -- the same absent-vs-denied confusion this
+# whole block exists to eliminate. Fail, but say which failure it is.
+#
+# The count, not merely zero: the backreference bug asked about one literal path
+# and got ONE well-formed entry back, so a `== 0` arm did not fire and the gate
+# went on to report a unanimous false denial. A short answer is the direct
+# signature of a probe that asked the wrong question, and neither a zero-check
+# nor a type-check sees it -- the values were valid capability lists, just for a
+# path nobody declared.
+- name: FAIL -- the capability probe did not answer about every path it asked about
+  ansible.builtin.fail:
+    msg: >-
+      Asked sys/capabilities-self about
+      {{ openbao_manageable_policies | length }} policy paths and the response
+      carried a capability entry for only
+      {{ openbao_policy_caps | default({}) | length }} of them. That is a broken
+      probe, not a permission finding -- do not read a short answer as "this
+      identity may write nothing". Check the request shape and the response
+      envelope before concluding anything about grants.
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_reconcile_mode | default(false)
+    - (openbao_policy_capabilities.rc | default(1)) == 0
+    - openbao_manageable_policies | length > 0
+    - >-
+      (openbao_policy_caps | default({}) | length)
+      < (openbao_manageable_policies | length)
+
 - name: FAIL -- the reconcile identity cannot manage every declared policy
   vars:
-    _caps: >-
-      {{ (openbao_policy_capabilities.stdout | default('{}') | from_json).data | default({}) }}
+    _caps: "{{ openbao_policy_caps | default({}) }}"
     _unwritable: >-
       {{ openbao_manageable_policies | map(attribute='name') | reject('in',
          (_caps | dict2items
@@ -56,15 +118,28 @@
     - (openbao_policy_capabilities.rc | default(1)) == 0
     - _unwritable | length > 0
 
-- name: Render the RBAC policies to the target
-  ansible.builtin.template:
-    src: "{{ item.template }}"
-    dest: "{{ openbao_config_dir }}/.policy-{{ item.name }}.hcl"
-    mode: "0600"
+# Rendered on the CONTROLLER, not the target. The previous shape wrote each
+# policy to the guest with `template`, read it back with `slurp`, and deleted it
+# again -- three remote round trips per policy purely to move content this
+# process already had in memory. Over 60 policies that is 180 operations on a
+# proxmox_pct_remote connection, and each one is a full paramiko connect plus a
+# `pct exec`: the render step alone measured 776 SECONDS (12.9 min, ~13s per
+# policy) writing a few KB per file.
+#
+# `lookup('template', ...)` resolves against the same role templates/ directory
+# the module used and renders with the same variable context, so the content is
+# identical -- it just never leaves the controller. The write below feeds it to
+# `bao policy write` on stdin, so no file is created and none has to be cleaned
+# up. Remote operations for this phase: 180 -> 0.
+- name: Render the RBAC policies on the controller
+  ansible.builtin.set_fact:
+    openbao_rendered_policy_map: >-
+      {{ openbao_rendered_policy_map | default({})
+         | combine({ item.name: lookup('template', item.template) }) }}
   loop: "{{ openbao_manageable_policies }}"
   loop_control:
     label: "{{ item.name }}"
-  changed_when: false
+  no_log: true
   when: openbao_bootstrap_token is defined
 
 - name: List existing policies
@@ -77,28 +152,6 @@
   no_log: true
   changed_when: false
   when: openbao_bootstrap_token is defined
-
-- name: Read rendered RBAC policy contents from the target
-  ansible.builtin.slurp:
-    src: "{{ openbao_config_dir }}/.policy-{{ item.name }}.hcl"
-  loop: "{{ openbao_manageable_policies }}"
-  loop_control:
-    label: "{{ item.name }}"
-  register: openbao_rendered_policy_reads
-  changed_when: false
-  when: openbao_bootstrap_token is defined
-
-- name: Build the rendered RBAC policy content map
-  ansible.builtin.set_fact:
-    openbao_rendered_policy_map: >-
-      {{ openbao_rendered_policy_map | default({})
-         | combine({ item.item.name: (item.content | default('') | b64decode) }) }}
-  loop: "{{ openbao_rendered_policy_reads.results | default([]) }}"
-  loop_control:
-    label: "{{ item.item.name }}"
-  when:
-    - openbao_bootstrap_token is defined
-    - not (item.skipped | default(false))
 
 - name: Read existing RBAC policy contents
   ansible.builtin.command:
@@ -138,9 +191,8 @@
 
 - name: Write the RBAC policies that are missing or changed
   ansible.builtin.command:
-    cmd: >-
-      bao policy write {{ item.name }}
-      {{ openbao_config_dir }}/.policy-{{ item.name }}.hcl
+    cmd: "bao policy write {{ item.name }} -"
+    stdin: "{{ (openbao_rendered_policy_map | default({}))[item.name] }}"
   environment:
     BAO_ADDR: "{{ openbao_api_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
@@ -157,15 +209,5 @@
       (openbao_existing_policy_map | default({})).get(item.name, '')
       !=
       (openbao_rendered_policy_map | default({})).get(item.name, '')
-
-- name: Remove the rendered policies from the target
-  ansible.builtin.file:
-    path: "{{ openbao_config_dir }}/.policy-{{ item.name }}.hcl"
-    state: absent
-  loop: "{{ openbao_manageable_policies }}"
-  loop_control:
-    label: "{{ item.name }}"
-  changed_when: false
-  when: openbao_bootstrap_token is defined
 
 # --- AppRole auth method (add-if-missing) -----------------------------------

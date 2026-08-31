@@ -39,6 +39,16 @@ identity_providers:
         key: |
 {{ authelia_oidc_jwks_key | indent(10, true) }}
     enforce_pkce: public_clients_only
+    # Semaphore and terrakube-dex (Dex) both need `groups` in the id_token to
+    # gate access on group membership; the default claims set omits it.
+    claims_policies:
+      semaphore_claims_policy:
+        id_token:
+          - groups
+          - email
+          - email_verified
+          - preferred_username
+          - name
     clients:
       - client_id: '{{ authelia_oidc_hermes_client_id }}'
         client_name: Hermes Dashboard
@@ -74,15 +84,15 @@ identity_providers:
         require_pkce: true
         pkce_challenge_method: S256
         token_endpoint_auth_method: none
-      # Homarr and Langfuse are confidential clients (server-side apps that
-      # can hold a secret), so client_secret carries a pbkdf2-sha512 digest
-      # (never plaintext) and there is no PKCE. Homarr additionally disables
-      # signed token/userinfo responses per Authelia's own documented Homarr
-      # integration — its OIDC client does not support OpenID Connect's
-      # signed-response mode.
+      # Homarr, Langfuse, Semaphore, and terrakube-dex are confidential clients
+      # (server-side apps that can hold a secret), so client_secret carries a
+      # pbkdf2-sha512 digest (never plaintext) and there is no PKCE. Homarr
+      # additionally disables signed token/userinfo responses per Authelia's
+      # own documented Homarr integration — its OIDC client does not support
+      # OpenID Connect's signed-response mode.
       - client_id: '{{ authelia_oidc_homarr_client_id }}'
         client_name: Homarr
-        client_secret: '{{ authelia_oidc_homarr_client_secret_hash }}'
+        client_secret: '{{ authelia_oidc_client_secret_hashes.homarr }}'
         public: false
         redirect_uris:
           - '{{ authelia_oidc_homarr_redirect_uri }}'
@@ -101,10 +111,73 @@ identity_providers:
         userinfo_signed_response_alg: none
       - client_id: '{{ authelia_oidc_langfuse_client_id }}'
         client_name: Langfuse
-        client_secret: '{{ authelia_oidc_langfuse_client_secret_hash }}'
+        client_secret: '{{ authelia_oidc_client_secret_hashes.langfuse }}'
         public: false
         redirect_uris:
           - '{{ authelia_oidc_langfuse_redirect_uri }}'
+        scopes:
+          - openid
+          - profile
+          - email
+        grant_types:
+          - authorization_code
+        response_types:
+          - code
+        authorization_policy: two_factor
+        require_pkce: false
+        token_endpoint_auth_method: client_secret_basic
+      # Semaphore and terrakube-dex (Dex) both read `groups` from the id_token
+      # to gate access, hence claims_policy; neither supports a signed
+      # userinfo response, same as Homarr above.
+      - client_id: '{{ authelia_oidc_semaphore_client_id }}'
+        client_name: Semaphore
+        client_secret: '{{ authelia_oidc_client_secret_hashes.semaphore }}'
+        public: false
+        redirect_uris:
+          - '{{ authelia_oidc_semaphore_redirect_uri }}'
+        scopes:
+          - openid
+          - profile
+          - email
+          - groups
+        grant_types:
+          - authorization_code
+        response_types:
+          - code
+        authorization_policy: two_factor
+        require_pkce: false
+        token_endpoint_auth_method: client_secret_basic
+        claims_policy: semaphore_claims_policy
+        userinfo_signed_response_alg: none
+      - client_id: '{{ authelia_oidc_terrakube_dex_client_id }}'
+        client_name: Terrakube Dex
+        client_secret: '{{ authelia_oidc_client_secret_hashes.terrakube_dex }}'
+        public: false
+        redirect_uris:
+          - '{{ authelia_oidc_terrakube_dex_redirect_uri }}'
+        scopes:
+          - openid
+          - profile
+          - email
+          - groups
+        grant_types:
+          - authorization_code
+        response_types:
+          - code
+        authorization_policy: two_factor
+        require_pkce: false
+        token_endpoint_auth_method: client_secret_basic
+        claims_policy: semaphore_claims_policy
+        userinfo_signed_response_alg: none
+      # Grafana reads no groups claim — its generic_oauth backend maps every
+      # SSO user to a fixed role via role_attribute_path, so this client needs
+      # neither the groups scope nor a claims policy.
+      - client_id: '{{ authelia_oidc_grafana_client_id }}'
+        client_name: Grafana
+        client_secret: '{{ authelia_oidc_client_secret_hashes.grafana }}'
+        public: false
+        redirect_uris:
+          - '{{ authelia_oidc_grafana_redirect_uri }}'
         scopes:
           - openid
           - profile

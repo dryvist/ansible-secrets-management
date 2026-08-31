@@ -26,6 +26,39 @@
   failed_when: false
   when: openbao_bootstrap_token is defined
 
+# A DENIED read is not an ABSENT role. `failed_when: false` above makes both
+# return a non-zero rc, and the create below treats any non-zero rc as "this
+# role does not exist yet" -- so a 403 fires a privileged create that 403s in
+# turn, and the run dies reporting a create failure rather than the access gap
+# that actually caused it.
+#
+# This is reachable by design, not only by misconfiguration. The reconcile
+# policy enumerates AppRole paths BY NAME and is excluded from its own managed
+# set, so a newly declared AppRole has no grant for the reconcile identity
+# until an operator run rewrites that policy. Every reconcile run in between
+# hits exactly this path. Name the gap instead of failing on its symptom.
+- name: FAIL -- the existence check was DENIED, so absence cannot be concluded
+  vars:
+    _denied: >-
+      {{ openbao_approle_checks.results | default([])
+         | rejectattr('skipped', 'defined')
+         | selectattr('rc', 'defined')
+         | rejectattr('rc', 'equalto', 0)
+         | selectattr('stderr', 'search', '403')
+         | map(attribute='item') | map(attribute='name') | list }}
+  ansible.builtin.fail:
+    msg: >-
+      The AppRole existence check was denied (403) for: {{ _denied | join(', ') }}.
+      A denied read says NOTHING about whether the role exists, so this run must
+      not conclude it is missing and attempt to create it. This identity holds
+      no grant on those paths. If a role was declared recently, the reconcile
+      policy enumerates AppRole paths by name and is excluded from its own
+      managed set -- one run with OPENBAO_PROVISIONING_TOKEN rewrites it and
+      closes the gap.
+  when:
+    - openbao_bootstrap_token is defined
+    - _denied | length > 0
+
 - name: Create the missing AppRoles bound to their policy
   ansible.builtin.command:
     cmd: >-
@@ -48,6 +81,9 @@
   when:
     - openbao_bootstrap_token is defined
     - (item.1.rc | default(0)) != 0
+    # absence only -- a denied read is caught by the arm above, and must never
+    # reach a privileged create
+    - not (item.1.stderr | default('') is search('403'))
 
 # Policy-attachment drift on EXISTING AppRoles is reconciled through the
 # dedicated /policies sub-endpoint: it updates token_policies ONLY — other
