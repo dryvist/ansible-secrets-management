@@ -271,6 +271,11 @@
       no_log: true
       notify: Restart authelia
 
+# Group membership is reconciled separately from the seed above, because the
+# seed only ever runs on a host that has no users.yml yet. See the task file.
+- name: Reconcile the operator's group membership
+  ansible.builtin.include_tasks: admin_groups.yml
+
 - name: Install the authelia systemd unit
   ansible.builtin.template:
     src: authelia.service.j2

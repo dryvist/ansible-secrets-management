@@ -121,19 +121,62 @@ authelia_oidc_donna_redirect_uri: "https://hermes-donna.{{ authelia_cookie_domai
 # rather than silently rendering an empty-secret client.
 authelia_oidc_homarr_client_id: homarr
 authelia_oidc_homarr_redirect_uri: "https://homarr.{{ authelia_cookie_domain }}/api/auth/callback/oidc"
+
+# NOTE on the guard shape below. It used to read
+# `| default('', true) | mandatory('...')`, which NEVER FIRES: mandatory raises
+# only on an UNDEFINED value, and the default to the left has already turned a
+# missing key into an empty string by the time it runs. Verified directly —
+# `undef_map.key | default('', true) | mandatory('SHOULD FIRE')` returns "".
+# The effect was that a secret absent from the store rendered as an empty
+# client secret, got hashed into the config, and left the relying party with a
+# credential that can never match — a converge reporting success over a broken
+# login. `or undef(hint=...)` raises on both the empty and the undefined case
+# and carries the same message.
 authelia_oidc_homarr_client_secret_plain: >-
-  {{ bao_apps_secrets.authelia_oidc_homarr_client_secret
-     | default('', true)
-     | mandatory('authelia_oidc_homarr_client_secret missing from OpenBao secret/apps/authelia') }}
+  {{ (bao_apps_secrets.authelia_oidc_homarr_client_secret | default('', true))
+     or undef(hint='authelia_oidc_homarr_client_secret missing from OpenBao secret/apps/authelia') }}
 authelia_oidc_homarr_client_secret_hash_file: "{{ authelia_secrets_dir }}/oidc_homarr_client_secret_hash"
 
 authelia_oidc_langfuse_client_id: langfuse
 authelia_oidc_langfuse_redirect_uri: "https://langfuse.{{ authelia_cookie_domain }}/api/auth/callback/custom"
 authelia_oidc_langfuse_client_secret_plain: >-
-  {{ bao_apps_secrets.authelia_oidc_langfuse_client_secret
-     | default('', true)
-     | mandatory('authelia_oidc_langfuse_client_secret missing from OpenBao secret/apps/authelia') }}
+  {{ (bao_apps_secrets.authelia_oidc_langfuse_client_secret | default('', true))
+     or undef(hint='authelia_oidc_langfuse_client_secret missing from OpenBao secret/apps/authelia') }}
 authelia_oidc_langfuse_client_secret_hash_file: "{{ authelia_secrets_dir }}/oidc_langfuse_client_secret_hash"
+
+# Semaphore (Ansible/Terraform run UI) and terrakube-dex (the Dex instance
+# Terrakube federates through) are confidential clients too — same
+# pbkdf2-sha512/client_secret_basic/no-PKCE shape as Homarr and Langfuse above.
+authelia_oidc_semaphore_client_id: semaphore
+authelia_oidc_semaphore_redirect_uri: "https://semaphore.{{ authelia_cookie_domain }}/api/auth/oidc/authelia/redirect"
+authelia_oidc_semaphore_client_secret_plain: >-
+  {{ (bao_apps_secrets.authelia_oidc_semaphore_client_secret | default('', true))
+     or undef(hint='authelia_oidc_semaphore_client_secret missing from OpenBao secret/apps/authelia') }}
+authelia_oidc_semaphore_client_secret_hash_file: "{{ authelia_secrets_dir }}/oidc_semaphore_client_secret_hash"
+
+authelia_oidc_terrakube_dex_client_id: terrakube-dex
+authelia_oidc_terrakube_dex_redirect_uri: "https://terrakube-dex.{{ authelia_cookie_domain }}/dex/callback"
+authelia_oidc_terrakube_dex_client_secret_plain: >-
+  {{ (bao_apps_secrets.authelia_oidc_terrakube_dex_client_secret | default('', true))
+     or undef(hint='authelia_oidc_terrakube_dex_client_secret missing from OpenBao secret/apps/authelia') }}
+authelia_oidc_terrakube_dex_client_secret_hash_file: "{{ authelia_secrets_dir }}/oidc_terrakube_dex_client_secret_hash"
+
+# Drives tasks/oidc_client_secrets.yml's create-if-absent hash loop and
+# configuration.yml.j2's lookup of the resulting digests. Add a confidential
+# client by appending here — never by editing the task file.
+authelia_oidc_confidential_clients:
+  - name: homarr
+    secret_plain: "{{ authelia_oidc_homarr_client_secret_plain }}"
+    hash_file: "{{ authelia_oidc_homarr_client_secret_hash_file }}"
+  - name: langfuse
+    secret_plain: "{{ authelia_oidc_langfuse_client_secret_plain }}"
+    hash_file: "{{ authelia_oidc_langfuse_client_secret_hash_file }}"
+  - name: semaphore
+    secret_plain: "{{ authelia_oidc_semaphore_client_secret_plain }}"
+    hash_file: "{{ authelia_oidc_semaphore_client_secret_hash_file }}"
+  - name: terrakube_dex
+    secret_plain: "{{ authelia_oidc_terrakube_dex_client_secret_plain }}"
+    hash_file: "{{ authelia_oidc_terrakube_dex_client_secret_hash_file }}"
 
 # --- Notifier: local filesystem, not SMTP -------------------------------------
 # One-time codes for passkey enrolment and password reset are written to this
@@ -148,3 +191,52 @@ authelia_notification_file: "{{ authelia_data_dir }}/notification.txt"
 authelia_manage_services: true
 
 authelia_api_timeout: 30
+
+# --- Terrakube admin group ----------------------------------------------------
+# Terrakube resolves "superuser" from ONE group string (io.terrakube.owner, fed
+# by TERRAKUBE_ADMIN_GROUP), and every permission check in its API is
+# `isSuperUser(user) || checkMembership(user, teams)`. Its Dex instance federates
+# two connectors, and they do not emit the same group shape:
+#
+#   - the GitHub connector's `orgs:` form emits "org:team-slug"
+#   - an OIDC connector emits whatever the upstream sends, unprefixed
+#
+# so a bare `terrakube-admins` from Authelia authenticates and then matches
+# nothing. Three shortcuts were checked and rejected:
+#
+#   - dex's `claimModifications.modifyGroupNames.prefix` would rewrite the group
+#     inside dex, but it is master-only and exists in NO released dex (checked
+#     v2.42.0 through v2.45.1) — an unknown key here is ignored, not an error,
+#     so it would have looked configured and done nothing.
+#   - dex's legacy single-`org:` github form emits bare team names, but it
+#     resolves groups via teamsForOrg(), which does not assert org membership;
+#     the `orgs:` form returns "user not in required orgs or teams" and denies
+#     login. Switching would have silently removed that gate.
+#   - granting the bare group via a terrakube_team record covers the membership
+#     half of every check but not isSuperUser, so organization creation and the
+#     internal-service-account paths would still fail.
+#
+# That leaves emitting the org-qualified name from here. Composed from the same
+# two atoms the Terrakube compose file composes TERRAKUBE_ADMIN_GROUP from, so
+# the two cannot drift into different shapes; the org itself is never written
+# into this repo.
+authelia_terrakube_sso_enabled: false
+authelia_terrakube_github_org: "{{ lookup('env', 'DEX_GITHUB_ORG') | default('', true) }}"
+authelia_terrakube_github_team: "{{ lookup('env', 'DEX_GITHUB_TEAM') | default('', true) }}"
+authelia_terrakube_admin_group: >-
+  {{ (authelia_terrakube_github_org ~ ':' ~ authelia_terrakube_github_team)
+     if (authelia_terrakube_github_org and authelia_terrakube_github_team)
+     else '' }}
+
+# Groups the operator account must carry. `admins` is Authelia's own; the
+# Terrakube group is appended only when both atoms above resolved, so a run
+# without them omits the group rather than seeding a bare name that would look
+# granted and match nothing downstream.
+authelia_admin_groups: >-
+  {{ ['admins']
+     + ([authelia_terrakube_admin_group] if authelia_terrakube_admin_group else []) }}
+
+# Owner of the users database. Split out from the literal `root` used elsewhere
+# in the role purely so tests/authelia_admin_groups can exercise the reconcile
+# without being root; production never overrides it.
+authelia_users_file_owner: root
