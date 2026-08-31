@@ -35,7 +35,7 @@ authelia_db_path: "{{ authelia_data_dir }}/db.sqlite3"
 authelia_port: "{{ tofu_data.constants.service_ports.authelia_portal }}"
 # The ingress base domain — the session cookie is scoped to it so ONE login
 # covers every <name>.<base> UI. Must match the Traefik router FQDNs.
-authelia_cookie_domain: "{{ lookup('env', 'PROXMOX_SUBDOMAIN') }}"
+authelia_cookie_domain: "{{ ingress_domain }}"
 authelia_portal_url: "https://authelia.{{ authelia_cookie_domain }}"
 
 # Domains whose API paths bypass the SSO gate. These apps enforce their own
@@ -161,6 +161,17 @@ authelia_oidc_terrakube_dex_client_secret_plain: >-
      or undef(hint='authelia_oidc_terrakube_dex_client_secret missing from OpenBao secret/apps/authelia') }}
 authelia_oidc_terrakube_dex_client_secret_hash_file: "{{ authelia_secrets_dir }}/oidc_terrakube_dex_client_secret_hash"
 
+# Grafana OSS uses its generic_oauth backend — a confidential client with the
+# same shape as the others above. client_id and the redirect host both come from
+# grafana_hostname (inventory/group_vars/all.yml, read from the deployment
+# object) so the name is defined once, never spelled into a URL.
+authelia_oidc_grafana_client_id: "{{ grafana_hostname }}"
+authelia_oidc_grafana_redirect_uri: "https://{{ grafana_hostname }}.{{ authelia_cookie_domain }}/login/generic_oauth"
+authelia_oidc_grafana_client_secret_plain: >-
+  {{ (bao_apps_secrets.authelia_oidc_grafana_client_secret | default('', true))
+     or undef(hint='authelia_oidc_grafana_client_secret missing from OpenBao secret/apps/authelia') }}
+authelia_oidc_grafana_client_secret_hash_file: "{{ authelia_secrets_dir }}/oidc_grafana_client_secret_hash"
+
 # Drives tasks/oidc_client_secrets.yml's create-if-absent hash loop and
 # configuration.yml.j2's lookup of the resulting digests. Add a confidential
 # client by appending here — never by editing the task file.
@@ -177,6 +188,9 @@ authelia_oidc_confidential_clients:
   - name: terrakube_dex
     secret_plain: "{{ authelia_oidc_terrakube_dex_client_secret_plain }}"
     hash_file: "{{ authelia_oidc_terrakube_dex_client_secret_hash_file }}"
+  - name: grafana
+    secret_plain: "{{ authelia_oidc_grafana_client_secret_plain }}"
+    hash_file: "{{ authelia_oidc_grafana_client_secret_hash_file }}"
 
 # --- Notifier: local filesystem, not SMTP -------------------------------------
 # One-time codes for passkey enrolment and password reset are written to this

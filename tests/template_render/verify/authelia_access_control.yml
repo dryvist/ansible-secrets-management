@@ -32,6 +32,10 @@
       langfuse: x
       semaphore: x
       terrakube_dex: x
+      grafana: x
+    # Supplied by inventory/group_vars/all.yml at run time.
+    ingress_domain: example.test
+    grafana_hostname: grafana
 
   tasks:
     - name: Load the authelia role defaults
