@@ -1,4 +1,17 @@
 ---
+# The SSH ENGINE (mount + CA key) is bootstrap work: the reconcile identity's
+# policy grants <ssh_mount>/roles/<name> but nothing on sys/mounts or
+# ssh/config/ca, so each of these 403s under a reconcile-mode run. Note the
+# reconcile login assigns its token to openbao_bootstrap_token, so
+# `openbao_bootstrap_token is defined` no longer means "operator token" and
+# cannot gate a privileged task on its own.
+#
+# The CA probe is gated too, not just the write: it runs under
+# failed_when: false, and a DENIED read returns rc != 0 exactly like an absent
+# CA — which then triggers the privileged key generation that cannot succeed.
+#
+# The SSH signing ROLES below stay ungated: they are in the reconcile policy by
+# design, and skipping them would silently stop reconciling them.
 - name: Enable the SSH secrets engine
   ansible.builtin.command:
     cmd: "bao secrets enable -path={{ openbao_ssh_mount }} ssh"
@@ -8,6 +21,7 @@
   no_log: true
   changed_when: true
   when:
+    - not (openbao_reconcile_mode | default(false))
     - openbao_bootstrap_token is defined
     - openbao_ssh_engine_enabled | bool
     - (openbao_ssh_mount ~ '/') not in (openbao_mounts_raw.stdout | from_json).keys()
@@ -26,6 +40,7 @@
   changed_when: false
   failed_when: false
   when:
+    - not (openbao_reconcile_mode | default(false))
     - openbao_bootstrap_token is defined
     - openbao_ssh_engine_enabled | bool
 
@@ -47,6 +62,7 @@
   no_log: true
   changed_when: true
   when:
+    - not (openbao_reconcile_mode | default(false))
     - openbao_bootstrap_token is defined
     - openbao_ssh_engine_enabled | bool
     - (openbao_ssh_ca_check.rc | default(1)) != 0
@@ -64,6 +80,7 @@
   register: openbao_ssh_ca_public_key
   changed_when: false
   when:
+    - not (openbao_reconcile_mode | default(false))
     - openbao_bootstrap_token is defined
     - openbao_ssh_engine_enabled | bool
 
@@ -77,6 +94,7 @@
   register: openbao_ssh_ca_fingerprint
   changed_when: false
   when:
+    - not (openbao_reconcile_mode | default(false))
     - openbao_bootstrap_token is defined
     - openbao_ssh_engine_enabled | bool
 
@@ -84,6 +102,7 @@
   ansible.builtin.debug:
     msg: "SSH CA fingerprint (pin in ansible-proxmox ssh_ca_trust): {{ openbao_ssh_ca_fingerprint.stdout }}"
   when:
+    - not (openbao_reconcile_mode | default(false))
     - openbao_bootstrap_token is defined
     - openbao_ssh_engine_enabled | bool
 

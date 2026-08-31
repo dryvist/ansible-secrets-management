@@ -4,7 +4,7 @@
     src: "{{ item.template }}"
     dest: "{{ openbao_config_dir }}/.policy-{{ item.name }}.hcl"
     mode: "0600"
-  loop: "{{ openbao_policies }}"
+  loop: "{{ openbao_manageable_policies }}"
   loop_control:
     label: "{{ item.name }}"
   changed_when: false
@@ -24,7 +24,7 @@
 - name: Read rendered RBAC policy contents from the target
   ansible.builtin.slurp:
     src: "{{ openbao_config_dir }}/.policy-{{ item.name }}.hcl"
-  loop: "{{ openbao_policies }}"
+  loop: "{{ openbao_manageable_policies }}"
   loop_control:
     label: "{{ item.name }}"
   register: openbao_rendered_policy_reads
@@ -49,7 +49,7 @@
   environment:
     BAO_ADDR: "{{ openbao_api_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
-  loop: "{{ openbao_policies }}"
+  loop: "{{ openbao_manageable_policies }}"
   loop_control:
     label: "{{ item.name }}"
   register: openbao_existing_policy_reads
@@ -81,7 +81,7 @@
   environment:
     BAO_ADDR: "{{ openbao_api_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
-  loop: "{{ openbao_policies }}"
+  loop: "{{ openbao_manageable_policies }}"
   loop_control:
     label: "{{ item.name }}"
   no_log: true
@@ -99,7 +99,7 @@
   ansible.builtin.file:
     path: "{{ openbao_config_dir }}/.policy-{{ item.name }}.hcl"
     state: absent
-  loop: "{{ openbao_policies }}"
+  loop: "{{ openbao_manageable_policies }}"
   loop_control:
     label: "{{ item.name }}"
   changed_when: false

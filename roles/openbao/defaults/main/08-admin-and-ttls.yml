@@ -7,6 +7,23 @@
 openbao_provisioning_token: >-
   {{ lookup('env', 'OPENBAO_PROVISIONING_TOKEN') | default('', true) }}
 
+# --- Routine reconciliation identity (no operator, no admin token) -----------
+# openbao-reconcile owns, BY NAME, the policies and AppRoles this repo declares.
+# It excludes the break-glass tiers and its own policy, so it cannot widen
+# itself. Wiring it here is what makes a change to the CONTENT of an
+# already-declared policy land on a routine converge instead of skipping
+# silently. Secret-zero is ambient env (`doppler run`), same as every other
+# AppRole; absent, the role falls back to skipping and says so.
+openbao_reconcile_role_id: >-
+  {{ lookup('env', 'OPENBAO_APPROLE_OPENBAO_RECONCILE_ROLE_ID') | default('', true) }}
+openbao_reconcile_secret_id: >-
+  {{ lookup('env', 'OPENBAO_APPROLE_OPENBAO_RECONCILE_SECRET_ID') | default('', true) }}
+# The reconcile login is delegated to the controller, so it needs the address
+# the CONTROLLER can reach -- openbao_api_addr is the guest's own bind address.
+# BAO_ADDR is already ambient for every runner invocation.
+openbao_reconcile_addr: >-
+  {{ lookup('env', 'BAO_ADDR') | default('', true) }}
+
 # --- AppRole token TTLs -------------------------------------------------------
 # Short-lived tokens; secret_id_ttl=0 means the secret_id itself does not expire
 # (rotate manually). Tune per-identity if needed.

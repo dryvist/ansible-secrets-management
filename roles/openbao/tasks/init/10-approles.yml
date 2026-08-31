@@ -17,7 +17,7 @@
   environment:
     BAO_ADDR: "{{ openbao_api_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
-  loop: "{{ openbao_approles }}"
+  loop: "{{ openbao_manageable_approles }}"
   loop_control:
     label: "{{ item.name }}"
   register: openbao_approle_checks
@@ -40,7 +40,7 @@
   environment:
     BAO_ADDR: "{{ openbao_api_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
-  loop: "{{ openbao_approles | zip(openbao_approle_checks.results | default([])) | list }}"
+  loop: "{{ openbao_manageable_approles | zip(openbao_approle_checks.results | default([])) | list }}"
   loop_control:
     label: "{{ item.0.name }}"
   no_log: true
@@ -62,7 +62,7 @@
   environment:
     BAO_ADDR: "{{ openbao_api_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
-  loop: "{{ openbao_approles | zip(openbao_approle_checks.results | default([])) | list }}"
+  loop: "{{ openbao_manageable_approles | zip(openbao_approle_checks.results | default([])) | list }}"
   loop_control:
     label: "{{ item.0.name }}"
   no_log: true
@@ -90,7 +90,7 @@
   environment:
     BAO_ADDR: "{{ openbao_api_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
-  loop: "{{ openbao_approles | zip(openbao_approle_checks.results | default([])) | list }}"
+  loop: "{{ openbao_manageable_approles | zip(openbao_approle_checks.results | default([])) | list }}"
   loop_control:
     label: "{{ item.0.name }}"
   register: openbao_role_ids
@@ -117,7 +117,7 @@
   environment:
     BAO_ADDR: "{{ openbao_api_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
-  loop: "{{ openbao_approles | zip(openbao_approle_checks.results | default([])) | list }}"
+  loop: "{{ openbao_manageable_approles | zip(openbao_approle_checks.results | default([])) | list }}"
   loop_control:
     label: "{{ item.0.name }}"
   register: openbao_secret_ids
@@ -141,7 +141,7 @@
     dest: "{{ openbao_approle_file_prefix }}-{{ item.0.0.name }}-{{ inventory_hostname }}.json"
     mode: "0600"
   loop: >-
-    {{ (openbao_approles | zip(openbao_approle_checks.results | default([])) | list)
+    {{ (openbao_manageable_approles | zip(openbao_approle_checks.results | default([])) | list)
        | zip(openbao_role_ids.results | default([]),
              openbao_secret_ids.results | default([]))
        | list }}
