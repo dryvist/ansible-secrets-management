@@ -27,10 +27,55 @@
     - openbao_bootstrap_token is defined
     - openbao_reconcile_mode | default(false)
 
+# sys/capabilities-self returns the per-path capability lists BOTH at the top
+# level and under `data`, and which of the two a given client surfaces is not
+# something to bet a hard failure on. Reading only `data` yielded an empty dict
+# against a live policy that demonstrably grants create/read/update on every
+# path asked about -- and an empty dict reads as "denied everything", so the
+# gate blocked a converge that should have proceeded.
+- name: Resolve what the server said this identity may write
+  ansible.builtin.set_fact:
+    openbao_policy_caps: >-
+      {{ (_body.get('data', {}) | combine(_body)) | dict2items
+         | selectattr('key', 'match', '^sys/policies/acl/') | items2dict }}
+  vars:
+    _body: "{{ openbao_policy_capabilities.stdout | default('{}') | from_json }}"
+  # Keep only real policy paths, rather than removing a hand-listed set of
+  # envelope keys. The response also carries `capabilities`, `mount_type`,
+  # `mount_class` and friends, and any future field would join them -- a
+  # denylist would have to grow to stay correct. A stray key surviving here
+  # would be compared against declared policy NAMES below (the prefix is
+  # stripped, not filtered, at that point), so a collision would mark a policy
+  # writable that is not: a false green in the guard built to prevent one.
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_reconcile_mode | default(false)
+    - (openbao_policy_capabilities.rc | default(1)) == 0
+
+# An uninformative probe is NOT a denial. If the response carried no capability
+# entry for ANY declared path, the probe itself is broken (a shape change, a
+# malformed request) and saying "the identity may write none of these" would be
+# a confident false red -- the same absent-vs-denied confusion this whole block
+# exists to eliminate. Fail, but say which failure it is.
+- name: FAIL -- the capability probe returned nothing usable
+  ansible.builtin.fail:
+    msg: >-
+      Asked sys/capabilities-self about
+      {{ openbao_manageable_policies | length }} policy paths and the response
+      carried a capability entry for NONE of them. That is a broken probe, not
+      a permission finding -- do not read it as "this identity may write
+      nothing". Check the request shape and the response envelope before
+      concluding anything about grants.
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_reconcile_mode | default(false)
+    - (openbao_policy_capabilities.rc | default(1)) == 0
+    - openbao_manageable_policies | length > 0
+    - (openbao_policy_caps | default({}) | length) == 0
+
 - name: FAIL -- the reconcile identity cannot manage every declared policy
   vars:
-    _caps: >-
-      {{ (openbao_policy_capabilities.stdout | default('{}') | from_json).data | default({}) }}
+    _caps: "{{ openbao_policy_caps | default({}) }}"
     _unwritable: >-
       {{ openbao_manageable_policies | map(attribute='name') | reject('in',
          (_caps | dict2items
