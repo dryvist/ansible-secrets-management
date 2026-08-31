@@ -111,6 +111,24 @@ openbao_base_approles:
       {{ openbao_read_all_policies
          + (openbao_ai_readonly_extra_subtrees | map('regex_replace', '^(.+)$', 'read-\1') | list)
          + (['ssh-sign-automation-ai'] if openbao_ssh_engine_enabled else []) }}
+  # iac-platform-deploy: the deploy of the IaC platform compose stack reads its
+  # runtime credentials from secret/platform/* and the two OIDC client secrets
+  # it must hand its services from secret/apps/*. It chains both reads under a
+  # SINGLE token, so it needs one identity holding both — and no workload
+  # identity had both, which made the deploy an operator-only action.
+  #
+  # ai-elevated already carries exactly these grants, and is deliberately the
+  # wrong answer: it is a broad standing READ tier that also attaches
+  # ssh-sign-automation-ai, so pointing a deploy at it would widen a tier whose
+  # scope is justified by a different purpose. A purpose-named role carrying the
+  # two capability leaves it actually needs is narrower and says what it is.
+  #
+  # READ-ONLY by construction — no write-*, no github-mint, no ssh-sign, so it
+  # cannot reach the control plane. Standing secret_id (manage_secret_id
+  # defaults true) because a deploy is routine and unattended; the human-gated
+  # inert pattern is for write tiers.
+  - name: iac-platform-deploy
+    token_policies: ['read-apps', 'read-platform']
   # ai-apply-all: the read-write-all rollup consumer — a scoped-but-broad WRITE
   # actor for a genuinely cross-domain task. Composed ONLY of KV read+write base
   # leaves (+ github-mint), so by construction it CANNOT touch sys/policies, auth,
