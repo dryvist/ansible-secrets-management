@@ -1,4 +1,61 @@
 ---
+# A reconcile-mode run may manage only what its OWN policy grants. That policy
+# is excluded from the set reconcile can rewrite (it cannot widen its own
+# grants), so the live policy drifts BEHIND the declared set the moment a new
+# policy is declared -- and every read/write of the new name then 403s.
+#
+# Ask the server what this token can actually do rather than inferring it from
+# the declared set, and fail LOUDLY naming the shortfall. Silently narrowing to
+# what happens to work is the exact false green this block exists to prevent:
+# a declared policy would never be written and nothing would say so.
+- name: Ask the server which declared policies this identity may actually write
+  ansible.builtin.command:
+    cmd: >-
+      bao write -format=json sys/capabilities-self
+      {{ openbao_manageable_policies
+         | map(attribute='name')
+         | map('regex_replace', '^(.+)$', 'paths=sys/policies/acl/\\1')
+         | join(' ') }}
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  register: openbao_policy_capabilities
+  changed_when: false
+  failed_when: false
+  no_log: true
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_reconcile_mode | default(false)
+
+- name: FAIL -- the reconcile identity cannot manage every declared policy
+  vars:
+    _caps: >-
+      {{ (openbao_policy_capabilities.stdout | default('{}') | from_json).data | default({}) }}
+    _unwritable: >-
+      {{ openbao_manageable_policies | map(attribute='name') | reject('in',
+         (_caps | dict2items
+                | selectattr('value', 'contains', 'update')
+                | map(attribute='key')
+                | map('regex_replace', '^sys/policies/acl/', '')
+                | list)) | list | sort }}
+  ansible.builtin.fail:
+    msg: >-
+      The openbao-reconcile identity is declared as managing
+      {{ openbao_manageable_policies | length }} policies but the live
+      openbao-reconcile policy grants update on none of these
+      {{ _unwritable | length }}: {{ _unwritable | join(', ') }}.
+      Reconcile CANNOT widen its own grants -- openbao-reconcile is in
+      openbao_reconcile_excluded_policies by design -- so this only clears with
+      one operator-token run (OPENBAO_PROVISIONING_TOKEN), which rewrites the
+      reconcile policy from the current declared set. Refusing to continue:
+      writing only the reachable subset would leave the rest declared but never
+      written, with the converge still reporting success.
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_reconcile_mode | default(false)
+    - (openbao_policy_capabilities.rc | default(1)) == 0
+    - _unwritable | length > 0
+
 - name: Render the RBAC policies to the target
   ansible.builtin.template:
     src: "{{ item.template }}"
@@ -55,6 +112,12 @@
   register: openbao_existing_policy_reads
   no_log: true
   changed_when: false
+  # Every other probe in this file tolerates a non-zero rc; this one did not, so
+  # a single denied read aborted the whole block before any policy was written.
+  # The map build below already guards on `rc == 0`, so a failed read is an
+  # expected, handled input -- not a reason to stop. The capability gate above
+  # is what turns a genuine scope shortfall into a loud failure.
+  failed_when: false
   when:
     - openbao_bootstrap_token is defined
     - item.name in (openbao_policies_raw.stdout | from_json)
