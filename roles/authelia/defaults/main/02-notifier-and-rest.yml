@@ -1,0 +1,68 @@
+---
+# Part of the authelia role's defaults. Ansible loads every file in
+# defaults/main/ as one namespace, so these split purely by subject --
+# a single main.yml grew past the repo's per-file token gate.
+# Subject: notifier, storage and the remaining service settings.
+
+# --- Notifier: local filesystem, not SMTP -------------------------------------
+# One-time codes for passkey enrolment and password reset are written to this
+# file on the persistent mount, not emailed. Auth-critical flows must not depend
+# on mail/DNS reachability in a single-user homelab; the operator reads the code
+# directly. Lives on the persistent mount so it survives a rebuild.
+authelia_notification_file: "{{ authelia_data_dir }}/notification.txt"
+
+# --- Behaviour toggles ---------------------------------------------------------
+# false in CI/molecule contexts: skips systemd unit install/start and the live
+# health check only (binary staging and config render still run).
+authelia_manage_services: true
+
+authelia_api_timeout: 30
+
+# --- Terrakube admin group ----------------------------------------------------
+# Terrakube resolves "superuser" from ONE group string (io.terrakube.owner, fed
+# by TERRAKUBE_ADMIN_GROUP), and every permission check in its API is
+# `isSuperUser(user) || checkMembership(user, teams)`. Its Dex instance federates
+# two connectors, and they do not emit the same group shape:
+#
+#   - the GitHub connector's `orgs:` form emits "org:team-slug"
+#   - an OIDC connector emits whatever the upstream sends, unprefixed
+#
+# so a bare `terrakube-admins` from Authelia authenticates and then matches
+# nothing. Three shortcuts were checked and rejected:
+#
+#   - dex's `claimModifications.modifyGroupNames.prefix` would rewrite the group
+#     inside dex, but it is master-only and exists in NO released dex (checked
+#     v2.42.0 through v2.45.1) — an unknown key here is ignored, not an error,
+#     so it would have looked configured and done nothing.
+#   - dex's legacy single-`org:` github form emits bare team names, but it
+#     resolves groups via teamsForOrg(), which does not assert org membership;
+#     the `orgs:` form returns "user not in required orgs or teams" and denies
+#     login. Switching would have silently removed that gate.
+#   - granting the bare group via a terrakube_team record covers the membership
+#     half of every check but not isSuperUser, so organization creation and the
+#     internal-service-account paths would still fail.
+#
+# That leaves emitting the org-qualified name from here. Composed from the same
+# two atoms the Terrakube compose file composes TERRAKUBE_ADMIN_GROUP from, so
+# the two cannot drift into different shapes; the org itself is never written
+# into this repo.
+authelia_terrakube_sso_enabled: false
+authelia_terrakube_github_org: "{{ lookup('env', 'DEX_GITHUB_ORG') | default('', true) }}"
+authelia_terrakube_github_team: "{{ lookup('env', 'DEX_GITHUB_TEAM') | default('', true) }}"
+authelia_terrakube_admin_group: >-
+  {{ (authelia_terrakube_github_org ~ ':' ~ authelia_terrakube_github_team)
+     if (authelia_terrakube_github_org and authelia_terrakube_github_team)
+     else '' }}
+
+# Groups the operator account must carry. `admins` is Authelia's own; the
+# Terrakube group is appended only when both atoms above resolved, so a run
+# without them omits the group rather than seeding a bare name that would look
+# granted and match nothing downstream.
+authelia_admin_groups: >-
+  {{ ['admins']
+     + ([authelia_terrakube_admin_group] if authelia_terrakube_admin_group else []) }}
+
+# Owner of the users database. Split out from the literal `root` used elsewhere
+# in the role purely so tests/authelia_admin_groups can exercise the reconcile
+# without being root; production never overrides it.
+authelia_users_file_owner: root
