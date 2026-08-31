@@ -59,26 +59,36 @@
     - openbao_reconcile_mode | default(false)
     - (openbao_policy_capabilities.rc | default(1)) == 0
 
-# An uninformative probe is NOT a denial. If the response carried no capability
-# entry for ANY declared path, the probe itself is broken (a shape change, a
-# malformed request) and saying "the identity may write none of these" would be
-# a confident false red -- the same absent-vs-denied confusion this whole block
-# exists to eliminate. Fail, but say which failure it is.
-- name: FAIL -- the capability probe returned nothing usable
+# An uninformative probe is NOT a denial. If the response carried capability
+# entries for FEWER paths than were asked about, the probe itself is broken (a
+# shape change, a malformed request) and reading the gap as a permission finding
+# would be a confident false red -- the same absent-vs-denied confusion this
+# whole block exists to eliminate. Fail, but say which failure it is.
+#
+# The count, not merely zero: the backreference bug asked about one literal path
+# and got ONE well-formed entry back, so a `== 0` arm did not fire and the gate
+# went on to report a unanimous false denial. A short answer is the direct
+# signature of a probe that asked the wrong question, and neither a zero-check
+# nor a type-check sees it -- the values were valid capability lists, just for a
+# path nobody declared.
+- name: FAIL -- the capability probe did not answer about every path it asked about
   ansible.builtin.fail:
     msg: >-
       Asked sys/capabilities-self about
       {{ openbao_manageable_policies | length }} policy paths and the response
-      carried a capability entry for NONE of them. That is a broken probe, not
-      a permission finding -- do not read it as "this identity may write
-      nothing". Check the request shape and the response envelope before
-      concluding anything about grants.
+      carried a capability entry for only
+      {{ openbao_policy_caps | default({}) | length }} of them. That is a broken
+      probe, not a permission finding -- do not read a short answer as "this
+      identity may write nothing". Check the request shape and the response
+      envelope before concluding anything about grants.
   when:
     - openbao_bootstrap_token is defined
     - openbao_reconcile_mode | default(false)
     - (openbao_policy_capabilities.rc | default(1)) == 0
     - openbao_manageable_policies | length > 0
-    - (openbao_policy_caps | default({}) | length) == 0
+    - >-
+      (openbao_policy_caps | default({}) | length)
+      < (openbao_manageable_policies | length)
 
 - name: FAIL -- the reconcile identity cannot manage every declared policy
   vars:

@@ -95,6 +95,30 @@ def probe_paths(declared):
     return [a[len("paths="):] for a in rendered.split() if a.startswith("paths=")]
 
 
+SHORT_ANSWER_TASK = (
+    "FAIL -- the capability probe did not answer about every path it asked about"
+)
+
+
+def probe_is_short(answered, asked):
+    """Render the coverage arm's OWN `when` expression from the task file.
+
+    `answered` is the resolved openbao_policy_caps; `asked` the declared names.
+    Returns True when the gate would abort as a broken probe.
+    """
+    task = _task(SHORT_ANSWER_TASK)
+    expr = [c for c in task["when"] if "openbao_policy_caps" in str(c)]
+    assert len(expr) == 1, f"expected one caps condition, got {expr}"
+    templar = Templar(loader=DataLoader())
+    templar.available_variables = {
+        "openbao_policy_caps": answered,
+        "openbao_manageable_policies": [{"name": n} for n in asked],
+    }
+    return templar.template(
+        trust_as_template("{{ " + expr[0] + " }}")
+    )
+
+
 class CapabilityResolution(unittest.TestCase):
     def test_data_only_response(self):
         body = json.dumps(dict(ENVELOPE, data=PATHS))
@@ -183,6 +207,41 @@ class ProbeAsksAboutRealPaths(unittest.TestCase):
             probe_paths(odd),
             [f"sys/policies/acl/{n}" for n in odd],
         )
+
+
+class ProbeCoverage(unittest.TestCase):
+    """A short answer is a broken probe, never a permission finding.
+
+    The zero-check this replaces could not see the failure that motivated it.
+    The backreference bug asked about one literal path and got ONE well-formed
+    entry back, so `len == 0` was false, the broken-probe arm stayed silent, and
+    the gate reported a unanimous false denial of all 60 policies.
+    """
+
+    def test_a_full_answer_is_not_flagged(self):
+        caps = resolve_caps(json.dumps(dict(ENVELOPE, data=PATHS)))
+        self.assertFalse(probe_is_short(caps, NAMES))
+
+    def test_the_one_entry_answer_that_defeated_the_zero_check_is_caught(self):
+        # Exactly the production signature: asked 3, answered 1, well-formed.
+        caps = resolve_caps(
+            json.dumps(dict(ENVELOPE, data={"sys/policies/acl/1": CAPS}))
+        )
+        self.assertEqual(len(caps), 1)   # the zero-check would NOT have fired
+        self.assertTrue(probe_is_short(caps, NAMES))
+
+    def test_an_empty_answer_is_still_caught(self):
+        # The case the old `== 0` arm covered must not regress.
+        self.assertTrue(probe_is_short({}, NAMES))
+
+    def test_a_real_shortfall_is_not_mistaken_for_a_short_answer(self):
+        # Every path answered, one of them read-only. That is a genuine
+        # permission finding and must reach the unwritable verdict instead.
+        partial = dict(PATHS)
+        partial["sys/policies/acl/media"] = ["read"]
+        caps = resolve_caps(json.dumps(dict(ENVELOPE, data=partial)))
+        self.assertFalse(probe_is_short(caps, NAMES))
+        self.assertEqual(unwritable(caps, NAMES), ["media"])
 
 
 if __name__ == "__main__":
