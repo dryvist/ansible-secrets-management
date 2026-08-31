@@ -78,12 +78,28 @@
 # A failure is NOT fatal -- on a cluster that has never had a privileged run the
 # identity does not exist yet -- but it MUST be loud, because a silent failure
 # here reproduces the exact false green this block exists to remove.
+# Delegated, like every other vault_login in this repo (see
+# openbao_secrets/tasks/publish.yml): community.hashi_vault needs hvac, which
+# lives in the controller's dev shell and NOT on the guests. Run on the guest it
+# fails to import, and `failed_when: false` then turns that into a silent "ok"
+# with no .login key -- indistinguishable from a rejected credential.
+#
+# openbao_api_addr is the node's own bind address and is not reachable from the
+# controller, so a delegated login must use the ambient BAO_ADDR the runner
+# already exports.
+#
+# ansible_become: false because a delegated task inherits the PLAY's become
+# regardless of any task-level setting, and would otherwise try to escalate on
+# the control node.
 - name: Log in as the reconcile identity for routine RBAC reconciliation
   community.hashi_vault.vault_login:
-    url: "{{ openbao_api_addr }}"
+    url: "{{ openbao_reconcile_addr }}"
     auth_method: approle
     role_id: "{{ openbao_reconcile_role_id }}"
     secret_id: "{{ openbao_reconcile_secret_id }}"
+  delegate_to: localhost
+  vars:
+    ansible_become: false
   register: openbao_reconcile_login
   no_log: true
   failed_when: false
@@ -92,6 +108,7 @@
     - openbao_provisioning_token | length == 0
     - openbao_reconcile_role_id | length > 0
     - openbao_reconcile_secret_id | length > 0
+    - openbao_reconcile_addr | length > 0
 
 - name: Use the reconcile token when it authenticated
   ansible.builtin.set_fact:
@@ -112,15 +129,19 @@
 - name: FAIL — the reconcile identity was configured but could not authenticate
   ansible.builtin.fail:
     msg: >-
-      OpenBao reconcile login FAILED on {{ inventory_hostname }}. Secret-zero
-      for the openbao-reconcile AppRole is present in the environment but the
-      login did not return a token, so RBAC would NOT have been reconciled.
-      Because the credentials ARE published, this is a regression, not a
-      bootstrap gap: the AppRole was deleted, or its secret_id was rotated
-      without republishing. Re-issue it (a privileged run recreates the role)
-      and republish role_id/secret_id, or unset
-      OPENBAO_APPROLE_OPENBAO_RECONCILE_{ROLE,SECRET}_ID to deliberately fall
-      back to the loud skip.
+      OpenBao reconcile login returned no token on {{ inventory_hostname }},
+      so RBAC was NOT reconciled. Secret-zero IS present, so this is not the
+      never-bootstrapped case.
+      This message does NOT diagnose which cause applies -- `failed_when: false`
+      keeps a module-level error indistinguishable from a rejected credential,
+      and `no_log` hides both. Check, in order:
+        1. the module itself errored (re-run this task with no_log removed);
+        2. BAO_ADDR is unreachable from the CONTROLLER, which is where this
+           login is delegated;
+        3. the AppRole was deleted or its secret_id rotated without
+           republishing -- re-issue via a privileged run and republish.
+      To deliberately fall back to the loud skip, unset
+      OPENBAO_APPROLE_OPENBAO_RECONCILE_{ROLE,SECRET}_ID.
   when:
     - openbao_reconcile_login is defined
     - not (openbao_reconcile_login.skipped | default(false))
