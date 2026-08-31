@@ -8,13 +8,20 @@
 # the declared set, and fail LOUDLY naming the shortfall. Silently narrowing to
 # what happens to work is the exact false green this block exists to prevent:
 # a declared policy would never be written and nothing would say so.
+# The prefix is added by matching '^' rather than capturing the whole name and
+# substituting \1. A backreference does not survive the trip: YAML, Jinja and
+# `command`'s shlex.split each get a say in what a backslash means, and the net
+# effect was that all 60 paths rendered as the single literal
+# `sys/policies/acl/1` -- a policy that does not exist, so the server answered
+# `deny` and the gate concluded the identity could write nothing. It had never
+# once asked about a real path.
 - name: Ask the server which declared policies this identity may actually write
   ansible.builtin.command:
     cmd: >-
       bao write -format=json sys/capabilities-self
       {{ openbao_manageable_policies
          | map(attribute='name')
-         | map('regex_replace', '^(.+)$', 'paths=sys/policies/acl/\\1')
+         | map('regex_replace', '^', 'paths=sys/policies/acl/')
          | join(' ') }}
   environment:
     BAO_ADDR: "{{ openbao_api_addr }}"

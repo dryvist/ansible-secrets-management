@@ -73,6 +73,28 @@ def unwritable(caps, declared):
     return templar.template(trust_as_template(task["vars"]["_unwritable"]))
 
 
+def probe_paths(declared):
+    """Render the task file's OWN probe command and return its `paths=` args.
+
+    Loaded from the task file rather than retyped. Retyping is what hid the
+    original bug: the replacement was `paths=sys/policies/acl/\\1`, and in
+    Python source that literal is ALREADY the unescaped two-character form, so
+    a transcribed check silently performs the unescaping step whose absence was
+    the defect and passes while production fails.
+    """
+    task = _task("Ask the server which declared policies this identity may actually write")
+    templar = Templar(loader=DataLoader())
+    templar.available_variables = {
+        "openbao_manageable_policies": [{"name": n} for n in declared],
+        "openbao_api_addr": "http://127.0.0.1:8200",
+        "openbao_bootstrap_token": "s.test",
+    }
+    rendered = templar.template(
+        trust_as_template(task["ansible.builtin.command"]["cmd"])
+    )
+    return [a[len("paths="):] for a in rendered.split() if a.startswith("paths=")]
+
+
 class CapabilityResolution(unittest.TestCase):
     def test_data_only_response(self):
         body = json.dumps(dict(ENVELOPE, data=PATHS))
@@ -127,6 +149,40 @@ class UnwritableVerdict(unittest.TestCase):
         partial = {"sys/policies/acl/hermes": ["read"]}
         caps = resolve_caps(json.dumps(dict(ENVELOPE, **partial)))
         self.assertEqual(unwritable(caps, ["hermes"]), ["hermes"])
+
+
+class ProbeAsksAboutRealPaths(unittest.TestCase):
+    """The probe must name every declared policy, once, at its real path.
+
+    The gate reported "grants update on none of these 56" against a live policy
+    that granted create/read/update on all of them. Cause: a regex
+    backreference that did not survive YAML -> Jinja -> shlex.split, so all 60
+    paths rendered as the single literal `sys/policies/acl/1` -- a policy that
+    does not exist, which the server answered `deny`. The probe had never once
+    asked about a real path, and every failure arm downstream was reasoning
+    about an answer to a question nobody asked.
+    """
+
+    def test_every_declared_policy_is_asked_about_at_its_real_path(self):
+        self.assertEqual(
+            probe_paths(NAMES),
+            [f"sys/policies/acl/{n}" for n in NAMES],
+        )
+
+    def test_the_backreference_collapse_cannot_return(self):
+        # The exact regression: N declared policies collapsing to one literal.
+        paths = probe_paths(NAMES)
+        self.assertNotIn("sys/policies/acl/1", paths)
+        self.assertEqual(len(set(paths)), len(NAMES))
+
+    def test_a_policy_name_is_never_mangled(self):
+        # Names carrying regex-significant characters must pass through whole;
+        # the prefix is added by matching '^', so there is nothing to escape.
+        odd = ["ai-api-key-openai", "read.platform", "a+b"]
+        self.assertEqual(
+            probe_paths(odd),
+            [f"sys/policies/acl/{n}" for n in odd],
+        )
 
 
 if __name__ == "__main__":
