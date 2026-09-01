@@ -69,6 +69,17 @@ authelia_api_bypass_domains:
   # guard. Homarr reaches both with an apiKey credential.
   - domain: "sonarr.{{ authelia_cookie_domain }}"
   - domain: "radarr.{{ authelia_cookie_domain }}"
+  # Semaphore enforces its own bearer auth on every real API path except
+  # /api/auth, which is its unauthenticated browser login/OIDC-initiation
+  # surface (probed live: every path below answers 401 without a token,
+  # while /api/auth/login and /api/auth/oidc/*/login are reachable). The
+  # default resource would hand out that login surface, so this is narrowed
+  # to a positive allowlist of the machine-consumed paths instead. Every
+  # alternative shares one suffix group admitting either a sub-path or a
+  # query string (some endpoints, e.g. GET /project/{id}/users, require
+  # `sort`/`order` query params) -- a bare `$` would reject those.
+  - domain: "semaphore.{{ authelia_cookie_domain }}"
+    resource: "^/api/(?:ping|info|apps|projects|project|users|user|events|runners|options)(?:[/?].*)?$"
   # Jellyseerr (seerr) is deliberately ABSENT. It serves its browser auth under
   # the same prefix -- /api/v1/auth/me answers 401 and /api/v1/auth/local answers
   # 405 to a GET, i.e. a reachable login POST -- so the default resource would

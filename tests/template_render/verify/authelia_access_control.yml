@@ -111,10 +111,57 @@
              | selectattr('domain', 'search', 'zammad')
              | first }}
 
+    - name: Assert Semaphore bypasses only its machine-consumed API paths
+      ansible.builtin.assert:
+        that:
+          # Regression guard. Every real Semaphore API path enforces its own
+          # bearer auth except /api/auth, which is the unauthenticated
+          # browser login / OIDC-initiation surface. The bypass must cover
+          # the machine-consumed paths and never widen to the default
+          # blanket resource, which would expose /api/auth/login.
+          - "'^/api(?:/.*)?$' not in _semaphore_rule.resources"
+          - _semaphore_paths | reject('match', _semaphore_rule.resources[0]) | list | length == 0
+          - _semaphore_auth_paths | select('match', _semaphore_rule.resources[0]) | list | length == 0
+        fail_msg: >-
+          Semaphore bypass does not cover its machine API paths, or exposes
+          /api/auth (got {{ _semaphore_rule.resources }})
+      vars:
+        _semaphore_rule: >-
+          {{ _authelia_rules
+             | selectattr('policy', 'eq', 'bypass')
+             | selectattr('domain', 'search', 'semaphore')
+             | first }}
+        # Paths that returned 401 without a bearer token, probed live, plus
+        # the intentionally public health check.
+        _semaphore_paths:
+          - /api/ping
+          - /api/info
+          - /api/apps
+          - /api/projects
+          - /api/project/1
+          - /api/users
+          - /api/user
+          - /api/user/tokens
+          - /api/events
+          - /api/runners
+          - /api/options
+          # /api/users/{id} (PUT, sets a user's admin flag) -- regression case
+          # for a suffix group missing on one alternative only.
+          - /api/users/5
+          # GET /project/{id}/users REQUIRES sort/order query params --
+          # regression case for a bare `$` rejecting a path with a query.
+          - /api/project/1/users?sort=name&order=asc
+        # Semaphore's own unauthenticated browser login/OIDC-initiation
+        # surface, which must stay gated behind the portal.
+        _semaphore_auth_paths:
+          - /api/auth/login
+          - /api/auth/oidc/authelia/login
+
     - name: Authelia access-control verification PASSED
       ansible.builtin.debug:
         msg: |
           Authelia access-control assertions passed:
           - every bypass rule is scoped to an /api prefix
           - Langfuse is narrowed to /api/public, so /api/auth stays gated
+          - Semaphore's allowlist covers its API paths without exposing /api/auth
           - entries omitting `resource` keep the previous default
