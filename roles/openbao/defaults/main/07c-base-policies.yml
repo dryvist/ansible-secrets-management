@@ -24,6 +24,9 @@ openbao_base_policies:
   - name: terrakube-tofu-proxmox-servarr-config
     template: terrakube-workspace-policy.hcl.j2
     workspace: "{{ openbao_terrakube_workspaces[7] }}"
+  - name: terrakube-iac-platform-semaphore
+    template: terrakube-workspace-policy.hcl.j2
+    workspace: "{{ openbao_terrakube_workspaces[8] }}"
   - name: "{{ openbao_terraform_apply_policy_name }}"
     template: terraform-apply-policy.hcl.j2
   - name: "{{ openbao_flow_lock_policy_name }}"
