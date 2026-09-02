@@ -108,7 +108,8 @@ openbao_ai_runner_secret_id_cidr: >-
 
 # The set of non-root AppRoles to provision, each {name, policy}. Driving the
 # bootstrap from this list keeps init.yml DRY as groups are added. Per-identity
-# `secret_id_bound_cidrs` hardening is left as a tracked follow-up: the real
-# per-domain consumer VLAN CIDRs aren't yet surfaced as Ansible vars in this
-# repo (they live in terraform-proxmox's locals.tf), and a wrong CIDR would
-# silently break legitimate access — worse than the hardening it buys.
+# `secret_id_bound_cidrs` / `token_bound_cidrs` binding is resolved from the
+# named CIDR classes in 08-admin-and-ttls.yml: a role declares which segment it
+# lives on, the operator supplies that segment's CIDRs by env, and a class that
+# is needed but empty FAILS the converge rather than silently producing the
+# unbound role the binding exists to prevent.

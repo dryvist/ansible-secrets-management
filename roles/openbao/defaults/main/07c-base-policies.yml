@@ -78,14 +78,24 @@ openbao_base_policies:
     template: github-runner-policy.hcl.j2
   - name: "{{ openbao_reconcile_policy_name }}"
     template: openbao-reconcile-policy.hcl.j2
+  # approle-issuer: the secret_id minting half, split off openbao-reconcile so
+  # a leaked reconcile credential is not a credential factory. See the template.
+  - name: "{{ openbao_approle_issuer_policy_name }}"
+    template: approle-issuer-policy.hcl.j2
+  # human-unlock: the operator-held complement of approle-issuer — mints the
+  # human-gated tiers and nothing else. Attached to a userpass user, not an
+  # AppRole, so it has no row in openbao_approles.
+  - name: "{{ openbao_human_unlock_policy_name }}"
+    template: human-unlock-policy.hcl.j2
   - name: "{{ openbao_ai_orchestrator_policy_name }}"
     template: ai-orchestrator-policy.hcl.j2
   # ai-readonly / ai-elevated / ai-apply-<svc> no longer own standalone policies —
   # they are ACTOR roles that attach the base read-/write- capability leaves
   # (generated below into openbao_ai_capability_policies). ai-admin remains a
   # standalone policy: it is the sole self-modify tier and is NOT composed leaves.
-  # ai-admin: break-glass COMPLETE full admin (superuser). Contained by TTL (1h)
-  # + human unlock + alerting, NOT capability scoping.
+  # ai-admin: break-glass full admin over the enumerated administrative surface
+  # this role provisions. Contained primarily by TTL (1h) + human unlock +
+  # alerting, and secondarily by the path list itself.
   - name: "{{ openbao_ai_admin_policy_name }}"
     template: ai-admin-policy.hcl.j2
   - name: "{{ openbao_snapshot_policy_name }}"

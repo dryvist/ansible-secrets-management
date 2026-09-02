@@ -1,17 +1,13 @@
 {{ ansible_managed | comment }}
 # OpenBao policy for the ai-admin AppRole — BREAK-GLASS, the top tier of the
-# AI-agent access model. COMPLETE FULL ADMINISTRATOR access: every path, every
-# capability, including `sudo` for the sudo-protected control endpoints (seal,
-# step-down, raft, rekey, rotate, audit devices, root-token generation). This is
-# the canonical OpenBao superuser policy — equivalent to root operationally.
+# AI-agent access model. Full administrative reach over everything this role
+# provisions, enumerated rather than wildcarded.
 #
 #   ai-readonly   read/plan/scan            (default, ambient, standing)
 #   ai-apply-<d>  scoped WRITE to domain d  (per-window, human-unlocked, 6h/12h)
 #   ai-admin      break-glass FULL admin    (per-window, human-unlocked, <=1h)   <-- this
 #
-# This environment is AI-created, -managed, and -monitored: an AI agent must be
-# able to acquire complete administrative control of OpenBao itself. Containment
-# is DELIBERATELY not least-privilege capability scoping — it is:
+# Containment is primarily temporal, procedural, and observational:
 #   * TEMPORAL      — the token lives at most the admin window (token_ttl 1h);
 #                     when it expires the agent must be re-unlocked.
 #   * PROCEDURAL    — NEVER STANDING. manage_secret_id:false; the converge creates
@@ -20,18 +16,165 @@
 #                     secret_id (`bao write -wrap-ttl=90s -f
 #                     auth/approle/role/ai-admin/secret-id`).
 #   * OBSERVATIONAL — EVERY use is audited (file audit device -> Cribl ->
-#                     index=openbao_audit) and MUST fire an alert. This is the
-#                     tier that can edit the controls themselves, so its use is
-#                     an incident by construction, monitored after the fact — the
-#                     audit trail, not a capability wall, is the control.
+#                     index=openbao_audit) and MUST fire an alert.
+#
+# WHY THIS IS NO LONGER `path "*"`. A bare `path "*"` with sudo was the widest
+# grant OpenBao can express: it covered every mount that exists and every mount
+# that ever will, including any future engine nobody has reasoned about, and it
+# made "what can break-glass do" unanswerable except as "everything". The list
+# below is derived from what the documented break-glass procedures actually do —
+# the operations in this role's own tasks/init/* plus seal, rekey, raft, and
+# root-token recovery — so the answer is readable. `sudo` is attached ONLY where
+# OpenBao requires it, which also makes the sudo-protected endpoints visible as
+# the short list they are, rather than hidden inside a wildcard.
+#
+# Anything genuinely outside this list is a gap to close deliberately, by adding
+# the path here with a reason — not by widening back to `*`.
 #
 # See docs.dryvist.com "AI Agent Access (OpenBao)" runbook for the unlock/grant
 # flow and the alerting contract.
 
-# --- Complete full administrator access --------------------------------------
-# Every path, every capability, plus sudo for the sudo-protected sys endpoints
-# (sys/seal, sys/step-down, sys/raft/*, sys/rekey, sys/rotate, audit devices,
-# root-token generation). The canonical OpenBao superuser policy.
-path "*" {
-  capabilities = ["create", "read", "update", "delete", "list", "patch", "sudo"]
+# --- RBAC: author and read every policy (tasks/init/08-rbac-policies.yml) -----
+path "sys/policies/acl/*" {
+  capabilities = ["create", "read", "update", "delete", "list"]
+}
+path "sys/policies/acl" {
+  capabilities = ["list"]
+}
+
+# --- Identity: create, tune, and mint for every AppRole (init/10-approles.yml)
+path "auth/approle/role/*" {
+  capabilities = ["create", "read", "update", "delete", "list"]
+}
+# The rest of the auth surface: JWT roles, method config, non-AppRole methods.
+path "auth/*" {
+  capabilities = ["create", "read", "update", "delete", "list"]
+}
+
+# --- Mount table: enable, tune, and remove engines (init/03..07) --------------
+# sudo is required by OpenBao to mutate the mount table itself.
+path "sys/mounts/*" {
+  capabilities = ["create", "read", "update", "delete", "list", "sudo"]
+}
+path "sys/mounts" {
+  capabilities = ["read", "list"]
+}
+# Enabling and disabling auth METHODS is likewise sudo-protected.
+path "sys/auth/*" {
+  capabilities = ["create", "read", "update", "delete", "list", "sudo"]
+}
+path "sys/auth" {
+  capabilities = ["read", "list"]
+}
+# Registering an external plugin binary (the AWS/GitHub/OAuthapp plugins).
+path "sys/plugins/*" {
+  capabilities = ["create", "read", "update", "delete", "list", "sudo"]
+}
+
+# --- Audit devices: sudo-protected by OpenBao (tasks/audit.yml) ---------------
+# Break-glass must be able to restore an audit device, and disabling one is the
+# first move of anyone covering their tracks — hence sudo, hence alerted.
+path "sys/audit" {
+  capabilities = ["read", "list", "sudo"]
+}
+path "sys/audit/*" {
+  capabilities = ["create", "read", "update", "delete", "list", "sudo"]
+}
+path "sys/audit-hash/*" {
+  capabilities = ["create", "update", "sudo"]
+}
+
+# --- Secret data: every KV mount this role provisions -------------------------
+# Driven from openbao_kv_mounts (secret, secrets-external, config) so a new
+# mount reaches break-glass from the one declaration, not a second hand-kept
+# list here that would be discovered missing during an incident.
+{% for mount in openbao_kv_mounts | default([]) %}
+path "{{ mount.path | default(mount) }}/*" {
+  capabilities = ["create", "read", "update", "delete", "list", "patch"]
+}
+{% endfor %}
+
+# --- Secrets engines: configure the engine AND mint from it -------------------
+# Break-glass covers repairing an engine's configuration (a rotated App key, a
+# re-pointed IAM role), which is why these are the full capability set and not
+# the consumer-tier read the ordinary identities hold.
+path "{{ openbao_github_mount | default('github') }}/*" {
+  capabilities = ["create", "read", "update", "delete", "list"]
+}
+path "{{ openbao_aws_mount | default('aws') }}/*" {
+  capabilities = ["create", "read", "update", "delete", "list"]
+}
+path "{{ openbao_ssh_mount | default('ssh-client-ca') }}/*" {
+  capabilities = ["create", "read", "update", "delete", "list"]
+}
+path "{{ openbao_oauthapp_mount | default('oauthapp') }}/*" {
+  capabilities = ["create", "read", "update", "delete", "list"]
+}
+
+# --- Raft storage: snapshot, restore, peer surgery ----------------------------
+# sudo-protected. This is the tier that takes and restores a cluster snapshot
+# and removes a departed peer.
+path "sys/storage/raft/*" {
+  capabilities = ["create", "read", "update", "delete", "list", "sudo"]
+}
+
+# --- Root-token generation: sudo-protected, the deepest recovery path ---------
+path "sys/generate-root" {
+  capabilities = ["read", "update", "delete", "sudo"]
+}
+path "sys/generate-root/*" {
+  capabilities = ["create", "read", "update", "delete", "sudo"]
+}
+
+# --- Rekey and seal: sudo-protected cluster-availability controls -------------
+path "sys/rekey" {
+  capabilities = ["create", "read", "update", "delete", "sudo"]
+}
+path "sys/rekey/*" {
+  capabilities = ["create", "read", "update", "delete", "sudo"]
+}
+path "sys/seal" {
+  capabilities = ["update", "sudo"]
+}
+path "sys/unseal" {
+  capabilities = ["update", "sudo"]
+}
+path "sys/seal-status" {
+  capabilities = ["read"]
+}
+path "sys/step-down" {
+  capabilities = ["update", "sudo"]
+}
+
+# --- Leases: revoke a compromised credential ----------------------------------
+# Revoking by prefix is sudo-protected; the ordinary lookup/revoke is not.
+path "sys/leases/*" {
+  capabilities = ["create", "read", "update", "delete", "list"]
+}
+path "sys/leases/revoke-prefix/*" {
+  capabilities = ["update", "sudo"]
+}
+path "sys/leases/revoke-force/*" {
+  capabilities = ["update", "sudo"]
+}
+
+# --- Tokens: create, look up, and revoke ---------------------------------------
+# Orphan creation and revoke-by-prefix are the sudo-protected members here; the
+# blanket token grant below covers create/lookup/renew/revoke-self.
+path "auth/token/*" {
+  capabilities = ["create", "read", "update", "delete", "list"]
+}
+path "auth/token/create-orphan" {
+  capabilities = ["create", "update", "sudo"]
+}
+path "auth/token/revoke-orphan" {
+  capabilities = ["update", "sudo"]
+}
+
+# --- Read-only cluster health, for the diagnosis half of break-glass -----------
+path "sys/health" {
+  capabilities = ["read"]
+}
+path "sys/capabilities-self" {
+  capabilities = ["create", "update"]
 }

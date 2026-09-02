@@ -25,7 +25,154 @@ openbao_reconcile_addr: >-
   {{ lookup('env', 'BAO_ADDR') | default('', true) }}
 
 # --- AppRole token TTLs -------------------------------------------------------
-# Short-lived tokens; secret_id_ttl=0 means the secret_id itself does not expire
-# (rotate manually). Tune per-identity if needed.
 openbao_approle_token_ttl: 1h
 openbao_approle_token_max_ttl: 4h
+
+# --- secret_id lifetime -------------------------------------------------------
+# A secret_id is the long-lived half of an AppRole credential: the role_id is a
+# public identifier, the secret_id is the password. `secret_id_ttl: 0` means it
+# NEVER expires and `secret_id_num_uses: 0` means it may be redeemed forever —
+# so a copy that leaks (a drop file left on a controller, a value pasted into a
+# shell history, an operator's clipboard) stays a working credential until
+# somebody notices and revokes it by hand. Nothing here rotates it, so "rotate
+# manually" was, in practice, never.
+#
+# The defaults below are therefore finite for every identity:
+#
+#   machine / guest / CI identities  secret_id_ttl 24h, num_uses 30
+#     24h bounds an unredeemed grant to one day. num_uses 30 bounds a redeemed
+#     one to roughly a day of converge logins — generous for a loop that logs
+#     in once or twice per run, tight enough that a copied value cannot serve
+#     an attacker indefinitely.
+#   human-unlocked identities        secret_id_ttl 15m, num_uses 1
+#     Already the shape of the elevated tiers (openbao_ai_elevated_secret_id_ttl
+#     in 07a); named here so the human tier is one constant, not a literal.
+#
+# THESE APPLY TO NEWLY CREATED ROLES ONLY. init/10-approles.yml is deliberately
+# add-if-missing — a full `bao write auth/approle/role/<name>` on a live role
+# would reset every unspecified field — so tightening a default here does not
+# retroactively expire a live credential. Bringing an already-live role onto
+# these bounds is a deliberate, separately-authorised operation.
+openbao_approle_secret_id_ttl: 24h
+openbao_approle_secret_id_num_uses: 30
+# The human-unlock tier: one wrapped, single-use secret_id per window.
+openbao_approle_human_secret_id_ttl: 15m
+
+# Per-role overrides, name -> value. An entry in openbao_base_approles wins over
+# these (it is the more visible declaration); these win over the globals above.
+openbao_approle_secret_id_ttl_overrides: {}
+# num_uses 0 (unlimited redemptions) is permitted ONLY with a reason on the line.
+openbao_approle_secret_id_num_uses_overrides:
+  # Its secret_id is live, non-expiring, and in active use by every agent
+  # session; capping redemptions here would strand them at an arbitrary login.
+  # Bounded instead by the CIDR class below until it is deliberately re-minted.
+  ai-orchestrator: 0
+  # The anonymous, non-exploitable-facts identity. It carries no secret worth
+  # bounding and is shipped ambiently by design, so a redemption cap buys
+  # nothing and would break every ambient consumer on a fixed schedule.
+  public: 0
+
+# --- secret_id / token CIDR binding -------------------------------------------
+# `secret_id_bound_cidrs` restricts where a secret_id may be REDEEMED;
+# `token_bound_cidrs` restricts where the resulting token may be USED. Together
+# they turn a leaked credential into one that only works from inside the network
+# segment that was supposed to hold it.
+#
+# Real CIDRs are NEVER committed — this repository is public and a CIDR list is
+# topology. They arrive by env, the same channel and shape as
+# OPENBAO_SSH_SOURCE_CIDRS (comma-separated, empty when unset).
+#
+# ASSERT-ON-RENDER: init/10-approles.yml fails the converge when a class that
+# any declared role uses is empty, unless the operator has explicitly accepted
+# unbound roles by setting openbao_approle_allow_unbound_cidrs. An unset
+# variable must not quietly produce the unbound role it was added to prevent.
+openbao_management_cidrs: >-
+  {{ lookup('env', 'OPENBAO_MANAGEMENT_CIDRS') | default('', true) }}
+openbao_workstation_cidrs: >-
+  {{ lookup('env', 'OPENBAO_WORKSTATION_CIDRS') | default('', true) }}
+openbao_ci_cidrs: >-
+  {{ lookup('env', 'OPENBAO_CI_CIDRS') | default('', true) }}
+# Escape hatch for a first bootstrap, where no CIDR is known yet. Setting it
+# true downgrades the assert to the loud warning that preceded it.
+openbao_approle_allow_unbound_cidrs: >-
+  {{ (lookup('env', 'OPENBAO_APPROLE_ALLOW_UNBOUND_CIDRS') | default('', true)) | length > 0 }}
+
+# Named classes, so a role declares WHERE it lives rather than a literal.
+openbao_approle_cidr_classes:
+  machine: "{{ openbao_management_cidrs }}"
+  workstation: "{{ openbao_workstation_cidrs }}"
+  ci: "{{ openbao_ci_cidrs }}"
+  # Deliberately unbound; every member needs a reason in the override map.
+  unbound: ""
+openbao_approle_default_cidr_class: machine
+# name -> class, for the identities that are not machine-resident.
+openbao_approle_cidr_class_overrides:
+  # Workstation-held: the operator's own machine runs git/gh and the unlocks.
+  admin: workstation
+  ai-admin: workstation
+  github-admin: workstation
+  github-read: workstation
+  github-write: workstation
+  # Ephemeral CI runners sit on their own isolated segment.
+  github-runner: ci
+  # Non-exploitable facts, shipped ambiently to anything that asks — a source
+  # restriction would break that contract and protects nothing.
+  public: unbound
+# Every declared role's class, defaults filled in and then overridden — so a
+# lookup never has to cope with a missing key. (`map('extract', dict, default)`
+# does NOT take a default: it raises on the first name absent from the override
+# map, which is most of them. Verified, not assumed.)
+openbao_approle_cidr_class_map: >-
+  {{ dict(openbao_approles | map(attribute='name') | list
+          | zip(openbao_approles | map(attribute='name')
+                | map('regex_replace', '^.*$', openbao_approle_default_cidr_class)
+                | list))
+     | combine(openbao_approle_cidr_class_overrides) }}
+# The classes that actually carry a role, so the assert in init/10-approles.yml
+# demands only the CIDRs this declaration set really needs. `unbound` is
+# excluded by definition — it is the documented opt-out, not a missing value.
+openbao_approle_cidr_classes_in_use: >-
+  {{ openbao_approle_cidr_class_map.values() | unique
+     | reject('equalto', 'unbound') | list }}
+# Of those, the ones with nothing supplied. Empty is the healthy state; the
+# assert in init/10-approles.yml fails on anything here.
+openbao_approle_unsupplied_cidr_classes: >-
+  {{ openbao_approle_cidr_classes_in_use
+     | select('in', openbao_approle_cidr_classes | dict2items
+                    | selectattr('value', 'equalto', '')
+                    | map(attribute='key') | list)
+     | list }}
+
+# --- Human unlock: the operator's own login -----------------------------------
+# A person, not a workload, so this is a userpass user rather than an AppRole:
+# there is no role_id/secret_id pair to store anywhere, which is the point — the
+# credential that mints break-glass must not itself be a file.
+#
+# The role NEVER touches the password. It updates only the token_* fields on an
+# EXISTING user (verified against OpenBao 2.5.5 `userCreateUpdate`: the password
+# is only written when the `password` parameter is explicitly present, and a
+# create with no password is refused outright). If the user does not exist the
+# converge FAILS and says so rather than creating a passwordless administrator.
+openbao_human_unlock_user: jevans
+# Short session, hard ceiling: the operator holds this only while unlocking.
+openbao_human_unlock_token_ttl: 15m
+openbao_human_unlock_token_max_ttl: 1h
+# Same workstation class the break-glass AppRoles are bound to.
+openbao_human_unlock_cidr_class: workstation
+
+# --- Login MFA (TOTP) on the human login --------------------------------------
+# A password alone is single-factor on the one credential that can mint full
+# admin. OpenBao 2.5.5 carries login MFA (endpoints verified against the v2.5.5
+# docs in-tree, NOT assumed): `identity/mfa/method/totp` and
+# `identity/mfa/login-enforcement/<name>` — note these live under `identity/`,
+# not `sys/`; only `sys/mfa/validate` is under sys.
+#
+# ENROLMENT IS A ONE-TIME HUMAN STEP AND IS NOT DONE HERE. The role declares the
+# method and the enforcement; a human then runs the `admin-generate` endpoint
+# once against their own entity to get the QR/secret. Enrolling from a converge
+# would mean the automation had, however briefly, the second factor — which
+# would make it not a second factor. See docs/secrets-and-rbac.md.
+openbao_human_unlock_mfa_enabled: true
+openbao_human_unlock_mfa_method_name: human-unlock-totp
+openbao_human_unlock_mfa_enforcement_name: human-unlock
+openbao_human_unlock_mfa_issuer: OpenBao

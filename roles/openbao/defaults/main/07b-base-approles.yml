@@ -87,6 +87,13 @@ openbao_base_approles:
     policy: "{{ openbao_reconcile_policy_name }}"
     token_ttl: 30m
     token_max_ttl: 2h
+  # approle-issuer: mints secret_ids for the enumerated non-break-glass roles
+  # and does nothing else. Its own token TTL is short because a mint is a
+  # single operation, not a session — nothing legitimate holds this for hours.
+  - name: "{{ openbao_approle_issuer_approle_name }}"
+    policy: "{{ openbao_approle_issuer_policy_name }}"
+    token_ttl: 15m
+    token_max_ttl: 30m
   # ai-orchestrator: role_id/secret_id are operator-held in Doppler tier-0
   # (services BAO_AI_ORCHESTRATOR_ROLE_ID / _SECRET_ID), consumed as ambient env.
   # This AppRole already exists LIVE with a non-expiring secret_id in active
@@ -143,9 +150,10 @@ openbao_base_approles:
     manage_secret_id: false
     secret_id_ttl: "{{ openbao_ai_elevated_secret_id_ttl }}"
     secret_id_num_uses: 1
-  # ai-admin: break-glass, COMPLETE full administrator (superuser — every path,
-  # every capability incl. sudo). NO standing secret_id; a token exists only after
-  # a human one-shot unlock and lives the admin window (1h), alerted on every use.
+  # ai-admin: break-glass full administrator over everything this role
+  # provisions — enumerated paths, with sudo only where OpenBao requires it, no
+  # longer a bare `path "*"`. NO standing secret_id; a token exists only after a
+  # human one-shot unlock and lives the admin window (1h), alerted on every use.
   - name: "{{ openbao_ai_admin_approle_name }}"
     policy: "{{ openbao_ai_admin_policy_name }}"
     token_ttl: "{{ openbao_ai_admin_token_ttl }}"
@@ -153,24 +161,35 @@ openbao_base_approles:
     manage_secret_id: false
     secret_id_ttl: "{{ openbao_ai_elevated_secret_id_ttl }}"
     secret_id_num_uses: 1
-  # admin: the human operator's STANDING master-administrator identity. Reuses
-  # the ai-admin superuser policy (full sudo, every path) but is deliberately
-  # standing, unlike the ai-* break-glass tiers above — the operator holds
-  # role_id + a non-expiring, reusable secret_id in a personal workstation
-  # keychain (same trust tier as the root break-glass token), NOT Doppler.
-  # manage_secret_id:false — the role is created inert; the operator mints the
-  # standing secret_id out-of-band with the break-glass token and stores it in
-  # the keychain (the role never mints or rotates it). The "full admin must
-  # never be standing" rule in ai-admin-policy.hcl.j2 contains AI AGENTS; this
-  # is the operator, the root of trust. Norm (not enforced): admin use should
-  # correspond to an open Zammad incident.
+  # admin: the human operator's master-administrator identity, carrying the
+  # ai-admin policy. manage_secret_id:false — the role is created inert and the
+  # operator mints its secret_id out-of-band with the break-glass token.
+  #
+  # CHANGED, and this reverses a documented decision — read before reverting.
+  # It previously ran token_ttl 8h / token_max_ttl 0 / secret_id_ttl 0 /
+  # num_uses 0, deliberately STANDING, on the reasoning that the operator is the
+  # root of trust and holds the secret_id in a personal workstation keychain
+  # rather than Doppler, so the "full admin must never be standing" rule was
+  # scoped to AI agents only.
+  #
+  # The trust argument holds; the unbounded credential does not follow from it.
+  # token_max_ttl 0 means no absolute ceiling, and secret_id_ttl 0 with
+  # unlimited uses means the widest credential in the estate is a permanent,
+  # reusable value living on a laptop — where a keychain read, a backup, or a
+  # stolen machine is a full compromise with no expiry to run out. Being the
+  # root of trust is a reason to trust the OPERATOR, not a reason for the
+  # credential to be immortal. Bounds now match the other break-glass tiers.
+  #
+  # If the standing form is genuinely required (an unattended operator workflow
+  # that cannot re-unlock), restore it here deliberately and say which workflow
+  # needs it — do not restore it merely because a converge became inconvenient.
   - name: admin
     policy: "{{ openbao_ai_admin_policy_name }}"
-    token_ttl: 8h
-    token_max_ttl: 0
+    token_ttl: 1h
+    token_max_ttl: 2h
     manage_secret_id: false
-    secret_id_ttl: 0
-    secret_id_num_uses: 0
+    secret_id_ttl: "{{ openbao_approle_human_secret_id_ttl }}"
+    secret_id_num_uses: 1
   - name: "{{ openbao_snapshot_approle_name }}"
     policy: "{{ openbao_snapshot_policy_name }}"
   # apps-seed: Doppler-published writer for secret/apps/* (Terraform vault-secrets).

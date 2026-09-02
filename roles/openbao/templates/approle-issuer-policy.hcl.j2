@@ -1,0 +1,43 @@
+{{ ansible_managed | comment }}
+# approle-issuer — the sole identity permitted to MINT an AppRole secret_id.
+#
+# Split out of openbao-reconcile because minting a credential for another
+# identity is not the same power as reconciling a declaration, and the two
+# should not share one leaked value. A holder of this policy can obtain a
+# working credential for every role enumerated below, and is therefore as
+# privileged as the most privileged role on that list — which is exactly why
+# the list is enumerated by NAME and why the exclusions below are load-bearing:
+#
+#   1. The break-glass tiers are excluded. Minting for them is the human
+#      unlock; it must never be reachable from an unattended converge.
+#   2. Every inert (manage_secret_id: false) role is excluded by that marker,
+#      so a newly added human-gated tier cannot be forgotten here.
+#   3. Its OWN role is excluded. It cannot re-mint itself a fresh credential
+#      and so cannot outlive the secret_id it was given.
+#
+# It grants NOTHING else: no policy writes, no role creation, no mount access.
+# Read-only visibility of a role's definition is included so a mint can be
+# checked against the role it is for; role-id is a public identifier.
+
+{% set breakglass = openbao_reconcile_excluded_policies | default([]) %}
+{% set issuable = openbao_approles
+     | rejectattr('manage_secret_id', 'defined')
+     | map(attribute='name')
+     | reject('in', breakglass)
+     | reject('equalto', openbao_approle_issuer_approle_name)
+     | list %}
+
+# --- secret_id minting, by role name --------------------------------------
+# Excluded and therefore unmintable from here: {{ (breakglass + [openbao_approle_issuer_approle_name]) | unique | join(', ') }}
+# Plus every role marked manage_secret_id: false (the inert human-gated tiers).
+{% for approle_name in issuable %}
+path "auth/approle/role/{{ approle_name }}/secret-id" {
+  capabilities = ["create", "update"]
+}
+path "auth/approle/role/{{ approle_name }}/role-id" {
+  capabilities = ["read"]
+}
+path "auth/approle/role/{{ approle_name }}" {
+  capabilities = ["read"]
+}
+{% endfor %}
