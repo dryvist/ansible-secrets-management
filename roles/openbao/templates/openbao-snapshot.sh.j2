@@ -22,6 +22,11 @@
 #
 # NOT `set -e`: every failure is handled explicitly so it ALERTS (ntfy +
 # healthchecks) instead of aborting silently.
+#
+# journald marker (logger -t openbao-snapshot), for Splunk alert rules:
+#   success: "snapshot OK: <path> (<bytes> bytes)"
+#   failure: "OpenBao snapshot FAILED on <host>: <reason>"
+#   no-op:   "not the active node — nothing to do"
 set -uo pipefail
 
 BAO_ADDR="{{ openbao_api_addr }}"

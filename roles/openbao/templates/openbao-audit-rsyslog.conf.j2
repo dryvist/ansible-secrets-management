@@ -19,6 +19,14 @@ module(load="imfile")
 # and truncation is silent, so that global is load-bearing for this ruleset
 # even though it is set by another role.
 ruleset(name="openbao_audit") {
+  # The listener idles out TCP sessions (observed: "CheckConnection detected
+  # that peer closed connection" -> "suspending action" -> "resumed" every
+  # ~70-90s on 8/9 nodes). None of that drops audit data -- the disk-assisted
+  # LinkedList queue below already buffers across the gap -- but the DEFAULT
+  # resumeInterval (30s, growing -- rsyslog omfwd docs:
+  # https://www.rsyslog.com/doc/configuration/actions.html#action-resumeinterval)
+  # widens the window before a reconnect is even attempted. Set to 1s so a
+  # closed session is retried almost immediately instead of waited out.
   action(type="omfwd"
          target="{{ openbao_audit_syslog_host }}"
          port="{{ openbao_audit_syslog_port }}"
@@ -28,6 +36,7 @@ ruleset(name="openbao_audit") {
          queue.maxDiskSpace="{{ openbao_audit_queue_max_disk_space }}"
          queue.saveOnShutdown="on"
          action.resumeRetryCount="-1"
+         action.resumeInterval="1"
          RebindInterval="{{ openbao_audit_rebind_interval }}")
   stop
 }

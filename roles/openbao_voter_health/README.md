@@ -34,7 +34,7 @@ capability. No existing least-privilege AppRole in `roles/openbao` grants
 that (they are all KV-scoped), and minting a new AppRole/policy is
 **explicitly out of scope for this role** — that's an OpenBao policy change,
 which is operator-gated separately. The script emits `raft_lag_ms: null`
-until `OPENBAO_VOTER_HEALTH_ROLE_ID` / `OPENBAO_VOTER_HEALTH_SECRET_ID` are
+until `OPENBAO_APPROLE_VOTER_HEALTH_ROLE_ID` / `OPENBAO_APPROLE_VOTER_HEALTH_SECRET_ID` are
 supplied (env, same delivery pattern as every other AppRole credential in
 this repo); wiring those up is a follow-up that provisions a `voter-health`
 AppRole scoped to exactly that one read.

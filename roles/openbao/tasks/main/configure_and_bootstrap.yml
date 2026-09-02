@@ -83,16 +83,22 @@
 
 # --- Phase 11: automated raft snapshots (all nodes; script leader-gates) -----
 # Deployed on every openbao node so the surviving nodes keep snapshotting after
-# a leadership change. Gated on the snapshot AppRole creds being present: they
-# are emitted by init.yml at bootstrap and injected at converge from tier-0, so
-# a first-bootstrap converge (creds not yet minted) skips this cleanly instead
-# of rendering an empty-cred EnvironmentFile that would fail every cycle.
+# a leadership change. Previously ALSO gated on the snapshot AppRole creds
+# being non-empty, keyed on OPENBAO_SNAPSHOT_ROLE_ID/SECRET_ID -- the wrong
+# names (every other AppRole in this repo is OPENBAO_APPROLE_<NAME>_*; the
+# converge environment carries OPENBAO_APPROLE_SNAPSHOT_ROLE_ID/SECRET_ID,
+# see defaults/main/09), so the lookup was permanently empty and the gate
+# permanently false: the timer/service/env-file were never deployed to any
+# node (verified: no openbao-snapshot.timer/.service or
+# /etc/openbao/openbao-snapshot.env on any of the 9 live nodes). Fixed the
+# var names AND deploy unconditionally behind the enabled flag, same as
+# voter-health below -- defaults/main/09 now makes the creds mandatory() so
+# a converge that would render a timer with empty credentials fails at
+# render time instead of shipping one that fails every 6h.
 - name: Deploy the automated raft snapshot timer
   ansible.builtin.include_tasks: ../snapshot.yml
   when:
     - openbao_snapshot_enabled | bool
-    - openbao_snapshot_role_id | length > 0
-    - openbao_snapshot_secret_id | length > 0
 
 # --- Phase 12: voter health telemetry (all nodes; read-only, script leader-gates) -
 # Deployed on every openbao node so any voter can take over the sweep after a
