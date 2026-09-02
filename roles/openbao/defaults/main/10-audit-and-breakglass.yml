@@ -22,6 +22,27 @@ openbao_audit_syslog_host: "syslog.{{ lookup('env', 'PROXMOX_SUBDOMAIN') }}"
 openbao_audit_syslog_port: >-
   {{ tofu_data.constants.ai_log_routing.openbao_audit.port | default(10331) }}
 openbao_audit_queue_max_disk_space: 256m
+# Recycle the forwarding TCP session every N messages.
+#
+# This bounds a failure actually observed on 2026-09-02: the session to the
+# ingest listener stayed ESTABLISHED and kept advancing bytes_sent/bytes_acked
+# in step with the audit file, the receiver kept draining it (Recv-Q 0), and
+# yet nothing from that session was indexed for four hours. A NEW connection
+# to the same port delivered end to end in seconds, so the session itself had
+# stopped yielding events somewhere past the socket. Nothing logged an error
+# on either side.
+#
+# The root cause of that wedge is NOT established — this does not cure it, it
+# caps how long it can hide. Without a rebind the only thing that clears a
+# wedged session is an rsyslog restart, which is why past occurrences read as
+# multi-hour gaps that "healed on their own" (32 zero-hours over the preceding
+# 30 days). A rebind also spreads senders across both listener nodes instead
+# of pinning every audit record to whichever one won the first connect.
+#
+# 200 is chosen against the observed floor of ~96 records/hour: roughly two
+# hours of exposure when idle, minutes when busy. Reconnect cost is one TCP
+# handshake.
+openbao_audit_rebind_interval: 200
 # Logrotate: copytruncate so the running server keeps its file handle (the
 # file audit device only reopens on SIGHUP; truncating in place avoids racing
 # a reload against audit writes).

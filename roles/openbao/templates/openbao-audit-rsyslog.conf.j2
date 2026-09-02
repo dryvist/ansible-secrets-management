@@ -13,6 +13,11 @@
 
 module(load="imfile")
 
+# Message size is NOT capped here: the syslog_forwarder role's
+# 10-forward-cribl.conf sets global(maxMessageSize) daemon-wide, and rsyslog
+# reads that fragment first. Audit records regularly exceed the 8 KB default
+# and truncation is silent, so that global is load-bearing for this ruleset
+# even though it is set by another role.
 ruleset(name="openbao_audit") {
   action(type="omfwd"
          target="{{ openbao_audit_syslog_host }}"
@@ -22,7 +27,8 @@ ruleset(name="openbao_audit") {
          queue.filename="openbao_audit_fwd"
          queue.maxDiskSpace="{{ openbao_audit_queue_max_disk_space }}"
          queue.saveOnShutdown="on"
-         action.resumeRetryCount="-1")
+         action.resumeRetryCount="-1"
+         RebindInterval="{{ openbao_audit_rebind_interval }}")
   stop
 }
 
