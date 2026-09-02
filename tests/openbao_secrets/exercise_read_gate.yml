@@ -1,0 +1,31 @@
+---
+# Runs the PRODUCTION gate (roles/openbao_secrets/tasks/classify_reads.yml)
+# against one synthetic read-result fixture and asserts whether it aborted.
+# Included once per fixture by verify_read_gate.yml.
+
+- name: Load the fixture results | {{ read_gate_fixture.name }}
+  ansible.builtin.set_fact:
+    openbao_secrets_domain_reads:
+      results: "{{ read_gate_fixture.results }}"
+    read_gate_failed: false
+
+- name: Execute the production gate | {{ read_gate_fixture.name }}
+  block:
+    - name: Include the production classification tasks | {{ read_gate_fixture.name }}
+      ansible.builtin.include_tasks: ../../roles/openbao_secrets/tasks/classify_reads.yml
+
+  rescue:
+    - name: Record that the gate aborted | {{ read_gate_fixture.name }}
+      ansible.builtin.set_fact:
+        read_gate_failed: true
+
+- name: Assert the gate reached the expected verdict | {{ read_gate_fixture.name }}
+  ansible.builtin.assert:
+    that:
+      - (read_gate_failed | bool) == (read_gate_fixture.expect_failure | bool)
+    fail_msg: >-
+      {{ read_gate_fixture.name }}: expected
+      {{ 'a FAILURE' if read_gate_fixture.expect_failure else 'no failure' }}
+      but the gate {{ 'failed' if read_gate_failed else 'passed' }}.
+    success_msg: "{{ read_gate_fixture.name }}: verdict as expected"
+    quiet: true

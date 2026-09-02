@@ -3,17 +3,42 @@
 # OpenBao, once per resource-domain identity, and reads that domain's KV
 # subtree into a per-domain fact (`bao_<domain>_secrets`, hyphens become
 # underscores — e.g. `local-cloud` -> `bao_local_cloud_secrets`). Consumer
-# roles then read bao-first with an env fallback:
-#   X: "{{ bao_<domain>_secrets.X | default(lookup('env','X'), true) }}"
+# roles then read from OpenBao and fail when the value is absent or empty:
+#   X: >-
+#     {{ bao_<domain>_secrets.X | default(undef(), true)
+#        | mandatory('X missing: OpenBao fetch did not supply it') }}
 #
 # Each domain authenticates with its OWN least-privilege AppRole (see
 # terraform-proxmox docs/SECRETS_HIERARCHY.md) rather than one broad shared
 # identity — a domain's credentials only ever unlock that domain's KV subtree.
 #
-# SKIPS CLEANLY at two levels: the whole role no-ops when BAO_ADDR is unset
-# (no OpenBao configured at all), and each domain independently no-ops when
-# its own role_id/secret_id envs are unset (lets an operator migrate one
-# domain at a time onto OpenBao while the rest still fall back to env/SOPS).
+# FAILS LOUD. A fetch that cannot happen is an error, never an empty value:
+#   - No OpenBao endpoint configured at all (BAO_ADDR unset AND no openbao-tagged
+#     node in the tofu inventory): the role no-ops. This is the only silent path,
+#     and it is the pre-migration case where nothing was ever asked of OpenBao.
+#   - Configured but NO candidate endpoint answers /v1/sys/health 200: the role
+#     FAILS. A total-OpenBao outage stops the converge instead of handing every
+#     consumer an empty secret.
+#   - A domain whose role_id/secret_id envs are missing: the role FAILS, unless
+#     that domain is named in `openbao_secrets_optional_domains` — the documented
+#     opt-out for migrating one domain at a time.
+#   - A KV read that errors: the role FAILS, naming the path. The ONE tolerated
+#     case is a 404 on a path declared `optional: true` in its mapping form —
+#     see openbao_secrets_optional_domains below. A 403 means the credential is
+#     wrong, not the secret absent, and always fails.
+#
+# Under --check the login and the KV reads run FOR REAL (check_mode: false —
+# they change no state), so a check run resolves genuine values and templates
+# diff against them instead of against blanks. publish.yml WRITES and still
+# honours check mode.
+# The bite this replaces: every one of the above used to produce an empty value
+# that consumers happily rendered, which is how a live database password was
+# overwritten with an empty string.
+#
+# Consumers of a secret-valued variable must therefore NOT carry an env
+# fallback; they end in `| default(undef(), true) | mandatory('...')` so an
+# absent secret aborts the play. `| default('', true) | mandatory(...)` NEVER
+# fires — mandatory only raises on undefined, and '' is defined.
 
 # Shared connection inputs.
 openbao_secrets_bao_addr: "{{ lookup('env', 'BAO_ADDR') | default('', true) }}"
@@ -21,6 +46,22 @@ openbao_secrets_bao_addr: "{{ lookup('env', 'BAO_ADDR') | default('', true) }}"
 # default; override only for a direct-to-node http bootstrap endpoint.
 openbao_secrets_validate_certs: true
 openbao_secrets_kv_mount: secret
+# Documented opt-out from the fail-loud contract, by domain NAME.
+#
+# A single PATH may also be declared optional, independently of its domain, by
+# giving it the mapping form instead of a bare string:
+#   - mount: secret          # optional, defaults to openbao_secrets_kv_mount
+#     path: apps/foo/vendor
+#     optional: true
+# A 404 on such a path is skipped with a visible warning naming it; a 403 and
+# every other error still fail. A bare string path is always REQUIRED, so a 404
+# on one fails the play — an undeclared-but-expected key is a real defect.
+# A domain
+# listed here may have no role_id/secret_id in the environment and is skipped
+# with a warning instead of failing the play — the migration escape hatch for
+# a domain whose AppRole is not provisioned yet. Empty by default: every
+# configured domain is required.
+openbao_secrets_optional_domains: []
 # Client failover across the OpenBao nodes: probe an ordered candidate list and
 # use the first reachable endpoint. See README for the full ordering + rationale.
 openbao_secrets_openbao_api_port: "{{ tofu_data['constants']['service_ports']['openbao_api'] | default(8200) }}"
@@ -58,30 +99,32 @@ openbao_secrets_domains:
     role_id_env: OBSERVABILITY_VAULT_ROLE_ID
     secret_id_env: OBSERVABILITY_VAULT_SECRET_ID
     paths:
-      - platform/splunk
-      - platform/cribl
+      # The store holds the `/main` keys, and the policy grants
+      # `platform/<app>/*` — the bare `platform/splunk` is a 403, not a 404.
+      - platform/splunk/main
+      - platform/cribl/main
   - name: local-cloud
     role_id_env: LOCAL_CLOUD_VAULT_ROLE_ID
     secret_id_env: LOCAL_CLOUD_VAULT_SECRET_ID
     paths:
-      - platform/object-storage
-      - platform/compute
+      # As above: the policy grants `platform/object-storage/*` only, so the
+      # bare key is a 403 even though it exists.
+      - platform/object-storage/main
+      # platform/compute is not declared: the path holds no keys at all.
   - name: monitoring
     role_id_env: MONITORING_VAULT_ROLE_ID
     secret_id_env: MONITORING_VAULT_SECRET_ID
     paths:
-      - apps/monitoring
+      # The policy grants `apps/monitoring/*`; the bare path is a 403.
+      - apps/monitoring/main
   - name: media
     role_id_env: MEDIA_VAULT_ROLE_ID
     secret_id_env: MEDIA_VAULT_SECRET_ID
     paths:
       # One path per KV ENTRY. `vault_kv2_get` reads a single entry and does not
       # walk a subtree, and the media policy grants `apps/media/*` — which does
-      # NOT match the bare `apps/media`. So the original single entry below
-      # resolved nothing at all, silently, because the whole fetch is
-      # `failed_when: false`. It is kept only because a flat `apps/media` entry
-      # does still exist and is read by the servarr-config tofu workspace.
-      - apps/media
+      # NOT match the bare `apps/media`, so that entry is a 403. Its fields are
+      # duplicated under the per-app subkeys below, which are the ones declared.
       - apps/media/sonarr
       - apps/media/radarr
       - apps/media/seerr
