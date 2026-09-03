@@ -48,11 +48,14 @@ openbao_approle_token_max_ttl: 4h
 #     Already the shape of the elevated tiers (openbao_ai_elevated_secret_id_ttl
 #     in 07a); named here so the human tier is one constant, not a literal.
 #
-# THESE APPLY TO NEWLY CREATED ROLES ONLY. init/10-approles.yml is deliberately
-# add-if-missing — a full `bao write auth/approle/role/<name>` on a live role
-# would reset every unspecified field — so tightening a default here does not
-# retroactively expire a live credential. Bringing an already-live role onto
-# these bounds is a deliberate, separately-authorised operation.
+# Machine AppRoles in openbao_manageable_approles: create is add-if-missing;
+# init/10-approles.yml then reconciles secret_id_ttl / num_uses / token TTLs
+# on existing roles with the same complete field set as create (a partial
+# write would reset omitted fields). That does not mint a secret_id and does
+# not expire already-issued ones. Break-glass / inert human-gated roles are
+# excluded from the reconcile-managed set BY DESIGN — tightening a default
+# here does not retune them, and a routine converge must not grant an admin
+# token to make that happen.
 openbao_approle_secret_id_ttl: 24h
 openbao_approle_secret_id_num_uses: 30
 # The human-unlock tier: one wrapped, single-use secret_id per window.

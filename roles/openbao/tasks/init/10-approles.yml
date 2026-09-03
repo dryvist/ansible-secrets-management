@@ -134,10 +134,13 @@
     - not (item.1.stderr | default('') is search('403'))
 
 # Policy-attachment drift on EXISTING AppRoles is reconciled through the
-# dedicated /policies sub-endpoint: it updates token_policies ONLY — other
-# role fields keep their live values and no secret_id is minted or touched
-# (a full `bao write auth/approle/role/<name>` would reset unspecified
-# fields to defaults, which is exactly why creation above is add-if-missing).
+# dedicated /policies sub-endpoint: it updates token_policies ONLY and does
+# not mint a secret_id. TTL / num_uses / token TTL / CIDRs are a sibling
+# task below; that write MUST pass the same complete field set as create,
+# because a partial `bao write auth/approle/role/<name>` resets omitted
+# fields to defaults. Break-glass roles are not in openbao_manageable_approles
+# during reconcile and stay inert here BY DESIGN — do not widen the set
+# to retune them.
 - name: Reconcile token_policies on existing AppRoles
   ansible.builtin.command:
     cmd: >-
@@ -158,14 +161,17 @@
       ((item.1.stdout | from_json).data.token_policies | default([]) | sort)
       != ((item.0.token_policies | default([item.0.policy])) | sort)
 
+- name: Reconcile TTL and token bounds on existing AppRoles
+  ansible.builtin.include_tasks: 10c-approle-ttl-bounds.yml
+
 # Issuing the credentials for whatever was just created is the other half of
 # this job and lives in its own file: everything above DECLARES roles (create,
-# and reconcile the policies on ones that already exist), everything below
-# ISSUES credentials for the ones that were new. Split because the combined
-# file exceeded the repo's per-file token budget — which is the budget working
-# as intended: an agent changing the mint path should not have to read the
-# declaration path to find it. Included last so ordering is unchanged; the
-# facts it consumes (openbao_approle_checks, openbao_manageable_approles) are
-# set above and cross the include intact.
+# reconcile policies, and reconcile bounds on ones that already exist),
+# everything below ISSUES credentials for the ones that were new. Split
+# because the combined file exceeded the repo's per-file token budget —
+# which is the budget working as intended: an agent changing the mint path
+# should not have to read the declaration path to find it. Included last so
+# ordering is unchanged; the facts it consumes (openbao_approle_checks,
+# openbao_manageable_approles) are set above and cross the include intact.
 - name: Issue credentials for the AppRoles created this run
   ansible.builtin.include_tasks: 10b-approle-secret-ids.yml

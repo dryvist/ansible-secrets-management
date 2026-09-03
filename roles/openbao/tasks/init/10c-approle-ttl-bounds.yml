@@ -1,0 +1,61 @@
+---
+# In-place TTL / num_uses / token-TTL tune for AppRoles that already exist.
+# Included from 10-approles.yml after policy reconcile and before 10b mint.
+# Split to stay inside the per-file token budget; the seam is DECLARE (there)
+# vs TUNE BOUNDS (here). 10b still ISSUES secret_ids for newly created roles
+# only — this file never mints.
+#
+# Same zip/loop and the same complete field set as "Create the missing
+# AppRoles". A partial `bao write auth/approle/role/<name>` resets omitted
+# fields to defaults. Break-glass roles are not in openbao_manageable_approles
+# during reconcile and are not retuned here BY DESIGN.
+
+- name: Reconcile AppRole TTL and token bounds on existing AppRoles
+  vars:
+    approle_cidr_class: "{{ openbao_approle_cidr_class_map[item.0.name] }}"
+    approle_bound_cidrs: >-
+      {{ item.0.secret_id_bound_cidrs | default('', true)
+         or openbao_approle_cidr_classes[approle_cidr_class] }}
+    approle_secret_id_ttl: >-
+      {{ item.0.secret_id_ttl
+         | default(openbao_approle_secret_id_ttl_overrides[item.0.name]
+                   | default(openbao_approle_secret_id_ttl)) }}
+    approle_secret_id_num_uses: >-
+      {{ item.0.secret_id_num_uses
+         | default(openbao_approle_secret_id_num_uses_overrides[item.0.name]
+                   if item.0.name in openbao_approle_secret_id_num_uses_overrides
+                   else openbao_approle_secret_id_num_uses) }}
+    approle_token_ttl: "{{ item.0.token_ttl | default(openbao_approle_token_ttl) }}"
+    approle_token_max_ttl: "{{ item.0.token_max_ttl | default(openbao_approle_token_max_ttl) }}"
+    live: "{{ (item.1.stdout | default('{}') | from_json).data | default({}) }}"
+    desired_secret_id_ttl_s: "{{ approle_secret_id_ttl | community.general.to_seconds }}"
+    desired_token_ttl_s: "{{ approle_token_ttl | community.general.to_seconds }}"
+    desired_token_max_ttl_s: "{{ approle_token_max_ttl | community.general.to_seconds }}"
+  ansible.builtin.command:
+    cmd: >-
+      bao write auth/approle/role/{{ item.0.name }}
+      token_policies={{ (item.0.token_policies | default([item.0.policy])) | join(',') }}
+      token_ttl={{ approle_token_ttl }}
+      token_max_ttl={{ approle_token_max_ttl }}
+      secret_id_ttl={{ approle_secret_id_ttl }}
+      secret_id_num_uses={{ approle_secret_id_num_uses }}
+      {{ ('secret_id_bound_cidrs=' ~ approle_bound_cidrs ~
+          ' token_bound_cidrs=' ~ approle_bound_cidrs)
+         if (approle_bound_cidrs | length > 0) else '' }}
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  loop: "{{ openbao_manageable_approles | zip(openbao_approle_checks.results | default([])) | list }}"
+  loop_control:
+    label: "{{ item.0.name }}"
+  no_log: true
+  changed_when: true
+  when:
+    - openbao_bootstrap_token is defined
+    - (item.1.rc | default(1)) == 0
+    - >-
+      (live.secret_id_ttl | default(0) | int != desired_secret_id_ttl_s | int)
+      or (live.secret_id_num_uses | default(0) | int
+          != approle_secret_id_num_uses | int)
+      or (live.token_ttl | default(0) | int != desired_token_ttl_s | int)
+      or (live.token_max_ttl | default(0) | int != desired_token_max_ttl_s | int)
