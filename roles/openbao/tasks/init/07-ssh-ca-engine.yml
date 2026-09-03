@@ -215,6 +215,43 @@
     - openbao_bootstrap_token is defined
     - openbao_ssh_engine_enabled | bool
 
+# --- Fail-closed guard: a workspace policy may not name an arbitrary path ----
+# terrakube-workspace-policy.hcl.j2 renders three loops over inventory data. The
+# kv_read and kv_write loops prefix every entry with the KV mount, so inventory
+# can only widen WITHIN that mount. The api_update loop does not -- it renders
+# `path "{{ path }}"` verbatim, so inventory data alone decides the grant.
+#
+# Every live value is an aws/sts/<role> path, and nothing enforces that. An
+# entry naming the policy/auth control plane would render a self-escalation
+# grant for that workspace's job identity, and the converge would report
+# success. This guard lives here rather than in 08-rbac-policies.yml so it runs
+# BEFORE the policies render, beside the sibling path-allowlist guards above.
+- name: Assert Terrakube api_update paths stay outside the control plane
+  ansible.builtin.assert:
+    that:
+      - _tk_api_update_forbidden | length == 0
+      - _tk_api_update_wildcards | length == 0
+    fail_msg: >-
+      A Terrakube workspace api_update path names the control plane or carries a
+      wildcard, and the api_update loop renders it verbatim with read+update.
+      Control-plane paths: {{ _tk_api_update_forbidden }}; wildcard paths:
+      {{ _tk_api_update_wildcards }}. Refusing to render -- this would let
+      inventory data grant a workspace identity the policy/auth control plane.
+    success_msg: >-
+      All {{ _tk_api_update_paths | length }} Terrakube api_update paths are
+      literal and outside the control plane.
+  vars:
+    _tk_api_update_paths: >-
+      {{ openbao_terrakube_workspaces | selectattr('api_update', 'defined')
+         | map(attribute='api_update') | flatten | list }}
+    _tk_api_update_forbidden: >-
+      {{ _tk_api_update_paths | select('match', '(' ~
+         ((openbao_ai_forbidden_subtrees + [openbao_kv_mount]) | join('|'))
+         ~ ')(/|$)') | list }}
+    _tk_api_update_wildcards: >-
+      {{ _tk_api_update_paths | select('search', '[*+]') | list }}
+  when: openbao_bootstrap_token is defined
+
 # --- RBAC policies (write-if-missing-or-changed) ----------------------------
 # Rendered on the TARGET: `bao policy write` below executes there and reads
 # the file from its local filesystem (a controller-side render is unreachable
