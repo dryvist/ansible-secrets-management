@@ -6,11 +6,13 @@
 # openbao node, but only the ACTIVE node acts — standby nodes exit 0 as a no-op,
 # so exactly one snapshot is taken per cycle regardless of who holds leadership.
 #
-# It talks to THIS node's own API address ({{ openbao_api_addr }} — its VLAN IP),
-# never the Traefik ingress VIP: there is no loopback listener (see
-# openbao.hcl.j2), and a backup must come from a known specific node, not
-# whichever node the load balancer happens to pick. It authenticates with the
-# least-privilege `snapshot` AppRole (sys/storage/raft/snapshot read only).
+# It talks to THIS node's listener on an on-box IPv4 + API port, never the
+# Traefik ingress VIP: there is no loopback listener (see openbao.hcl.j2),
+# and a backup must come from a known specific node, not whichever node the
+# load balancer happens to pick. The address is resolved at runtime so a
+# templated hostname cannot hairpin through ingress and miss the socket.
+# It authenticates with the least-privilege `snapshot` AppRole
+# (sys/storage/raft/snapshot read only).
 #
 # Each snapshot is integrity-checked (gzip -t — raft snapshots are gzipped tar)
 # and written under the data volume, which sits on a ZFS/PBS-backed dataset that
@@ -29,8 +31,6 @@
 #   no-op:   "not the active node — nothing to do"
 set -uo pipefail
 
-BAO_ADDR="{{ openbao_api_addr }}"
-export BAO_ADDR
 BIN="{{ openbao_install_dir }}/bao"
 SNAP_DIR="{{ openbao_snapshot_dir }}"
 RETAIN="{{ openbao_snapshot_retain }}"
@@ -58,6 +58,12 @@ fail() {
   hc_ping /fail
   exit 1
 }
+
+PORT="{{ openbao_api_port }}"
+ONBOX_IP="$(ip -4 -o addr show scope global | awk '{print $4}' | cut -d/ -f1 | head -n1)"
+[ -n "${ONBOX_IP}" ] || fail "no on-box IPv4 for snapshot API"
+BAO_ADDR="http://${ONBOX_IP}:${PORT}"
+export BAO_ADDR
 
 # 1. Leader-gate. /sys/leader is unauthenticated; is_self=true only on the
 #    active node. A standby is a clean no-op so peers never double-ship.
