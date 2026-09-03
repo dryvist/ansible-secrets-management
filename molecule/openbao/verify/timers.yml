@@ -40,6 +40,7 @@
       # Leader-gated: only the active node snapshots.
       - "'/v1/sys/leader' in (bao_snap_script.content | b64decode)"
       - "'is_self' in (bao_snap_script.content | b64decode)"
+      - "'sys/leader unreachable' in (bao_snap_script.content | b64decode)"
       # Takes + integrity-checks the snapshot.
       - "'operator raft snapshot save' in (bao_snap_script.content | b64decode)"
       - "'gzip -t' in (bao_snap_script.content | b64decode)"

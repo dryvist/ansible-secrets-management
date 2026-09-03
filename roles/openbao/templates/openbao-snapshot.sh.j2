@@ -60,14 +60,22 @@ fail() {
 }
 
 # 1. Leader-gate. /sys/leader is unauthenticated; is_self=true only on the
-#    active node. A standby (or an unreachable local node — the deadman watchdog
-#    covers real outages) is a clean no-op, so peers never double-ship.
+#    active node. A standby is a clean no-op so peers never double-ship.
+#    A curl failure is NOT a standby: collapsing it into the no-op made a
+#    cluster-wide snapshot miss look healthy. Fail that so the deadman fires.
 # ponytail: JSON grep instead of jq (not on these WAN-firewalled nodes); swap to
 # `jq -e .is_self` if jq ever lands in the base image.
-if ! curl -fsS --max-time 8 "${BAO_ADDR}/v1/sys/leader" | grep -q '"is_self":true'; then
+leader_json="$(mktemp)"
+if ! curl -fsS --max-time 8 -o "${leader_json}" "${BAO_ADDR}/v1/sys/leader"; then
+  rm -f "${leader_json}"
+  fail "local sys/leader unreachable (not a standby no-op)"
+fi
+if ! grep -Eq '"is_self"[[:space:]]*:[[:space:]]*true' "${leader_json}"; then
+  rm -f "${leader_json}"
   log "not the active node — nothing to do"
   exit 0
 fi
+rm -f "${leader_json}"
 
 # 2. Health-gate: never snapshot a sealed/unhealthy node (standbyok=true so an
 #    unsealed standby still reads 200; sealed=503, uninitialized=501).
