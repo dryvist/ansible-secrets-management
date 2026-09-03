@@ -126,6 +126,15 @@ openbao_generated_app_secrets:
   # and Redis password are NOT here — they live at ai/llm and ai/llm-router in
   # the local-llm domain, hand-seeded, and must keep their current values.
   llm-router: [llm_router_db_password]
+  # Per-caller virtual keys for the router. Generated HERE so the router never
+  # mints or distributes a credential — it registers a value it merely READS
+  # (ansible-proxmox-ai, roles/llm_router/tasks/seed-keys.yml), and reads are
+  # pre-authorized. Replaces these two consumers' use of the shared router
+  # master key for router calls, which made spend unattributable and made
+  # revoking one tool a rotation for everyone. App-namespaced for the flat
+  # bao_apps_secrets merge, same as every other field here.
+  open-webui: [open_webui_llm_router_key]
+  langgraph: [langgraph_llm_router_key]
   # hermes-ui companion web guest (ai VLAN): hermes-workspace's bind password
   # plus mission-control's auth pair. App-namespaced for the flat
   # bao_apps_secrets merge. hermes_ui_hermes_api_token is deliberately NOT
