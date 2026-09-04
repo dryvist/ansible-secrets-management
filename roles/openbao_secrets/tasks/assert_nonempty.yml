@@ -1,0 +1,52 @@
+---
+# Reusable fail-closed guard: refuse to render a secret that resolved empty.
+#
+# WHY THIS EXISTS: a consumer resolves its credential from `bao_<domain>_secrets`,
+# which defaults to `{}` (group_vars/all.yml). A domain that was not fetched
+# therefore resolves every one of its fields to nothing, and the converge then
+# WRITES that nothing — a database role rewritten with an empty password, an
+# application key replaced by a blank one. The failure is invisible: the play is
+# green and the app is locked out of its own data. Roles used to each carry
+# their own version of this check, which meant each one could forget it.
+#
+# Contract — the caller sets:
+#   openbao_secrets_required_vars : list of VARIABLE NAMES (strings) that must
+#                                   resolve to a non-empty value
+#
+# Usage:
+#   - name: Assert this app's secrets resolved
+#     ansible.builtin.include_role:
+#       name: openbao_secrets
+#       tasks_from: assert_nonempty.yml
+#     vars:
+#       openbao_secrets_required_vars:
+#         - myapp_db_password
+#
+# Only variable NAMES are ever printed, never values, so this deliberately runs
+# without no_log — a censored guard tells the operator nothing about what to fix.
+
+- name: Validate the assert_nonempty inputs
+  ansible.builtin.assert:
+    that:
+      - openbao_secrets_required_vars is defined
+      - openbao_secrets_required_vars is sequence
+      - openbao_secrets_required_vars is not string
+      - openbao_secrets_required_vars | length > 0
+    fail_msg: >-
+      openbao_secrets/assert_nonempty.yml requires openbao_secrets_required_vars
+      to be a non-empty list of variable names.
+    quiet: true
+
+- name: Assert every required secret resolved to a non-empty value
+  ansible.builtin.assert:
+    that:
+      - lookup('vars', item, default='') | default('', true) | trim | length > 0
+    fail_msg: >-
+      '{{ item }}' resolved to an empty value. Converging would write that empty
+      value over the live credential and lock the application out of its own
+      data. Re-run under the secrets environment so its OpenBao domain is
+      fetched, or seed the field in OpenBao — never let this proceed empty.
+    quiet: true
+  loop: "{{ openbao_secrets_required_vars }}"
+  loop_control:
+    label: "{{ item }}"

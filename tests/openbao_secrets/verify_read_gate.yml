@@ -1,0 +1,57 @@
+---
+# Proves the four cases of the openbao_secrets KV-read gate against the
+# PRODUCTION tasks, with synthetic registered results — no live OpenBao.
+#
+#   optional 404  -> skipped, warned, play continues
+#   optional 403  -> FAILS (a wrong credential is not an absent secret)
+#   required 404  -> FAILS (an undeclared-but-expected key is a real defect)
+#   clean read    -> no failure
+#
+# The message strings are vault_kv2_get's own (plugins/modules/vault_kv2_get.py:
+# "Invalid or missing path ['%s'] ..." for hvac InvalidPath, "Forbidden:
+# Permission Denied to path ['%s']." for hvac Forbidden).
+#
+# Run: ansible-playbook -i localhost, -c local tests/openbao_secrets/verify_read_gate.yml
+
+- name: Verify the openbao_secrets read gate
+  hosts: localhost
+  gather_facts: false
+  vars:
+    openbao_secrets_kv_mount: secret
+    openbao_domain:
+      name: harness
+    _msg_404: >-
+      Invalid or missing path ['apps/harness/vendor'] with secret version
+      'latest'. Check the path or secret version.
+    _msg_403: "Forbidden: Permission Denied to path ['apps/harness/vendor']."
+  tasks:
+    - name: Exercise every read-gate case
+      ansible.builtin.include_tasks: exercise_read_gate.yml
+      loop:
+        - name: optional path returning 404 is skipped
+          expect_failure: false
+          results:
+            - item: {path: apps/harness/vendor, optional: true}
+              failed: true
+              msg: "{{ _msg_404 }}"
+        - name: optional path returning 403 still fails
+          expect_failure: true
+          results:
+            - item: {path: apps/harness/vendor, optional: true}
+              failed: true
+              msg: "{{ _msg_403 }}"
+        - name: required path returning 404 fails
+          expect_failure: true
+          results:
+            - item: apps/harness/required
+              failed: true
+              msg: "{{ _msg_404 }}"
+        - name: clean read passes
+          expect_failure: false
+          results:
+            - item: apps/harness/required
+              failed: false
+              secret: {SOME_FIELD: value}
+      loop_control:
+        loop_var: read_gate_fixture
+        label: "{{ read_gate_fixture.name }}"

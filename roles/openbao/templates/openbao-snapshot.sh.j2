@@ -6,11 +6,13 @@
 # openbao node, but only the ACTIVE node acts — standby nodes exit 0 as a no-op,
 # so exactly one snapshot is taken per cycle regardless of who holds leadership.
 #
-# It talks to THIS node's own API address ({{ openbao_api_addr }} — its VLAN IP),
-# never the Traefik ingress VIP: there is no loopback listener (see
-# openbao.hcl.j2), and a backup must come from a known specific node, not
-# whichever node the load balancer happens to pick. It authenticates with the
-# least-privilege `snapshot` AppRole (sys/storage/raft/snapshot read only).
+# It talks to THIS node's listener on an on-box IPv4 + API port, never the
+# Traefik ingress VIP: there is no loopback listener (see openbao.hcl.j2),
+# and a backup must come from a known specific node, not whichever node the
+# load balancer happens to pick. The address is resolved at runtime so a
+# templated hostname cannot hairpin through ingress and miss the socket.
+# It authenticates with the least-privilege `snapshot` AppRole
+# (sys/storage/raft/snapshot read only).
 #
 # Each snapshot is integrity-checked (gzip -t — raft snapshots are gzipped tar)
 # and written under the data volume, which sits on a ZFS/PBS-backed dataset that
@@ -22,10 +24,13 @@
 #
 # NOT `set -e`: every failure is handled explicitly so it ALERTS (ntfy +
 # healthchecks) instead of aborting silently.
+#
+# journald marker (logger -t openbao-snapshot), for Splunk alert rules:
+#   success: "snapshot OK: <path> (<bytes> bytes)"
+#   failure: "OpenBao snapshot FAILED on <host>: <reason>"
+#   no-op:   "not the active node — nothing to do"
 set -uo pipefail
 
-BAO_ADDR="{{ openbao_api_addr }}"
-export BAO_ADDR
 BIN="{{ openbao_install_dir }}/bao"
 SNAP_DIR="{{ openbao_snapshot_dir }}"
 RETAIN="{{ openbao_snapshot_retain }}"
@@ -54,15 +59,29 @@ fail() {
   exit 1
 }
 
+PORT="{{ openbao_api_port }}"
+ONBOX_IP="$(ip -4 -o addr show scope global | awk '{print $4}' | cut -d/ -f1 | head -n1)"
+[ -n "${ONBOX_IP}" ] || fail "no on-box IPv4 for snapshot API"
+BAO_ADDR="http://${ONBOX_IP}:${PORT}"
+export BAO_ADDR
+
 # 1. Leader-gate. /sys/leader is unauthenticated; is_self=true only on the
-#    active node. A standby (or an unreachable local node — the deadman watchdog
-#    covers real outages) is a clean no-op, so peers never double-ship.
+#    active node. A standby is a clean no-op so peers never double-ship.
+#    A curl failure is NOT a standby: collapsing it into the no-op made a
+#    cluster-wide snapshot miss look healthy. Fail that so the deadman fires.
 # ponytail: JSON grep instead of jq (not on these WAN-firewalled nodes); swap to
 # `jq -e .is_self` if jq ever lands in the base image.
-if ! curl -fsS --max-time 8 "${BAO_ADDR}/v1/sys/leader" | grep -q '"is_self":true'; then
+leader_json="$(mktemp)"
+if ! curl -fsS --max-time 8 -o "${leader_json}" "${BAO_ADDR}/v1/sys/leader"; then
+  rm -f "${leader_json}"
+  fail "local sys/leader unreachable (not a standby no-op)"
+fi
+if ! grep -Eq '"is_self"[[:space:]]*:[[:space:]]*true' "${leader_json}"; then
+  rm -f "${leader_json}"
   log "not the active node — nothing to do"
   exit 0
 fi
+rm -f "${leader_json}"
 
 # 2. Health-gate: never snapshot a sealed/unhealthy node (standbyok=true so an
 #    unsealed standby still reads 200; sealed=503, uninitialized=501).

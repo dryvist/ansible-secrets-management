@@ -42,6 +42,26 @@ openbao_terrakube_workspaces:
     api_update: [aws/sts/tf-proxmox]
   - name: tofu-proxmox-servarr-config
     kv_read: [apps/media]
+  - name: iac-platform-semaphore
+    # Declares Semaphore's own project, repositories, inventories, templates
+    # and schedules. Reads exactly one path, for exactly one field: the
+    # Semaphore API token its provider authenticates with. Deliberately NOT
+    # granted apps/authelia — unlike the iac-platform workspace above, this one
+    # configures an application through its own API and never touches an OIDC
+    # client secret.
+    #
+    # apps/semaphore, not platform/terrakube/main. Two reasons, and the second
+    # is the load-bearing one:
+    #   - Scope. That platform path carries the whole Terrakube stack's
+    #     credentials (Dex OIDC, object store, database, signing keys). Reading
+    #     all of it to obtain one API token is a grant far wider than the need.
+    #   - Writability. `platform` is in openbao_ai_readonly_extra_subtrees, so
+    #     it has a read leaf and no write leaf by design; `apps` is in
+    #     openbao_ai_domains and has both. A credential the deploy must be able
+    #     to CREATE cannot live in a subtree the model deliberately keeps
+    #     read-only — siting it there turns a routine mint into a request to
+    #     widen the access model.
+    kv_read: [apps/semaphore]
 openbao_ansible_converge_policy_name: ansible-converge
 openbao_ansible_converge_approle_name: ansible-converge
 openbao_observability_policy_name: observability

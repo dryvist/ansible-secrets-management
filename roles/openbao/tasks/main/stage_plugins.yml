@@ -4,6 +4,14 @@
 # release tarball from the controller exactly like the server .deb, on EVERY
 # node: the plugin catalog is cluster-replicated but each node execs its OWN
 # copy of the binary, which must match the registered sha256.
+#
+# Every controller-side staging task here carries `check_mode: false`. Ansible
+# skips a delegated get_url/command under --check, but the tasks that read
+# what it staged — `file` lookups, checksum asserts, signature verification —
+# have no check-mode of their own and fail on a path that was never created.
+# Without these the role could not be dry-run at all. They touch only the
+# controller's own scratch space, so running them under --check changes
+# nothing on any managed host.
 - name: Stage the AWS plugin checksums file on controller
   ansible.builtin.get_url:
     url: "{{ openbao_aws_plugin_checksums_url }}"
@@ -17,6 +25,7 @@
     ansible_become: false
   run_once: true
   when: openbao_aws_engine_enabled | bool
+  check_mode: false
 
 - name: Stage the AWS plugin detached signature on controller
   ansible.builtin.get_url:
@@ -31,6 +40,7 @@
     ansible_become: false
   run_once: true
   when: openbao_aws_engine_enabled | bool
+  check_mode: false
 
 - name: Build the OpenBao release verification keyring on controller
   ansible.builtin.command:
@@ -50,6 +60,7 @@
   run_once: true
   changed_when: false
   when: openbao_aws_engine_enabled | bool
+  check_mode: false
 
 - name: Read the expected SHA256 values for the AWS plugin release
   ansible.builtin.set_fact:
@@ -92,6 +103,7 @@
     ansible_become: false
   run_once: true
   when: openbao_aws_engine_enabled | bool
+  check_mode: false
 
 - name: Verify the AWS plugin release signature
   ansible.builtin.command:
@@ -109,6 +121,7 @@
   run_once: true
   changed_when: false
   when: openbao_aws_engine_enabled | bool
+  check_mode: false
 
 - name: Extract the AWS plugin binary into the plugin directory
   ansible.builtin.unarchive:
@@ -159,6 +172,7 @@
     ansible_become: false
   run_once: true
   when: openbao_github_engine_enabled | bool
+  check_mode: false
 
 - name: Stage the GitHub plugin checksum signature on controller
   ansible.builtin.get_url:
@@ -173,6 +187,7 @@
     ansible_become: false
   run_once: true
   when: openbao_github_engine_enabled | bool
+  check_mode: false
 
 - name: Build the GitHub plugin release verification keyring on controller
   ansible.builtin.command:
@@ -192,6 +207,7 @@
   run_once: true
   changed_when: false
   when: openbao_github_engine_enabled | bool
+  check_mode: false
 
 - name: Verify the GitHub plugin checksum manifest signature
   ansible.builtin.command:
@@ -209,6 +225,7 @@
   run_once: true
   changed_when: false
   when: openbao_github_engine_enabled | bool
+  check_mode: false
 
 - name: Read the expected SHA256 for the GitHub plugin binary
   ansible.builtin.set_fact:
@@ -244,6 +261,7 @@
     ansible_become: false
   run_once: true
   when: openbao_github_engine_enabled | bool
+  check_mode: false
 
 - name: Install the immutable GitHub plugin command
   ansible.builtin.copy:
@@ -273,6 +291,7 @@
     ansible_become: false
   run_once: true
   when: openbao_oauthapp_engine_enabled | bool
+  check_mode: false
 
 - name: Extract the OAuthapp plugin binary into the plugin directory
   ansible.builtin.unarchive:

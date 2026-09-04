@@ -134,3 +134,11 @@
          != (openbao_terrakube_jwt_token_ttl | regex_replace('m$', '') | int) * 60
 
 # --- AppRoles (add-if-missing), one per RBAC group --------------------------
+
+# The human operator's own login is a third concern in this file (after the
+# workload auth methods and the Terrakube JWT roles), so it lives in its own.
+# Included last, leaving ordering unchanged: it needs the auth-method listing
+# registered above, and it re-reads that listing itself where a mount may have
+# been enabled by this same run.
+- name: Configure the human-unlock login and its MFA enforcement
+  ansible.builtin.include_tasks: 09b-human-unlock.yml

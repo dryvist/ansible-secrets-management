@@ -39,6 +39,10 @@
   register: openbao_installed_version
   changed_when: false
   failed_when: false
+  # A `command` is skipped under --check, leaving the fact below to conclude
+  # nothing is installed and every gate downstream to take the install path.
+  # Reading a version string changes nothing, so run it either way.
+  check_mode: false
 
 - name: Record whether the target OpenBao version is already installed
   ansible.builtin.set_fact:
@@ -67,6 +71,12 @@
   vars:
     ansible_become: false
   run_once: true
+  # check_mode: false — this writes only to the CONTROLLER's /tmp, but the
+  # next task reads that file back through a `file` lookup, and a lookup has
+  # no check-mode of its own. Skipped here, the whole role fails under
+  # --check with "File not found" before it evaluates a single change, so the
+  # role could not be dry-run at all.
+  check_mode: false
 
 - name: Read the expected SHA256 for the amd64 .deb
   ansible.builtin.set_fact:
@@ -99,6 +109,9 @@
   vars:
     ansible_become: false
   run_once: true
+  # Same reason as the checksums file above: skipped under --check, the copy
+  # below fails on a controller path that was never created.
+  check_mode: false
 
 - name: Copy the OpenBao .deb to the target
   ansible.builtin.copy:

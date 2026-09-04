@@ -1,0 +1,227 @@
+---
+# The human operator's login: a userpass user carrying the human-unlock policy,
+# with TOTP enforced on the mount. Included as the final step of
+# 09-auth-methods-and-terrakube-jwt.yml, and split out of it to keep each file
+# to one concern and inside the per-file token budget.
+#
+# This is what replaces the retired standing `admin` secret_id: it is the only
+# way a human mints a break-glass credential without already holding one. See
+# templates/human-unlock-policy.hcl.j2 and docs/secrets-and-rbac.md.
+
+# --- Human unlock: userpass + login MFA --------------------------------------
+# The operator's own login, carrying the human-unlock policy. This is what
+# replaces the retired standing `admin` secret_id, so it must exist before that
+# credential is destroyed.
+- name: Enable the userpass auth method
+  ansible.builtin.command:
+    cmd: bao auth enable userpass
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  no_log: true
+  changed_when: true
+  when:
+    - openbao_bootstrap_token is defined
+    - "'userpass/' not in (openbao_auth_raw.stdout | from_json).keys()"
+
+# A denied or absent read is NOT an absent user, and the two must not be
+# conflated: writing the token fields onto a user that does not exist is a
+# CREATE, and OpenBao refuses a create with no password — so the failure would
+# be confusing rather than dangerous. Probing first turns it into a clear
+# instruction. The role never learns or sets the password.
+- name: Check whether the human-unlock user exists
+  ansible.builtin.command:
+    cmd: "bao read -format=json auth/userpass/users/{{ openbao_human_unlock_user }}"
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  register: openbao_human_unlock_user_check
+  no_log: true
+  changed_when: false
+  failed_when: false
+  when: openbao_bootstrap_token is defined
+
+- name: FAIL — the human-unlock user must be created out-of-band, with a password
+  ansible.builtin.fail:
+    msg: >-
+      The userpass user '{{ openbao_human_unlock_user }}' does not exist. This
+      role deliberately never sets a password, so it cannot create it: doing so
+      would either put a password in automation or create a passwordless
+      administrator. Create it once by hand
+      (`bao write auth/userpass/users/{{ openbao_human_unlock_user }} password=-`),
+      then re-run — this play owns its policy and token bounds from then on.
+  when:
+    - openbao_bootstrap_token is defined
+    - (openbao_human_unlock_user_check.rc | default(0)) != 0
+
+# token_* fields ONLY. `password` is deliberately absent from this command:
+# OpenBao writes the password only when that parameter is explicitly present,
+# so an update without it leaves the existing credential untouched.
+- name: Bind the human-unlock policy and token bounds to the operator's user
+  ansible.builtin.command:
+    cmd: >-
+      bao write auth/userpass/users/{{ openbao_human_unlock_user }}
+      token_policies={{ openbao_human_unlock_policy_name }}
+      token_ttl={{ openbao_human_unlock_token_ttl }}
+      token_max_ttl={{ openbao_human_unlock_token_max_ttl }}
+      {{ ('token_bound_cidrs=' ~ openbao_approle_cidr_classes[openbao_human_unlock_cidr_class])
+         if (openbao_approle_cidr_classes[openbao_human_unlock_cidr_class] | length > 0) else '' }}
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  no_log: true
+  changed_when: true
+  when:
+    - openbao_bootstrap_token is defined
+    - (openbao_human_unlock_user_check.rc | default(1)) == 0
+
+# --- Login MFA (TOTP) --------------------------------------------------------
+# A TOTP method is created with a server-generated id, so a blind POST would
+# mint a NEW method on every converge. `method_name` is unique, so the existing
+# one is found by name first and only a genuinely missing method is created.
+- name: List the configured TOTP MFA methods
+  ansible.builtin.command:
+    cmd: bao list -format=json identity/mfa/method/totp
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  register: openbao_mfa_totp_list
+  no_log: true
+  changed_when: false
+  failed_when: false
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_human_unlock_mfa_enabled | bool
+
+- name: Read each configured TOTP MFA method
+  ansible.builtin.command:
+    cmd: "bao read -format=json identity/mfa/method/totp/{{ item }}"
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  loop: >-
+    {{ (openbao_mfa_totp_list.stdout | default('[]') | from_json)
+       if (openbao_mfa_totp_list.rc | default(1)) == 0 else [] }}
+  register: openbao_mfa_totp_reads
+  no_log: true
+  changed_when: false
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_human_unlock_mfa_enabled | bool
+
+- name: Resolve the TOTP method id for this method_name
+  ansible.builtin.set_fact:
+    openbao_mfa_totp_method_id: >-
+      {{ (openbao_mfa_totp_reads.results | default([])
+          | rejectattr('skipped', 'defined')
+          | map(attribute='stdout') | map('from_json') | map(attribute='data')
+          | selectattr('method_name', 'defined')
+          | selectattr('method_name', 'equalto', openbao_human_unlock_mfa_method_name)
+          | map(attribute='id') | list | first) | default('', true) }}
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_human_unlock_mfa_enabled | bool
+
+- name: Create the TOTP MFA method
+  ansible.builtin.command:
+    cmd: >-
+      bao write -format=json identity/mfa/method/totp
+      method_name={{ openbao_human_unlock_mfa_method_name }}
+      issuer={{ openbao_human_unlock_mfa_issuer }}
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  register: openbao_mfa_totp_created
+  no_log: true
+  changed_when: true
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_human_unlock_mfa_enabled | bool
+    - (openbao_mfa_totp_method_id | default('')) | length == 0
+
+# The v2.5.5 docs show `id` on the READ response and `method_id` as the request
+# parameter, and give no create-response body — so the create key is taken from
+# whichever is present rather than guessed. The assert below refuses to continue
+# on an empty id, so a wrong guess here fails loudly instead of silently
+# skipping the enforcement and leaving MFA declared-but-absent.
+- name: Use the newly created TOTP method id
+  ansible.builtin.set_fact:
+    openbao_mfa_totp_method_id: >-
+      {{ (openbao_mfa_totp_created.stdout | from_json).data.method_id
+         | default((openbao_mfa_totp_created.stdout | from_json).data.id, true) }}
+  no_log: true
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_human_unlock_mfa_enabled | bool
+    - not (openbao_mfa_totp_created.skipped | default(true))
+
+# openbao_auth_raw was registered at the top of this file, BEFORE userpass may
+# have been enabled by this same run — on a first bootstrap it therefore has no
+# userpass accessor at all. Re-read it rather than reusing a listing that is
+# stale by construction.
+- name: Re-list enabled auth methods to resolve the userpass accessor
+  ansible.builtin.command:
+    cmd: bao auth list -format=json
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  register: openbao_auth_raw_after
+  no_log: true
+  changed_when: false
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_human_unlock_mfa_enabled | bool
+
+- name: Assert the TOTP method and userpass accessor both resolved
+  ansible.builtin.assert:
+    that:
+      - (openbao_mfa_totp_method_id | default('')) | length > 0
+      - "'userpass/' in (openbao_auth_raw_after.stdout | from_json)"
+    fail_msg: >-
+      Login MFA is enabled but could not be applied: TOTP method id
+      '{{ openbao_mfa_totp_method_id | default('') }}', userpass mount
+      {{ 'present' if "userpass/" in (openbao_auth_raw_after.stdout | from_json)
+         else 'ABSENT' }}. Enforcing nothing while reporting success would leave
+      the human login single-factor, so this fails instead.
+    quiet: true
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_human_unlock_mfa_enabled | bool
+
+# The enforcement is name-addressed, so this write is idempotent. Scoped to the
+# userpass MOUNT ACCESSOR: it covers every login through that mount, including
+# a user added later, rather than one entity that a rename would slip past.
+- name: Enforce TOTP on the userpass auth mount
+  ansible.builtin.command:
+    cmd: >-
+      bao write identity/mfa/login-enforcement/{{ openbao_human_unlock_mfa_enforcement_name }}
+      mfa_method_ids={{ openbao_mfa_totp_method_id }}
+      auth_method_accessors={{ (openbao_auth_raw_after.stdout | from_json)['userpass/'].accessor }}
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  no_log: true
+  changed_when: true
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_human_unlock_mfa_enabled | bool
+
+- name: INSTRUCT — enrol the operator's TOTP device (one-time, human)
+  ansible.builtin.debug:
+    msg: >-
+      ============================================================
+      TOTP is now ENFORCED on the userpass mount, and enrolment is NOT done by
+      this role — deliberately: a converge that could enrol the second factor
+      would be holding it. Until '{{ openbao_human_unlock_user }}' enrols, that
+      login cannot complete, so do this before retiring any standing admin
+      credential. Once, as a human with an admin token:
+        bao write identity/mfa/method/totp/admin-generate
+          method_id={{ openbao_mfa_totp_method_id | default('<method id>') }}
+          entity_id=<the entity id for {{ openbao_human_unlock_user }}>
+      Scan the returned barcode into an authenticator, then verify a full
+      login BEFORE destroying the standing admin secret_id.
+      ============================================================
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_human_unlock_mfa_enabled | bool
+    - (openbao_mfa_totp_method_id | default('')) | length > 0

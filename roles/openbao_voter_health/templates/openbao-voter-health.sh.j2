@@ -15,6 +15,10 @@
 # ingress VIP (TLS terminates there; an https:// probe to a backend reads 000
 # and lies about the node being down — see .claude/rules/ip-addressing.md and
 # openbao.hcl.j2's tls_disable=1 backend listener).
+#
+# journald marker (logger -t openbao-voter-health), for Splunk alert rules:
+#   active node, completed sweep: "sweep complete: shipped <n> voter events (<n> unreachable)"
+#   standby node, clean no-op:    "not the active node — nothing to sweep"
 set -uo pipefail
 
 # shellcheck source=/dev/null
@@ -93,8 +97,13 @@ EOF
 }
 
 # 1. Leader-gate against THIS node's own API — is_self=true only on the
-#    active node. sys/leader is unauthenticated.
-self_leader="$(curl -fsS --max-time "${TIMEOUT}" "http://127.0.0.1:${PORT}/v1/sys/leader" 2>/dev/null \
+#    active node. sys/leader is unauthenticated. There is no loopback
+#    listener (see openbao.hcl.j2 / roles/openbao/templates/
+#    openbao-snapshot.sh.j2's BAO_ADDR comment), so probe this node's own
+#    VLAN fqdn:port, same as every voter in the sweep below — 127.0.0.1
+#    connection-refuses here and made every node read "not active" forever.
+self_leader="$(curl -fsS --max-time "${TIMEOUT}" \
+  "http://{{ hostvars[inventory_hostname].hostname }}.{{ tofu_data.domain }}:${PORT}/v1/sys/leader" 2>/dev/null \
   | grep -o '"is_self":true' || true)"
 if [ -z "${self_leader}" ]; then
   log "not the active node — nothing to sweep"

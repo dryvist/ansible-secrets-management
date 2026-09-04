@@ -7,11 +7,16 @@
 # sys/policies/acl/*, because a wildcard there is escalation: anything that can
 # write an arbitrary policy can write itself a better one.
 #
-# Two exclusions are what make that true, and both are load-bearing:
+# Three exclusions are what make that true, and all are load-bearing:
 #
 #   1. The break-glass tiers are excluded. This identity cannot create or
 #      rewrite them, so it can never mint itself break-glass.
 #   2. Its OWN policy is excluded. It cannot widen its own grant.
+#   3. The approle-issuer policy is excluded, and this identity holds NO
+#      secret-id endpoint of its own. Minting a credential for another
+#      identity is a separate power on a separate credential
+#      (approle-issuer-policy.hcl.j2); a leaked reconcile secret_id
+#      reconciles declarations, it does not manufacture credentials.
 #
 # The consequence is deliberate: adding a NEW policy or AppRole name is not a
 # routine converge. The name has to be added to this template first, and that
@@ -56,9 +61,6 @@ path "auth/approle/role/{{ approle_name }}" {
 path "auth/approle/role/{{ approle_name }}/role-id" {
   capabilities = ["read"]
 }
-path "auth/approle/role/{{ approle_name }}/secret-id" {
-  capabilities = ["create", "update"]
-}
 path "auth/approle/role/{{ approle_name }}/policies" {
   capabilities = ["create", "update"]
 }
@@ -71,13 +73,6 @@ path "auth/approle/role/{{ approle_name }}/policies" {
 # the same reason as everything else here: `{{ openbao_ssh_mount }}/roles/*`
 # would let it invent a role with any principal it liked, including one the
 # host CA trusts for root.
-{% for ssh_role in openbao_ssh_roles %}
-path "{{ openbao_ssh_mount }}/roles/{{ ssh_role.name }}" {
-  capabilities = ["create", "read", "update"]
-}
-{% endfor %}
-
-# --- SSH signing roles, by name ------------------------------------------
 {% for ssh_role in openbao_ssh_roles %}
 path "{{ openbao_ssh_mount }}/roles/{{ ssh_role.name }}" {
   capabilities = ["create", "read", "update"]

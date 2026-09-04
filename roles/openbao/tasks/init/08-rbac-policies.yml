@@ -1,4 +1,34 @@
 ---
+# Each Terrakube workspace policy references its workspace BY LIST INDEX
+# (openbao_terrakube_workspaces[N]) while carrying the workspace's name in its
+# own `name`. Nothing structural keeps the two in step: inserting a workspace
+# anywhere but the end, or mistyping an index, silently points a policy at a
+# DIFFERENT workspace — which grants that workspace's KV paths to the wrong
+# job identity and reads as a working converge.
+#
+# Compare the two ORDERED lists rather than their sets: a set comparison passes
+# on exactly the swap this is guarding against, since both names are still
+# present.
+- name: Assert every Terrakube workspace policy names the workspace it points at
+  ansible.builtin.assert:
+    that:
+      - _tk_policy_names == _tk_workspace_derived_names
+    fail_msg: >-
+      A Terrakube workspace policy references the wrong entry in
+      openbao_terrakube_workspaces. Declared policy names:
+      {{ _tk_policy_names }}; names derived from the workspaces each one
+      actually points at: {{ _tk_workspace_derived_names }}.
+    success_msg: "All {{ _tk_policy_names | length }} Terrakube workspace policies point at their own workspace."
+  vars:
+    _tk_policies: "{{ openbao_base_policies | selectattr('workspace', 'defined') | list }}"
+    _tk_policy_names: "{{ _tk_policies | map(attribute='name') | list }}"
+    _tk_workspace_derived_names: >-
+      {{ _tk_policies | map(attribute='workspace.name')
+         | map('regex_replace', '^', 'terrakube-') | list }}
+  run_once: true
+  delegate_to: localhost
+  become: false
+
 # A reconcile-mode run may manage only what its OWN policy grants. That policy
 # is excluded from the set reconcile can rewrite (it cannot widen its own
 # grants), so the live policy drifts BEHIND the declared set the moment a new

@@ -17,7 +17,7 @@
 #        ai-elevated    -> [read-all + read-<extra>]        (standing, ambient)
 #        ai-apply-<svc> -> [read-<svc>, write-<svc>, github-mint]  (per-window, 6h/12h)
 #        ai-apply-all   -> [read-write-all, github-mint]           (per-window, 1h/6h)
-#        ai-admin       -> [ai-admin]                    (COMPLETE full admin, 1h, alerted)
+#        ai-admin       -> [ai-admin]                    (full admin, 1h, alerted)
 # "Unlock window" model: authorization is scoped by TASK / BLAST-RADIUS and
 # gated by ONE human UNLOCK per window, never by model capability (the model is
 # an AUDIT claim, never a key). Every apply/admin role is provisioned
@@ -27,9 +27,11 @@
 # (`bao write -wrap-ttl=90s -f auth/approle/role/<role>/secret-id`); that ONE
 # unlock then yields a token that lives the window (above), so the agent runs
 # unattended for the window instead of a human minting per task. ai-admin grants
-# COMPLETE full administrator access (superuser) — its containment is temporal
-# (1h) + procedural (human unlock) + observational (alerted every use), NOT
-# capability scoping. See the docs.dryvist.com "AI Agent Access (OpenBao)"
+# full administrator access over an ENUMERATED path list (see
+# ai-admin-policy.hcl.j2) — its containment is primarily temporal (1h) +
+# procedural (human unlock) + observational (alerted every use), with the path
+# list bounding it to what break-glass actually does rather than to every mount
+# that will ever exist. See the docs.dryvist.com "AI Agent Access (OpenBao)"
 # runbook for the full unlock/grant flow.
 #
 # SINGLE SOURCE OF TRUTH: add a writable service = ONE entry here. It renders a

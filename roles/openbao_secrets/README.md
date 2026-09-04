@@ -5,11 +5,16 @@ resource-domain identity** (each with its own least-privilege AppRole) and
 reads that domain's KV subtree into a per-domain fact,
 `bao_<domain>_secrets` (hyphens become underscores, e.g. `local-cloud` ->
 `bao_local_cloud_secrets`). Consumer roles then resolve their secrets
-**bao-first with an env fallback**:
+**from OpenBao only, failing loudly when the value is absent or empty**:
 
 ```yaml
-some_secret: "{{ bao_observability_secrets.SOME_SECRET | default(lookup('env', 'SOME_SECRET'), true) }}"
+some_secret: >-
+  {{ bao_observability_secrets.SOME_SECRET | default(undef(), true)
+     | mandatory('SOME_SECRET missing: OpenBao fetch did not supply it') }}
 ```
+
+`| mandatory()` alone would not fire on an empty string — it raises only on
+undefined — so the `default(undef(), true)` in front of it is load-bearing.
 
 It runs **once** on the controller (`delegate_to: localhost`, `run_once`),
 looping `openbao_secrets_domains` and leaving each domain's merged result in
@@ -17,10 +22,11 @@ looping `openbao_secrets_domains` and leaving each domain's merged result in
 then copies each domain's dict into its own shared, un-prefixed
 `bao_<domain>_secrets` fact per host (the publish lives at the playbook
 layer — like `tofu_data` in `load_tofu.yml` — so the role's own facts stay
-role-prefixed). Each domain **skips cleanly** when its own role_id/secret_id
-envs are unset, so an operator can migrate one domain at a time onto OpenBao
-while the rest keep resolving from env/SOPS (the `group_vars/all.yml` `{}`
-defaults guarantee the fallback resolves for every domain).
+role-prefixed). A domain whose role_id/secret_id envs are unset **fails the
+play**, unless it is named in `openbao_secrets_optional_domains` — the
+documented opt-out for migrating one domain at a time. Skipping silently is
+what let a domain resolve to `{}` and every consumer render an empty
+credential over a live one.
 
 ## Alignment with `roles/openbao` (RBAC)
 
@@ -33,7 +39,12 @@ a policy can't read:
   `tofu-proxmox` `docs/SECRETS_HIERARCHY.md` for the full RBAC table.
 - **Seeding**: `roles/openbao` seeds **no** values; it creates only the mount,
   policies, and AppRoles. So a domain's paths yield keys only once a writer
-  populates them; until then every read is empty and the env fallback wins.
+  populates them. A path that errors fails the play naming it — including a
+  404, because an undeclared-but-expected key is a real defect. The one
+  exception is a path given the mapping form with `optional: true`, whose 404
+  is skipped with a visible warning; a 403 (wrong credential, not an absent
+  secret) always fails. Login and reads run with `check_mode: false`, so a
+  `--check` run resolves real values instead of blanks.
 
 ## Installation
 
@@ -57,9 +68,9 @@ Set `BAO_ADDR` plus each domain's `<DOMAIN>_VAULT_ROLE_ID` / `_SECRET_ID`
 doppler run -- ansible-playbook playbooks/site.yml --tags openbao_secrets
 ```
 
-Any domain whose credentials aren't set simply falls back to env/SOPS for its
-consumer roles — see [Wiring](#wiring) for how the pre-fetch play publishes
-each domain's fact.
+A domain whose credentials aren't set fails the play unless it is listed in
+`openbao_secrets_optional_domains` — see [Wiring](#wiring) for how the
+pre-fetch play publishes each domain's fact.
 
 ## Client failover
 
@@ -69,8 +80,9 @@ to the active peer so any node can serve the read). It tries `BAO_ADDR` (the
 Traefik ingress VIP name, made HA by the `keepalived` role) first, then each
 `openbao`-tagged container's own per-node endpoint derived from the tofu
 inventory (no literal address), so failover holds even if both ingress instances
-are unreachable. If none answers, the role skips to the env/SOPS fallback for
-this run rather than hard-failing every converge. This is client failover only;
+are unreachable. Individual candidates may be down — that is the point of the
+list — but if NONE answers, the role FAILS: a converge that can read no secret
+must stop, not hand every consumer an empty value. This is client failover only;
 server-side quorum HA needs a fourth node and is out of scope.
 
 ## Domains fetched (`openbao_secrets_domains`)
@@ -97,8 +109,8 @@ All readable path keys for a domain are merged flat into that domain's
 
 | Env var | Purpose |
 | --- | --- |
-| `BAO_ADDR` | OpenBao ingress URL (`https://openbao.<subdomain>`). Unset ⇒ skip everything. |
-| `<DOMAIN>_VAULT_ROLE_ID` / `_SECRET_ID` | That domain's own AppRole credentials. Unset ⇒ skip just that domain. |
+| `BAO_ADDR` | OpenBao ingress URL (`https://openbao.<subdomain>`). Unset **and** no openbao-tagged node ⇒ the role no-ops (the pre-migration case). Set but unreachable ⇒ fail. |
+| `<DOMAIN>_VAULT_ROLE_ID` / `_SECRET_ID` | That domain's own AppRole credentials. Unset ⇒ fail, unless the domain is in `openbao_secrets_optional_domains`. |
 
 On macOS these are sourced from the operator's dedicated `openbao.keychain-db`
 keychain (72h auto-lock — the keychain's lock state is the access boundary,

@@ -47,5 +47,5 @@ openbao_voter_health_splunk_sourcetype: "openbao:voter:health"
 # "Known gap"). When role_id/secret_id for a future least-privilege
 # `voter-health` AppRole are supplied, the script authenticates and includes
 # per-voter raft applied-index lag; until then raft_lag_ms ships as null.
-openbao_voter_health_role_id: "{{ lookup('env', 'OPENBAO_VOTER_HEALTH_ROLE_ID') | default('', true) }}"
-openbao_voter_health_secret_id: "{{ lookup('env', 'OPENBAO_VOTER_HEALTH_SECRET_ID') | default('', true) }}"
+openbao_voter_health_role_id: "{{ lookup('env', 'OPENBAO_APPROLE_VOTER_HEALTH_ROLE_ID') | default('', true) }}"
+openbao_voter_health_secret_id: "{{ lookup('env', 'OPENBAO_APPROLE_VOTER_HEALTH_SECRET_ID') | default('', true) }}"

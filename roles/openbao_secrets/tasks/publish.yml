@@ -98,7 +98,10 @@
           no_log: true
 
         # Read-before-write so a single-field publish cannot drop sibling keys.
-        # A 404 (path not yet seeded) is expected and must not fail the run.
+        # A 404 (path not yet seeded) is expected and is the ONLY tolerated
+        # outcome — the gate is the task after this one. A blanket tolerance
+        # here also swallowed a 403, whose empty read then merged into a write
+        # that dropped every sibling field.
         - name: Read the existing secret so the write merges rather than clobbers
           community.hashi_vault.vault_kv2_get:
             url: "{{ _addr }}"
@@ -108,8 +111,25 @@
             path: "{{ _path }}"
             validate_certs: "{{ openbao_secrets_validate_certs }}"
           register: openbao_secrets_publish_existing
+          # Classified below, not here: a bare `msg` is NOT injected into
+          # `failed_when` on ansible-core 2.21, so a condition written against
+          # it evaluates FALSE and silently swallows a 403 exactly like the
+          # blanket `failed_when: false` this replaces.
           failed_when: false
           no_log: true
+
+        - name: Fail unless the read-before-write found the path simply absent
+          ansible.builtin.fail:
+            msg: >-
+              Reading {{ openbao_secrets_kv_mount }}/{{ _path }} before writing
+              it failed: {{ openbao_secrets_publish_existing.msg }}
+              Only a not-yet-seeded path (404) may be tolerated here; a 403
+              would merge an EMPTY existing secret into the write and drop
+              every field another writer put there.
+          when:
+            - openbao_secrets_publish_existing.msg is defined
+            - not (openbao_secrets_publish_existing.msg is search('^Invalid or missing path'))
+          no_log: false
 
         - name: Merge the new fields over the existing secret and write it back
           community.hashi_vault.vault_write:
@@ -147,5 +167,17 @@
           when:
             - openbao_secrets_publish_login is defined
             - openbao_secrets_publish_login.login is defined
-          failed_when: false
+          register: openbao_secrets_publish_revoke
+          # Not a read-before-write 404, so no blanket tolerance: a failed
+          # revoke is reported. It stays non-fatal because this runs in
+          # `always` — failing here would mask the real error of the block it
+          # is cleaning up, and the token expires on its own TTL regardless.
+          ignore_errors: true
           no_log: true
+
+        - name: Warn that the publish token was not revoked
+          ansible.builtin.debug:
+            msg: >-
+              WARNING: revoking the publish token failed; it stays valid until
+              its TTL expires. This did not affect the write above.
+          when: openbao_secrets_publish_revoke is failed

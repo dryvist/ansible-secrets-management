@@ -1,0 +1,56 @@
+{{ ansible_managed | comment }}
+# human-unlock — what a HUMAN operator holds, and the only way a break-glass
+# credential now comes into existence.
+#
+# `admin` used to be standing: role_id plus a non-expiring, unlimited-use
+# secret_id sitting in a personal keychain. That made the widest credential in
+# the estate permanent, so this policy is what replaces it. The operator logs in
+# as themselves (userpass + TOTP), wraps a single-use secret_id for the tier
+# they need, uses it, and holds nothing afterwards.
+#
+# It is the exact complement of approle-issuer:
+#
+#   approle-issuer  mints the AUTOMATABLE roles   (manage_secret_id unset)
+#   human-unlock    mints the HUMAN-GATED tiers   (manage_secret_id: false)
+#
+# Both derive their role lists from that one marker, so a newly declared tier
+# lands on exactly one of them and cannot be forgotten by either. Together they
+# cover every role, and neither can mint the other's set.
+#
+# It grants NOTHING else. No KV, no policy writes, no mount or auth changes —
+# the operator's REACH comes from the tier they unlock and is bounded by that
+# tier's own TTL, not from this policy. That matters: this credential is used
+# routinely and interactively, so it must not itself be worth stealing.
+
+{% set unlockable = openbao_approles
+     | selectattr('manage_secret_id', 'defined')
+     | rejectattr('manage_secret_id')
+     | map(attribute='name') | sort | list %}
+
+# --- The human-gated tiers this operator may unlock ------------------------
+# {{ unlockable | join(', ') }}
+{% for approle_name in unlockable %}
+path "auth/approle/role/{{ approle_name }}/secret-id" {
+  capabilities = ["create", "update"]
+}
+path "auth/approle/role/{{ approle_name }}/role-id" {
+  capabilities = ["read"]
+}
+{% endfor %}
+
+# --- Response wrapping -----------------------------------------------------
+# The unlock is handed over WRAPPED (`-wrap-ttl=90s`), so the secret_id is
+# never readable in a terminal, a scrollback, or a shell history, and a single
+# unwrap by the intended holder makes any interception detectable.
+path "sys/wrapping/wrap" {
+  capabilities = ["update"]
+}
+
+# --- Self-service token management -----------------------------------------
+# Enough to see and extend one's own session; nothing about anyone else's.
+path "auth/token/lookup-self" {
+  capabilities = ["read"]
+}
+path "auth/token/renew-self" {
+  capabilities = ["update"]
+}

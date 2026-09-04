@@ -90,7 +90,29 @@ openbao_github_runner_policy_name: github-runner
 openbao_github_runner_approle_name: github-runner
 openbao_reconcile_policy_name: openbao-reconcile
 openbao_reconcile_approle_name: openbao-reconcile
+# approle-issuer — the ONLY identity that may mint an AppRole secret_id.
+#
+# Split out of openbao-reconcile because those are two different powers wearing
+# one credential. Reconciling declarations (writing a named policy, updating a
+# role's attached policies) is routine and unattended. Minting a secret_id is
+# handing out a working credential for another identity — a holder of that
+# power is, effectively, every role it can mint for. Keeping both on one
+# credential meant a leaked reconcile secret_id was a credential factory.
+#
+# The two are now separable: revoke the issuer and converges still reconcile
+# policy drift, they just stop handing out credentials.
+openbao_approle_issuer_policy_name: approle-issuer
+openbao_approle_issuer_approle_name: approle-issuer
+# human-unlock — the operator's own identity, bound to the userpass user rather
+# than to an AppRole (it is a person, not a workload, so it has no role_id/
+# secret_id of its own). It mints the human-gated tiers approle-issuer cannot,
+# and is what replaces the retired standing `admin` credential.
+openbao_human_unlock_policy_name: human-unlock
 openbao_reconcile_excluded_policies:
+  - "{{ openbao_approle_issuer_policy_name }}"
+  # Anything that can rewrite this policy can grant itself the break-glass
+  # unlock, so the unattended identity must not reach it.
+  - "{{ openbao_human_unlock_policy_name }}"
   - "{{ openbao_ai_admin_policy_name }}"
   - "{{ openbao_github_admin_policy_name }}"
   - "{{ openbao_slack_admin_policy_name }}"
