@@ -47,7 +47,41 @@
       - "'gzip -t' in (bao_snap_script.content | b64decode)"
       # Least-privilege snapshot AppRole login, not a root token.
       - "'auth/approle/login' in (bao_snap_script.content | b64decode)"
-    fail_msg: "openbao-snapshot.sh missing leader-gate, snapshot-save, integrity, or approle-login logic"
+      # Names the real cause. A missing binary used to surface as the
+      # leader-gate message above, which points at the cluster instead.
+      - "'required binary not installed' in (bao_snap_script.content | b64decode)"
+    fail_msg: >-
+      openbao-snapshot.sh missing leader-gate, snapshot-save, integrity,
+      approle-login, or dependency-check logic
+
+# The timer never starts under Docker, so nothing else here would notice the
+# script being unrunnable. These two checks are what the live failure needed:
+# the script parses, and every binary it declares is actually installed by the
+# role. Deriving the list from the script's own marker means a new dependency
+# is covered without editing this file.
+- name: Syntax-check the rendered snapshot script and resolve its dependencies
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      bash -n /usr/local/bin/openbao-snapshot.sh || exit 1
+      missing=""
+      for bin in $(sed -n 's/^# requires: //p' /usr/local/bin/openbao-snapshot.sh); do
+        command -v "$bin" >/dev/null 2>&1 || missing="$missing $bin"
+      done
+      printf '%s' "${missing# }"
+    executable: /bin/bash
+  register: bao_snap_deps
+  changed_when: false
+
+- name: Assert the role installed every binary the snapshot script calls
+  ansible.builtin.assert:
+    that:
+      - bao_snap_deps.stdout | length == 0
+    fail_msg: >-
+      openbao-snapshot.sh declares binaries the role does not install:
+      {{ bao_snap_deps.stdout }}. Every timer run fails on the first command
+      that needs one.
+    success_msg: openbao-snapshot.sh parses and every binary it declares is installed
 
 # --- Slack app-config token rotation (rendered when slack-admin creds are
 # set; converge.yml stubs them). Same shape as the snapshot check above:

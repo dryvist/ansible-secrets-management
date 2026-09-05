@@ -8,6 +8,15 @@
   ansible.builtin.apt:
     name:
       - ca-certificates
+      # What the snapshot and Slack-rotation timer payloads call. Neither is
+      # guaranteed by the base template, and the snapshot timer failed every
+      # run on guests that had neither. No WAN is needed for them: site.yml's
+      # baseline phase configures apt's Proxy-Auto-Detect hook on every LXC
+      # before this role runs, so the download comes from the internal caching
+      # proxy. Both are main-suite packages, so the existing index covers them
+      # and update_cache stays false, as for ca-certificates above.
+      - curl
+      - jq
     state: present
     update_cache: false
 
