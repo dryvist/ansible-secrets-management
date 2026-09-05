@@ -18,14 +18,20 @@ openbao_terrakube_workspaces:
     # never the plaintext, so the consumer reads it back from OpenBao directly.
     kv_read: [platform/terrakube/main, apps/authelia]
   - name: tofu-github
-    kv_read: [infrastructure/github]
-    # infrastructure/github is an internet-reachable SaaS credential (a
-    # GitHub App key), so its canonical home is moving to the
-    # secrets-external mount; dual-granted here until the internal-mount
-    # entry above is deleted. kv_read only ever renders against the
-    # internal openbao_kv_mount (see terrakube-workspace-policy.hcl.j2), so
-    # this is a distinct list rather than a mount override on kv_read.
-    kv_read_external: [infrastructure/github]
+    # Mints an installation token per run instead of reading a stored one. The
+    # workspace previously read a static GITHUB_TOKEN out of KV
+    # (infrastructure/github, on both mounts); that value expired and every plan
+    # failed with `401 Bad credentials`, which is the failure mode a stored PAT
+    # has and an engine-minted token does not.
+    #
+    # dryvist-full-automation is the admin-tier set: installation-wide, full App
+    # ceiling. That is the ceiling this workspace already had via the stored
+    # token, so this is not a widening — but it IS wider than the work needs,
+    # because the set carries no permissions map. The narrower fix is a
+    # dedicated permission set scoped to what org configuration actually
+    # touches; that is a follow-up, and it is a change to
+    # openbao_github_permission_sets rather than to this entry.
+    github_mint: [dryvist-full-automation]
   - name: tofu-unifi
     # platform/object-storage: that workspace reads the published inventory and
     # the desired-state object out of the store to derive its DNS records and

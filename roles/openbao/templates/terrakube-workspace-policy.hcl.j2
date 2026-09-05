@@ -37,3 +37,14 @@ path "{{ path }}" {
   capabilities = ["read", "update"]
 }
 {% endfor %}
+{% for permission_set in item.workspace.github_mint | default([]) %}
+
+# Ephemeral GitHub App installation token, minted per run. Same capability
+# shape as the github-mint base policy. A workspace that lists a set here does
+# NOT also get a stored token: minting is the alternative to holding one, so a
+# `github_mint` entry should arrive in the same change that removes the
+# workspace's kv_read of a static GitHub credential, never alongside it.
+path "{{ openbao_github_mount }}/token/{{ permission_set }}" {
+  capabilities = ["create", "update"]
+}
+{% endfor %}
