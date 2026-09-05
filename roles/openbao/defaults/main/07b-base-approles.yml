@@ -206,8 +206,8 @@ openbao_base_approles:
   # needs it — do not restore it merely because a converge became inconvenient.
   - name: admin
     policy: "{{ openbao_ai_admin_policy_name }}"
-    token_ttl: 1h
-    token_max_ttl: 2h
+    token_ttl: "{{ openbao_approle_human_secret_id_ttl }}"
+    token_max_ttl: 30m
     manage_secret_id: false
     secret_id_ttl: "{{ openbao_approle_human_secret_id_ttl }}"
     secret_id_num_uses: 1
