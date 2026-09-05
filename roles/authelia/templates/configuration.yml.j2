@@ -126,6 +126,23 @@ identity_providers:
         authorization_policy: two_factor
         require_pkce: false
         token_endpoint_auth_method: client_secret_basic
+      - client_id: '{{ authelia_oidc_phoenix_client_id }}'
+        client_name: Arize Phoenix
+        client_secret: '{{ authelia_oidc_client_secret_hashes.phoenix }}'
+        public: false
+        redirect_uris:
+          - '{{ authelia_oidc_phoenix_redirect_uri }}'
+        scopes:
+          - openid
+          - profile
+          - email
+        grant_types:
+          - authorization_code
+        response_types:
+          - code
+        authorization_policy: two_factor
+        require_pkce: false
+        token_endpoint_auth_method: client_secret_basic
       # Semaphore and terrakube-dex (Dex) both read `groups` from the id_token
       # to gate access, hence claims_policy; neither supports a signed
       # userinfo response, same as Homarr above.

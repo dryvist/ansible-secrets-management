@@ -30,6 +30,7 @@
     authelia_oidc_client_secret_hashes:
       homarr: x
       langfuse: x
+      phoenix: x
       semaphore: x
       terrakube_dex: x
       grafana: x
@@ -58,7 +59,7 @@
         _authelia_rules: >-
           {{ (_authelia_raw.content | b64decode | from_yaml)['access_control']['rules'] }}
 
-    - name: Assert every bypass rule is scoped to an API prefix, never the whole host
+    - name: Assert every bypass rule is scoped to a machine-API prefix, never the whole host
       ansible.builtin.assert:
         that:
           # A bypass entry must never widen to the entire domain. `policy:
@@ -68,13 +69,36 @@
             | selectattr('policy', 'eq', 'bypass')
             | rejectattr('resources', 'defined')
             | list | length == 0
+          # Two machine-API roots are allowed, and only these two. Most apps
+          # serve theirs under /api. OTLP collectors do not: the protocol puts
+          # ingest at /v1/<signal> off the root, so a trace sink's bypass can
+          # never match /api. Both alternatives stay anchored and narrow, which
+          # is the property this guard actually protects.
           - _authelia_rules
             | selectattr('policy', 'eq', 'bypass')
             | map(attribute='resources') | flatten
-            | reject('match', '\\^/api') | list | length == 0
+            | reject('match', '\\^/(api|v1/)') | list | length == 0
         fail_msg: >-
           an Authelia bypass rule is missing a resource scope or does not
-          anchor to an /api prefix: {{ _authelia_rules }}
+          anchor to /api or /v1/: {{ _authelia_rules }}
+
+    - name: Assert Phoenix bypasses only its OTLP ingest, leaving the UI gated
+      ansible.builtin.assert:
+        that:
+          # Regression guard, the Langfuse shape. Phoenix serves its browser UI
+          # and its bearer-keyed OTLP ingest on one host. Cribl Stream cannot
+          # complete a browser login, so the ingest path must bypass -- and
+          # nothing else may, or the console goes public.
+          - _phoenix_rule.resources == ['^/v1/traces(?:/.*)?$']
+        fail_msg: >-
+          Phoenix bypass is not scoped to /v1/traces (got
+          {{ _phoenix_rule.resources }})
+      vars:
+        _phoenix_rule: >-
+          {{ _authelia_rules
+             | selectattr('policy', 'eq', 'bypass')
+             | selectattr('domain', 'search', 'phoenix')
+             | first }}
 
     - name: Assert Langfuse bypasses only /api/public, leaving /api/auth gated
       ansible.builtin.assert:

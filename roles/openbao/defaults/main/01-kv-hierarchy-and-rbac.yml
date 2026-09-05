@@ -192,8 +192,8 @@ openbao_generated_app_secrets:
     - smb_user_username
     - smb_user_password
   # Confidential OIDC client secrets for apps that need a real shared secret
-  # rather than Hermes/Donna's public-PKCE pattern (Homarr, Langfuse, Semaphore,
-  # terrakube-dex, Grafana — all server-side apps). Authelia's role hashes the plaintext
+  # rather than Hermes/Donna's public-PKCE pattern (Homarr, Langfuse, Phoenix,
+  # Semaphore, terrakube-dex, Grafana — all server-side apps). Authelia's role hashes the plaintext
   # into its own config; the consuming app's role reads the same plaintext back
   # via bao_apps_secrets. Listing the app here grants the `apps` AppRole read on
   # secret/apps/authelia (same mechanism as the homarr note above).
@@ -201,6 +201,7 @@ openbao_generated_app_secrets:
     [
       authelia_oidc_homarr_client_secret,
       authelia_oidc_langfuse_client_secret,
+      authelia_oidc_phoenix_client_secret,
       authelia_oidc_semaphore_client_secret,
       authelia_oidc_terrakube_dex_client_secret,
       authelia_oidc_grafana_client_secret,

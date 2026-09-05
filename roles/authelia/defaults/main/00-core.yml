@@ -62,6 +62,13 @@ authelia_api_bypass_domains:
   # collectors can deliver spans while the console's auth surface stays gated.
   - domain: "langfuse.{{ authelia_cookie_domain }}"
     resource: "^/api/public(?:/.*)?$"
+  # Phoenix serves its OTLP trace ingest at /v1/traces, authenticated by a
+  # bearer API key it mints itself. Cribl Stream is a machine client and cannot
+  # complete a browser login, so without this bypass every span POST gets a
+  # redirect to the portal and is dropped while the whole pipeline stays green.
+  # Narrowed to the ingest path: the UI and its login surface stay gated.
+  - domain: "phoenix.{{ authelia_cookie_domain }}"
+    resource: "^/v1/traces(?:/.*)?$"
   # Sonarr and Radarr enforce their API key across their whole /api surface --
   # probed live, every path under it answers 401 without a key, including
   # /api/v3/auth and /api/login. Their browser login is /login, outside the
