@@ -160,6 +160,7 @@ apparatus; the block is enable + write-once CA + add-if-missing roles.
 - Signing roles are the ADR's per-principal-class table
   (`openbao_ssh_roles`): `automation-ai` (principal `ai-agent`, 2h,
   `permit-pty`), `automation-ansible` (`ansible`, 2h, no extensions),
+  `automation-semaphore` (`semaphore`, 2h, no extensions),
   `ci-runner` (`ci`, 30m, no extensions). TTLs are declared in seconds so the
   reconcile can compare them against the API without normalizing.
   `ttl == max_ttl`; a sign request may shorten a cert's life, never extend it.
@@ -170,10 +171,12 @@ apparatus; the block is enable + write-once CA + add-if-missing roles.
   friction-free agent SSH bounded by 1h certs, non-root principals,
   default-deny host opt-in, audit) + every `ai-apply-*`;
   `ssh-sign-automation-ansible` → `ansible-converge` only;
+  `ssh-sign-automation-semaphore` → `semaphore` only, so a certificate's
+  principal identifies which caller ran a converge;
   `ssh-sign-ci-runner` → unattached until a CI identity exists.
 - `OPENBAO_SSH_SOURCE_CIDRS` (Doppler) adds a `source-address` critical
   option restricting where certs are valid from; unset ⇒ loud warning and
   the guest-firewall default-deny layer is the compensating control.
 - **ai-agent is never a hypervisor root principal** — PVE nodes map
-  `root: [ansible]` only; `ai-agent` reaches guest-level accounts on hosts
+  `root: [ansible, semaphore]` only; `ai-agent` reaches guest-level accounts on hosts
   that opt in (see `ssh_ca_trust`).

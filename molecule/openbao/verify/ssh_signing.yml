@@ -11,7 +11,11 @@
   ansible.builtin.assert:
     that:
       - openbao_ssh_mount == 'ssh-client-ca'
-      - "ssh_roles_by_name == {'automation-ai': 'ai-agent', 'automation-ansible': 'ansible', 'ci-runner': 'ci'}"
+      - >-
+        ssh_roles_by_name == {'automation-ai': 'ai-agent',
+                              'automation-ansible': 'ansible',
+                              'automation-semaphore': 'semaphore',
+                              'ci-runner': 'ci'}
       - (openbao_ssh_roles | selectattr('name', 'equalto', 'automation-ai') | first).ttl == 7200
       - (openbao_ssh_roles | selectattr('name', 'equalto', 'automation-ansible') | first).ttl == 7200
       - (openbao_ssh_roles | selectattr('name', 'equalto', 'ci-runner') | first).ttl == 1800
@@ -86,6 +90,7 @@
       # ai-elevated signs ONLY automation-ai — never ansible/ci roles.
       - "'ssh-sign-automation-ai' in elevated_role.token_policies"
       - "'ssh-sign-automation-ansible' not in elevated_role.token_policies"
+      - "'ssh-sign-automation-semaphore' not in elevated_role.token_policies"
       - "'ssh-sign-ci-runner' not in elevated_role.token_policies"
       # ai-readonly signs nothing.
       - readonly_role.token_policies | select('match', '^ssh-sign-') | list | length == 0
