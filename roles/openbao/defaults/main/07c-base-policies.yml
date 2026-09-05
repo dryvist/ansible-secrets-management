@@ -37,6 +37,12 @@ openbao_base_policies:
     template: packer-policy.hcl.j2
   - name: "{{ openbao_ansible_converge_policy_name }}"
     template: ansible-converge-policy.hcl.j2
+  # Placed next to ansible-converge because it is that policy's delta, not an
+  # independent grant set. Safe to insert here despite the Terrakube
+  # index-drift hazard above: the assert in tasks/init/08-rbac-policies.yml
+  # selects on `workspace` being defined, and this entry has no `workspace`.
+  - name: "{{ openbao_semaphore_policy_name }}"
+    template: semaphore-policy.hcl.j2
   - name: "{{ openbao_observability_policy_name }}"
     template: observability-policy.hcl.j2
   - name: "{{ openbao_local_cloud_policy_name }}"

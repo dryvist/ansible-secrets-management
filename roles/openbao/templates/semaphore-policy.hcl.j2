@@ -1,0 +1,54 @@
+{{ ansible_managed | comment }}
+# OpenBao policy for the semaphore AppRole — the DELTA over ansible-converge,
+# not a replacement for it. The semaphore AppRole attaches both: every path a
+# converge already reads comes from ansible-converge-policy.hcl.j2, and this
+# file adds only what a Semaphore-driven run needs on top. Splitting it this
+# way keeps one consumer inventory rather than two copies that drift.
+#
+# Why a separate identity at all, when the same playbooks run from a laptop
+# under ansible-converge: the two callers are not equally trusted. A Semaphore
+# run is unattended, triggered by anyone who can reach the web UI or its API,
+# and its bootstrap credential sits in a database on the platform VM. A laptop
+# run is a human at a terminal holding secret-zero. Giving them one identity
+# means the unattended path silently inherits every grant the interactive one
+# ever gains.
+#
+# ENUMERATED exact paths only — no platform/* or apps/* wildcard, matching the
+# ansible-converge convention. Each entry names the call site that reads it; a
+# path with no named consumer does not belong here.
+#
+#   platform/splunk/main
+#     ansible-splunk's converge reads the Splunk and Splunkbase credentials it
+#     used to receive as ambient environment variables from a laptop secrets
+#     manager, and which an unattended run therefore could not reach at all.
+#     Read-only: these are provisioned out of band and a converge must never
+#     rewrite the account it authenticates as. Call sites:
+#       ansible-splunk  playbooks/site.yml                       (SPLUNK_PASSWORD,
+#                                                                 SPLUNK_HEC_TOKEN,
+#                                                                 HEC_NAMESPACE)
+#       ansible-splunk  playbooks/tasks/sync-splunkbase/preflight.yml
+#                                                                (SPLUNKBASE_USERNAME,
+#                                                                 SPLUNKBASE_PASSWORD)
+#
+# NO OBJECT-STORAGE GRANT HERE, DELIBERATELY, AND IT IS NOT AN OVERSIGHT.
+# The Splunkbase mirror writes to the artifact bucket, so it needs an
+# object-storage credential — but ansible-converge, which this AppRole also
+# attaches, already grants the path the mirror reads. A second grant here would
+# widen nothing and only add a place to keep in sync.
+#
+# The longer-term intent is a bucket-scoped read-write key per workload, per
+# the one-bucket-per-workload rule, rather than the shared credential in use
+# today. That is blocked on the object store rather than on policy: the
+# deployed version implements neither an IAM nor an STS API, so there is no
+# second credential to mint and no role to assume — verified against the
+# running service, not inferred from its documentation. When the store gains
+# one, the scoped key lands at apps/splunkbase-mirror and gets its own stanza
+# here.
+
+path "{{ openbao_kv_mount }}/data/platform/splunk/main" {
+  capabilities = ["read"]
+}
+
+path "{{ openbao_kv_mount }}/metadata/platform/splunk/main" {
+  capabilities = ["read", "list"]
+}

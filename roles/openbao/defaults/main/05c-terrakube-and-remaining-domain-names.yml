@@ -64,6 +64,13 @@ openbao_terrakube_workspaces:
     kv_read: [apps/semaphore]
 openbao_ansible_converge_policy_name: ansible-converge
 openbao_ansible_converge_approle_name: ansible-converge
+# semaphore — the unattended execution plane's own identity. It attaches the
+# ansible-converge policy PLUS this delta (semaphore-policy.hcl.j2), and signs
+# its SSH certificates under its own principal rather than borrowing
+# `ansible`. Kept distinct from ansible-converge because the two callers are
+# not equally trusted: see the header of semaphore-policy.hcl.j2.
+openbao_semaphore_policy_name: semaphore
+openbao_semaphore_approle_name: semaphore
 openbao_observability_policy_name: observability
 openbao_observability_approle_name: observability
 openbao_local_cloud_policy_name: local-cloud

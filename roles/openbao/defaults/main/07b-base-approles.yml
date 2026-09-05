@@ -20,6 +20,27 @@ openbao_base_approles:
     token_policies: >-
       {{ [openbao_ansible_converge_policy_name, openbao_config_write_policy_name]
          + (['ssh-sign-automation-ansible'] if openbao_ssh_engine_enabled else []) }}
+  # The unattended execution plane. Attaches ansible-converge (the shared
+  # consumer inventory) plus its own delta, and signs SSH certificates under
+  # ssh-sign-automation-semaphore rather than ...-ansible, so the principal on
+  # the wire says which caller ran the converge.
+  #
+  # Unlimited secret_id, with the reason 08-admin-and-ttls.yml requires: nothing
+  # re-mints this one. It is written once into the execution plane's stored
+  # environment, so a finite bound retires a credential nothing replaces and
+  # every scheduled run then fails reporting an expired login. What bounds this
+  # identity is its grant — enumerated read on named paths — not its lifetime.
+  # Give it a lifetime back when something re-mints on a schedule.
+  # "0s" not 0: 10c compares via to_seconds, which splits its input.
+  # No config-write: that capability belongs to the systems that AUTHOR config
+  # (see config-write-policy.hcl.j2), and this one only runs them. Attaching it
+  # would make a third holder of a deliberately two-holder capability.
+  - name: "{{ openbao_semaphore_approle_name }}"
+    secret_id_ttl: "0s"
+    secret_id_num_uses: 0
+    token_policies: >-
+      {{ [openbao_ansible_converge_policy_name, openbao_semaphore_policy_name]
+         + (['ssh-sign-automation-semaphore'] if openbao_ssh_engine_enabled else []) }}
   - name: "{{ openbao_observability_approle_name }}"
     policy: "{{ openbao_observability_policy_name }}"
   - name: "{{ openbao_local_cloud_approle_name }}"
