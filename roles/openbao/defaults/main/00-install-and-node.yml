@@ -53,6 +53,19 @@ openbao_bind_address: >-
 openbao_api_addr: "http://{{ openbao_bind_address }}:{{ openbao_api_port }}"
 openbao_cluster_addr: "https://{{ openbao_bind_address }}:{{ openbao_cluster_port }}"
 
+# --- Ingress addresses whose X-Forwarded-For header is trusted ---------------
+# Every ingress instance's own address plus the floating ingress VIP, both
+# derived from the inventory exactly as the keepalived role derives them — no
+# literal address is ever written here. Empty (the molecule / template-render
+# case, where neither the group nor tofu_data exists) leaves XFF handling off
+# entirely; see templates/openbao.hcl.j2 for what a non-empty list turns on.
+openbao_xff_authorized_addrs: >-
+  {{ ((groups['traefik_group'] | default([])
+       | map('extract', hostvars)
+       | map(attribute='container_ip', default='') | list)
+      + [tofu_data.ingress_vip | default('', true)])
+     | reject('equalto', '') | unique | list }}
+
 # --- Raft HA: peers + bootstrap election ------------------------------------
 # Every node carries a retry_join for each peer (built from the openbao_group
 # hostvars' container_ip), so a node that is not yet part of a cluster finds the

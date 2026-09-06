@@ -1,5 +1,6 @@
 ---
-# In-place TTL / num_uses / token-TTL tune for AppRoles that already exist.
+# In-place TTL / num_uses / token-TTL / bound-CIDR tune for AppRoles that
+# already exist.
 # Included from 10-approles.yml after policy reconcile and before 10b mint.
 # Split to stay inside the per-file token budget; the seam is DECLARE (there)
 # vs TUNE BOUNDS (here). 10b still ISSUES secret_ids for newly created roles
@@ -31,6 +32,22 @@
     desired_secret_id_ttl_s: "{{ approle_secret_id_ttl | community.general.to_seconds }}"
     desired_token_ttl_s: "{{ approle_token_ttl | community.general.to_seconds }}"
     desired_token_max_ttl_s: "{{ approle_token_max_ttl | community.general.to_seconds }}"
+    desired_bound_cidrs: >-
+      {{ approle_bound_cidrs | split(',') | map('trim')
+         | reject('equalto', '') | sort | list }}
+    # An empty desired list means "unbound" ONLY for the class that declares
+    # itself unbound. Everywhere else empty means the CIDR env vars were not
+    # supplied on this run -- the documented allow-unbound bootstrap mode --
+    # and treating that as drift would make a routine converge STRIP the
+    # bindings off every existing role, which is the opposite of this gate's
+    # job. `default([], true)` and not `default([])`: OpenBao returns JSON null
+    # for an unset bound-CIDR field, which is defined and would slip through.
+    cidr_drift: >-
+      {{ (desired_bound_cidrs | length > 0 or approle_cidr_class == 'unbound')
+         and ((live.secret_id_bound_cidrs | default([], true)
+               | map('trim') | sort | list != desired_bound_cidrs)
+              or (live.token_bound_cidrs | default([], true)
+                  | map('trim') | sort | list != desired_bound_cidrs)) }}
   ansible.builtin.command:
     cmd: >-
       bao write auth/approle/role/{{ item.0.name }}
@@ -59,3 +76,4 @@
           != approle_secret_id_num_uses | int)
       or (live.token_ttl | default(0) | int != desired_token_ttl_s | int)
       or (live.token_max_ttl | default(0) | int != desired_token_max_ttl_s | int)
+      or (cidr_drift | bool)

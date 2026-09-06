@@ -1,0 +1,105 @@
+---
+# =============================================================================
+# openbao — listener X-Forwarded-For trust
+# =============================================================================
+# The XFF block is what makes an AppRole's bound CIDRs mean the CLIENT's address
+# rather than the ingress proxy's on every proxied request. Both failure modes
+# are silent on a live cluster: rendered when the authorized list is empty it
+# rejects every direct client, and omitted when the list is populated it leaves
+# the CIDR bind evaluating the proxy address on all fronted traffic. Neither
+# turns anything red, so both are asserted here.
+#
+# Addresses below are TEST-NET-1 (RFC 5737, reserved for documentation). No real
+# address ever enters this repository — the role derives the live list from the
+# inventory.
+- name: Render and verify the openbao listener XFF block
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    ansible_become: false
+    _fixture_dir: "{{ render_tmp }}"
+    _template: "{{ playbook_dir }}/../../../roles/openbao/templates/openbao.hcl.j2"
+    # Mirror roles/openbao/defaults/main/ for everything the template touches.
+    openbao_data_dir: /opt/openbao/data
+    openbao_node_id: openbao-test
+    openbao_raft_peer_ips: []
+    # Named inside a template comment, which Jinja still evaluates.
+    openbao_env_file: /etc/openbao/openbao.env
+    openbao_seal_key_id: static-1
+    openbao_seal_previous_key_id: ""
+    openbao_bind_address: 192.0.2.20
+    openbao_api_port: 8200
+    openbao_api_addr: "http://192.0.2.20:8200"
+    openbao_cluster_addr: "https://192.0.2.20:8201"
+    openbao_plugin_dir: /opt/openbao/plugins
+    openbao_audit_device_name: file
+    openbao_audit_log_path: /var/log/openbao/audit.log
+    openbao_enable_ui: true
+    _xff_addrs: ["192.0.2.10", "192.0.2.11"]
+
+  tasks:
+    - name: Render the config with and without an authorized ingress list
+      ansible.builtin.template:
+        src: "{{ _template }}"
+        dest: "{{ _fixture_dir }}/test_openbao_{{ item.name }}.hcl"
+        mode: "0600"
+      vars:
+        openbao_xff_authorized_addrs: "{{ item.addrs }}"
+      loop:
+        - name: xff_on
+          addrs: "{{ _xff_addrs }}"
+        - name: xff_off
+          addrs: []
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: Read both rendered configs
+      ansible.builtin.slurp:
+        src: "{{ _fixture_dir }}/test_openbao_{{ item }}.hcl"
+      register: _hcl_raw
+      loop:
+        - xff_on
+        - xff_off
+
+    # Directive lines only: the template explains the XFF block at length and
+    # the prose names the very parameters asserted below, so a whole-file search
+    # passes with the directives absent.
+    - name: Reduce both renders to their directive lines
+      ansible.builtin.set_fact:
+        _on: >-
+          {{ (_hcl_raw.results[0].content | b64decode).splitlines()
+             | reject('match', '\s*#') | list }}
+        _off: >-
+          {{ (_hcl_raw.results[1].content | b64decode).splitlines()
+             | reject('match', '\s*#') | list }}
+
+    - name: Assert a populated list turns XFF on, with both addresses trusted
+      ansible.builtin.assert:
+        that:
+          - _on | select('search', 'x_forwarded_for_authorized_addrs') | length > 0
+          - _on | select('search', '192\.0\.2\.10') | length > 0
+          - _on | select('search', '192\.0\.2\.11') | length > 0
+          - >-
+            _on | select('search',
+              'x_forwarded_for_reject_not_authorized\s*=\s*true') | length > 0
+          - >-
+            _on | select('search',
+              'x_forwarded_for_reject_not_present\s*=\s*false') | length > 0
+        fail_msg: >-
+          The listener does not trust the ingress X-Forwarded-For header, or
+          rejects requests that carry none. Without the trust, an AppRole's
+          bound CIDRs are evaluated against the proxy's address on every
+          proxied request and cannot discriminate at all; with
+          reject_not_present left at its true default, Raft peers and the
+          node's own CLI — which send no header — are refused.
+
+    - name: Assert an empty list leaves XFF handling off entirely
+      ansible.builtin.assert:
+        that:
+          - _off | select('search', 'x_forwarded_for') | length == 0
+        fail_msg: >-
+          The listener emitted X-Forwarded-For parameters with no authorized
+          addresses supplied. OpenBao then trusts the header from nothing at
+          all, which rejects every client that presents one.

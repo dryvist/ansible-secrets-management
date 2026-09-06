@@ -38,9 +38,26 @@ seal "static" {
 # OpenBao. End-to-end TLS (listener-native certs) is a later hardening step —
 # when added, drop tls_disable and point tls_cert_file/tls_key_file at the
 # node cert, and flip openbao_api_addr to https://.
+#
+# X-Forwarded-For is OFF until openbao_xff_authorized_addrs is non-empty. With
+# it set, the address OpenBao evaluates — for the audit log's remote_address and
+# for AppRole secret_id_bound_cidrs / token_bound_cidrs — becomes the client's
+# own address instead of the proxy's on every proxied request. Without it a
+# proxied AppRole login presents the proxy address, so the CIDR bind cannot
+# discriminate on that path at all.
+#
+# reject_not_present = false is required, not a relaxation: Raft peers and this
+# node's own `bao` CLI reach this listener directly and send no header, and
+# rejecting them would break the cluster. reject_not_authorized stays true, so a
+# header from anything outside the list is refused rather than believed.
 listener "tcp" {
   address     = "{{ openbao_bind_address }}:{{ openbao_api_port }}"
   tls_disable = 1
+{% if openbao_xff_authorized_addrs | default([]) | length > 0 %}
+  x_forwarded_for_authorized_addrs      = {{ openbao_xff_authorized_addrs | to_json }}
+  x_forwarded_for_reject_not_authorized = true
+  x_forwarded_for_reject_not_present    = false
+{% endif %}
 }
 
 # Addresses advertised to clients and peer Raft nodes.
