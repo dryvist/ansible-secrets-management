@@ -160,6 +160,25 @@ openbao_approle_unsupplied_cidr_classes: >-
                     | map(attribute='key') | list)
      | list }}
 
+# --- Coverage: every created AppRole must carry a class decision ---------------
+# openbao_approle_cidr_class_map is built from openbao_approles ALONE. A role
+# created from any other list therefore resolves to no class at all, and the
+# only symptom is an undefined-variable error raised deep inside a no_log loop
+# that names neither the role nor the reason. init/10-approles.yml asserts the
+# set it actually loops (openbao_manageable_approles) against the map keys
+# first, so the failure names the role before anything is written.
+#
+# `unbound` is the documented opt-out, not a gap: its members are listed with a
+# reason in openbao_approle_cidr_class_overrides above, so they ARE covered.
+#
+# The second gap is quieter and needs its own list. An override key that names
+# no declared role is a silent no-op -- the role it was meant to move keeps the
+# machine default, the converge stays green, and nothing anywhere says the
+# class it was given is not the class it has. Empty is the healthy state.
+openbao_approle_unknown_cidr_class_overrides: >-
+  {{ openbao_approle_cidr_class_overrides | list
+     | reject('in', openbao_approles | map(attribute='name') | list) | list }}
+
 # --- Human unlock: the operator's own login -----------------------------------
 # A person, not a workload, so this is a userpass user rather than an AppRole:
 # there is no role_id/secret_id pair to store anywhere, which is the point — the

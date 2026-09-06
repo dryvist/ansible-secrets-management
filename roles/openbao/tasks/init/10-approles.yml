@@ -34,6 +34,44 @@
     - openbao_bootstrap_token is defined
     - openbao_approle_allow_unbound_cidrs | bool
 
+- name: Assert every AppRole this run creates has a source-address class
+  vars:
+    _unclassed: >-
+      {{ openbao_manageable_approles | map(attribute='name')
+         | reject('in', openbao_approle_cidr_class_map | list) | list }}
+  ansible.builtin.assert:
+    that:
+      - _unclassed | length == 0
+    fail_msg: >-
+      AppRoles {{ _unclassed | join(', ') }} are created by this converge but
+      resolve to no source-address class, so nothing decides where their
+      secret_ids may be redeemed. openbao_approle_cidr_class_map is built from
+      openbao_approles; a role declared anywhere else must be added to that
+      list, or given the `unbound` class in
+      openbao_approle_cidr_class_overrides with a one-line reason on the entry.
+      Unbound is a decision that gets written down, never a default.
+    quiet: true
+  when: openbao_bootstrap_token is defined
+
+# The sibling failure, and the quiet one: the class map is a `combine` of the
+# defaults with the override map, so an override key that matches no declared
+# role adds a phantom entry and the role it was meant to move stays on the
+# machine default. Nothing errors, the converge is green, and the role is bound
+# to the wrong segment until somebody reads the live roles back.
+- name: Assert every CIDR class override names a declared AppRole
+  ansible.builtin.assert:
+    that:
+      - openbao_approle_unknown_cidr_class_overrides | length == 0
+    fail_msg: >-
+      openbao_approle_cidr_class_overrides names
+      {{ openbao_approle_unknown_cidr_class_overrides | join(', ') }}, which no
+      declared AppRole matches. That override is a silent no-op: the role it was
+      written for is created in the
+      {{ openbao_approle_default_cidr_class }} class instead. Fix the name or
+      drop the entry.
+    quiet: true
+  when: openbao_bootstrap_token is defined
+
 - name: Check whether each AppRole already exists
   ansible.builtin.command:
     cmd: "bao read -format=json auth/approle/role/{{ item.name }}"

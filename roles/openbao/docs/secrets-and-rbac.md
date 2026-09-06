@@ -85,7 +85,7 @@ plans):
 | `apps-seed` | `secret/apps/*` | `secret/apps/*` create/update | Doppler-published writer; Terraform `vault-secrets` seeds `secret/apps/<app>` at source |
 | `flow-lock` | `secret/locks/global`, `secret/infra/*` | `secret/locks/global` | Cross-repo apply lock; releases the lock via metadata delete |
 | `terrakube-<workspace>` JWT | Only that workspace's native paths | Workspace-specific | Short-lived; exact organization/workspace subject and audience |
-| `ansible-converge` | Platform, apps, exact MCP secrets, the run-environment documents (`platform/ansible/env` on each mount) | Exact MCP secrets | Config pulls and transitional MCP publishers; no broad AI access |
+| `ansible-converge` | Platform, apps, MCP secrets, `platform/ansible/env` per mount | Exact MCP secrets | Config pulls, MCP publishers; no broad AI access |
 | `observability` | `secret/platform/{splunk,cribl}` | — | Ingest pipeline (shared HEC tokens) |
 | `local-cloud` | `secret/platform/{object-storage,compute}` | — | RustFS + compute creds |
 | `monitoring` | `secret/apps/monitoring` | — | netmon/unifi_metrics/prometheus_stack |
@@ -170,6 +170,15 @@ Source binding uses named CIDR classes (`machine` / `workstation` / `ci`), whose
 values arrive by environment and are never committed. A class that a declared
 role uses but which was never supplied **fails the converge** rather than
 quietly creating the unbound role the binding exists to prevent.
+
+Two sibling asserts cover the class *assignment* rather than the class values.
+Every AppRole the converge loops must resolve to a class, so a role declared
+outside `openbao_approles` fails the run by name instead of dying on an
+undefined variable inside a `no_log` loop. And every key of
+`openbao_approle_cidr_class_overrides` must name a declared role, because an
+override that matches nothing is a silent no-op that leaves its role on the
+machine default while the file says otherwise. `unbound` stays a decision that
+is written down with a reason, never something a role arrives at by omission.
 
 The one exception throughout is `public`: it needs no secret-zero, no
 redemption cap and no source binding, since it only unlocks non-exploitable
