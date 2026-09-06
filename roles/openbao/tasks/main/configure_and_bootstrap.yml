@@ -1,4 +1,29 @@
 ---
+# The listener trusts an ingress X-Forwarded-For header only while
+# openbao_xff_authorized_addrs holds usable addresses: templates/openbao.hcl.j2
+# omits the whole block when the list is empty, and OpenBao then reads the
+# socket peer on every request. Through the ingress that peer is the proxy, and
+# the proxy's address sits inside the broadest bound CIDR, so an AppRole's
+# secret_id_bound_cidrs / token_bound_cidrs admit every client and nothing
+# anywhere turns red. Both list inputs are derived from the inventory, and a
+# leased guest's container_ip is an FQDN rather than an address, so neither is
+# guaranteed to yield something OpenBao can match on. Assert instead of
+# discovering it from an audit log.
+- name: Assert the ingress addresses trusted for X-Forwarded-For are usable
+  ansible.builtin.assert:
+    that:
+      - openbao_xff_authorized_addrs | length > 0
+      - >-
+        openbao_xff_authorized_addrs | map('ansible.utils.ipaddr')
+        | select('equalto', false) | list | length == 0
+    fail_msg: >-
+      The ingress group exists but yielded no usable X-Forwarded-For address
+      ({{ openbao_xff_authorized_addrs }}). The listener would silently fall
+      back to the proxy's own address for every fronted request, and every
+      AppRole CIDR bind would stop discriminating. Check that each ingress
+      host carries an address-valued container_ip.
+  when: groups['traefik_group'] | default([]) | length > 0
+
 - name: Render OpenBao server config
   ansible.builtin.template:
     src: openbao.hcl.j2
