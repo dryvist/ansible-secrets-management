@@ -21,10 +21,6 @@
 # healthchecks + a non-zero exit systemd records) instead of aborting silently.
 # Never logs a token value — only remaining lifetime and KV version numbers.
 #
-# ponytail: grep/sed JSON extraction instead of jq — this node has no jq (see
-# openbao-snapshot.sh.j2, same reasoning); every field read here is a unique,
-# flat top-level key, so a field-by-field grep is exactly as reliable. Swap to
-# jq if it ever lands in the base image.
 set -uo pipefail
 
 BAO_ADDR="{{ openbao_api_addr }}"
@@ -57,13 +53,24 @@ fail() {
   exit 1
 }
 
-# Extract a top-level string field "key":"value" from a flat JSON blob.
-json_str() { printf '%s' "$1" | grep -o "\"$2\":\"[^\"]*\"" | head -1 | cut -d'"' -f4; }
-# Extract a top-level numeric field "key":123.
-json_num() { printf '%s' "$1" | grep -o "\"$2\":[0-9]*" | head -1 | cut -d: -f2; }
-# Extract a top-level boolean field "key":true|false (Slack's "ok" — an
-# unquoted JSON literal, not a string, so json_str never matches it).
-json_bool() { printf '%s' "$1" | grep -o "\"$2\":\(true\|false\)" | head -1 | cut -d: -f2; }
+# Same up-front dependency check as openbao-snapshot.sh.j2, for the same
+# reason: without it a missing curl reads as "AppRole login failed", which
+# points at the credential rather than at the missing package.
+# requires: curl jq date
+require_binaries() {
+  local missing=""
+  for _bin in $(sed -n 's/^# requires: //p' "$0"); do
+    command -v "${_bin}" >/dev/null 2>&1 || missing="${missing} ${_bin}"
+  done
+  [ -z "${missing# }" ] || fail "required binary not installed:${missing# }"
+}
+require_binaries
+
+# Extract a value from a JSON blob by jq path. Prints nothing when the path is
+# absent or null, so callers keep testing for an empty string. Reading by path
+# rather than by key name is what makes the KV-v2 reads below unambiguous: the
+# entry carries a `version` under both `metadata` and `custom_metadata`.
+json() { printf '%s' "$1" | jq -r "$2 // empty" 2>/dev/null; }
 
 # ISO8601 UTC -> epoch seconds. GNU date (this node's own OS, unlike the
 # macOS wrapper's BSD date) parses ISO8601 directly, no format string needed.
@@ -75,7 +82,7 @@ bao_login() {
   resp="$(curl -sf --max-time 10 -X POST \
     -d "{\"role_id\":\"${OPENBAO_APPROLE_SLACK_ADMIN_ROLE_ID}\",\"secret_id\":\"${OPENBAO_APPROLE_SLACK_ADMIN_SECRET_ID}\"}" \
     "${BAO_ADDR}/v1/auth/approle/login")" || return 1
-  token="$(json_str "${resp}" client_token)"
+  token="$(json "${resp}" '.auth.client_token')"
   [ -n "${token}" ] || return 1
   printf '%s' "${token}"
 }
@@ -115,8 +122,8 @@ do_rotate() {
 
   bao_tok="$(bao_login)" || fail "slack-admin AppRole login failed"
   entry="$(kv_read "${bao_tok}")" || fail "reading ${KV_PATH} failed"
-  cur_refresh="$(json_str "${entry}" app_config_refresh_token)"
-  cur_ver="$(json_num "${entry}" version)"
+  cur_refresh="$(json "${entry}" '.data.data.app_config_refresh_token')"
+  cur_ver="$(json "${entry}" '.data.metadata.version')"
   [ -n "${cur_refresh}" ] || fail "no app_config_refresh_token at ${KV_PATH} — needs MANUAL REGENERATION at api.slack.com"
   # Must know the CAS version before burning the single-use refresh token —
   # otherwise the write-back body is malformed, OpenBao 400s it, and the
@@ -125,15 +132,15 @@ do_rotate() {
   case "${cur_ver}" in '' | *[!0-9]*) fail "could not read a numeric KV version at ${KV_PATH} — refusing to rotate" ;; esac
 
   slack_resp="$(slack_rotate "${cur_refresh}")" || fail "Slack tooling.tokens.rotate call failed"
-  ok="$(json_bool "${slack_resp}" ok)"
+  ok="$(json "${slack_resp}" '.ok | tostring')"
 
   if [ "${ok}" != "true" ]; then
     local err latest latest_ver
-    err="$(json_str "${slack_resp}" error)"
+    err="$(json "${slack_resp}" '.error')"
     log "rotation rejected by Slack (${err:-unknown}) — checking whether another node already rotated"
     latest="$(kv_read "${bao_tok}")" \
       || fail "Slack rejected rotation (${err:-unknown}) and re-reading ${KV_PATH} also failed — needs MANUAL REGENERATION at api.slack.com"
-    latest_ver="$(json_num "${latest}" version)"
+    latest_ver="$(json "${latest}" '.data.metadata.version')"
     if [ -n "${latest_ver}" ] && [ "${latest_ver}" -gt "${cur_ver:-0}" ]; then
       log "another node rotated first (version ${cur_ver} -> ${latest_ver}); adopting their result"
       return 0
@@ -142,9 +149,9 @@ do_rotate() {
   fi
 
   local new_tok new_refresh exp_epoch rotated_at expires_at code tries=0 backoff="${WRITE_RETRY_BACKOFF_SECONDS}"
-  new_tok="$(json_str "${slack_resp}" token)"
-  new_refresh="$(json_str "${slack_resp}" refresh_token)"
-  exp_epoch="$(json_num "${slack_resp}" exp)"
+  new_tok="$(json "${slack_resp}" '.token')"
+  new_refresh="$(json "${slack_resp}" '.refresh_token')"
+  exp_epoch="$(json "${slack_resp}" '.exp')"
   [ -n "${new_tok}" ] && [ -n "${new_refresh}" ] && [ -n "${exp_epoch}" ] \
     || fail "Slack rotation response missing token/refresh_token/exp"
 
@@ -179,7 +186,7 @@ do_rotate() {
 #    the common case (well within the token's ~12h life) is a cheap no-op.
 token="$(bao_login)" || fail "slack-admin AppRole login failed"
 entry="$(kv_read "${token}")" || fail "reading ${KV_PATH} failed"
-expires_at="$(json_str "${entry}" expires_at)"
+expires_at="$(json "${entry}" '.data.data.expires_at')"
 
 if [ -n "${expires_at}" ] && exp_epoch="$(epoch_of "${expires_at}")"; then
   now_epoch="$(date -u +%s)"

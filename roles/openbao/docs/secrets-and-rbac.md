@@ -85,7 +85,7 @@ plans):
 | `apps-seed` | `secret/apps/*` | `secret/apps/*` create/update | Doppler-published writer; Terraform `vault-secrets` seeds `secret/apps/<app>` at source |
 | `flow-lock` | `secret/locks/global`, `secret/infra/*` | `secret/locks/global` | Cross-repo apply lock; releases the lock via metadata delete |
 | `terrakube-<workspace>` JWT | Only that workspace's native paths | Workspace-specific | Short-lived; exact organization/workspace subject and audience |
-| `ansible-converge` | Platform, apps, exact MCP secrets | Exact MCP secrets | Config pulls and transitional MCP publishers; no broad AI access |
+| `ansible-converge` | Platform, apps, exact MCP secrets, the run-environment documents (`platform/ansible/env` on each mount) | Exact MCP secrets | Config pulls and transitional MCP publishers; no broad AI access |
 | `observability` | `secret/platform/{splunk,cribl}` | — | Ingest pipeline (shared HEC tokens) |
 | `local-cloud` | `secret/platform/{object-storage,compute}` | — | RustFS + compute creds |
 | `monitoring` | `secret/apps/monitoring` | — | netmon/unifi_metrics/prometheus_stack |
@@ -190,7 +190,7 @@ there is no secret-zero pair to store anywhere.
 2. They wrap a single-use `secret_id` for the tier they need:
    `bao write -wrap-ttl=90s -f auth/approle/role/admin/secret-id`.
 3. They hand the wrapping token to the session, which unwraps it and logs in as
-   `admin` — one login, then the token lives its 1h window.
+   `admin` — one login, then the token lives its 15m window (renewable to 30m).
 4. Nothing persists. The `secret_id` was single-use and is spent; the token
    expires on its own.
 
@@ -207,7 +207,7 @@ role declares the TOTP method (`identity/mfa/method/totp`) and the enforcement
 accessor), but a converge that could enrol the second factor would be holding
 it, which would make it not a second factor. Enrol once, as a human:
 
-```
+```bash
 bao write identity/mfa/method/totp/admin-generate \
   method_id=<id> entity_id=<the operator's entity id>
 ```
@@ -227,4 +227,3 @@ goes beside the others in `templates/`). Adding a row **after** the cluster is
 already initialized needs a privileged token supplied via `BAO_TOKEN` (see
 [Idempotency](operations.md#idempotency)) — only the newly-added identities get created and
 get fresh credentials; existing ones are untouched.
-

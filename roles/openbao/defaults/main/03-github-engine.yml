@@ -54,6 +54,33 @@ openbao_github_read_permissions:
 # repository, and only mints the short-lived registration token a runner needs.
 openbao_github_runner_permissions:
   organization_self_hosted_runners: write
+# Publish tier: the ONE set that both WRITES and is repository-scoped. The
+# scope lives in the set itself — installation_id, the repository list and the
+# permission map are all stored server-side, and the permission-set token path
+# ignores request bodies at plugin v2.3.2, so a holder can widen none of them.
+# That is why this is a set rather than a github-write realm: a publisher runs
+# unattended and should carry no ability to name its own target.
+openbao_github_docs_publisher_set_name: docs-publisher
+openbao_github_docs_publisher_permissions:
+  contents: write
+  pull_requests: write
+# The repository name is supplied by the iac secret store, NOT inline: this
+# repository is public and the installation covers private repositories, the
+# same reasoning as OPENBAO_GITHUB_WRITE_REPOS. Unset yields no set at all
+# rather than a set with an empty repository list — an omitted `repositories`
+# on a permission set means the WHOLE installation, so an unconfigured
+# publisher must not exist rather than exist unbounded. Explicit literals
+# only, never a glob, for the reason recorded with the write allowlist.
+openbao_github_docs_publisher_repos: >-
+  {{ (lookup('env', 'OPENBAO_GITHUB_DOCS_PUBLISHER_REPOS') | default('', true)).split(',')
+     | map('trim') | reject('equalto', '') | list }}
+openbao_github_docs_publisher_permission_sets: >-
+  {{ [{'name': openbao_github_docs_publisher_set_name,
+       'tier': 'publish',
+       'installation_id': openbao_github_dryvist_installation_id,
+       'repositories': openbao_github_docs_publisher_repos,
+       'permissions': openbao_github_docs_publisher_permissions}]
+     if openbao_github_docs_publisher_repos | length > 0 else [] }}
 # tier drives which identities may mint a set (see the github-*-policy
 # templates): `read` sets are ambient; `admin` sets (installation-wide, full
 # App ceiling) are minted only through the inert, human-gated github-admin
@@ -62,7 +89,7 @@ openbao_github_runner_permissions:
 # to exactly one allowlisted repository per request (a stored set cannot be
 # narrowed by the request body at plugin v2.3.2, so per-repo scoping must
 # ride the raw endpoint).
-openbao_github_permission_sets:
+openbao_github_base_permission_sets:
   - name: dryvist-full-automation
     tier: admin
     installation_id: "{{ openbao_github_dryvist_installation_id }}"
@@ -81,3 +108,8 @@ openbao_github_permission_sets:
     tier: runner
     installation_id: "{{ openbao_github_dryvist_installation_id }}"
     permissions: "{{ openbao_github_runner_permissions }}"
+# Full set list = the static base above + the publish tier, which exists only
+# when its repository list is configured.
+openbao_github_permission_sets: >-
+  {{ openbao_github_base_permission_sets
+     + openbao_github_docs_publisher_permission_sets }}

@@ -93,6 +93,61 @@
     - openbao_bootstrap_token is defined
     - openbao_human_unlock_mfa_enabled | bool
 
+# `bao list` exits non-zero BOTH when the path holds nothing and when the read
+# is denied, so its rc cannot tell "no TOTP method exists yet" from "this
+# identity may not look at them". Conflating the two is not harmless: an empty
+# listing drives the create below, and a create this identity may not perform
+# fails the whole converge at the last step before the AppRoles are reconciled.
+# This is the same distinction the userpass probe above is careful to make. Ask
+# the server what this identity may actually do, rather than inferring it from
+# an absence.
+- name: Ask whether this identity may administer login MFA
+  ansible.builtin.command:
+    cmd: bao write -format=json sys/capabilities-self paths=identity/mfa/method/totp
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  register: openbao_mfa_capabilities
+  changed_when: false
+  failed_when: false
+  no_log: true
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_human_unlock_mfa_enabled | bool
+
+# sys/capabilities-self reports the per-path list BOTH at the top level and
+# under `data`; which one a client surfaces is not something to bet on. Same
+# envelope handling as tasks/init/08-rbac-policies.yml, for the same reason.
+- name: Resolve whether login MFA is administrable by this identity
+  ansible.builtin.set_fact:
+    openbao_mfa_administrable: >-
+      {{ (_caps | intersect(['create', 'update', 'root'])) | length > 0 }}
+  vars:
+    _body: "{{ openbao_mfa_capabilities.stdout | default('{}') | from_json }}"
+    _caps: >-
+      {{ (_body.get('data', {}) | combine(_body)).get('identity/mfa/method/totp', []) }}
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_human_unlock_mfa_enabled | bool
+    - (openbao_mfa_capabilities.rc | default(1)) == 0
+
+# Login MFA guards the human break-glass login, so the identity that may
+# administer it is deliberately NOT the one an unattended converge carries.
+# Saying so and moving on is correct; proceeding regardless would either fail
+# the run or, worse, report success over an unenforced second factor.
+- name: NOTE — login MFA left untouched; this identity may not administer it
+  ansible.builtin.debug:
+    msg: >-
+      Login MFA is declared but was not reconciled: this identity has no
+      create/update on identity/mfa/method/totp. Everything else in this play
+      is unaffected. To reconcile MFA, re-run with an operator token
+      (OPENBAO_PROVISIONING_TOKEN) that holds it — the same escape
+      tasks/init/08-rbac-policies.yml names for the policy set.
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_human_unlock_mfa_enabled | bool
+    - not (openbao_mfa_administrable | default(false))
+
 - name: Read each configured TOTP MFA method
   ansible.builtin.command:
     cmd: "bao read -format=json identity/mfa/method/totp/{{ item }}"
@@ -138,12 +193,14 @@
     - openbao_bootstrap_token is defined
     - openbao_human_unlock_mfa_enabled | bool
     - (openbao_mfa_totp_method_id | default('')) | length == 0
+    - openbao_mfa_administrable | default(false)
 
 # The v2.5.5 docs show `id` on the READ response and `method_id` as the request
 # parameter, and give no create-response body — so the create key is taken from
 # whichever is present rather than guessed. The assert below refuses to continue
 # on an empty id, so a wrong guess here fails loudly instead of silently
 # skipping the enforcement and leaving MFA declared-but-absent.
+
 - name: Use the newly created TOTP method id
   ansible.builtin.set_fact:
     openbao_mfa_totp_method_id: >-
@@ -171,6 +228,7 @@
   when:
     - openbao_bootstrap_token is defined
     - openbao_human_unlock_mfa_enabled | bool
+    - openbao_mfa_administrable | default(false)
 
 - name: Assert the TOTP method and userpass accessor both resolved
   ansible.builtin.assert:
@@ -187,10 +245,12 @@
   when:
     - openbao_bootstrap_token is defined
     - openbao_human_unlock_mfa_enabled | bool
+    - openbao_mfa_administrable | default(false)
 
 # The enforcement is name-addressed, so this write is idempotent. Scoped to the
 # userpass MOUNT ACCESSOR: it covers every login through that mount, including
 # a user added later, rather than one entity that a rename would slip past.
+
 - name: Enforce TOTP on the userpass auth mount
   ansible.builtin.command:
     cmd: >-
@@ -205,6 +265,7 @@
   when:
     - openbao_bootstrap_token is defined
     - openbao_human_unlock_mfa_enabled | bool
+    - openbao_mfa_administrable | default(false)
 
 - name: INSTRUCT — enrol the operator's TOTP device (one-time, human)
   ansible.builtin.debug:

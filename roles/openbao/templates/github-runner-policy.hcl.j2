@@ -13,9 +13,17 @@
 # admin sets, the read-* sets, and the engine's config/* + permissionset/*
 # administration paths are all absent: a leaked runner secret-zero can add or
 # remove a self-hosted runner and can read no repository content at all.
+#
+# `read` is here alongside create/update and grants NOTHING extra. The plugin
+# registers ReadOperation on token/<set> against the same mint callback as
+# CreateOperation -- a GET mints exactly what a POST mints, deliberately, so
+# that read-only clients can obtain one. Withholding `read` therefore denies no
+# capability; it only denies the HTTP verb, and the OpenBao Agent's template
+# engine issues a GET. Omitting it is what makes an agent-rendered token 403
+# while a hand-run POST succeeds.
 {% for permission_set in openbao_github_permission_sets | selectattr('tier', 'equalto', 'runner') %}
 path "{{ openbao_github_mount }}/token/{{ permission_set.name }}" {
-  capabilities = ["create", "update"]
+  capabilities = ["read", "create", "update"]
 }
 
 {% endfor %}

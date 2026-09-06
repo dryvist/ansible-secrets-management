@@ -29,6 +29,15 @@ openbao_ssh_roles:
     principal: ansible
     ttl: 7200
     extensions: {}
+  # The unattended execution plane signs under its own principal so a host can
+  # tell a Semaphore-triggered run from a human's laptop run in the sshd log,
+  # and so revoking one does not revoke the other. Same 7200 TTL as
+  # automation-ansible and for the same reason: a full converge that outlives
+  # its own certificate fails on every host remaining after the expiry.
+  - name: automation-semaphore
+    principal: semaphore
+    ttl: 7200
+    extensions: {}
   - name: ci-runner
     principal: ci
     ttl: 1800

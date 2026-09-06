@@ -214,9 +214,12 @@
     - openbao_github_engine_enabled | bool
 
 # Body carries the stored token-request shape: installation_id always, plus
-# the read-only permissions map on read-tier sets. Admin-tier sets stay
-# permissions-less on purpose — an omitted map IS the full App ceiling, which
-# is what break-glass means. Drift on either field re-POSTs the set.
+# the permissions map and the repository list on the sets that declare them.
+# Admin-tier sets stay permissions-less on purpose — an omitted map IS the full
+# App ceiling, which is what break-glass means. An omitted `repositories` means
+# every repository of the installation, so a set that scopes itself to named
+# repositories MUST carry the field here or it would be stored unbounded.
+# Drift on any of the three re-POSTs the set.
 - name: Reconcile the GitHub token permission sets
   ansible.builtin.uri:
     url: >-
@@ -229,7 +232,9 @@
     body: >-
       {{ {'installation_id': item.0.installation_id | int}
          | combine({'permissions': item.0.permissions}
-                   if item.0.permissions is defined else {}) }}
+                   if item.0.permissions is defined else {})
+         | combine({'repositories': item.0.repositories}
+                   if item.0.repositories is defined else {}) }}
     status_code:
       - 200
       - 204
@@ -248,6 +253,8 @@
          != (item.0.installation_id | int)
       or ((item.1.stdout | from_json).data.permissions | default({}, true))
          != (item.0.permissions | default({}, true))
+      or ((item.1.stdout | from_json).data.repositories | default([], true))
+         != (item.0.repositories | default([], true))
 
 # --- OAuthapp secrets engine (external, mounted; no credential configured) --
 # The plugin binary was staged on every voter by main.yml. Its archive hash is

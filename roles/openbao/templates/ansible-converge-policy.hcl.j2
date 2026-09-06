@@ -134,6 +134,24 @@ path "secrets-external/metadata/platform/backblaze-splunk" {
   capabilities = ["read"]
 }
 
+# --- The execution plane's run environment -----------------------------------
+# One document per mount, each holding the environment variables a converge
+# reads, so every value lives on exactly one tier: topology in config/ (already
+# readable through config-write), internal-only secrets on the internal mount,
+# anything reachable from the public internet on the external mount. The run
+# wrapper on the execution plane reads all three at task start and exports
+# them; the playbooks read plain environment variables and stay indifferent to
+# the store behind them. Exact paths, read only — a converge never writes here.
+{% for mount in [openbao_kv_mount, 'secrets-external'] %}
+path "{{ mount }}/data/platform/ansible/env" {
+  capabilities = ["read"]
+}
+
+path "{{ mount }}/metadata/platform/ansible/env" {
+  capabilities = ["read"]
+}
+
+{% endfor %}
 # --- Guest-generated credential publication -----------------------------------
 # Several roles mint a credential create-if-absent and keep the ONLY copy in a
 # guest-local file, so losing the guest loses the secret. For some of these the

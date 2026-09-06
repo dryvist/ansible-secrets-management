@@ -59,6 +59,24 @@ fail() {
   exit 1
 }
 
+# Every external binary these timer payloads need, checked once, up front.
+# Without this a missing one surfaces as whatever the first command using it
+# was doing: a missing curl read as "sys/leader unreachable", which points at
+# the cluster rather than at the package that is not installed, and a missing
+# jq would make every node decide it was a standby and snapshot nothing at all.
+# Keep the marker line in sync with the loop — Molecule reads it to check the
+# role actually installs what the script calls.
+# requires: curl jq
+require_binaries() {
+  local missing=""
+  [ -x "${BIN}" ] || missing="${BIN}"
+  for _bin in $(sed -n 's/^# requires: //p' "$0"); do
+    command -v "${_bin}" >/dev/null 2>&1 || missing="${missing} ${_bin}"
+  done
+  [ -z "${missing# }" ] || fail "required binary not installed:${missing# }"
+}
+require_binaries
+
 PORT="{{ openbao_api_port }}"
 ONBOX_IP="$(ip -4 -o addr show scope global | awk '{print $4}' | cut -d/ -f1 | head -n1)"
 [ -n "${ONBOX_IP}" ] || fail "no on-box IPv4 for snapshot API"
@@ -69,14 +87,12 @@ export BAO_ADDR
 #    active node. A standby is a clean no-op so peers never double-ship.
 #    A curl failure is NOT a standby: collapsing it into the no-op made a
 #    cluster-wide snapshot miss look healthy. Fail that so the deadman fires.
-# ponytail: JSON grep instead of jq (not on these WAN-firewalled nodes); swap to
-# `jq -e .is_self` if jq ever lands in the base image.
 leader_json="$(mktemp)"
 if ! curl -fsS --max-time 8 -o "${leader_json}" "${BAO_ADDR}/v1/sys/leader"; then
   rm -f "${leader_json}"
   fail "local sys/leader unreachable (not a standby no-op)"
 fi
-if ! grep -Eq '"is_self"[[:space:]]*:[[:space:]]*true' "${leader_json}"; then
+if ! jq -e '.is_self == true' "${leader_json}" >/dev/null 2>&1; then
   rm -f "${leader_json}"
   log "not the active node — nothing to do"
   exit 0

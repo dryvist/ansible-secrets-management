@@ -1,0 +1,22 @@
+{{ ansible_managed | comment }}
+# docs-publisher — the documentation publisher's standing identity. Mints ONLY
+# the publish-tier permission sets, whose stored scope is one repository plus
+# `contents: write` and `pull_requests: write` and nothing else (the
+# permission-set token path ignores request bodies at plugin v2.3.2, so a
+# holder cannot name another repository or ask for another permission).
+#
+# The raw {{ openbao_github_mount }}/token endpoint, the *-full-automation
+# admin sets, the read-* sets, the runner set, and the engine's config/* +
+# permissionset/* administration paths are all absent. The write-lease lock
+# subtree is absent too: the lease exists to serialise callers that choose
+# their own repository per request, and this identity cannot choose one.
+#
+# The block below renders nothing when no publish set is declared, which is
+# what an unconfigured publisher repository list produces — the policy then
+# grants nothing at all rather than granting something unbounded.
+{% for permission_set in openbao_github_permission_sets | selectattr('tier', 'equalto', 'publish') %}
+path "{{ openbao_github_mount }}/token/{{ permission_set.name }}" {
+  capabilities = ["create", "read", "update"]
+}
+
+{% endfor %}

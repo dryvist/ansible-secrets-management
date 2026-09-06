@@ -1,0 +1,136 @@
+---
+# GitHub Actions OIDC workload identity.
+#
+# A workflow on a self-hosted runner presents the token GitHub mints for that
+# job and gets back a short-lived OpenBao token whose only grant is the
+# publisher permission set. Nothing is stored on the runner: the credential is
+# the job's own identity, it is bound to one repository and one ref, and it
+# expires in minutes.
+#
+# Included from 09-auth-methods-and-terrakube-jwt.yml, which registers the auth
+# listing this file reads.
+
+- name: Enable the GitHub Actions OIDC auth method
+  ansible.builtin.command:
+    cmd: "bao auth enable -path={{ openbao_github_oidc_auth_path }} jwt"
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  no_log: true
+  changed_when: true
+  when:
+    - openbao_bootstrap_token is defined
+    - (openbao_github_oidc_auth_path ~ '/') not in (openbao_auth_raw.stdout | from_json).keys()
+
+- name: Read the GitHub Actions OIDC auth configuration
+  ansible.builtin.command:
+    cmd: "bao read -format=json auth/{{ openbao_github_oidc_auth_path }}/config"
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  register: openbao_github_oidc_config_current
+  no_log: true
+  changed_when: false
+  failed_when: false
+  when: openbao_bootstrap_token is defined
+
+# bound_issuer alongside the discovery URL: discovery says where the keys come
+# from, bound_issuer says whose `iss` claim is acceptable. Setting only the
+# first would accept a token signed by the right keys but issued for something
+# else.
+- name: Configure GitHub as the OIDC issuer
+  ansible.builtin.command:
+    cmd: "bao write auth/{{ openbao_github_oidc_auth_path }}/config -"
+    stdin: >-
+      {{ {'oidc_discovery_url': openbao_github_oidc_issuer,
+            'bound_issuer': openbao_github_oidc_issuer} | to_json }}
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  no_log: true
+  changed_when: true
+  when:
+    - openbao_bootstrap_token is defined
+    - >-
+      (openbao_github_oidc_config_current.rc | default(1)) != 0
+      or ((openbao_github_oidc_config_current.stdout | default('{}') | from_json).data
+          | default({}, true)).oidc_discovery_url | default('')
+         != openbao_github_oidc_issuer
+      or ((openbao_github_oidc_config_current.stdout | default('{}') | from_json).data
+          | default({}, true)).bound_issuer | default('')
+         != openbao_github_oidc_issuer
+
+- name: Read the docs-publisher OIDC role
+  ansible.builtin.command:
+    cmd: >-
+      bao read -format=json
+      auth/{{ openbao_github_oidc_auth_path }}/role/{{ openbao_github_docs_publisher_policy_name }}
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  register: openbao_github_oidc_docs_role_current
+  no_log: true
+  changed_when: false
+  failed_when: false
+  when: openbao_bootstrap_token is defined
+
+# Three independent bounds, all required. The audience stops a token minted for
+# another consumer of the same issuer; the repository claim stops any other
+# repository in the organisation; the ref claim stops a pull-request or branch
+# build, which is what a fork's contributor controls. bound_claims_type is
+# string so both are matched literally rather than as globs.
+#
+# token_policies carries only the publisher policy. The role is the whole
+# identity here: there is no AppRole and no secret_id for it, so a token can
+# exist only for a job that satisfied all three bounds.
+- name: Reconcile the docs-publisher OIDC role
+  vars:
+    _docs_role_claims:
+      repository: "{{ openbao_github_oidc_docs_repository }}"
+      ref: "{{ openbao_github_oidc_docs_ref }}"
+    _docs_role_live: >-
+      {{ (openbao_github_oidc_docs_role_current.stdout | default('{}') | from_json).data
+         | default({}, true) }}
+    _docs_token_ttl_s: "{{ openbao_github_oidc_docs_token_ttl | community.general.to_seconds | int }}"
+    _docs_token_max_ttl_s: >-
+      {{ openbao_github_oidc_docs_token_max_ttl | community.general.to_seconds | int }}
+  ansible.builtin.command:
+    cmd: >-
+      bao write
+      auth/{{ openbao_github_oidc_auth_path }}/role/{{ openbao_github_docs_publisher_policy_name }} -
+    stdin: >-
+      {{ {'role_type': 'jwt',
+            'user_claim': 'repository',
+            'bound_audiences': [openbao_github_oidc_audience],
+            'bound_claims': _docs_role_claims,
+            'bound_claims_type': 'string',
+            'token_policies': [openbao_github_docs_publisher_policy_name],
+            'token_ttl': openbao_github_oidc_docs_token_ttl,
+            'token_max_ttl': openbao_github_oidc_docs_token_max_ttl} | to_json }}
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  no_log: true
+  changed_when: true
+  when:
+    - openbao_bootstrap_token is defined
+    # No source repository configured means no role: a bound_claims entry set
+    # to an empty string is a bound nothing can satisfy, and declaring one
+    # would read as a working publisher that silently rejects every job.
+    - openbao_github_oidc_docs_repository | length > 0
+    - >-
+      (openbao_github_oidc_docs_role_current.rc | default(1)) != 0
+      or (_docs_role_live.bound_audiences | default([]))
+         != [openbao_github_oidc_audience]
+      or (_docs_role_live.bound_claims | default({}, true))
+         != _docs_role_claims
+      or (_docs_role_live.bound_claims_type | default(''))
+         != 'string'
+      or (_docs_role_live.user_claim | default(''))
+         != 'repository'
+      or (_docs_role_live.token_policies | default([]) | sort)
+         != [openbao_github_docs_publisher_policy_name]
+      or (_docs_role_live.token_ttl | default(0) | int)
+         != (_docs_token_ttl_s | int)
+      or (_docs_role_live.token_max_ttl | default(0) | int)
+         != (_docs_token_max_ttl_s | int)

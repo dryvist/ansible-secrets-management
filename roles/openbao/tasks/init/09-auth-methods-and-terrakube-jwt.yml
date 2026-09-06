@@ -133,6 +133,12 @@
           | default({}, true)).token_ttl | default(0) | int
          != (openbao_terrakube_jwt_token_ttl | regex_replace('m$', '') | int) * 60
 
+# --- GitHub Actions OIDC workload identity ---------------------------------
+# Its own file, for the same reason the human login below has one: a second
+# JWT issuer with its own bounds is a separate concern from Terrakube's.
+- name: Configure the GitHub Actions OIDC auth method and its publisher role
+  ansible.builtin.include_tasks: 09c-github-oidc.yml
+
 # --- AppRoles (add-if-missing), one per RBAC group --------------------------
 
 # The human operator's own login is a third concern in this file (after the

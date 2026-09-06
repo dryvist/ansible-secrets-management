@@ -9,7 +9,12 @@
   tasks:
     - name: Wait for container to be ready
       ansible.builtin.wait_for_connection:
-        timeout: 30
+        # 30s was tight enough that a container which simply started slowly
+        # under a loaded runner failed before it was ever asked to do
+        # anything, reported as ok=0 and passing on a rerun. A container that
+        # is going to answer does so in seconds, so a longer ceiling costs
+        # nothing on the healthy path.
+        timeout: 180
 
     - name: Gather facts
       ansible.builtin.setup:

@@ -11,7 +11,7 @@ driver:
   name: docker
 
 platforms:
-  - name: openbao-test
+  - name: openbao-test${CI_INSTANCE_SUFFIX}
     # No stable version tags published; geerlingguy only ships :latest.
     image: geerlingguy/docker-debian12-ansible:latest
     privileged: true
@@ -34,7 +34,7 @@ provisioner:
     # the role reads it via hostvars to build the Raft peer list, so it must be
     # a hostvar here too (a play var would not be visible through hostvars).
     host_vars:
-      openbao-test:
+      openbao-test${CI_INSTANCE_SUFFIX}:
         container_ip: "192.0.2.210"
   config_options:
     defaults:

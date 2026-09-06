@@ -192,8 +192,8 @@ openbao_generated_app_secrets:
     - smb_user_username
     - smb_user_password
   # Confidential OIDC client secrets for apps that need a real shared secret
-  # rather than Hermes/Donna's public-PKCE pattern (Homarr, Langfuse, Semaphore,
-  # terrakube-dex, Grafana — all server-side apps). Authelia's role hashes the plaintext
+  # rather than Hermes/Donna's public-PKCE pattern (Homarr, Langfuse, Phoenix,
+  # Semaphore, terrakube-dex, Grafana — all server-side apps). Authelia's role hashes the plaintext
   # into its own config; the consuming app's role reads the same plaintext back
   # via bao_apps_secrets. Listing the app here grants the `apps` AppRole read on
   # secret/apps/authelia (same mechanism as the homarr note above).
@@ -201,6 +201,7 @@ openbao_generated_app_secrets:
     [
       authelia_oidc_homarr_client_secret,
       authelia_oidc_langfuse_client_secret,
+      authelia_oidc_phoenix_client_secret,
       authelia_oidc_semaphore_client_secret,
       authelia_oidc_terrakube_dex_client_secret,
       authelia_oidc_grafana_client_secret,
@@ -215,3 +216,14 @@ openbao_app_secret_key_length: 64
 # is ~75 bits, which is far more than a login name needs to be unguessable.
 openbao_app_secret_username_suffix: _username
 openbao_app_secret_username_length: 16
+
+# The ONLY `bao` CLI stderr text that means "this path does not exist". A read
+# that fails for any OTHER reason -- 403, an unreachable server, a malformed
+# response -- says NOTHING about whether the path exists, and concluding
+# "absent" from it fires a privileged write against a path this identity cannot
+# see. Every read whose result decides a write must therefore tolerate THIS
+# string and fail on everything else, rather than blanket `failed_when: false`.
+#
+# Five instances of that defect were fixed across #1641/#1653/#1656/#1659/#1661;
+# these are the rest. See docs-starlight `d/conventions/absent-is-not-denied`.
+openbao_absent_stderr_marker: No value found

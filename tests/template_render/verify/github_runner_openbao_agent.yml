@@ -1,0 +1,114 @@
+---
+# The agent config is the whole credential path for the runner fleet. Every
+# failure it can have is silent from the fleet's point of view: the units stay
+# "up", the containers start, and jobs queue unassigned until GitHub cancels
+# them a day later. Nothing turns red. So the shape is asserted here rather
+# than discovered on a host.
+- name: Render and verify the github_runner OpenBao Agent templates
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    ansible_become: false
+    _fixture_dir: "{{ render_tmp }}"
+    _template_dir: "{{ playbook_dir }}/../../../roles/github_runner/templates"
+    # Mirror roles/github_runner/defaults/main.yml.
+    github_runner_bao_addr: "https://openbao.example.invalid"
+    github_runner_bao_bin: /usr/bin/bao
+    github_runner_approle_dir: /etc/github-runner/approle
+    github_runner_agent_config: /etc/github-runner/openbao-agent.hcl
+    github_runner_token_env_file: /etc/github-runner/access-token.env
+    github_runner_token_path: github/token/runner-register-dryvist
+    github_runner_openbao_role_id: "role-id-not-a-real-credential"
+    github_runner_openbao_secret_id: "secret-id-not-a-real-credential"
+
+  tasks:
+    - name: Render the agent config and unit
+      ansible.builtin.template:
+        src: "{{ _template_dir }}/{{ item.src }}"
+        dest: "{{ _fixture_dir }}/{{ item.dest }}"
+        mode: "0600"
+      loop:
+        - src: openbao-agent.hcl.j2
+          dest: test_openbao-agent.hcl
+        - src: openbao-github-runner-agent.service.j2
+          dest: test_openbao-github-runner-agent.service
+
+    - name: Read the rendered files
+      ansible.builtin.slurp:
+        src: "{{ _fixture_dir }}/{{ item }}"
+      register: _agent_raw
+      loop:
+        - test_openbao-agent.hcl
+        - test_openbao-github-runner-agent.service
+
+    - name: Decode the rendered files
+      ansible.builtin.set_fact:
+        _hcl_raw: "{{ _agent_raw.results[0].content | b64decode }}"
+        _svc_raw: "{{ _agent_raw.results[1].content | b64decode }}"
+
+    # Directive lines only: both files explain themselves at length and the
+    # prose names the very strings asserted below, so a whole-file search
+    # passes with the directive absent.
+    - name: Reduce both files to their directive lines
+      ansible.builtin.set_fact:
+        _hcl: "{{ _hcl_raw.splitlines() | reject('match', '\\s*#') | reject('match', '\\s*$') | list }}"
+        _svc: "{{ _svc_raw.splitlines() | reject('match', '\\s*#') | reject('match', '\\s*$') | list }}"
+
+    - name: Assert the agent authenticates from files, never an inlined secret
+      ansible.builtin.assert:
+        that:
+          - _hcl | select('search', 'role_id_file_path') | length > 0
+          - _hcl | select('search', 'secret_id_file_path') | length > 0
+          - _hcl | select('search', 'role-id-not-a-real-credential') | length == 0
+          - _hcl | select('search', 'secret-id-not-a-real-credential') | length == 0
+        fail_msg: >-
+          The agent config either does not point at the AppRole files or has
+          the secret-zero inlined into it. Inlining puts a live credential in a
+          config file that is not treated as a secret, and readable by anything
+          that can read the config.
+
+    - name: Assert the secret_id survives being read
+      ansible.builtin.assert:
+        that:
+          - _hcl | select('search', 'remove_secret_id_file_after_reading\s*=\s*false') | length > 0
+        fail_msg: >-
+          The agent deletes the secret_id file after reading it. Ansible
+          re-delivers that file only on a converge, so the next agent restart
+          before the next converge finds no credential and the fleet cannot
+          register.
+
+    - name: Assert the token is minted from the runner-scoped permission set
+      ansible.builtin.assert:
+        that:
+          - _hcl | select('search', 'github/token/runner-register-dryvist') | length > 0
+          - _hcl | select('search', 'ACCESS_TOKEN=') | length > 0
+          - _hcl | select('search', 'destination') | length > 0
+        fail_msg: >-
+          The agent does not render ACCESS_TOKEN from the runner-scoped
+          permission set. That set is the only path the github-runner policy
+          grants, and its stored permission map is
+          organization_self_hosted_runners:write and nothing else -- any other
+          path is both denied and a wider credential than the fleet needs.
+
+    - name: Assert a missing token fails the render rather than emptying it
+      ansible.builtin.assert:
+        that:
+          - _hcl | select('search', 'error_on_missing_key\s*=\s*true') | length > 0
+        fail_msg: >-
+          error_on_missing_key is not true, so a response the template cannot
+          read renders an EMPTY ACCESS_TOKEN instead of failing. The containers
+          then start and fail to register, which is invisible until jobs stop
+          being picked up.
+
+    - name: Assert the agent keeps running and recovers on its own
+      ansible.builtin.assert:
+        that:
+          - _hcl | select('search', 'exit_after_auth\s*=\s*false') | length > 0
+          - "'Restart=always' in _svc"
+        fail_msg: >-
+          The agent either exits after authenticating or is not restarted. The
+          token it renders lives about an hour while the host runs for weeks,
+          so an agent that stops is a fleet that stops registering one hour
+          later, with nothing in the runner units to indicate why.

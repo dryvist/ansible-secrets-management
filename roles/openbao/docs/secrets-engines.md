@@ -68,7 +68,11 @@ Token access is tiered; the tier IS the privilege boundary:
 - **read (`github-read`)** — `github/token/read-dryvist-all` and
   `github/token/read-personal-all`: all repos, read-only permission map stored
   in the set itself (the set path ignores request bodies, so a holder cannot
-  widen it). Standing ambient AppRole.
+  widen it). Standing ambient AppRole. The `semaphore` AppRole also names
+  `github/token/read-dryvist-all` — exact path, no wildcard — so the
+  unattended Ansible execution plane can check out the repositories it runs,
+  including one with a private submodule, without holding a stored token. Read
+  only: a checkout can never write a repository.
 - **write (`github-write`)** — the raw `github/token` endpoint, pinned to
   exactly ONE allowlisted repository per request: the policy requires
   `installation_id` + `repositories`, allowlists their values
@@ -77,6 +81,15 @@ Token access is tiered; the tier IS the privilege boundary:
   AppRole, plus the claim-before-work write lease under
   `secret/locks/github-write/` (KV-v2 CAS acquire, `delete_version_after`
   deadman).
+- **publish (`docs-publisher`)** — `github/token/docs-publisher`: one
+  repository, `contents: write` + `pull_requests: write`, all three stored in
+  the set. The repository list comes from the iac secret store; with none
+  configured the set is not declared and the policy grants nothing. Excluded
+  from `github-mint`, so no estate AI identity inherits it. Reached only
+  through GitHub Actions OIDC (`auth/github-actions`, role `docs-publisher`),
+  bound to one audience, one repository and one ref, with a 10m token. There
+  is no AppRole and no secret_id for it: the workflow's own job identity is
+  the credential, so the runner stores nothing.
 - **admin (`github-admin`)** — `github/token/dryvist-full-automation` and
   `github/token/personal-full-automation`: installation-wide, full App
   ceiling. INERT AppRole — a human response-wraps a single-use secret_id per
@@ -160,6 +173,7 @@ apparatus; the block is enable + write-once CA + add-if-missing roles.
 - Signing roles are the ADR's per-principal-class table
   (`openbao_ssh_roles`): `automation-ai` (principal `ai-agent`, 2h,
   `permit-pty`), `automation-ansible` (`ansible`, 2h, no extensions),
+  `automation-semaphore` (`semaphore`, 2h, no extensions),
   `ci-runner` (`ci`, 30m, no extensions). TTLs are declared in seconds so the
   reconcile can compare them against the API without normalizing.
   `ttl == max_ttl`; a sign request may shorten a cert's life, never extend it.
@@ -170,10 +184,12 @@ apparatus; the block is enable + write-once CA + add-if-missing roles.
   friction-free agent SSH bounded by 1h certs, non-root principals,
   default-deny host opt-in, audit) + every `ai-apply-*`;
   `ssh-sign-automation-ansible` → `ansible-converge` only;
+  `ssh-sign-automation-semaphore` → `semaphore` only, so a certificate's
+  principal identifies which caller ran a converge;
   `ssh-sign-ci-runner` → unattached until a CI identity exists.
 - `OPENBAO_SSH_SOURCE_CIDRS` (Doppler) adds a `source-address` critical
   option restricting where certs are valid from; unset ⇒ loud warning and
   the guest-firewall default-deny layer is the compensating control.
 - **ai-agent is never a hypervisor root principal** — PVE nodes map
-  `root: [ansible]` only; `ai-agent` reaches guest-level accounts on hosts
+  `root: [ansible, semaphore]` only; `ai-agent` reaches guest-level accounts on hosts
   that opt in (see `ssh_ca_trust`).

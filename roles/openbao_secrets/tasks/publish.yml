@@ -128,7 +128,8 @@
               every field another writer put there.
           when:
             - openbao_secrets_publish_existing.msg is defined
-            - not (openbao_secrets_publish_existing.msg is search('^Invalid or missing path'))
+            - not (openbao_secrets_publish_existing.msg
+                 is search('^' ~ openbao_secrets_absent_msg_marker))
           no_log: false
 
         - name: Merge the new fields over the existing secret and write it back
