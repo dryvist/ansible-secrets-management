@@ -72,6 +72,15 @@
     quiet: true
   when: openbao_bootstrap_token is defined
 
+# The complementary half of the two asserts above: those catch a role this
+# converge CREATES with no source-address class. This one catches a role that
+# exists live and this converge never even LOOPS, because it is declared
+# nowhere -- split into its own file to stay under the per-file token budget;
+# see 10d-approle-undeclared-live.yml for the full reasoning.
+- name: Assert every live AppRole is either declared or a named exception
+  ansible.builtin.include_tasks: 10d-approle-undeclared-live.yml
+  when: openbao_bootstrap_token is defined
+
 - name: Check whether each AppRole already exists
   ansible.builtin.command:
     cmd: "bao read -format=json auth/approle/role/{{ item.name }}"

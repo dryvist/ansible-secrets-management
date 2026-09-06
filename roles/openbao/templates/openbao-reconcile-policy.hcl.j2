@@ -65,6 +65,13 @@ path "auth/approle/role/{{ approle_name }}/policies" {
   capabilities = ["create", "update"]
 }
 {% endfor %}
+# Listing names only (no role definitions, no credentials) is how the converge
+# notices an AppRole that exists in the store but was never enumerated above —
+# the enumerate-by-name design above means such a role is otherwise invisible
+# to every future reconcile. Read-only, same reasoning as the policy list line.
+path "auth/approle/role" {
+  capabilities = ["list"]
+}
 
 # --- SSH signing roles, by name ------------------------------------------
 # Without these the identity cannot perform the SSH-role reconcile, which is
