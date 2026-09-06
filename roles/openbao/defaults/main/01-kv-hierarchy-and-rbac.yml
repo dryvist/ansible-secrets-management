@@ -216,3 +216,14 @@ openbao_app_secret_key_length: 64
 # is ~75 bits, which is far more than a login name needs to be unguessable.
 openbao_app_secret_username_suffix: _username
 openbao_app_secret_username_length: 16
+
+# The ONLY `bao` CLI stderr text that means "this path does not exist". A read
+# that fails for any OTHER reason -- 403, an unreachable server, a malformed
+# response -- says NOTHING about whether the path exists, and concluding
+# "absent" from it fires a privileged write against a path this identity cannot
+# see. Every read whose result decides a write must therefore tolerate THIS
+# string and fail on everything else, rather than blanket `failed_when: false`.
+#
+# Five instances of that defect were fixed across #1641/#1653/#1656/#1659/#1661;
+# these are the rest. See docs-starlight `d/conventions/absent-is-not-denied`.
+openbao_absent_stderr_marker: No value found

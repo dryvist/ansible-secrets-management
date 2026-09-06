@@ -209,3 +209,11 @@ openbao_secrets_domains:
                        #   roles/phoenix_docker); the same path also holds the
                        #   guest's own bootstrap secrets, read only over there.
       - ai/langflow    # LANGFLOW_{SUPERUSER,SUPERUSER_PASSWORD,DB_PASSWORD}
+
+# `community.hashi_vault.vault_kv2_get` distinguishes the two cases cleanly in
+# its own failure message, and only this one means the path is genuinely absent:
+#   absent -> "Invalid or missing path ['<p>'] with secret version 'latest'. ..."
+#   DENIED -> "Forbidden: Permission Denied to path ['<p>']."
+# A read-before-write that swallows both turns its own anti-clobber merge INTO
+# the clobber, because a denied read yields no siblings to preserve.
+openbao_secrets_absent_msg_marker: Invalid or missing path
