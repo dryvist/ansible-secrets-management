@@ -88,6 +88,35 @@ openbao_github_admin_policy_name: github-admin
 openbao_github_admin_approle_name: github-admin
 openbao_github_runner_policy_name: github-runner
 openbao_github_runner_approle_name: github-runner
+# docs-publisher: the documentation publisher's own identity. Mints exactly
+# one repository-scoped write set and nothing else — it holds no read set, no
+# raw token path and no lock subtree, so a leaked secret-zero can open a pull
+# request against one repository and do nothing anywhere else.
+openbao_github_docs_publisher_policy_name: docs-publisher
+# GitHub Actions OIDC workload identity. The publish workflow presents the
+# token GitHub mints for its own job, so the runner stores no credential at
+# all; the role name is the policy name, as everywhere else here.
+openbao_github_oidc_auth_path: github-actions
+openbao_github_oidc_issuer: https://token.actions.githubusercontent.com
+# The audience GitHub is asked to stamp into the job token. Bounding it stops a
+# token minted for a different consumer of the same issuer being replayed here.
+openbao_github_oidc_audience: https://github.com/dryvist
+# The one repository and the one ref a publisher token may be minted for. A
+# pull-request or branch build fails the ref bound, which is the build a fork's
+# contributor controls.
+#
+# The repository is the workflow's own SOURCE repository, which is private, so
+# it comes from the secret store rather than inline — this repository is
+# public, the same reasoning as OPENBAO_GITHUB_WRITE_REPOS. Unset yields no
+# role at all rather than a role bound to an empty repository claim. The
+# destination the minted token writes to is a separate, public repository and
+# is named in the permission set.
+openbao_github_oidc_docs_repository: >-
+  {{ lookup('env', 'OPENBAO_GITHUB_DOCS_SOURCE_REPO') | default('', true) }}
+openbao_github_oidc_docs_ref: refs/heads/main
+# Minutes, not hours: the token is held for one publish step.
+openbao_github_oidc_docs_token_ttl: 10m
+openbao_github_oidc_docs_token_max_ttl: 15m
 openbao_reconcile_policy_name: openbao-reconcile
 openbao_reconcile_approle_name: openbao-reconcile
 # approle-issuer — the ONLY identity that may mint an AppRole secret_id.

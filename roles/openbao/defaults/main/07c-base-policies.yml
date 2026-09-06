@@ -82,6 +82,8 @@ openbao_base_policies:
     template: github-admin-policy.hcl.j2
   - name: "{{ openbao_github_runner_policy_name }}"
     template: github-runner-policy.hcl.j2
+  - name: "{{ openbao_github_docs_publisher_policy_name }}"
+    template: github-docs-publisher-policy.hcl.j2
   - name: "{{ openbao_reconcile_policy_name }}"
     template: openbao-reconcile-policy.hcl.j2
   # approle-issuer: the secret_id minting half, split off openbao-reconcile so

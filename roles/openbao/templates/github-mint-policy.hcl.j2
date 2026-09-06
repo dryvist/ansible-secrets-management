@@ -8,9 +8,12 @@
 # capability can only mint the read sets — it cannot widen the token's scope.
 # Per-repo WRITE minting is the github-write identity's policy alone; an estate
 # identity that needs repo write gets its own parameter-pinned grant, never
-# this leaf widened. Attached (via token_policies) to the apply-tier actor
-# roles; carries no self-escalation path, so composing it with KV leaves is safe.
-{% for permission_set in openbao_github_permission_sets | rejectattr('tier', 'equalto', 'admin') %}
+# this leaf widened. The publish tier is rejected here for that reason: its
+# sets carry a stored write permission map, so leaving it in would hand every
+# apply-tier actor the publisher's grant. Attached (via token_policies) to the
+# apply-tier actor roles; carries no self-escalation path, so composing it with
+# KV leaves is safe.
+{% for permission_set in openbao_github_permission_sets | rejectattr('tier', 'equalto', 'admin') | rejectattr('tier', 'equalto', 'publish') %}
 path "{{ openbao_github_mount }}/token/{{ permission_set.name }}" {
   capabilities = ["create", "update"]
 }

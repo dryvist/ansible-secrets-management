@@ -1,0 +1,115 @@
+---
+# The GitHub token tiers are a privilege boundary expressed entirely in Jinja
+# loops over one shared list, so a set added for one identity silently reaches
+# every other policy whose loop does not exclude it. `github-mint` is the
+# dangerous one: it is attached to every apply-tier estate actor and selects by
+# REJECTING the admin tier, so any new tier is included by default. A write
+# grant landing there would hand repository write to identities that are only
+# ever meant to read, and nothing about the diff that added it would say so.
+#
+# Rendering is the only place this is observable: the declarations look correct
+# in isolation, and no converge assertion compares one policy against another.
+- name: Render and verify the GitHub tier policies
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    ansible_become: false
+    _fixture_dir: "{{ render_tmp }}"
+    _template_dir: "../../../roles/openbao/templates"
+    ansible_managed: "test fixture"
+    _publisher_path: >-
+      {{ openbao_github_mount }}/token/{{ openbao_github_docs_publisher_set_name }}
+
+  tasks:
+    # The real defaults, not a mirrored subset: the composition of
+    # openbao_github_permission_sets from its base list plus the conditional
+    # publish tier IS what is under test, so a hand-written fixture would test
+    # the fixture. `dir` resolves relative to this file.
+    - name: Load the openbao role defaults
+      ansible.builtin.include_vars:
+        dir: ../../../roles/openbao/defaults/main
+
+    # set_fact, not task vars: include_vars sits ABOVE task vars in Ansible's
+    # precedence order, so a task-level override of a value it loaded is
+    # ignored. Pinning both cases here also keeps the result independent of
+    # whether the caller happens to have the publisher variable in its own
+    # environment.
+    - name: Pin the publisher repository list to the unconfigured case
+      ansible.builtin.set_fact:
+        openbao_github_docs_publisher_repos: []
+
+    - name: Render the publisher policy with no repository configured
+      ansible.builtin.template:
+        src: "{{ _template_dir }}/github-docs-publisher-policy.hcl.j2"
+        dest: "{{ _fixture_dir }}/unset-github-docs-publisher-policy.hcl"
+        mode: "0644"
+
+    - name: Read the policy rendered without a publisher repository
+      ansible.builtin.slurp:
+        src: "{{ _fixture_dir }}/unset-github-docs-publisher-policy.hcl"
+      register: _publisher_unset_raw
+
+    # An omitted `repositories` on a permission set means every repository of
+    # the installation. A publisher with no configured repository must
+    # therefore grant nothing at all, rather than a write grant with no bound.
+    - name: Assert an unconfigured publisher grants no path
+      ansible.builtin.assert:
+        that:
+          - >-
+            (_publisher_unset_raw.content | b64decode)
+            | regex_findall('(?m)^path "([^"]+)"') | length == 0
+        fail_msg: >-
+          The docs-publisher policy grants a path with no publisher repository
+          configured. An unbounded set would carry write over the whole
+          installation.
+
+    - name: Pin the publisher repository list to the configured case
+      ansible.builtin.set_fact:
+        openbao_github_docs_publisher_repos: [fixture-repo]
+
+    - name: Render the tier policies with a publisher repository configured
+      ansible.builtin.template:
+        src: "{{ _template_dir }}/{{ item }}.j2"
+        dest: "{{ _fixture_dir }}/set-{{ item }}"
+        mode: "0644"
+      loop: &tier_policies
+        - github-docs-publisher-policy.hcl
+        - github-mint-policy.hcl
+        - github-read-policy.hcl
+
+    - name: Read the policies rendered with a publisher repository
+      ansible.builtin.slurp:
+        src: "{{ _fixture_dir }}/set-{{ item }}"
+      register: _tier_raw
+      loop: *tier_policies
+
+    - name: Reduce each rendered policy to its path lines
+      ansible.builtin.set_fact:
+        _publisher_paths: "{{ _paths[0] }}"
+        _mint_paths: "{{ _paths[1] }}"
+        _read_paths: "{{ _paths[2] }}"
+      vars:
+        _paths: >-
+          {{ _tier_raw.results | map(attribute='content') | map('b64decode')
+             | map('regex_findall', '(?m)^path "([^"]+)"') | list }}
+
+    - name: Assert the publisher policy grants exactly its own set
+      ansible.builtin.assert:
+        that:
+          - _publisher_paths == [_publisher_path]
+        fail_msg: >-
+          The docs-publisher policy grants {{ _publisher_paths }}. It must
+          grant exactly its own permission set: no raw token endpoint, no read
+          or admin set, no lock subtree.
+
+    - name: Assert no other tier inherits the publisher's grant
+      ansible.builtin.assert:
+        that:
+          - _publisher_path not in _mint_paths
+          - _publisher_path not in _read_paths
+        fail_msg: >-
+          A tier other than docs-publisher grants the publisher's set.
+          github-mint selects by rejecting tiers, so a new write-bearing tier
+          is included there unless it is rejected explicitly.
