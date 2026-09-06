@@ -105,6 +105,15 @@ openbao_approle_cidr_classes:
   machine: "{{ openbao_management_cidrs }}"
   workstation: "{{ openbao_workstation_cidrs }}"
   ci: "{{ openbao_ci_cidrs }}"
+  # Union of machine + workstation, for an identity genuinely redeemed from
+  # BOTH: never restate either range literally, derive from the two lists
+  # above so there remains exactly one declaration of each.
+  machine_or_workstation: >-
+    {{ ([openbao_management_cidrs, openbao_workstation_cidrs]
+        | reject('equalto', '') | list
+        | map('split', ',') | list
+        | sum(start=[]) | unique | list
+        | join(',')) }}
   # Deliberately unbound; every member needs a reason in the override map.
   unbound: ""
 openbao_approle_default_cidr_class: machine
@@ -118,6 +127,11 @@ openbao_approle_cidr_class_overrides:
   github-write: workstation
   # Ephemeral CI runners sit on their own isolated segment.
   github-runner: ci
+  # The cross-repo apply-lock holder: taken interactively from the operator's
+  # own workstation AND by every automation host during a converge/apply. A
+  # single class here would break one caller or the other -- do not "tidy"
+  # this back to `machine` or `workstation` alone.
+  flow-lock: machine_or_workstation
   # Non-exploitable facts, shipped ambiently to anything that asks — a source
   # restriction would break that contract and protects nothing.
   public: unbound
