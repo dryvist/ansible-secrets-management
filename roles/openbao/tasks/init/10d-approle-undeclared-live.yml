@@ -1,0 +1,110 @@
+---
+# --- Undeclared-live coverage: fail on an identity code never visits --------
+# The sibling of the two CIDR-class asserts in 10-approles.yml: those catch a
+# role this converge CREATES with no source-address class. This one catches
+# the complementary case -- a role that exists live and this converge never
+# even LOOPS, because it is declared nowhere. Every task in this role
+# (including those two asserts) iterates openbao_manageable_approles, which
+# is derived from openbao_approles -- the DECLARED set. An identity created
+# in the store by any other path (a rename that left the old name behind, a
+# manual break-glass create that was never backfilled into code) is a member
+# of neither set, so reconciliation never visits it, never bounds it, and
+# never notices it again. That is the worst case a converge can produce, and
+# this is the only place that can catch it: everywhere else in this role
+# assumes the declared list is the whole truth.
+#
+# Included from 10-approles.yml (after the CIDR-class asserts, before the
+# existence check) rather than living inline there, purely to stay under
+# this repo's per-file token budget -- same seam-by-topic split as
+# 10b/10c already use.
+#
+# `bao list` on this path needs the `list` capability on `auth/approle/role`
+# itself (see the list stanza in openbao-reconcile-policy.hcl.j2, added
+# alongside this assert) -- a reconcile identity that has not yet had that
+# policy rewritten by a provisioning run gets a 403 here, which is caught and
+# named below rather than silently read as "no identities exist".
+- name: List every AppRole that actually exists in the store
+  ansible.builtin.command:
+    cmd: "bao list -format=json auth/approle/role"
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  register: openbao_approle_live_list
+  no_log: true
+  changed_when: false
+  failed_when: false
+  when: openbao_bootstrap_token is defined
+
+# A 403 here is the same trap as the per-role existence check above: it says
+# nothing about which identities exist, so the diff below MUST NOT run on a
+# denied listing -- an empty read on denial would report a clean converge
+# while the live set is invisible.
+- name: FAIL -- the AppRole listing was DENIED, so live identities cannot be enumerated
+  ansible.builtin.fail:
+    msg: >-
+      `bao list auth/approle/role` was denied (403), so this run cannot compare
+      declared AppRoles against what actually exists in the store -- an
+      undeclared identity would be invisible instead of caught. This identity
+      needs the `list` capability on `auth/approle/role`, added to
+      openbao-reconcile-policy.hcl.j2; one run with OPENBAO_PROVISIONING_TOKEN
+      rewrites the policy and closes the gap.
+  when:
+    - openbao_bootstrap_token is defined
+    - (openbao_approle_live_list.rc | default(0)) != 0
+    - openbao_approle_live_list.stderr | default('') is search('403')
+
+# A non-zero rc that is NOT a 403 (an empty mount on a brand-new cluster reads
+# this way too) legitimately means zero live identities, so it resolves to []
+# rather than being treated as denial -- only the FAIL above owns "unknown".
+- name: Resolve the set of AppRole names that actually exist live
+  ansible.builtin.set_fact:
+    openbao_approle_live_names: >-
+      {{ ((openbao_approle_live_list.stdout | default('{}') | from_json).data['keys']
+          | default([]))
+         if (openbao_approle_live_list.rc | default(1)) == 0 else [] }}
+  when: openbao_bootstrap_token is defined
+
+- name: Assert every live AppRole is either declared or a named exception
+  vars:
+    _declared: "{{ openbao_approles | map(attribute='name') | list }}"
+    _excepted: >-
+      {{ openbao_approle_undeclared_exceptions | map(attribute='name') | list }}
+    _undeclared: >-
+      {{ openbao_approle_live_names | reject('in', _declared + _excepted) | list }}
+  ansible.builtin.assert:
+    that:
+      - _undeclared | length == 0
+    fail_msg: >-
+      AppRoles {{ _undeclared | join(', ') }} exist live in the store but are
+      declared NOWHERE in openbao_approles, so reconciliation never visits
+      them and they keep whatever bounds they were created with indefinitely.
+      Add each one to openbao_base_approles (or its generated siblings) so it
+      is managed, or -- only for a genuine, deliberate exception -- add it to
+      openbao_approle_undeclared_exceptions in
+      07c-approle-undeclared-exceptions.yml, with a reason.
+    quiet: true
+  when:
+    - openbao_bootstrap_token is defined
+    - (openbao_approle_live_list.rc | default(1)) == 0 or
+      not (openbao_approle_live_list.stderr | default('') is search('403'))
+
+# The reverse direction is a real signal but not the same failure: a role
+# declared in code and not yet live is the ordinary shape of "about to be
+# created" (first bootstrap, or a role just added to openbao_approles this
+# run) or of a break-glass tier this identity deliberately cannot see. Failing
+# the converge on it would make every routine rollout of a new AppRole a red
+# run. Warn so it stays visible without blocking the create that follows.
+- name: Warn about declared AppRoles that reconciliation cannot see live
+  vars:
+    _missing: >-
+      {{ openbao_manageable_approles | map(attribute='name')
+         | reject('in', openbao_approle_live_names) | list }}
+  ansible.builtin.debug:
+    msg: >-
+      Declared AppRoles not (yet) visible live: {{ _missing | join(', ') }}.
+      Expected on a first create this run; if that is not what is happening,
+      the identity may be missing or the create step below failed.
+  when:
+    - openbao_bootstrap_token is defined
+    - (openbao_approle_live_list.rc | default(1)) == 0
+    - _missing | length > 0

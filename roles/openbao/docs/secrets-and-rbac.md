@@ -85,7 +85,7 @@ plans):
 | `apps-seed` | `secret/apps/*` | `secret/apps/*` create/update | Doppler-published writer; Terraform `vault-secrets` seeds `secret/apps/<app>` at source |
 | `flow-lock` | `secret/locks/global`, `secret/infra/*` | `secret/locks/global` | Cross-repo apply lock; releases the lock via metadata delete |
 | `terrakube-<workspace>` JWT | Only that workspace's native paths | Workspace-specific | Short-lived; exact organization/workspace subject and audience |
-| `ansible-converge` | Platform, apps, exact MCP secrets, the run-environment documents (`platform/ansible/env` on each mount) | Exact MCP secrets | Config pulls and transitional MCP publishers; no broad AI access |
+| `ansible-converge` | Platform, apps, MCP secrets, `platform/ansible/env` per mount | Exact MCP secrets | Config pulls, MCP publishers; no broad AI access |
 | `observability` | `secret/platform/{splunk,cribl}` | — | Ingest pipeline (shared HEC tokens) |
 | `local-cloud` | `secret/platform/{object-storage,compute}` | — | RustFS + compute creds |
 | `monitoring` | `secret/apps/monitoring` | — | netmon/unifi_metrics/prometheus_stack |
@@ -171,59 +171,33 @@ values arrive by environment and are never committed. A class that a declared
 role uses but which was never supplied **fails the converge** rather than
 quietly creating the unbound role the binding exists to prevent.
 
+Two sibling asserts cover the class *assignment* rather than the class values.
+Every AppRole the converge loops must resolve to a class, so a role declared
+outside `openbao_approles` fails the run by name instead of dying on an
+undefined variable inside a `no_log` loop. And every key of
+`openbao_approle_cidr_class_overrides` must name a declared role, because an
+override that matches nothing is a silent no-op that leaves its role on the
+machine default while the file says otherwise. `unbound` stays a decision that
+is written down with a reason, never something a role arrives at by omission.
+
 The one exception throughout is `public`: it needs no secret-zero, no
 redemption cap and no source binding, since it only unlocks non-exploitable
 facts.
 
+Every check above assumes the declared list is the complete truth. It is not,
+by construction: reconciliation only ever loops what code declares, so an
+identity created by any other path — a rename that left the old name live, a
+manual break-glass create nobody backfilled — is invisible to every one of
+them and keeps whatever bounds it was created with forever. The converge
+closes that by listing what actually exists in the store (`bao list
+auth/approle/role`, granted read-only to the reconcile identity) and failing
+by name on anything live that is declared nowhere. A genuine, deliberate
+exception is named in `openbao_approle_undeclared_exceptions`, next to the
+declarations themselves, with a reason — never a silent allowlist elsewhere.
+The reverse direction (declared but not yet live) only warns: that is the
+ordinary shape of a role about to be created, not a leak.
+
 ### How a human gets break-glass now
 
-`admin` used to be standing: `role_id` plus a non-expiring, unlimited-use
-`secret_id` in a personal keychain. It is now inert and bounded like every other
-break-glass tier (1h token, 2h ceiling, 15m single-use `secret_id`), which only
-works because there is a way to mint the next one without holding a standing
-credential. That way is the `human-unlock` policy, attached to the operator's
-own `userpass` user rather than to an AppRole — a person is not a workload, so
-there is no secret-zero pair to store anywhere.
-
-1. The operator logs in: `bao login -method=userpass username=<user>`, plus a
-   TOTP passcode (enforced on the whole userpass mount).
-2. They wrap a single-use `secret_id` for the tier they need:
-   `bao write -wrap-ttl=90s -f auth/approle/role/admin/secret-id`.
-3. They hand the wrapping token to the session, which unwraps it and logs in as
-   `admin` — one login, then the token lives its 15m window (renewable to 30m).
-4. Nothing persists. The `secret_id` was single-use and is spent; the token
-   expires on its own.
-
-`human-unlock` is the exact complement of `approle-issuer`: the issuer mints the
-automatable roles (`manage_secret_id` unset), human-unlock mints the human-gated
-tiers (`manage_secret_id: false`). Both derive their lists from that one marker,
-so every role is mintable by exactly one of them and a new tier cannot be
-forgotten by either. Neither can mint the other's set, and neither can write a
-policy.
-
-**Enrolment is a one-time human step and is deliberately not automated.** The
-role declares the TOTP method (`identity/mfa/method/totp`) and the enforcement
-(`identity/mfa/login-enforcement/<name>`, scoped to the userpass mount
-accessor), but a converge that could enrol the second factor would be holding
-it, which would make it not a second factor. Enrol once, as a human:
-
-```bash
-bao write identity/mfa/method/totp/admin-generate \
-  method_id=<id> entity_id=<the operator's entity id>
-```
-
-**Order matters.** Enrol, then verify a full userpass+TOTP login, and only then
-destroy the standing `admin` secret_id — the enforcement is live as soon as the
-converge applies it, so an unenrolled user cannot log in.
-
-The role never sets or reads the password. It updates only the `token_*` fields
-on an existing user (OpenBao writes the password only when that parameter is
-explicitly present), and if the user does not exist the converge fails with an
-instruction rather than creating a passwordless administrator.
-
-The policy/AppRole set is driven by `openbao_policies` / `openbao_approles` in
-`defaults/main.yml` — add a row to grow the RBAC surface (a new policy template
-goes beside the others in `templates/`). Adding a row **after** the cluster is
-already initialized needs a privileged token supplied via `BAO_TOKEN` (see
-[Idempotency](operations.md#idempotency)) — only the newly-added identities get created and
-get fresh credentials; existing ones are untouched.
+See [Break-glass access](break-glass-access.md) — the `human-unlock` login
+flow, TOTP enrolment order, and how the policy/AppRole set grows.
