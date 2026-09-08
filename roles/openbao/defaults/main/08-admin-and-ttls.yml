@@ -127,6 +127,14 @@ openbao_approle_cidr_class_overrides:
   github-write: workstation
   # Ephemeral CI runners sit on their own isolated segment.
   github-runner: ci
+  # Operator-run, not machine-resident: the platform deploy is driven from the
+  # operator's workstation against a remote engine, so it belongs to the same
+  # class as the other identities that machine holds. It defaulted to the
+  # machine class, which stopped accepting the workstation when that machine
+  # moved onto a client segment — the deploy then failed on source address
+  # while its credentials were perfectly valid, which reads as a broken
+  # credential rather than a misclassified one.
+  iac-platform-deploy: workstation
   # The cross-repo apply-lock holder: taken interactively from the operator's
   # own workstation AND by every automation host during a converge/apply. A
   # single class here would break one caller or the other -- do not "tidy"
