@@ -1,0 +1,87 @@
+---
+# The reconcile identity must not declare as machine-only.
+#
+# It runs from the execution plane AND is the documented workstation path for
+# read-only queries. It is currently unbound in the store, which is why the
+# workstation use works; the moment the declared class is actually applied, a
+# machine-only class refuses the workstation on source address while the
+# credentials stay valid. That reads as a broken credential rather than a
+# misclassified one, and the same mistake has already been made once here for
+# the platform deploy identity.
+#
+# The map is RENDERED from the role's own defaults rather than restated: it is
+# built by combining a default over every declared name, so a restated copy
+# would drift the moment either half changes.
+- name: Verify the AppRole source-address class map
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    role_defaults: "{{ playbook_dir }}/../../roles/openbao/defaults/main"
+    # Any non-empty values will do: the assertions are about CLASS NAMES, not
+    # about the ranges, and no real range is ever committed here.
+    openbao_management_cidrs: "192.0.2.0/24"
+    openbao_workstation_cidrs: "198.51.100.0/24"
+    openbao_ci_cidrs: "203.0.113.0/24"
+    openbao_ssh_source_cidrs: "192.0.2.0/24"
+
+  tasks:
+    - name: Load the openbao role defaults
+      ansible.builtin.include_vars:
+        dir: "{{ role_defaults }}"
+
+    # include_vars outranks play vars, so the fixture ranges have to be set
+    # AFTER the load or the defaults' own (env-derived, empty here) values win
+    # and every class resolves empty. The class definitions are lazy templates,
+    # so setting the inputs now is enough for them to resolve.
+    - name: Supply the range inputs the class definitions read
+      ansible.builtin.set_fact:
+        openbao_management_cidrs: "192.0.2.0/24"
+        openbao_workstation_cidrs: "198.51.100.0/24"
+        openbao_ci_cidrs: "203.0.113.0/24"
+
+    - name: The reconcile identity is declared, or this test is asserting nothing
+      ansible.builtin.assert:
+        that:
+          - "'openbao-reconcile' in (openbao_approles | map(attribute='name') | list)"
+        fail_msg: >-
+          openbao-reconcile is not in the declared AppRole set, so the class map
+          below cannot contain it and every assertion here would pass vacuously.
+
+    - name: It must reach both the execution plane and the workstation
+      vars:
+        cls: "{{ openbao_approle_cidr_class_map['openbao-reconcile'] }}"
+      ansible.builtin.assert:
+        that:
+          - cls != 'machine'
+          - cls in ['machine_or_workstation', 'workstation']
+        fail_msg: >-
+          openbao-reconcile declares class '{{ cls }}'. A machine-only class
+          refuses the documented workstation callers on source address once the
+          class is applied, with credentials that are perfectly valid — the
+          same failure the platform deploy identity already hit. Move those
+          callers first if this is to be narrowed.
+
+    - name: A class that carries a role must resolve to a non-empty range
+      vars:
+        cls: "{{ openbao_approle_cidr_class_map['openbao-reconcile'] }}"
+      ansible.builtin.assert:
+        that:
+          - (openbao_approle_cidr_classes[cls] | default('')) | length > 0
+        fail_msg: >-
+          Class '{{ cls }}' resolves to an empty range, which binds nothing.
+          An empty class is indistinguishable from no binding at all.
+
+    - name: The unbound opt-out stays deliberate, not a dumping ground
+      vars:
+        unbound_names: >-
+          {{ openbao_approle_cidr_class_map | dict2items
+             | selectattr('value', 'equalto', 'unbound')
+             | map(attribute='key') | list | sort }}
+      ansible.builtin.assert:
+        that:
+          - unbound_names | length <= 2
+        fail_msg: >-
+          {{ unbound_names | length }} identities declare the unbound class
+          ({{ unbound_names | join(', ') }}). Each one needs a written reason
+          next to it; unbound is the documented opt-out, not the fallback.
