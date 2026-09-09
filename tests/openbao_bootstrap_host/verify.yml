@@ -1,0 +1,108 @@
+---
+# The store's provisioning host dropping out of a run must be LOUD.
+#
+# Everything init.yml owns runs on one host, gated by
+# `inventory_hostname == openbao_bootstrap_host`. When that host is not in the
+# play the gate is false everywhere, so cluster init, RBAC policies, AppRole
+# reconciliation and the undeclared-identity audit all skip and the run still
+# reports success. That went unnoticed for three days.
+#
+# Both directions are asserted. Only checking that the guard stays quiet when
+# the host is present would pass just as happily against a guard that can
+# never fire at all.
+- name: Verify the bootstrap-host-absent guard
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    guard_file: "{{ playbook_dir }}/../../roles/openbao/tasks/main/configure_and_bootstrap.yml"
+    guard_task_name: >-
+      FAIL -- the store's provisioning host dropped out of this run, so nothing
+      it owns will happen
+
+  tasks:
+    # Read the guard's own condition out of the role rather than restating it:
+    # a restated condition passes forever while the role's copy drifts.
+    - name: Read the guard task out of the role
+      ansible.builtin.set_fact:
+        guard_task: >-
+          {{ (lookup('ansible.builtin.file', guard_file) | from_yaml)
+             | selectattr('name', 'equalto', guard_task_name | replace('\n', ' ') | trim)
+             | first | default({}, true) }}
+
+    - name: The guard must still exist, under that name
+      ansible.builtin.assert:
+        that:
+          - guard_task | length > 0
+        fail_msg: >-
+          The bootstrap-host-absent guard is not in
+          roles/openbao/tasks/main/configure_and_bootstrap.yml. It was either
+          renamed, in which case this test must follow it, or removed — in
+          which case the store's provisioning silently not running becomes
+          invisible again. Do not delete this test to make the suite pass.
+
+    - name: It must run once, not once per host
+      ansible.builtin.assert:
+        that:
+          - guard_task.run_once | default(false) | bool
+        fail_msg: >-
+          Without run_once the guard reports the same absence once per host,
+          which buries it.
+
+    # The condition is the load-bearing part: ansible_play_hosts holds the
+    # hosts STILL ACTIVE, so a host that went unreachable mid-play has already
+    # left it. `groups[...]` or `ansible_play_hosts_all` would still contain
+    # the dropped host and the guard would never fire.
+    # Matched as a whole clause, not a substring: `... not in
+    # ansible_play_hosts` is a prefix of `... not in ansible_play_hosts_all`,
+    # so a substring check accepts the one variable that would stop the guard
+    # ever firing.
+    - name: It must test membership of the hosts still active in the play
+      vars:
+        clauses: >-
+          {{ guard_task.when | default([]) | map('trim') | list }}
+      ansible.builtin.assert:
+        that:
+          - "'openbao_bootstrap_host not in ansible_play_hosts' in clauses"
+          - "'openbao_bootstrap_host in ansible_play_hosts_all' in clauses"
+        fail_msg: >-
+          The guard must test BOTH lists (found: {{ clauses }}). Absent from
+          the active hosts alone would also fire on a deliberately scoped run;
+          present in the play's full list is what makes it mean "dropped out"
+          rather than "not asked for". Dropping either clause makes the guard
+          either incapable of firing or noisy enough to be switched off.
+
+    # Evaluate the condition's SHAPE both ways, so this proves behaviour and
+    # not just text. The stand-in names are deliberate: ansible_play_hosts is
+    # a reserved magic variable and a task-level `vars` entry does not shadow
+    # it, so a fixture using the real name would silently test the real play's
+    # host list instead of the fixture. The assertion above is what pins the
+    # real variable names in the role.
+    - name: It fires when the bootstrap host was in the play and dropped out
+      vars:
+        bootstrap_host: openbao-01.example.com
+        all_hosts: [openbao-01.example.com, openbao-02.example.com]
+        active_hosts: [openbao-02.example.com]
+      ansible.builtin.assert:
+        that:
+          - bootstrap_host in all_hosts
+          - bootstrap_host not in active_hosts
+
+    - name: It stays quiet when the bootstrap host converged normally
+      vars:
+        bootstrap_host: openbao-01.example.com
+        all_hosts: [openbao-01.example.com, openbao-02.example.com]
+        active_hosts: [openbao-01.example.com, openbao-02.example.com]
+      ansible.builtin.assert:
+        that:
+          - not (bootstrap_host in all_hosts and bootstrap_host not in active_hosts)
+
+    # The false positive that would get the guard switched off.
+    - name: It stays quiet on a run deliberately scoped away from that host
+      vars:
+        bootstrap_host: openbao-01.example.com
+        all_hosts: [openbao-02.example.com]
+        active_hosts: [openbao-02.example.com]
+      ansible.builtin.assert:
+        that:
+          - not (bootstrap_host in all_hosts and bootstrap_host not in active_hosts)

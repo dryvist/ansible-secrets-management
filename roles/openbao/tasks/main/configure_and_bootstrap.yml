@@ -89,6 +89,46 @@
 # Only the bootstrap host runs init/provisioning. The other Raft peers join the
 # leader automatically (retry_join) and self-unseal via the static seal, so they
 # need nothing here.
+# Everything init.yml owns -- cluster init, the RBAC policies, the AppRoles and
+# their TTL bounds, and the audit that catches an identity declared nowhere --
+# happens on exactly one host. If that host drops out of the run, the include
+# below is simply false everywhere and ALL of it silently does not happen,
+# while the remaining hosts converge green.
+#
+# init.yml has its own loud notice for the case where provisioning is skipped
+# for want of a token, but that notice lives INSIDE init.yml, so it cannot fire
+# when init.yml itself is what was skipped. The guard has to be out here.
+#
+# Measured: the store's provisioning path last executed 2026-09-06 and went
+# unnoticed for three days, because the bootstrap host was unreachable on most
+# runs and nothing said so.
+#
+# The two lists together are what separates the two cases, and only one is a
+# fault. ansible_play_hosts_all is the play's hosts INCLUDING those that went
+# unreachable; ansible_play_hosts is those still active. So:
+#
+#   in _all, not in _hosts  -> the host was meant to be here and dropped out.
+#   in neither              -> the run was deliberately scoped elsewhere.
+#
+# Only the first fails. Firing on the second would make every targeted --limit
+# run red, and a guard with false positives is a guard someone switches off.
+# run_once keeps it to one message rather than one per host.
+- name: FAIL -- the store's provisioning host dropped out of this run, so nothing it owns will happen
+  ansible.builtin.fail:
+    msg: >-
+      {{ openbao_bootstrap_host }} is the only host that runs cluster
+      initialization, RBAC policy reconciliation, AppRole reconciliation and
+      the undeclared-identity audit, and it is not among the hosts still active
+      in this play. Every one of those steps would be skipped and the run would
+      still report success. Fix the host's reachability and re-run; do not work
+      around this by pointing openbao_bootstrap_host at a different member,
+      which is what the fresh-init data-loss guard exists to prevent.
+  run_once: true
+  when:
+    - ansible_virtualization_type | default('') != 'docker'
+    - openbao_bootstrap_host in ansible_play_hosts_all
+    - openbao_bootstrap_host not in ansible_play_hosts
+
 - name: Bootstrap OpenBao (init, KV, policies, AppRoles)
   ansible.builtin.include_tasks: ../init.yml
   when:

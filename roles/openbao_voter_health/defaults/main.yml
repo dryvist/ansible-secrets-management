@@ -32,7 +32,12 @@ openbao_voter_health_timeout_seconds: 5
 # gets it (SPLUNK_HEC_TOKEN, Doppler/SOPS — see AGENTS.md env var table); this
 # role invents no new secret.
 openbao_voter_health_splunk_hec_token: "{{ lookup('env', 'SPLUNK_HEC_TOKEN') | default('', true) }}"
-openbao_voter_health_splunk_index: openbao
+# The index the sampler ships to. It must be an index that EXISTS and that
+# this token is permitted to write: the collector rejects anything else with
+# "Incorrect index", and every event is lost. `openbao_audit` is the declared
+# index for this component; a dedicated telemetry index can be introduced
+# later, but it has to be declared on the platform first.
+openbao_voter_health_splunk_index: openbao_audit
 openbao_voter_health_splunk_sourcetype: "openbao:voter:health"
 
 # --- Raft apply-lag (authenticated, currently unavailable) ---------------
