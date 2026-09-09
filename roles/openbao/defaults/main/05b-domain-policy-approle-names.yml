@@ -137,39 +137,6 @@ openbao_approle_issuer_approle_name: approle-issuer
 # secret_id of its own). It mints the human-gated tiers approle-issuer cannot,
 # and is what replaces the retired standing `admin` credential.
 openbao_human_unlock_policy_name: human-unlock
-openbao_reconcile_excluded_policies:
-  - "{{ openbao_approle_issuer_policy_name }}"
-  # Anything that can rewrite this policy can grant itself the break-glass
-  # unlock, so the unattended identity must not reach it.
-  - "{{ openbao_human_unlock_policy_name }}"
-  - "{{ openbao_ai_admin_policy_name }}"
-  - "{{ openbao_github_admin_policy_name }}"
-  - "{{ openbao_slack_admin_policy_name }}"
-  - "{{ openbao_reconcile_policy_name }}"
-# Repositories a github-write identity may name (exactly one per request; the
-# wrapper sends `repositories` as a plain STRING, `installation_id` as a
-# STRING). Values are repository NAMES resolved within whichever installation
-# the request names — a name existing in both accounts is therefore
-# allowlisted in both (accepted, documented). Editing the list + converging IS
-# the write-grant process; anything off-list needs the human-gated
-# github-admin tier.
-#
-# The names live in the iac secret store as OPENBAO_GITHUB_WRITE_REPOS (a
-# comma-separated string), NOT inline here: this repository is public and the
-# installations cover private repositories, so an inline list would disclose
-# private repository names to anyone reading it. Same reasoning as the other
-# lookup('env', ...) values above. Keep it in sync with the installations —
-# compare against `gh api /installation/repositories` for each owner. An unset
-# variable yields an empty list, which denies every write mint (fails closed).
-#
-# EXPLICIT LITERALS ONLY — never add a glob (verified live 2026-07-18):
-#   * OpenBao's ACL does not element-match LIST-valued request parameters, so
-#     the wrapper sends `repositories` as a comma-capable STRING the ACL can
-#     compare. Exact literals make comma smuggling impossible
-#     ("docs,evil" != "docs"), but a prefix glob like "nix-*" would match
-#     "nix-a,evil-repo" and hand the caller an off-list repo.
-#   * `installation_id` must be allowlisted (and sent) in STRING form — the
-#     JSON-number form matches neither a quoted nor an unquoted policy value.
 openbao_github_write_repo_allowlist: >-
   {{ (lookup('env', 'OPENBAO_GITHUB_WRITE_REPOS') | default('', true)).split(',')
      | map('trim') | reject('equalto', '') | list }}

@@ -91,6 +91,18 @@
 # ansible_become: false because a delegated task inherits the PLAY's become
 # regardless of any task-level setting, and would otherwise try to escalate on
 # the control node.
+# Preferred over secret-zero: whatever supplies a token is maintaining it.
+# Checked BEFORE the login so a host carrying both mints nothing extra.
+- name: Use the pre-issued reconcile token when one is supplied
+  ansible.builtin.set_fact:
+    openbao_bootstrap_token: "{{ openbao_reconcile_token }}"
+    openbao_reconcile_mode: true
+  no_log: true
+  when:
+    - openbao_status.initialized
+    - openbao_provisioning_token | length == 0
+    - openbao_reconcile_token | length > 0
+
 - name: Log in as the reconcile identity for routine RBAC reconciliation
   community.hashi_vault.vault_login:
     url: "{{ openbao_reconcile_addr }}"
@@ -102,10 +114,13 @@
     ansible_become: false
   register: openbao_reconcile_login
   no_log: true
-  failed_when: false
+  # ignore_errors, NOT `failed_when: false`: measured, the latter leaves the
+  # result with no `msg` at all, so the failure below cannot name the cause.
+  ignore_errors: true
   when:
     - openbao_status.initialized
     - openbao_provisioning_token | length == 0
+    - openbao_reconcile_token | length == 0
     - openbao_reconcile_role_id | length > 0
     - openbao_reconcile_secret_id | length > 0
     - openbao_reconcile_addr | length > 0
@@ -132,14 +147,14 @@
       OpenBao reconcile login returned no token on {{ inventory_hostname }},
       so RBAC was NOT reconciled. Secret-zero IS present, so this is not the
       never-bootstrapped case.
-      This message does NOT diagnose which cause applies -- `failed_when: false`
-      keeps a module-level error indistinguishable from a rejected credential,
-      and `no_log` hides both. Check, in order:
-        1. the module itself errored (re-run this task with no_log removed);
-        2. BAO_ADDR is unreachable from the CONTROLLER, which is where this
-           login is delegated;
-        3. the AppRole was deleted or its secret_id rotated without
-           republishing -- re-issue via a privileged run and republish.
+      What the store actually said:
+      {{ (openbao_reconcile_login.msg | default('(no message -- the module did not run)'))
+         | regex_replace('\\s+', ' ') }}
+      Read that message first; it distinguishes a rejected credential from an
+      endpoint the CONTROLLER cannot reach, which is where this login is
+      delegated. A rejection on source-address grounds is the CIDR class doing
+      its job and means this identity may not reconcile from HERE -- do not add
+      a range to get past it.
       To deliberately fall back to the loud skip, unset
       OPENBAO_APPROLE_OPENBAO_RECONCILE_{ROLE,SECRET}_ID.
   when:
@@ -200,11 +215,14 @@
       ({{ openbao_generated_app_secrets | default({}) | length }} generated-secret
       apps, {{ openbao_promoted_app_secrets | default({}) | length }} promoted,
       {{ openbao_policies | default([]) | length }} policies left untouched).
-      Routine reconciliation is supposed to happen WITHOUT a token, as the
-      openbao-reconcile identity -- reaching this message means its secret-zero
-      (OPENBAO_APPROLE_OPENBAO_RECONCILE_ROLE_ID / _SECRET_ID) is absent from
-      the environment. Publish it, or re-run once with a provisioning token to
-      create the AppRole. Until then a declared policy change does NOT land.
+      Routine reconciliation is supposed to happen WITHOUT a provisioning token,
+      as the reconcile identity. Reaching this message means this host carries
+      NEITHER of the two ways to be that identity: no OPENBAO_RECONCILE_TOKEN
+      (a token that already holds the policy, maintained by an agent on the
+      host -- the intended shape for an unattended plane), and no secret-zero
+      (OPENBAO_APPROLE_OPENBAO_RECONCILE_ROLE_ID / _SECRET_ID). Supply one of
+      them. Until then a declared policy change does NOT land, on this run or
+      any future one, and the recap stays green while it does not.
   when: openbao_bootstrap_token is not defined
 
 # --- KV v2 mount (add-if-missing) -------------------------------------------

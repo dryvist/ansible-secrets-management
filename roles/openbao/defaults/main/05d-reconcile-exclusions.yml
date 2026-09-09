@@ -1,0 +1,58 @@
+---
+# The RBAC set the routine reconcile identity may NOT touch.
+#
+# Split out of the names file purely for size: that file is at its budget and
+# this list grows every time an identity earns an exclusion, so keeping them
+# together meant the next entry would be the one that could not be added.
+#
+# The list is matched against POLICY names when filtering policies and against
+# APPROLE names when filtering AppRoles, so a name belongs here for either
+# half. Anything that can rewrite its own grant, or grant the break-glass
+# unlock, goes here — an identity able to edit its own bounds has no bounds.
+openbao_reconcile_excluded_policies:
+  - "{{ openbao_approle_issuer_policy_name }}"
+  # Anything that can rewrite this policy can grant itself the break-glass
+  # unlock, so the unattended identity must not reach it.
+  - "{{ openbao_human_unlock_policy_name }}"
+  - "{{ openbao_ai_admin_policy_name }}"
+  - "{{ openbao_github_admin_policy_name }}"
+  - "{{ openbao_slack_admin_policy_name }}"
+  - "{{ openbao_reconcile_policy_name }}"
+  # This list is matched against POLICY names when filtering policies and
+  # against APPROLE names when filtering AppRoles, so a name belongs here for
+  # either half. This entry is the AppRole half.
+  #
+  # The execution plane's identity now holds the reconcile policy, so a routine
+  # converge runs AS it. Without this exclusion that run could rewrite its own
+  # AppRole — including the non-expiring secret_id whose defensibility rests
+  # entirely on the grant it carries. An identity able to edit its own bounds
+  # has no bounds.
+  #
+  # The consequence is deliberate: this AppRole is created and changed only by
+  # a privileged run, which is the human checkpoint the non-expiring credential
+  # is traded against.
+  - "{{ openbao_semaphore_approle_name }}"
+# Repositories a github-write identity may name (exactly one per request; the
+# wrapper sends `repositories` as a plain STRING, `installation_id` as a
+# STRING). Values are repository NAMES resolved within whichever installation
+# the request names — a name existing in both accounts is therefore
+# allowlisted in both (accepted, documented). Editing the list + converging IS
+# the write-grant process; anything off-list needs the human-gated
+# github-admin tier.
+#
+# The names live in the iac secret store as OPENBAO_GITHUB_WRITE_REPOS (a
+# comma-separated string), NOT inline here: this repository is public and the
+# installations cover private repositories, so an inline list would disclose
+# private repository names to anyone reading it. Same reasoning as the other
+# lookup('env', ...) values above. Keep it in sync with the installations —
+# compare against `gh api /installation/repositories` for each owner. An unset
+# variable yields an empty list, which denies every write mint (fails closed).
+#
+# EXPLICIT LITERALS ONLY — never add a glob (verified live 2026-07-18):
+#   * OpenBao's ACL does not element-match LIST-valued request parameters, so
+#     the wrapper sends `repositories` as a comma-capable STRING the ACL can
+#     compare. Exact literals make comma smuggling impossible
+#     ("docs,evil" != "docs"), but a prefix glob like "nix-*" would match
+#     "nix-a,evil-repo" and hand the caller an off-list repo.
+#   * `installation_id` must be allowlisted (and sent) in STRING form — the
+#     JSON-number form matches neither a quoted nor an unquoted policy value.

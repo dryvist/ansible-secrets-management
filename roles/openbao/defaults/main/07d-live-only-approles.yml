@@ -1,0 +1,32 @@
+---
+# The four identities that were live and declared nowhere (names in 05e).
+#
+# Declared to MATCH THE STORE, not to correct it: a non-expiring secret_id and
+# the source ranges they already carry. Applying a finite lifetime here instead
+# would expire a credential nothing re-mints, which is precisely how the
+# converge silently moved onto an unbounded identity on 2026-09-06. Give them a
+# lifetime back when something re-mints on a schedule.
+#
+# What bounds them meanwhile is the source range, applied to all four, and
+# asserted by tests/plane_identity_bounds/verify.yml.
+#
+# Separate file rather than more rows in 07b: that file is at the per-file size
+# budget CI enforces, and the remedy for that budget is always splitting the
+# source. These four also share one rationale, so they read better together.
+openbao_live_only_approles:
+  - name: "{{ openbao_terraform_approle_name }}"
+    policy: "{{ openbao_terraform_live_policy_name }}"
+    secret_id_ttl: "0s"
+    secret_id_num_uses: 0
+  - name: "{{ openbao_vikunja_approle_name }}"
+    policy: "{{ openbao_vikunja_live_policy_name }}"
+    secret_id_ttl: "0s"
+    secret_id_num_uses: 0
+  - name: "{{ openbao_media_rotate_approle_name }}"
+    policy: "{{ openbao_media_rotate_live_policy_name }}"
+    secret_id_ttl: "0s"
+    secret_id_num_uses: 0
+  - name: "{{ openbao_github_write_x10_approle_name }}"
+    policy: "{{ openbao_github_write_x10_live_policy_name }}"
+    secret_id_ttl: "0s"
+    secret_id_num_uses: 0
