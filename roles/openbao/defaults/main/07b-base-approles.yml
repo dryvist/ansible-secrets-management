@@ -35,11 +35,17 @@ openbao_base_approles:
   # No config-write: that capability belongs to the systems that AUTHOR config
   # (see config-write-policy.hcl.j2), and this one only runs them. Attaching it
   # would make a third holder of a deliberately two-holder capability.
+  #
+  # It also carries the RECONCILE policy: without it an unattended converge
+  # skips the whole provisioning path and still reports success. On the
+  # existing holder, never a second identity — see the test named below.
+  # tests/plane_identity_bounds/verify.yml asserts what keeps this safe.
   - name: "{{ openbao_semaphore_approle_name }}"
     secret_id_ttl: "0s"
     secret_id_num_uses: 0
     token_policies: >-
-      {{ [openbao_ansible_converge_policy_name, openbao_semaphore_policy_name]
+      {{ [openbao_ansible_converge_policy_name, openbao_semaphore_policy_name,
+          openbao_reconcile_policy_name]
          + (['ssh-sign-automation-semaphore'] if openbao_ssh_engine_enabled else []) }}
   - name: "{{ openbao_observability_approle_name }}"
     policy: "{{ openbao_observability_policy_name }}"
