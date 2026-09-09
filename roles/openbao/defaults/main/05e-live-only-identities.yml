@@ -1,0 +1,29 @@
+---
+# Identities that exist in the running store and were declared nowhere.
+#
+# Four of them, found by comparing the live AppRole list against this
+# repository's declared set. All four authenticate regularly, so they are real
+# workloads rather than leftovers — two others found in the same sweep had one
+# login between them in ninety days and were revoked instead.
+#
+# THE NAMES ONLY, DELIBERATELY. Each of these carries a policy of the same name
+# that this repository also does not declare. Attaching an existing policy by
+# name binds the identity without touching what that policy grants: the
+# reconciler writes token_policies and nothing else. Transcribing four policy
+# documents from the live store into a converge that then WRITES them back is a
+# different and much riskier change — one wrong path and the converge replaces
+# a working grant with a broken one. Declaring the identity is what closes the
+# undeclared-identity gap; managing its grant is separate work with its own
+# verification.
+#
+# So after this, the audit stops reporting them and the store still owns their
+# policy content. That is the honest state, and it is better than either
+# leaving them undeclared or pretending a transcription is management.
+openbao_terraform_approle_name: terraform
+openbao_terraform_live_policy_name: terraform
+openbao_vikunja_approle_name: vikunja
+openbao_vikunja_live_policy_name: vikunja
+openbao_media_rotate_approle_name: media-rotate
+openbao_media_rotate_live_policy_name: media-rotate
+openbao_github_write_x10_approle_name: github-write-x10
+openbao_github_write_x10_live_policy_name: github-write-x10

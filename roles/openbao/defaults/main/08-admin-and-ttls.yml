@@ -169,6 +169,15 @@ openbao_approle_cidr_class_overrides:
   # iac-platform-deploy already hit; do not narrow this to `machine` alone
   # without first moving those workstation callers somewhere else.
   openbao-reconcile: machine_or_workstation
+  # The four live-only identities (05e). The union, matching what they carry in
+  # the store today, so the first reconcile does not move them. Narrowing each
+  # to the class it truly needs is a per-identity decision and belongs with
+  # whoever owns the workload — getting it wrong refuses a valid credential on
+  # source address, which reads as a broken credential rather than a
+  # misclassified one, and that mistake has been made twice here already.
+  terraform: machine_or_workstation
+  vikunja: machine_or_workstation
+  media-rotate: machine_or_workstation
 # Every declared role's class, defaults filled in and then overridden — so a
 # lookup never has to cope with a missing key. (`map('extract', dict, default)`
 # does NOT take a default: it raises on the first name absent from the override
