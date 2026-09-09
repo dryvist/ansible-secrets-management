@@ -143,6 +143,16 @@ openbao_approle_cidr_class_overrides:
   # Non-exploitable facts, shipped ambiently to anything that asks — a source
   # restriction would break that contract and protects nothing.
   public: unbound
+  # The routine reconcile identity runs from the execution plane AND is the
+  # documented workstation path for read-only queries against the platform and
+  # the trackers. It carried no override, so it declared as `machine` — and it
+  # is currently UNBOUND live, which is why the workstation use has worked.
+  # Applying the declared class as-is would refuse the workstation on source
+  # address while its credentials stayed valid, which reads as a broken
+  # credential rather than a misclassified one. That is the same failure
+  # iac-platform-deploy already hit; do not narrow this to `machine` alone
+  # without first moving those workstation callers somewhere else.
+  openbao-reconcile: machine_or_workstation
 # Every declared role's class, defaults filled in and then overridden — so a
 # lookup never has to cope with a missing key. (`map('extract', dict, default)`
 # does NOT take a default: it raises on the first name absent from the override
