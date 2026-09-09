@@ -1,0 +1,135 @@
+---
+# The execution plane's identity holds a secret_id that never expires. That is
+# defensible only while other things bound it, and none of them are visible
+# from the line that grants the exception.
+#
+# It carries the reconcile policy, so a routine converge runs AS it. Without an
+# exclusion, that run can rewrite its own AppRole — including the grant that is
+# the entire justification for the non-expiring credential. An identity able to
+# edit its own bounds has no bounds.
+#
+# This asserts the CONJUNCTION, because removing any single control while
+# leaving the exception in place is the failure mode, and it would read as a
+# tidy-up rather than as the widening it is.
+#
+# Everything is RENDERED from the role's own defaults, never restated: these
+# names are generated, and computing them another way has already produced
+# three different wrong answers in this repository.
+- name: Verify the execution plane's non-expiring credential is bounded elsewhere
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    role_defaults: "{{ playbook_dir }}/../../roles/openbao/defaults/main"
+    openbao_management_cidrs: "192.0.2.0/24"
+    openbao_workstation_cidrs: "198.51.100.0/24"
+    openbao_ci_cidrs: "203.0.113.0/24"
+    openbao_ssh_source_cidrs: "192.0.2.0/24"
+
+  tasks:
+    - name: Load the openbao role defaults
+      ansible.builtin.include_vars:
+        dir: "{{ role_defaults }}"
+
+    # include_vars outranks play vars, so the fixture ranges have to be set
+    # AFTER the load or the defaults' own env-derived (empty here) values win.
+    - name: Supply the range inputs the class definitions read
+      ansible.builtin.set_fact:
+        openbao_management_cidrs: "192.0.2.0/24"
+        openbao_workstation_cidrs: "198.51.100.0/24"
+        openbao_ci_cidrs: "203.0.113.0/24"
+
+    - name: The plane identity is declared, or this test asserts nothing
+      ansible.builtin.assert:
+        that:
+          - openbao_semaphore_approle_name in (openbao_approles | map(attribute='name') | list)
+        fail_msg: >-
+          The execution plane's identity is not in the declared AppRole set, so
+          every assertion below would pass by looking up nothing.
+
+    - name: It can actually reconcile, which is the whole point of it
+      vars:
+        plane: >-
+          {{ openbao_approles
+             | selectattr('name', 'equalto', openbao_semaphore_approle_name) | first }}
+      ansible.builtin.assert:
+        that:
+          - openbao_reconcile_policy_name in (plane.token_policies | default([]))
+        fail_msg: >-
+          The execution plane's identity does not carry the reconcile policy, so
+          an unattended converge cannot be the reconcile identity at all. It
+          then skips the entire provisioning path — policies, AppRoles, TTL
+          bounds and generated application secrets — and still reports success.
+          That is exactly the silence this attachment exists to end.
+
+    - name: It cannot reconcile its own role and retune its own bounds
+      ansible.builtin.assert:
+        that:
+          - openbao_semaphore_approle_name in openbao_reconcile_excluded_policies
+        fail_msg: >-
+          The execution plane's identity is not excluded from routine
+          reconciliation while holding the reconcile policy. A converge running
+          as it could rewrite its own AppRole, including the non-expiring
+          secret_id and the grant that justifies it. The deliberate consequence
+          of the exclusion is that this role changes only under a privileged
+          run — the human checkpoint the credential is traded against.
+
+    # The general guard. Any future non-expiring secret_id must earn it the same
+    # way, or this fails on the day it is added rather than the day it leaks.
+    # Both spellings are checked: the override map AND an inline declaration on
+    # the role itself, because the first version of this guard read only the
+    # map and would have missed the very identity it was written for.
+    #
+    # CORRECTED, and the correction matters — read before tightening this back.
+    # An earlier version accepted only exclusion from reconciliation, and so
+    # failed the four identities that were declared to match what the store
+    # already held. Being RECONCILED BY the unattended identity is not the
+    # hazard; being able to RECONCILE ITSELF is, and the assertion directly
+    # above is what tests for that. A source-address class that is not
+    # `unbound` is a compensating control in its own right — a leaked secret_id
+    # is useless from anywhere else — and it is the control this programme
+    # names alongside lifetime and redemption limits. Excluding a role from
+    # reconciliation is the heavier remedy, reserved for the role that holds
+    # the reconcile policy, because exclusion also means nothing manages it.
+    - name: Every non-expiring secret_id is bounded by something else
+      vars:
+        from_overrides: >-
+          {{ (openbao_approle_secret_id_ttl_overrides | default({}))
+             | dict2items | selectattr('value', 'in', [0, '0', '0s'])
+             | map(attribute='key') | list }}
+        from_declarations: >-
+          {{ openbao_approles
+             | selectattr('secret_id_ttl', 'defined')
+             | selectattr('secret_id_ttl', 'in', [0, '0', '0s'])
+             | map(attribute='name') | list }}
+        bound_by_place: >-
+          {{ (openbao_approle_cidr_class_map | default({})) | dict2items
+             | rejectattr('value', 'equalto', 'unbound')
+             | map(attribute='key') | list }}
+        unprotected: >-
+          {{ (from_overrides + from_declarations) | unique
+             | reject('in', openbao_reconcile_excluded_policies)
+             | reject('in', bound_by_place) | list }}
+      ansible.builtin.assert:
+        that:
+          - unprotected | length == 0
+        fail_msg: >-
+          {{ unprotected | join(', ') }} declare a secret_id that never expires
+          with nothing standing in for the lifetime. Give it one, or bind it to
+          a source-address class, or exclude the role so nothing running as it
+          can rewrite its own controls. Any of the three; none of them
+          optional.
+
+    - name: The guard is looking at something, not passing on an empty set
+      vars:
+        forever: >-
+          {{ openbao_approles | selectattr('secret_id_ttl', 'defined')
+             | selectattr('secret_id_ttl', 'in', [0, '0', '0s'])
+             | map(attribute='name') | list }}
+      ansible.builtin.assert:
+        that:
+          - forever | length > 0
+        fail_msg: >-
+          No declared role carries a non-expiring secret_id, so the guard above
+          asserted nothing. If that exception has genuinely been retired, delete
+          the guard deliberately rather than leaving a check that cannot fail.
