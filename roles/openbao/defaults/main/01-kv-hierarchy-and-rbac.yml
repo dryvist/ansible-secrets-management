@@ -81,6 +81,21 @@ openbao_promoted_app_secrets:
     # promotion map, never in openbao_generated_app_secrets.
     vikunja_jwt_secret: VIKUNJA_JWT_SECRET
     vikunja_admin_password: VIKUNJA_ADMIN_PASSWORD
+    # Optional human operator account. PROMOTED into this app's own bucket
+    # rather than wired to the general-purpose path the pair occupies today:
+    # that path carries exactly these two values, so pointing a domain at it
+    # would stand up a whole resource domain to deliver one account, against
+    # one-bucket-per-workload. Promoting here retires the path instead.
+    # Not app-namespaced like the fields above because these are already
+    # distinct names in the flat merge, and no sibling app declares them.
+    #
+    # ORDER MATTERS. Promotion reads FROM the converge environment, so the
+    # bootstrap rows must still exist while this runs. The consumer stays on
+    # its env lookup until a converge has been observed writing these fields;
+    # only then is the bao-first wiring added and the bootstrap rows removed.
+    # Doing both halves at once deletes the source the promotion reads from.
+    operator_username: DEFAULT_USERNAME
+    operator_password: DEFAULT_PASSWORD
   n8n:
     # The workflow engine's credential-encryption key. PROMOTED, never
     # generated: it is the only thing that can decrypt the credentials already
