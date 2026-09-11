@@ -34,6 +34,7 @@
       semaphore: x
       terrakube_dex: x
       grafana: x
+      litellm: x
     # Supplied by inventory/group_vars/all.yml at run time.
     ingress_domain: example.test
     grafana_hostname: grafana
@@ -180,6 +181,26 @@
         _semaphore_auth_paths:
           - /api/auth/login
           - /api/auth/oidc/authelia/login
+
+    - name: Assert the LiteLLM confidential client renders with the Langfuse shape
+      ansible.builtin.assert:
+        that:
+          # Regression guard: the OIDC client list must keep carrying LiteLLM
+          # as a confidential (client_secret_basic) client, or its SSO login
+          # breaks silently at the next converge.
+          - _litellm_client.client_name == 'LiteLLM'
+          - _litellm_client.public == false
+          - _litellm_client.redirect_uris == ['https://llm.example.test/sso/callback']
+          - _litellm_client.authorization_policy == 'two_factor'
+          - _litellm_client.token_endpoint_auth_method == 'client_secret_basic'
+        fail_msg: >-
+          the LiteLLM OIDC client is missing or malformed in the rendered
+          configuration (got {{ _litellm_client | default('ABSENT') }})
+      vars:
+        _litellm_client: >-
+          {{ (_authelia_raw.content | b64decode | from_yaml)
+             ['identity_providers']['oidc']['clients']
+             | selectattr('client_id', 'eq', 'litellm') | first }}
 
     - name: Authelia access-control verification PASSED
       ansible.builtin.debug:

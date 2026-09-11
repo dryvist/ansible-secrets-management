@@ -21,6 +21,20 @@ opens every Traefik route whose tofu ingress row carries `sso = true`; the
 - **Mail**: identity-verification mails go to the internal SMTP relay
   (Mailpit) — open its UI to click verification links.
 
+## OIDC clients
+
+Authelia is the estate OIDC provider for apps that do their own sign-in.
+Hermes and Donna are public PKCE clients (no secret); Homarr, Langfuse,
+Phoenix, Semaphore, Terrakube's Dex, Grafana and LiteLLM are confidential
+clients. A confidential client's secret is the one exception to the
+no-shared-store rule below — it has a second consumer, the relying party — so
+it is generated once in OpenBao (`secret/apps/authelia`) and hashed guest-side
+into `configuration.yml`; the plaintext never renders. Client ids, redirect
+URIs and secret hash files live in `defaults/main/01-oidc-clients.yml`.
+
+`litellm` is the AI repo's LiteLLM proxy Admin UI (AI `roles/llm_router`);
+its redirect is `https://llm.<domain>/sso/callback`.
+
 ## Secrets — generated at the source, no shared store
 
 Per the workspace generate-at-source rule, NONE of Authelia's secrets live in

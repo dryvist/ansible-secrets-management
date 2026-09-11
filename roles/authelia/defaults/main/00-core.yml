@@ -10,7 +10,7 @@
 # tarball is downloaded and checksum-verified on the CONTROLLER, then the
 # extracted binary is copied to the target — same pattern as roles/vikunja.
 # renovate: datasource=github-releases depName=authelia/authelia
-authelia_version: "4.39.20"
+authelia_version: "4.39.22"
 authelia_release_tgz: "authelia-v{{ authelia_version }}-linux-amd64.tar.gz"
 authelia_release_tgz_url: >-
   https://github.com/authelia/authelia/releases/download/v{{ authelia_version }}/{{ authelia_release_tgz }}
