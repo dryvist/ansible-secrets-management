@@ -206,6 +206,25 @@ identity_providers:
         authorization_policy: two_factor
         require_pkce: false
         token_endpoint_auth_method: client_secret_basic
+      # LiteLLM reads no groups claim and needs no custom claims policy; its
+      # SSO callback is served by the LiteLLM proxy itself.
+      - client_id: '{{ authelia_oidc_litellm_client_id }}'
+        client_name: LiteLLM
+        client_secret: '{{ authelia_oidc_client_secret_hashes.litellm }}'
+        public: false
+        redirect_uris:
+          - '{{ authelia_oidc_litellm_redirect_uri }}'
+        scopes:
+          - openid
+          - profile
+          - email
+        grant_types:
+          - authorization_code
+        response_types:
+          - code
+        authorization_policy: two_factor
+        require_pkce: false
+        token_endpoint_auth_method: client_secret_basic
 
 access_control:
   default_policy: deny
