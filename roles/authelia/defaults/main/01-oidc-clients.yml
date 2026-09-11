@@ -89,6 +89,17 @@ authelia_oidc_grafana_client_secret_plain: >-
      or undef(hint='authelia_oidc_grafana_client_secret missing from OpenBao secret/apps/authelia') }}
 authelia_oidc_grafana_client_secret_hash_file: "{{ authelia_secrets_dir }}/oidc_grafana_client_secret_hash"
 
+# LiteLLM proxy UI (ai roles/llm_router) — confidential client on LiteLLM's
+# generic OIDC backend. The redirect is LiteLLM's documented generic-SSO
+# callback path (<PROXY_BASE_URL>/sso/callback); same bao-first guard shape
+# as the confidential clients above.
+authelia_oidc_litellm_client_id: litellm
+authelia_oidc_litellm_redirect_uri: "https://llm.{{ authelia_cookie_domain }}/sso/callback"
+authelia_oidc_litellm_client_secret_plain: >-
+  {{ (bao_apps_secrets.authelia_oidc_litellm_client_secret | default('', true))
+     or undef(hint='authelia_oidc_litellm_client_secret missing from OpenBao secret/apps/authelia') }}
+authelia_oidc_litellm_client_secret_hash_file: "{{ authelia_secrets_dir }}/oidc_litellm_client_secret_hash"
+
 # Drives tasks/oidc_client_secrets.yml's create-if-absent hash loop and
 # configuration.yml.j2's lookup of the resulting digests. Add a confidential
 # client by appending here — never by editing the task file.
@@ -111,3 +122,6 @@ authelia_oidc_confidential_clients:
   - name: grafana
     secret_plain: "{{ authelia_oidc_grafana_client_secret_plain }}"
     hash_file: "{{ authelia_oidc_grafana_client_secret_hash_file }}"
+  - name: litellm
+    secret_plain: "{{ authelia_oidc_litellm_client_secret_plain }}"
+    hash_file: "{{ authelia_oidc_litellm_client_secret_hash_file }}"
