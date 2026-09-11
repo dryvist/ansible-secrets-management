@@ -220,6 +220,7 @@ openbao_generated_app_secrets:
       authelia_oidc_semaphore_client_secret,
       authelia_oidc_terrakube_dex_client_secret,
       authelia_oidc_grafana_client_secret,
+      authelia_oidc_litellm_client_secret,
     ]
 # Random length for generated app credentials (alnum). secret_key needs more
 # entropy than a login credential, so it gets its own length (matches the 64-char
