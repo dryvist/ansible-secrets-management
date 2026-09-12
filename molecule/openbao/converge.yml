@@ -37,6 +37,29 @@
     openbao_slack_rotate_secret_id: "test-slack-rotate-secret-id"
     openbao_slack_rotate_ntfy_url: "http://ntfy.test/openbao"
     openbao_slack_rotate_healthcheck_url: ""
+    # Splunk MCP rotation AppRole creds + alert target — same reasoning:
+    # overriding the standalone knobs (defaults/main/09) rather than setting
+    # the OPENBAO_APPROLE_SPLUNK_MCP_ROTATE_* env vars, since those lookups
+    # run on the Ansible CONTROLLER at template-render time, not in the
+    # container — an env var set here would need to exist in the shell that
+    # invokes `molecule test`, not the play. This also exercises the row
+    # without depending on `ingress_domain`, which this scenario's inventory
+    # never sets.
+    openbao_splunk_mcp_rotate_role_id: "test-splunk-mcp-rotate-role-id"
+    openbao_splunk_mcp_rotate_secret_id: "test-splunk-mcp-rotate-secret-id"
+    openbao_splunk_mcp_rotate_ntfy_url: "http://ntfy.test/secrets-security"
+    openbao_splunk_mcp_rotate_healthcheck_url: ""
+    # Secret-age auditor AppRole creds + alert target — same reasoning as the
+    # rotator stubs above: the timer never starts under Docker, so these are
+    # inert placeholders that only need to make Phase 14's templates render.
+    # openbao_secret_age_ntfy_url already points at a standalone knob (not a
+    # dict2items-looped table row like the rotators), so it was never at risk
+    # of the ingress_domain-render-before-guard bug those rows had — this
+    # override exists only to exercise the templates, not to route around it.
+    openbao_secret_age_role_id: "test-secret-age-role-id"
+    openbao_secret_age_secret_id: "test-secret-age-secret-id"
+    openbao_secret_age_ntfy_url: "http://ntfy.test/secrets-security"
+    openbao_secret_age_healthcheck_url: ""
     # Exercise the OAuthapp download/extract/immutable-command path. Bootstrap
     # is Docker-guarded, so no Slack client secret or live API is required.
     openbao_oauthapp_engine_enabled: true

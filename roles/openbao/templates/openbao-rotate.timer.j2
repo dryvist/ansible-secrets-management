@@ -1,10 +1,9 @@
 {{ ansible_managed | comment }}
-# Check the Slack app-config token every {{ openbao_slack_rotate_interval }}
-# and rotate it if it's within {{ openbao_slack_rotate_safety_margin }}s of
-# expiry. Rendered by the openbao role.
+# Check/rotate the {{ rotator.name }} credential every {{ rotator.interval }}.
+# Rendered by the openbao role from the openbao_rotators table.
 
 [Unit]
-Description=Check/rotate the Slack app-configuration token every {{ openbao_slack_rotate_interval }}
+Description=Check/rotate the {{ rotator.name }} credential every {{ rotator.interval }}
 Documentation=https://github.com/JacobPEvans/ansible-proxmox-apps
 
 [Timer]
@@ -13,7 +12,7 @@ Documentation=https://github.com/JacobPEvans/ansible-proxmox-apps
 # Persistent=true runs a missed check promptly after downtime rather than
 # waiting a full period, so a guest that was down still rotates promptly.
 OnBootSec=300s
-OnUnitActiveSec={{ openbao_slack_rotate_interval }}
+OnUnitActiveSec={{ rotator.interval }}
 RandomizedDelaySec=30m
 AccuracySec=1m
 Persistent=true

@@ -83,13 +83,56 @@
       that needs one.
     success_msg: openbao-snapshot.sh parses and every binary it declares is installed
 
-# --- Slack app-config token rotation (rendered when slack-admin creds are
-# set; converge.yml stubs them). Same shape as the snapshot check above:
-# file presence + perms here; the actual rotate-decision and CAS-adopt
-# BEHAVIOR is exercised (not just grepped for) by
-# tests/openbao_slack_rotate/verify_rotate_logic.yml, which runs the
-# rendered script against a stubbed curl. ---
-- name: Stat the Slack rotation daemon files
+# --- Table-driven credential rotators (openbao_rotators, defaults/main/09).
+# converge.yml stubs creds for BOTH declared rows (slack-admin, splunk-mcp)
+# so both render under the generic openbao-rotate-<name>.* naming. Same
+# shape as the snapshot check above: file presence + perms here; the actual
+# rotate-decision, CAS-adopt, and stamp BEHAVIOR is exercised (not just
+# grepped for) by tests/openbao_slack_rotate/verify_rotate_logic.yml and
+# tests/openbao_rotate/verify_splunk_mcp_logic.yml, which run the rendered
+# scripts against a stubbed curl. ---
+- name: Stat each active rotator's daemon files
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - /usr/local/bin/openbao-rotate-slack-admin.sh
+    - /etc/openbao/openbao-rotate-slack-admin.env
+    - /etc/systemd/system/openbao-rotate-slack-admin.service
+    - /etc/systemd/system/openbao-rotate-slack-admin.timer
+    - /usr/local/bin/openbao-rotate-splunk-mcp.sh
+    - /etc/openbao/openbao-rotate-splunk-mcp.env
+    - /etc/systemd/system/openbao-rotate-splunk-mcp.service
+    - /etc/systemd/system/openbao-rotate-splunk-mcp.timer
+  register: bao_rotate_files
+
+- name: Assert every active rotator's script, env, service, and timer all rendered
+  ansible.builtin.assert:
+    that:
+      - item.stat.exists
+    fail_msg: "rotator daemon file missing: {{ item.item }}"
+  loop: "{{ bao_rotate_files.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: Assert every active rotator's env file is 0600 (holds the AppRole creds)
+  ansible.builtin.assert:
+    that:
+      - item.stat.mode == '0600'
+    fail_msg: >-
+      {{ item.item }} must be 0600 ({{ item.stat.mode | default('absent') }})
+  loop: "{{ bao_rotate_files.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when: item.item is search('\.env$')
+
+# --- Old pre-table Slack-only rotator, retired ------------------------------
+# roles/openbao/tasks/retire_slack_rotate.yml runs unconditionally alongside
+# the deploy above. This scenario never had the old units to begin with (it
+# converges straight onto the table-driven role), so this also proves the
+# retirement task's stat-gated design is a true no-op when there is nothing
+# to retire — it must NOT create, and must not error over the absence of,
+# any of these four paths.
+- name: Stat the old pre-table Slack-only rotator's paths
   ansible.builtin.stat:
     path: "{{ item }}"
   loop:
@@ -97,21 +140,53 @@
     - /etc/openbao/openbao-slack-rotate.env
     - /etc/systemd/system/openbao-slack-rotate.service
     - /etc/systemd/system/openbao-slack-rotate.timer
-  register: bao_slack_rotate_files
+  register: bao_old_slack_rotate_files
 
-- name: Assert the Slack rotation script, env, service, and timer all rendered
+- name: Assert the old pre-table Slack-only rotator's paths are ABSENT
   ansible.builtin.assert:
     that:
-      - item.stat.exists
-    fail_msg: "Slack rotation daemon file missing: {{ item.item }}"
-  loop: "{{ bao_slack_rotate_files.results }}"
+      - not item.stat.exists
+    fail_msg: >-
+      {{ item.item }} exists — the old pre-table Slack-only rotator was
+      never retired (or was re-created), which races the new
+      openbao-rotate-slack-admin.timer for the same single-use Slack refresh
+      token and the same KV path.
+  loop: "{{ bao_old_slack_rotate_files.results }}"
   loop_control:
     label: "{{ item.item }}"
 
-- name: Assert the Slack rotation env file is 0600 (holds the AppRole creds)
+# --- Secret-age auditor daemon (rendered when secret-age-audit creds are
+# set; converge.yml stubs them). Same shape as the snapshot check above:
+# file presence + perms + the dedicated rsyslog shipping ruleset here; the
+# actual age-classification, false-green, and alert-storm BEHAVIOR is
+# exercised (not just grepped for) by
+# tests/openbao_secret_age/verify_age_logic.yml and
+# verify_age_logic_guards.yml, which run the rendered script against a
+# stubbed bao/curl. ---
+- name: Stat the secret-age auditor daemon files
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - /usr/local/bin/openbao-secret-age.sh
+    - /etc/openbao/openbao-secret-age.env
+    - /etc/systemd/system/openbao-secret-age.service
+    - /etc/systemd/system/openbao-secret-age.timer
+    - /etc/rsyslog.d/21-openbao-secret-age.conf
+  register: bao_secret_age_files
+
+- name: Assert the secret-age auditor's script, env, service, timer, and rsyslog conf all rendered
   ansible.builtin.assert:
     that:
-      - bao_slack_rotate_files.results[1].stat.mode == '0600'
+      - item.stat.exists
+    fail_msg: "secret-age auditor file missing: {{ item.item }}"
+  loop: "{{ bao_secret_age_files.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: Assert the secret-age auditor env file is 0600 (holds the AppRole creds)
+  ansible.builtin.assert:
+    that:
+      - bao_secret_age_files.results[1].stat.mode == '0600'
     fail_msg: >-
-      openbao-slack-rotate.env must be 0600
-      ({{ bao_slack_rotate_files.results[1].stat.mode | default('absent') }})
+      openbao-secret-age.env must be 0600
+      ({{ bao_secret_age_files.results[1].stat.mode | default('absent') }})

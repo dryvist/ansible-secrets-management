@@ -1,0 +1,139 @@
+---
+# Behavioral verification for roles/openbao/templates/openbao-secret-age.sh.j2.
+# Renders the ACTUAL script, then runs it (--dry-run) against stub `curl` and
+# `bao` binaries on PATH (no live OpenBao) to prove the classification logic
+# actually works, not just that the code text is present:
+#
+#   1. a stamp older than max_days classifies as "overdue"
+#   2. a stamp between target_days and max_days classifies as "due"
+#   3. a path tagged custom_metadata.rotation=exempt is skipped entirely
+#   4. a leaf with no rotated_<FIELD> stamp falls back to updated_time,
+#      tagged source "updated_time"
+#   5. an AppRole secret-id accessor older than max_days classifies as
+#      "overdue"
+#
+# The false-green (B1/R2) and alert-storm (B2) guard cases live in the
+# sibling verify_age_logic_guards.yml — split out to stay under this repo's
+# per-file token budget (.token-limits.yaml). Both import the same
+# _fixture_tasks.yml.
+#
+# Usage: ansible-playbook tests/openbao_secret_age/verify_age_logic.yml -c local
+
+- name: Verify the secret-age auditor script's classification logic
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    ansible_become: false
+    _template_dir: "../../roles/openbao/templates"
+    # Mirror defaults/main/09b-secret-age.yml so the fixture matches production.
+    openbao_api_addr: "http://openbao-test:8200"
+    openbao_secret_age_interval: "24h"
+    openbao_secret_age_target_days: 30
+    openbao_secret_age_max_days: 47
+    openbao_secret_age_report_path: "{{ fixture_dir }}/secret-age.json"
+    openbao_secret_age_ntfy_url: "https://ntfy.example.test/secrets-security"
+    openbao_secret_age_healthcheck_url: ""
+    openbao_kv_mount: secret
+    openbao_config_mount: config
+    openbao_group: openbao
+    openbao_absent_stderr_marker: "No value found"
+    openbao_kv_mounts:
+      - path: secret
+      - path: secrets-external
+      - path: config
+        max_versions: 30
+
+  tasks:
+    - name: Set up the fixture (render the script, install stub curl/bao)
+      ansible.builtin.import_tasks: _fixture_tasks.yml
+
+    - name: Run the script (--dry-run — prints the report, sends no alerts)
+      ansible.builtin.command: "{{ fixture_dir }}/openbao-secret-age.sh --dry-run"
+      register: _run
+      changed_when: false
+      environment:
+        # lookup('env', ...), not ansible_env.PATH — gather_facts is false so
+        # the latter is undefined and the override silently drops.
+        PATH: "{{ fixture_dir }}/bin:{{ lookup('env', 'PATH') }}"
+        OPENBAO_APPROLE_SECRET_AGE_AUDIT_ROLE_ID: test-role-id
+        OPENBAO_APPROLE_SECRET_AGE_AUDIT_SECRET_ID: test-secret-id
+
+    - name: Parse the emitted report
+      ansible.builtin.set_fact:
+        _report: "{{ _run.stdout | from_json }}"
+
+    - name: Assert the script ran cleanly and emitted a report
+      ansible.builtin.assert:
+        that:
+          - _run.rc == 0
+        fail_msg: >-
+          The script must exit 0 in the fixture. rc={{ _run.rc }}
+          stdout={{ _run.stdout }} stderr={{ _run.stderr }}
+
+    - name: Assert a stamp past max_days classifies as overdue
+      ansible.builtin.assert:
+        that:
+          - >-
+            _report['items'] | selectattr('path', 'equalto', 'apps/overdue-app')
+            | selectattr('field', 'equalto', 'password')
+            | selectattr('status', 'equalto', 'overdue') | list | length == 1
+        fail_msg: >-
+          apps/overdue-app#password (60d, max=47) must classify as overdue.
+          items={{ _report['items'] }}
+
+    - name: Assert a stamp between target_days and max_days classifies as due
+      ansible.builtin.assert:
+        that:
+          - >-
+            _report['items'] | selectattr('path', 'equalto', 'apps/due-app')
+            | selectattr('field', 'equalto', 'password')
+            | selectattr('status', 'equalto', 'due') | list | length == 1
+        fail_msg: >-
+          apps/due-app#password (35d, target=30/max=47) must classify as due.
+          items={{ _report['items'] }}
+
+    - name: Assert an exempt-tagged path is skipped entirely
+      ansible.builtin.assert:
+        that:
+          - _report['items'] | selectattr('path', 'equalto', 'apps/exempt-app') | list | length == 0
+        fail_msg: >-
+          apps/exempt-app carries custom_metadata.rotation=exempt and must
+          never appear in the report, even though its stamp is 60 days old.
+          items={{ _report['items'] }}
+
+    - name: Assert a leaf with no rotated_<FIELD> stamp falls back to updated_time
+      ansible.builtin.assert:
+        that:
+          - >-
+            _report['items'] | selectattr('path', 'equalto', 'apps/ok-app')
+            | selectattr('field', 'equalto', None)
+            | selectattr('source', 'equalto', 'updated_time')
+            | selectattr('status', 'equalto', 'ok') | list | length == 1
+        fail_msg: >-
+          apps/ok-app has no rotated_<FIELD> custom_metadata, so it must
+          report at path level with source updated_time (fresh, 5d -> ok).
+          items={{ _report['items'] }}
+
+    - name: Assert an AppRole secret-id accessor past max_days classifies as overdue
+      ansible.builtin.assert:
+        that:
+          - >-
+            _report['items'] | selectattr('kind', 'equalto', 'approle')
+            | selectattr('path', 'equalto', 'test-role')
+            | selectattr('status', 'equalto', 'overdue') | list | length == 1
+        fail_msg: >-
+          test-role's secret-id accessor (60d, max=47) must classify as
+          overdue. items={{ _report['items'] }}
+
+    - name: Secret-age auditor classification verification PASSED
+      ansible.builtin.debug:
+        msg: |
+          openbao-secret-age.sh.j2 classification assertions passed:
+          - overdue stamp (60d) -> status overdue
+          - due stamp (35d, target=30/max=47) -> status due
+          - custom_metadata.rotation=exempt path -> skipped entirely
+          - no rotated_<FIELD> stamp -> path-level fallback, source updated_time
+          - AppRole secret-id accessor past max_days -> status overdue
+          See verify_age_logic_guards.yml for the B1/R2/B2 guard cases.

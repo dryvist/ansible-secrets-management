@@ -9,6 +9,14 @@
 #   2. the CAS-rejection adopt path — a token past the safety margin must
 #      call Slack, and a 400 on the write-back must be treated as a
 #      concurrent writer winning (adopt + exit 0), never a failure.
+#   3. the rotated_<field> metadata stamp's policy dependency — a successful
+#      rotation whose AppRole lacks `patch` on the metadata path (a 403,
+#      modeled by the stub exiting nonzero) must FAIL LOUD, and the same
+#      rotation with the grant present must succeed. This is what would have
+#      caught slack-admin-policy.hcl.j2 shipping without the metadata grant:
+#      the stub's default (grant ABSENT) is the regression-catching case,
+#      and Case 3b's opposite outcome with the same script proves the
+#      assertion actually discriminates rather than always failing.
 #
 # GNU `date -u -d` is required (fixture computation below); CI-only, same as
 # the molecule scenarios — do not run locally on macOS (BSD date lacks -d).
@@ -89,6 +97,21 @@
                 json="${json}\"metadata\":{\"version\":5}}}"
                 echo "${json}"
               fi
+              ;;
+            # Models secrets-external/metadata/platform/slack-admin's PATCH
+            # grant. stamp_rotation() only ever PATCHes this path, so a
+            # non-PATCH call here is a script defect, not a fixture gap.
+            # STUB_METADATA_PATCH_GRANTED unset/0 = grant absent (a real
+            # curl -f against a 403 exits nonzero with no output — modeled
+            # here as `exit 1`); =1 = grant present, succeeds.
+            */secrets-external/metadata/platform/slack-admin)
+              is_patch=0
+              for a in "$@"; do [ "${a}" = "PATCH" ] && is_patch=1; done
+              if [ "${is_patch}" != "1" ]; then
+                echo "stub curl: unexpected non-PATCH call to the metadata path: ${url}" >&2
+                exit 1
+              fi
+              [ "${STUB_METADATA_PATCH_GRANTED:-0}" = "1" ] || exit 1
               ;;
             *)
               echo "stub curl: unhandled URL: ${url}" >&2
@@ -186,6 +209,79 @@
           report a brick/manual-regeneration failure for a CAS conflict.
           rc={{ _case2.rc }} output={{ _case2.stdout }} {{ _case2.stderr }}
 
+    # -------------------------------------------------------------------
+    # Case 3a: rotation WINS the CAS write (200, not 400 — this is the
+    # success path Case 2 deliberately never reaches) but the AppRole's
+    # metadata PATCH is rejected (grant absent, modeled as stub exit 1) ->
+    # must fail loud, never silently warn, never report success.
+    # -------------------------------------------------------------------
+    - name: "Case 3a: run the script through a winning rotation with the metadata grant ABSENT"
+      ansible.builtin.command: "{{ fixture_dir }}/openbao-slack-rotate.sh"
+      register: _case3a
+      changed_when: false
+      failed_when: false
+      environment:
+        PATH: "{{ fixture_dir }}/bin:{{ lookup('env', 'PATH') }}"
+        OPENBAO_APPROLE_SLACK_ADMIN_ROLE_ID: test-role-id
+        OPENBAO_APPROLE_SLACK_ADMIN_SECRET_ID: test-secret-id
+        STUB_EXPIRES_AT: "{{ _past_expiry.stdout }}"
+        STUB_NEW_EXP: "{{ _new_exp_epoch.stdout }}"
+        STUB_WRITE_CODE: "200"
+        STUB_CALL_LOG: "{{ fixture_dir }}/case3a-calls.log"
+
+    - name: "Case 3a: read the stub call log"
+      ansible.builtin.slurp:
+        src: "{{ fixture_dir }}/case3a-calls.log"
+      register: _case3a_calls
+
+    - name: "Case 3a: assert the metadata-grant-absent case fails loud"
+      vars:
+        _calls: "{{ _case3a_calls.content | b64decode }}"
+      ansible.builtin.assert:
+        that:
+          - _case3a.rc != 0
+          - "'rotated Slack app config token' in (_case3a.stdout + _case3a.stderr)"
+          - "'stamping' in (_case3a.stdout + _case3a.stderr)"
+          - "'metadata/platform/slack-admin' in _calls"
+        fail_msg: >-
+          Case 3a (rotation succeeds, metadata PATCH grant absent) must fail
+          loud after the KV write succeeds — this is exactly the class of
+          regression a missing `patch` capability on
+          secrets-external/metadata/platform/slack-admin produces in
+          production. rc={{ _case3a.rc }} output={{ _case3a.stdout }} {{ _case3a.stderr }}
+
+    # -------------------------------------------------------------------
+    # Case 3b: same winning rotation, metadata grant PRESENT -> succeeds.
+    # Anti-vacuity: proves Case 3a's failure is because the grant is
+    # missing, not because this test harness always fails a winning
+    # rotation — the only variable that changed is
+    # STUB_METADATA_PATCH_GRANTED.
+    # -------------------------------------------------------------------
+    - name: "Case 3b: run the same winning rotation with the metadata grant PRESENT"
+      ansible.builtin.command: "{{ fixture_dir }}/openbao-slack-rotate.sh"
+      register: _case3b
+      changed_when: false
+      environment:
+        PATH: "{{ fixture_dir }}/bin:{{ lookup('env', 'PATH') }}"
+        OPENBAO_APPROLE_SLACK_ADMIN_ROLE_ID: test-role-id
+        OPENBAO_APPROLE_SLACK_ADMIN_SECRET_ID: test-secret-id
+        STUB_EXPIRES_AT: "{{ _past_expiry.stdout }}"
+        STUB_NEW_EXP: "{{ _new_exp_epoch.stdout }}"
+        STUB_WRITE_CODE: "200"
+        STUB_METADATA_PATCH_GRANTED: "1"
+        STUB_CALL_LOG: "{{ fixture_dir }}/case3b-calls.log"
+
+    - name: "Case 3b: assert the metadata-grant-present case succeeds"
+      ansible.builtin.assert:
+        that:
+          - _case3b.rc == 0
+          - "'rotated Slack app config token' in (_case3b.stdout + _case3b.stderr)"
+        fail_msg: >-
+          Case 3b (rotation succeeds, metadata PATCH grant present) must
+          exit 0 — proves Case 3a's failure tracks the grant, not a harness
+          defect that always fails a winning rotation.
+          rc={{ _case3b.rc }} output={{ _case3b.stdout }} {{ _case3b.stderr }}
+
     - name: Slack rotation script logic verification PASSED
       ansible.builtin.debug:
         msg: |
@@ -193,3 +289,5 @@
           - token far from expiry: no-op, Slack never called
           - token past the safety margin + CAS-rejected write-back: rotates,
             adopts the concurrent writer's result, exits 0 (never bricks)
+          - winning rotation + metadata PATCH grant absent: fails loud
+          - winning rotation + metadata PATCH grant present: succeeds

@@ -86,10 +86,6 @@ openbao_approle_secret_id_num_uses_overrides:
   # session; capping redemptions here would strand them at an arbitrary login.
   # Bounded instead by the CIDR class below until it is deliberately re-minted.
   ai-orchestrator: 0
-  # The anonymous, non-exploitable-facts identity. It carries no secret worth
-  # bounding and is shipped ambiently by design, so a redemption cap buys
-  # nothing and would break every ambient consumer on a fixed schedule.
-  public: 0
 
 # --- secret_id / token CIDR binding -------------------------------------------
 # `secret_id_bound_cidrs` restricts where a secret_id may be REDEEMED;
@@ -156,9 +152,6 @@ openbao_approle_cidr_class_overrides:
   # single class here would break one caller or the other -- do not "tidy"
   # this back to `machine` or `workstation` alone.
   flow-lock: machine_or_workstation
-  # Non-exploitable facts, shipped ambiently to anything that asks — a source
-  # restriction would break that contract and protects nothing.
-  public: unbound
   # The routine reconcile identity runs from the execution plane AND is the
   # documented workstation path for read-only queries against the platform and
   # the trackers. It carried no override, so it declared as `machine` — and it
@@ -178,6 +171,12 @@ openbao_approle_cidr_class_overrides:
   terraform: machine_or_workstation
   vikunja: machine_or_workstation
   media-rotate: machine_or_workstation
+  # Human-gated, operator-driven (rotate-key.yml, W1c): the wrap+unlock and
+  # the rotation run it drives both happen from the operator's own
+  # workstation, not a machine-resident timer — unlike every other rotator
+  # in openbao_rotators, these two carry no standing secret_id at all.
+  ai-rotate: workstation
+  apps-rotate: workstation
 # Every declared role's class, defaults filled in and then overridden — so a
 # lookup never has to cope with a missing key. (`map('extract', dict, default)`
 # does NOT take a default: it raises on the first name absent from the override

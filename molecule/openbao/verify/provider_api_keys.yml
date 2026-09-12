@@ -47,6 +47,7 @@
       - zai
       - nvidia
       - moonshotai
+      - opencode
 
 - name: Render every provider-key policy in memory
   ansible.builtin.set_fact:

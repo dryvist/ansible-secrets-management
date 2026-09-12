@@ -54,14 +54,99 @@ openbao_snapshot_ntfy_url: >-
 # (ntfy + journal alert still fire). Set per-node from the healthchecks LXC.
 openbao_snapshot_healthcheck_url: "{{ lookup('env', 'OPENBAO_SNAPSHOT_HC_URL') | default('', true) }}"
 
-# --- Slack app-config token rotation (automated, on-box timer) --------------
-# An on-box systemd timer rotates the Slack app-configuration token pair
-# (secrets-external/platform/slack-admin) before it expires, using the
-# least-privilege `slack-admin` AppRole (read+update on exactly that entry).
-# This is the PRIMARY scheduled rotator; a macOS wrapper (nix-darwin
-# openbao-slack-creds) also rotates on-demand if the stored pair goes stale
-# between fires. The refresh token is single-use, so OpenBao's CAS write-back
-# is the only coordination needed between the two — no client-side lock.
+# --- Credential rotation (automated, on-box timers) -------------------------
+# openbao_rotators is a DECLARATION TABLE, not a loop of one-off timers: every
+# entry becomes an identically-shaped systemd service+timer pair (rendered by
+# roles/openbao/tasks/rotate.yml from the generic openbao-rotate.*.j2
+# templates), differing only in which upstream mint the rendered script
+# delegates to (`mint:`, resolved to templates/rotators/<mint>.sh.j2) and
+# which KV entry it rotates (`target:`). Adding a rotator is one table row —
+# a new AppRole + policy pair to grant it least privilege, and (if the mint
+# doesn't exist yet) one new templates/rotators/<mint>.sh.j2 fragment.
+#
+# `enabled` false OR an empty role_id/secret_id skips that rotator's timer
+# entirely (see tasks/rotate.yml) — the same bootstrap-safe pattern the Slack
+# rotator has always used, so a first-bootstrap converge (creds not yet
+# minted) stays green instead of rendering an empty-credential EnvironmentFile.
+#
+# rotate_at_days / target / field / minter_secret are used by rotators whose
+# mint DECIDES freshness from a stamped rotation clock rather than an
+# upstream-carried expiry (see templates/rotators/splunk-mcp.sh.j2); a mint
+# that instead reads its own expiry from the stored secret (slack) ignores
+# them.
+openbao_rotation_target_days: 30
+openbao_rotation_max_days: 47
+openbao_rotators:
+  slack-admin:
+    # Primary scheduled rotator for the Slack app-configuration token pair
+    # (secrets-external/platform/slack-admin). A macOS wrapper (nix-darwin
+    # openbao-slack-creds) also rotates on-demand if a consumer sees a stale
+    # pair between fires; OpenBao's CAS write-back is the only coordination
+    # needed between the two (the Slack refresh token is single-use).
+    enabled: "{{ openbao_slack_rotate_enabled }}"
+    interval: "{{ openbao_slack_rotate_interval }}"
+    approle: slack-admin
+    role_id: "{{ openbao_slack_rotate_role_id }}"
+    secret_id: "{{ openbao_slack_rotate_secret_id }}"
+    mint: slack
+    target: { mount: secrets-external, path: platform/slack-admin }
+    safety_margin: "{{ openbao_slack_rotate_safety_margin }}"
+    healthcheck_url: "{{ openbao_slack_rotate_healthcheck_url }}"
+    ntfy_url: "{{ openbao_slack_rotate_ntfy_url }}"
+  splunk-mcp:
+    # Rotates the shared Splunk MCP bearer token consumed by AI agents/MCP
+    # clients (secret/ai/mcp/splunk, field SPLUNK_MCP_TOKEN). Mirrors the
+    # mint/probe/publish/reconcile invariants of ansible-splunk's
+    # roles/splunk_docker/tasks/manage_one_user.yml, run here on a schedule
+    # from the OpenBao side instead of at Splunk-converge time.
+    enabled: "{{ openbao_splunk_mcp_rotate_enabled }}"
+    interval: 24h
+    approle: splunk-mcp-rotate
+    role_id: "{{ openbao_splunk_mcp_rotate_role_id }}"
+    secret_id: "{{ openbao_splunk_mcp_rotate_secret_id }}"
+    mint: splunk-mcp
+    target: { mount: "{{ openbao_kv_mount }}", path: ai/mcp/splunk }
+    field: SPLUNK_MCP_TOKEN
+    rotate_at_days: "{{ openbao_rotation_target_days }}"
+    # Requested Splunk-side token lifetime — the same ceiling every rotator
+    # in this table is expected to stay inside, so the number lives once
+    # (openbao_rotation_max_days above) rather than being re-typed per mint.
+    rotate_max_days: "{{ openbao_rotation_max_days }}"
+    # KV path (under openbao_kv_mount) holding the Splunk service-account
+    # credentials this rotator authenticates to Splunk with (fields:
+    # username, password, mgmt_url) — seeded by a sibling package; the
+    # script fails loud if it is absent rather than skipping quietly.
+    minter_secret: apps/splunk-rotator
+    healthcheck_url: "{{ openbao_splunk_mcp_rotate_healthcheck_url }}"
+    ntfy_url: "{{ openbao_splunk_mcp_rotate_ntfy_url }}"
+openbao_splunk_mcp_rotate_enabled: true
+# --- splunk-mcp rotator knobs (the table row above points at these; kept as
+# standalone vars for the same reason the slack-admin knobs below are split
+# out — a scenario that needs a different value (e.g. molecule, which has no
+# `ingress_domain` inventory fact) overrides the var directly instead of the
+# table row, and the row itself carries no inlined lookup() or Jinja
+# expression that could fail before its `enabled`/role_id/secret_id guard in
+# tasks/rotate.yml ever gets a chance to skip it — dict2items renders every
+# row's values to build the loop list, so an inlined expression in a
+# disabled row still has to resolve.) --------------------------------------
+# splunk-mcp-rotate AppRole creds the timer logs in with. Injected at
+# converge from tier-0 (never committed). When unset the rotator is skipped
+# so a pre-provisioning converge stays green.
+openbao_splunk_mcp_rotate_role_id: >-
+  {{ lookup('env', 'OPENBAO_APPROLE_SPLUNK_MCP_ROTATE_ROLE_ID') | default('', true) }}
+openbao_splunk_mcp_rotate_secret_id: >-
+  {{ lookup('env', 'OPENBAO_APPROLE_SPLUNK_MCP_ROTATE_SECRET_ID') | default('', true) }}
+openbao_splunk_mcp_rotate_healthcheck_url: "{{ lookup('env', 'OPENBAO_SPLUNK_MCP_ROTATE_HC_URL') | default('', true) }}"
+# ntfy alert target — secrets-security topic (Vikunja-slug topic set): new
+# publishers land here; the legacy `openbao` topic (used by the snapshot and
+# slack-admin jobs above) stays reserved for those existing publishers until
+# the rename sweep.
+openbao_splunk_mcp_rotate_ntfy_url: >-
+  https://ntfy.{{ ingress_domain }}/secrets-security
+
+# --- slack-admin rotator knobs (the table row above points at these; kept as
+# standalone vars so the Doppler-published env-var/value names underneath
+# them don't churn) -----------------------------------------------------
 openbao_slack_rotate_enabled: true
 # Timer cadence (systemd OnUnitActiveSec) and how close to expiry (seconds
 # remaining) triggers a rotation. The 12h token life vs 6h cadence means the
@@ -69,14 +154,10 @@ openbao_slack_rotate_enabled: true
 # catching a fire that lands close to the boundary.
 openbao_slack_rotate_interval: "6h"
 openbao_slack_rotate_safety_margin: 14400 # 4h
-openbao_slack_rotate_script_path: /usr/local/bin/openbao-slack-rotate.sh
-openbao_slack_rotate_env_file: "{{ openbao_config_dir }}/openbao-slack-rotate.env"
-openbao_slack_rotate_service_name: openbao-slack-rotate
-# slack-admin AppRole creds the timer logs in with. Delivered the same way as
-# the snapshot AppRole above (injected at converge from tier-0, never
-# committed) and named identically to the env vars the macOS wrapper reads,
-# so one Doppler-held pair serves both consumers. When unset the timer is
-# skipped so a pre-provisioning converge stays green.
+# slack-admin AppRole creds the timer logs in with. Injected at converge from
+# tier-0 (never committed), named identically to the env vars the macOS
+# wrapper reads, so one Doppler-held pair serves both consumers. When unset
+# the rotator is skipped so a pre-provisioning converge stays green.
 openbao_slack_rotate_role_id: "{{ lookup('env', 'OPENBAO_APPROLE_SLACK_ADMIN_ROLE_ID') | default('', true) }}"
 openbao_slack_rotate_secret_id: "{{ lookup('env', 'OPENBAO_APPROLE_SLACK_ADMIN_SECRET_ID') | default('', true) }}"
 # ntfy alert target — FQDN-first, same topic as the snapshot job (this is

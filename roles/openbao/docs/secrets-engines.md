@@ -126,10 +126,29 @@ configuration, consumer AppRole/policy, and drift assertions to
 `.claude/rules/openbao-plugins-first.md` for the engine-first policy this
 mount exists to satisfy.
 
-## Slack app-config token rotation (on-box timer)
+## Credential rotation (on-box timers, table-driven)
 
-An on-box `openbao-slack-rotate.timer` (every `openbao_slack_rotate_interval`,
-default `6h`, jittered) keeps the Slack **app-configuration** token pair
+`openbao_rotators` (`defaults/main/09-snapshots-and-rotation.yml`) is a
+declaration table, not a set of one-off timers: every entry becomes an
+identically-shaped systemd service+timer pair (rendered by
+`tasks/rotate.yml` from the generic `templates/openbao-rotate.*.j2`
+templates), differing only in which upstream mint the rendered script
+delegates to (`mint:`, resolved to `templates/rotators/<mint>.sh.j2`) and
+which KV entry it rotates (`target:`). Deployed on **every** node — each
+mint owns its own concurrency story rather than the deploying task
+leader-gating anything. A rotator whose AppRole creds are not yet present is
+skipped for that run, the same pre-provisioning-skip pattern as the snapshot
+timer above, so a first-bootstrap converge stays green. Adding a rotator is
+one table row plus a least-privilege AppRole/policy pair, and — if the mint
+doesn't exist yet — one new `templates/rotators/<mint>.sh.j2` fragment.
+
+After every successful rotation, the generic wrapper stamps
+`custom_metadata.rotated_<FIELD>` (UTC ISO-8601) on the target KV entry —
+the per-field rotation clock a sibling auditor (`secret-age-audit`) reads.
+
+### `slack-admin` — Slack app-config token rotation
+
+Keeps the Slack **app-configuration** token pair
 (`secrets-external/platform/slack-admin` — distinct from the OAuthapp
 workspace bot token above; this one authorizes `apps.manifest.create`/`.validate`)
 rotated ahead of its ~12-hour expiry. It:
@@ -144,12 +163,34 @@ rotated ahead of its ~12-hour expiry. It:
   whichever pair is newer instead of retrying — the refresh token is single-use,
   so that is the only coordination two writers need.
 
-Deployed on **every** openbao node (no leader-gate needed — the single-use
-refresh token is already the mutex) and gated on the AppRole creds being
-present, same pre-provisioning-skip pattern as the snapshot timer above. A
+No leader-gate needed — the single-use refresh token is already the mutex. A
 macOS wrapper (`nix-darwin` `openbao-slack-creds`) also rotates on-demand if a
 consumer sees a stale pair between fires; this timer is the primary, scheduled
 rotator — the two are safe to run concurrently because of the CAS-adopt logic.
+
+### `splunk-mcp` — Splunk MCP token rotation
+
+Keeps the shared Splunk MCP bearer token (`secret/ai/mcp/splunk`, field
+`SPLUNK_MCP_TOKEN`) fresh for AI agents/MCP clients. Mirrors the mint/probe/
+publish/reconcile invariants of `ansible-splunk`'s
+`roles/splunk_docker/tasks/manage_one_user.yml`, run here from the OpenBao
+side on a schedule instead of at Splunk-converge time:
+
+- authenticates with the least-privilege **`splunk-mcp-rotate` AppRole**
+  (read its own minter credentials at `secret/apps/splunk-rotator`; read+
+  update `secret/ai/mcp/splunk`; read+patch its metadata);
+- decides freshness from the `rotated_SPLUNK_MCP_TOKEN` stamp (falling back
+  to the KV entry's `updated_time` on first run) against
+  `openbao_rotation_target_days` (default 30d);
+- mints via `GET .../services/mcp_token` and **proves the new token works**
+  against the MCP JSON-RPC `initialize` endpoint *before* it ever reaches
+  OpenBao — a failed probe leaves the published field untouched;
+- CAS-writes **only** the `SPLUNK_MCP_TOKEN` field, preserving every sibling
+  field in the secret — a CAS conflict here **fails loud** rather than
+  adopting (unlike Slack, this mint has no single-use-token mutex to make an
+  adopt safe);
+- once published, revokes every *other* eligible MCP-audience token for the
+  user so exactly one canonical token exists.
 
 ## SSH secrets engine (signed client certificates — the SSH CA)
 

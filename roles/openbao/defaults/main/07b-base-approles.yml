@@ -81,8 +81,6 @@ openbao_base_approles:
   # construction — so it is shipped ambiently rather than human-gated.
   - name: "{{ openbao_config_read_approle_name }}"
     policy: "{{ openbao_config_read_policy_name }}"
-  - name: "{{ openbao_public_approle_name }}"
-    policy: "{{ openbao_public_policy_name }}"
   # ai-public: read-only fabric-brain domain, its own narrow credential (see
   # the name vars above) — held by the hermes / open_webui brain-sync timers.
   - name: "{{ openbao_ai_public_approle_name }}"
@@ -249,5 +247,5 @@ openbao_base_approles:
 # Full AppRole set = the static base above + the per-service ai-apply-<svc> actor
 # roles generated from openbao_ai_domains. init.yml loops this combined list.
 openbao_approles: >-
-  {{ openbao_base_approles + openbao_live_only_approles
+  {{ openbao_base_approles + openbao_live_only_approles + openbao_rotation_approles
      + openbao_ai_apply_approles + openbao_github_write_scope_approles }}

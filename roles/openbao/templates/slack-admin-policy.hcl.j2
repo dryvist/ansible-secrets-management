@@ -17,6 +17,23 @@ path "secrets-external/data/platform/slack-admin" {
   capabilities = ["read", "update", "create"]
 }
 
+# The rotation-clock stamp: after each successful rotation the generic
+# rotator PATCHes custom_metadata.rotated_<field> for BOTH fields it just
+# wrote (rotated_app_config_token, rotated_app_config_refresh_token — the
+# pair rotates together in one CAS write, so both get their own clock) via
+# the KV-v2 metadata PATCH primitive, which needs only `patch`. `read` lets
+# the age auditor (secret-age-audit) and any future on-box freshness check
+# read those same stamps back. allowed_parameters constrains the PATCH body
+# to custom_metadata only: the metadata PATCH endpoint also accepts
+# max_versions/cas_required/delete_version_after, and this identity's own
+# `update` on data/ above means an unconstrained `patch` here would let it
+# set max_versions=1 and then destroy every prior version with one CAS
+# write — no `delete` capability required.
+path "secrets-external/metadata/platform/slack-admin" {
+  capabilities       = ["read", "patch"]
+  allowed_parameters = { "custom_metadata" = [] }
+}
+
 # create + read on platform/slack-app-* only — the per-app credential set
 # (client_id, client_secret, verification_token, signing_secret) issued once
 # by apps.manifest.create for a given app_id, one entry per app. Create only,

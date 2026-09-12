@@ -122,6 +122,10 @@ openbao_ai_api_key_providers:
   - zai
   - nvidia
   - moonshotai
+  # opencode — subscription-backed provider whose key is read by the
+  # router's local-llm domain. The leaf may be unseeded; the policy grants the
+  # read either way so an absent key surfaces as 404, never 403.
+  - opencode
 openbao_hermes_policy_name: hermes
 openbao_hermes_approle_name: hermes
 openbao_hermes_write_policy_name: hermes-write
@@ -135,8 +139,6 @@ openbao_llm_router_write_approle_name: llm-router-write
 # isolated credential domain (secret/ai/donna), sharing nothing with hermes.
 openbao_ai_donna_policy_name: ai-donna
 openbao_ai_donna_approle_name: ai-donna
-openbao_public_policy_name: public
-openbao_public_approle_name: public
 # config-read: THE DEFAULT identity on the non-secret `config` mount — read +
 # list across every path in it, and nothing anywhere else. Everything that only
 # consumes config uses this. Nothing in the mount is a secret, so per-path

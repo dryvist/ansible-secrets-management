@@ -1,0 +1,50 @@
+---
+# Stamp custom_metadata.rotation=exempt on every path the operator has
+# declared encryption/signing material at (openbao_rotation_exempt,
+# defaults/main/09b-secret-age.yml). The secret-age auditor skips any path
+# carrying this marker instead of flagging it "overdue" for a rotation that
+# would destroy already-stored data. Runs only on the bootstrap host under
+# the admin token, same tier as promote/seed. Called per entry from
+# init/03-kv-mounts-and-seed-secrets.yml with openbao_rotation_exempt_entry.
+#
+# Idempotent: read the metadata first, patch only when the marker is not
+# already set — `bao kv metadata patch` is itself a write regardless of
+# current state, so skipping it when unchanged keeps a clean converge quiet.
+- name: Split the exempt entry into its mount and path
+  ansible.builtin.set_fact:
+    openbao_rotation_exempt_mount: "{{ openbao_rotation_exempt_entry.split(':', 1)[0] }}"
+    openbao_rotation_exempt_path: "{{ openbao_rotation_exempt_entry.split(':', 1)[1] }}"
+
+- name: Read the exempt path's current custom_metadata
+  ansible.builtin.command:
+    cmd: >-
+      bao kv metadata get -format=json
+      {{ openbao_rotation_exempt_mount }}/{{ openbao_rotation_exempt_path }}
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  register: openbao_rotation_exempt_current
+  # A DENIED read is not an ABSENT path — see the openbao_absent_stderr_marker
+  # doc (01-kv-hierarchy-and-rbac.yml). Tolerate genuine absence ONLY: a path
+  # that does not exist yet has nothing to tag, but a denial says nothing
+  # about the stored metadata and must not be read as "not yet exempt".
+  failed_when:
+    - openbao_rotation_exempt_current.rc != 0
+    - openbao_absent_stderr_marker not in (openbao_rotation_exempt_current.stderr | default(''))
+  changed_when: false
+  no_log: true
+
+- name: Patch the exempt marker onto the path (only when not already set)
+  ansible.builtin.command:
+    cmd: >-
+      bao kv metadata patch -custom-metadata=rotation=exempt
+      {{ openbao_rotation_exempt_mount }}/{{ openbao_rotation_exempt_path }}
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  no_log: true
+  changed_when: true
+  when:
+    - openbao_rotation_exempt_current.rc == 0
+    - ((openbao_rotation_exempt_current.stdout | from_json).data.custom_metadata
+       | default({}, true)).rotation | default('') != 'exempt'

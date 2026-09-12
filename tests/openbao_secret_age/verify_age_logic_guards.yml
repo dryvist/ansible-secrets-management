@@ -1,0 +1,167 @@
+---
+# False-green and alert-storm guard cases for
+# roles/openbao/templates/openbao-secret-age.sh.j2, split out of
+# verify_age_logic.yml (which covers the base classification logic) to stay
+# under this repo's per-file token budget (.token-limits.yaml). Shares the
+# same _fixture_tasks.yml (render the actual script, install stub curl/bao).
+#
+#   B1. a DENIED (not absent) list at a KV mount ROOT fails the whole audit —
+#       never reports an empty tree as healthy
+#   R2. a successful read whose rotated_<FIELD> value is not a parseable
+#       timestamp counts as an error and fails the audit — never a silent
+#       drop, and the garbage value itself is never logged
+#   B2. overdue items page as ONE digest ntfy message, never one push per
+#       item
+#
+# Usage: ansible-playbook tests/openbao_secret_age/verify_age_logic_guards.yml -c local
+
+- name: Verify the secret-age auditor script's false-green and alert-storm guards
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    ansible_become: false
+    _template_dir: "../../roles/openbao/templates"
+    # Mirror defaults/main/09b-secret-age.yml so the fixture matches production.
+    openbao_api_addr: "http://openbao-test:8200"
+    openbao_secret_age_interval: "24h"
+    openbao_secret_age_target_days: 30
+    openbao_secret_age_max_days: 47
+    openbao_secret_age_report_path: "{{ fixture_dir }}/secret-age.json"
+    openbao_secret_age_ntfy_url: "https://ntfy.example.test/secrets-security"
+    openbao_secret_age_healthcheck_url: ""
+    openbao_kv_mount: secret
+    openbao_config_mount: config
+    openbao_group: openbao
+    openbao_absent_stderr_marker: "No value found"
+    openbao_kv_mounts:
+      - path: secret
+      - path: secrets-external
+      - path: config
+        max_versions: 30
+
+  tasks:
+    - name: Set up the fixture (render the script, install stub curl/bao)
+      ansible.builtin.import_tasks: _fixture_tasks.yml
+
+    # -------------------------------------------------------------------
+    # Case B1 (false-green guard): a DENIED (not absent) list at a KV mount
+    # ROOT must fail the whole audit, never report an empty, healthy-looking
+    # tree. The pre-fix script returned 0 on ANY non-zero `bao kv list`,
+    # including this one — it would have printed "0 ok, 0 due, 0 overdue"
+    # and exited 0 here instead.
+    # -------------------------------------------------------------------
+    - name: "Case B1: run with the secret/ mount root DENIED (not absent)"
+      ansible.builtin.command: "{{ fixture_dir }}/openbao-secret-age.sh --dry-run"
+      register: _case_b1
+      changed_when: false
+      failed_when: false
+      environment:
+        PATH: "{{ fixture_dir }}/bin:{{ lookup('env', 'PATH') }}"
+        OPENBAO_APPROLE_SECRET_AGE_AUDIT_ROLE_ID: test-role-id
+        OPENBAO_APPROLE_SECRET_AGE_AUDIT_SECRET_ID: test-secret-id
+        SIMULATE_ROOT_DENIAL: "1"
+
+    - name: "Case B1: assert the audit FAILS (never a quiet 0-overdue exit)"
+      ansible.builtin.assert:
+        that:
+          - _case_b1.rc != 0
+          - "'secret/' in (_case_b1.stdout + _case_b1.stderr)"
+        fail_msg: >-
+          A denied (not absent) list at the secret/ mount root must fail the
+          whole audit. rc={{ _case_b1.rc }}
+          stdout={{ _case_b1.stdout }} stderr={{ _case_b1.stderr }}
+
+    # -------------------------------------------------------------------
+    # Case R2 (false-green guard): a successful metadata read whose
+    # rotated_<FIELD> value is not a parseable timestamp must count as an
+    # error and fail the audit, never silently vanish from items[]. The
+    # pre-fix script did `age_days_from_ts "$ts" || continue` with no log or
+    # ERRORS increment on this path — a single corrupted rotation stamp
+    # (e.g. written by a buggy rotator) would drop that secret out of every
+    # future audit forever, never overdue, never logged.
+    # -------------------------------------------------------------------
+    - name: "Case R2: run with one leaf's rotated_password value unparseable"
+      ansible.builtin.command: "{{ fixture_dir }}/openbao-secret-age.sh --dry-run"
+      register: _case_r2
+      changed_when: false
+      failed_when: false
+      environment:
+        PATH: "{{ fixture_dir }}/bin:{{ lookup('env', 'PATH') }}"
+        OPENBAO_APPROLE_SECRET_AGE_AUDIT_ROLE_ID: test-role-id
+        OPENBAO_APPROLE_SECRET_AGE_AUDIT_SECRET_ID: test-secret-id
+        SIMULATE_GARBAGE_TS: "1"
+
+    - name: "Case R2: assert the audit FAILS with errors>0 (never a silent drop)"
+      ansible.builtin.assert:
+        that:
+          - _case_r2.rc != 0
+          - "'unparseable' in (_case_r2.stdout + _case_r2.stderr)"
+        fail_msg: >-
+          A successful read whose rotated_password value cannot be parsed as
+          a timestamp must be counted as an error and fail the audit.
+          rc={{ _case_r2.rc }}
+          stdout={{ _case_r2.stdout }} stderr={{ _case_r2.stderr }}
+
+    - name: "Case R2: assert the garbage VALUE itself never reaches the log"
+      ansible.builtin.assert:
+        that:
+          - "'not-a-timestamp' not in (_case_r2.stdout + _case_r2.stderr)"
+        fail_msg: >-
+          custom_metadata is operator-writable free text and this AppRole
+          never sees a secret value — the unparseable-timestamp log line
+          must name the key/path only, never echo the value itself.
+          stdout={{ _case_r2.stdout }} stderr={{ _case_r2.stderr }}
+
+    # -------------------------------------------------------------------
+    # Case B2 (alert-storm guard): overdue items (apps/overdue-app#password
+    # + test-role's secret-id — 2 total in this fixture) must page as ONE
+    # digest ntfy message, never one push per item. The pre-fix script sent
+    # one urgent ntfy per overdue item, which at estate scale (~25 AppRole
+    # secret-ids + every 90-day KV path already past max_days on day one)
+    # opens dozens of pages daily.
+    # -------------------------------------------------------------------
+    - name: "Case B2: run without --dry-run so ntfy_send actually fires"
+      ansible.builtin.command: "{{ fixture_dir }}/openbao-secret-age.sh"
+      register: _case_b2
+      changed_when: false
+      environment:
+        PATH: "{{ fixture_dir }}/bin:{{ lookup('env', 'PATH') }}"
+        OPENBAO_APPROLE_SECRET_AGE_AUDIT_ROLE_ID: test-role-id
+        OPENBAO_APPROLE_SECRET_AGE_AUDIT_SECRET_ID: test-secret-id
+        CALL_LOG: "{{ fixture_dir }}/case-b2-ntfy-calls.log"
+
+    - name: "Case B2: read the ntfy call log"
+      ansible.builtin.slurp:
+        src: "{{ fixture_dir }}/case-b2-ntfy-calls.log"
+      register: _case_b2_calls
+
+    - name: "Case B2: assert exactly ONE overdue digest, never one push per item"
+      vars:
+        _calls: "{{ _case_b2_calls.content | b64decode }}"
+      ansible.builtin.assert:
+        that:
+          - _case_b2.rc == 0
+          - >-
+            _calls.splitlines()
+            | select('match', '^ntfy title=secrets overdue: 2 item\(s\)$')
+            | list | length == 1
+          - >-
+            _calls.splitlines()
+            | select('match', '^ntfy title=secret overdue: ')
+            | list | length == 0
+        fail_msg: >-
+          The 2 overdue items (apps/overdue-app#password, test-role) must
+          page as exactly ONE digest titled "secrets overdue: 2 item(s)" —
+          never one "secret overdue: <label>" push per item.
+          rc={{ _case_b2.rc }} calls={{ _calls }}
+
+    - name: Secret-age auditor guard verification PASSED
+      ansible.builtin.debug:
+        msg: |
+          openbao-secret-age.sh.j2 guard assertions passed:
+          - B1: a denied (not absent) mount-root list fails the whole audit
+          - R2: an unparseable rotation timestamp counts as an error, never
+            a silent drop, and the garbage value itself is never logged
+          - B2: overdue items page as one digest, never one push per item
