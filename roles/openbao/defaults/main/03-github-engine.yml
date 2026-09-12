@@ -49,6 +49,11 @@ openbao_github_read_permissions:
   # the App's ceiling (it is granted security_events: write).
   security_events: read
   vulnerability_alerts: read
+# repo-create tier: exactly one permission, exactly this value. Widening it
+# defeats the narrow-tier design (add a new tier instead of broadening this
+# one) — asserted verbatim in tasks/init/05-github-engine.yml.
+openbao_github_repo_create_permissions:
+  administration: write
 # Runner registration is organization-scoped.  This is deliberately separate
 # from repository read/write credentials: it cannot read source or name a
 # repository, and only mints the short-lived registration token a runner needs.
@@ -96,6 +101,16 @@ openbao_github_base_permission_sets:
   - name: personal-full-automation
     tier: admin
     installation_id: "{{ openbao_github_personal_installation_id }}"
+  # repo-create: administration:write ONLY — narrow enough to call
+  # `POST /orgs/dryvist/repos` and nothing else (no contents, no pull_requests,
+  # so this token cannot push). No `repositories` key: administration at the
+  # org level cannot be scoped to a repo that does not exist yet. Dryvist only
+  # — a personal-account counterpart is not shipped, see docs/secrets-engines.md
+  # for why a personal one buys nothing.
+  - name: dryvist-repo-create
+    tier: repo-create
+    installation_id: "{{ openbao_github_dryvist_installation_id }}"
+    permissions: "{{ openbao_github_repo_create_permissions }}"
   - name: read-dryvist-all
     tier: read
     installation_id: "{{ openbao_github_dryvist_installation_id }}"

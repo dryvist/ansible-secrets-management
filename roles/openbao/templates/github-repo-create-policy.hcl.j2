@@ -1,0 +1,15 @@
+{{ ansible_managed | comment }}
+# github-repo-create — standing identity, one purpose: mint the
+# `dryvist-repo-create` set to call `POST /orgs/dryvist/repos`. The set's
+# stored permission map is `administration: write` only (no `contents`, no
+# `pull_requests`), so a token minted here can create a repository but cannot
+# push to one — pushing goes through the separate github-write claim once the
+# repository exists. The raw {{ openbao_github_mount }}/token endpoint, the
+# read-* sets, the publish set, the runner set, and the *-full-automation
+# admin sets are all absent.
+{% for permission_set in openbao_github_permission_sets | selectattr('tier', 'equalto', 'repo-create') %}
+path "{{ openbao_github_mount }}/token/{{ permission_set.name }}" {
+  capabilities = ["create", "update"]
+}
+
+{% endfor %}
