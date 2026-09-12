@@ -20,7 +20,6 @@
     - media-policy.hcl.j2
     - local-llm-policy.hcl.j2
     - ai-api-key-provider-policy.hcl.j2
-    - public-policy.hcl.j2
     - config-read-policy.hcl.j2
     - config-write-policy.hcl.j2
     - kv-capability-policy.hcl.j2

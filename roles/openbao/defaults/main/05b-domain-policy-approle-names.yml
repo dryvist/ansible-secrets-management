@@ -35,9 +35,6 @@
 #                      (no wildcard, no other paths). Used for the one-time
 #                      Hermes credential seed; ansible-converge owns shared MCP
 #                      publication.
-#   public           — anonymous, non-exploitable facts (domain/subdomain);
-#                      read-only, secret/public/*; needs no secret-zero —
-#                      shipped ambiently like other non-secret internal config
 #   ai-orchestrator  — AI agent/orchestrator WRITE identity; read + create/update
 #                      secret/ai/* (the one AI identity that may write). Its
 #                      role_id/secret_id are operator-held in Doppler tier-0

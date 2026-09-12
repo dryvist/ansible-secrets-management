@@ -70,7 +70,6 @@ secret/platform/   dns/ traefik/ terrakube/ splunk/ cribl/ object-storage/ compu
 secret/apps/       media/ monitoring/ home-automation/
 secret/ai/         hermes/ agents/          # LLM stack + AI-agent creds
 secret/locks/      global                   # cross-repo apply lock state
-secret/public/     domain/ ...              # non-secret, non-exploitable facts
 secret/ci/         github/ doppler-sync/
 ```
 
@@ -93,7 +92,6 @@ plans):
 | `local-llm` | `secret/ai/*` | — | The LLM serving stack itself |
 | `hermes` | `secret/ai/hermes`, `secret/ai/mcp/splunk` | — | Dedicated least-privilege reader for Hermes; NO broad `secret/ai/*` |
 | `hermes-write` | `secret/ai/hermes` | `secret/ai/hermes` | Narrow one-time credential seed writer; shared MCP publication belongs to `ansible-converge` |
-| `public` | `secret/public/*` | — | **Anonymous** — no secret-zero; shipped ambiently |
 | `config-read` | all of `config/` | — | **Default** reader; mount-wide wildcard is correct here; shipped ambiently |
 | `config-write` *(policy, no AppRole)* | all of `config/` | `config/` values: create/update/patch/soft-delete | Attached to the 3 IaC authors[^config-write] |
 | `ai-orchestrator` | `secret/ai/{hermes,agents}` | `secret/ai/{hermes,agents}` (create/update) | WRITE; Doppler tier-0; narrowed + 30m TTL at Phase-3 |

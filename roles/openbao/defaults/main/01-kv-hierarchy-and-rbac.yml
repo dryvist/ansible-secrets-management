@@ -6,8 +6,6 @@
 #                      cribl/object-storage/compute/...)
 #   secret/apps/*      application credentials (media/monitoring/home-automation)
 #   secret/ai/*        LLM stack + AI-agent creds
-#   secret/public/*    non-secret, non-exploitable facts (domain/subdomain) —
-#                      readable by a fixed, low-privilege AppRole
 #   secret/ci/*        CI/CD tokens
 openbao_kv_mount: secret
 # Non-secret configuration mount. Holds values that are sensitive-but-not-
