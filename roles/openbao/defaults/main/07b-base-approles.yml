@@ -25,7 +25,7 @@ openbao_base_approles_core:
   # ssh-sign-automation-semaphore rather than ...-ansible, so the principal on
   # the wire says which caller ran the converge.
   #
-  # Unlimited secret_id, with the reason 08-admin-and-ttls.yml requires: nothing
+  # Unlimited secret_id, with the reason 08a-admin-and-ttls.yml requires: nothing
   # re-mints this one. It is written once into the execution plane's stored
   # environment, so a finite bound retires a credential nothing replaces and
   # every scheduled run then fails reporting an expired login. What bounds this
@@ -162,4 +162,5 @@ openbao_base_approles: "{{ openbao_base_approles_core + openbao_base_approles_el
 # roles generated from openbao_ai_domains. init.yml loops this combined list.
 openbao_approles: >-
   {{ openbao_base_approles + openbao_live_only_approles + openbao_rotation_approles
+     + openbao_workstation_approles
      + openbao_ai_apply_approles + openbao_github_write_scope_approles }}

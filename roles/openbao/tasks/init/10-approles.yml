@@ -1,7 +1,7 @@
 ---
 # --- CIDR binding: fail on an empty class rather than create an unbound role --
 # Every declared AppRole resolves to a named CIDR class (see
-# 08-admin-and-ttls.yml). A class whose CIDRs were never supplied would silently
+# 08b-cidr-and-unlock.yml). A class whose CIDRs were never supplied would silently
 # produce exactly the unbound, redeemable-from-anywhere secret_id the binding
 # exists to prevent — and it would look like a clean converge. So the classes
 # actually in use are asserted before anything is written.
@@ -131,7 +131,7 @@
 
 # Resolution order for each bound, most specific first:
 #   1. the role's own declaration in openbao_base_approles (most visible)
-#   2. the per-role override map in 08-admin-and-ttls.yml
+#   2. the per-role override map in 08b-cidr-and-unlock.yml
 #   3. the global default
 # `vars:` is evaluated per loop item, so `item` is in scope here and the command
 # stays readable instead of carrying three nested defaults inline.
