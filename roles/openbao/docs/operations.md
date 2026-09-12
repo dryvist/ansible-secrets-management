@@ -55,6 +55,58 @@ Static-key rotation is n-1 → n: set `OPENBAO_STATIC_SEAL_PREVIOUS_KEY` (+
 `_PREVIOUS_KEY_ID`) to the old key, re-render, and OpenBao rewraps to the new
 `current_key`, then clear the previous-key vars.
 
+## Rotating a secret on demand
+
+`playbooks/rotate-key.yml` rotates one field of one KV v2 entry, writing under
+that domain's own `<DOMAIN>-rotate` AppRole rather than the read-only identity
+a converge uses. It never invents a field — the target field must already
+exist — and it refuses a path whose `custom_metadata.rotation` is `exempt`.
+
+Every `<DOMAIN>-rotate` AppRole except `media-rotate` is **inert**
+(`manage_secret_id=false`, `secret_id_ttl=15m`, `num_uses=1`): there is no
+standing secret_id to read from the environment. A human issues a wrapped,
+single-use one and hands it to the playbook — that wrap IS the approval, the
+same pattern as the `ai-apply-<svc>` tier:
+
+```bash
+bao write -wrap-ttl=5m -f auth/approle/role/ai-rotate/secret-id
+# hand the wrapping_token from that output to the playbook:
+ROTATE_WRAPPING_TOKEN=<wrapping_token> doppler run -- ansible-playbook playbooks/rotate-key.yml \
+  -e rotate_mount=secret -e rotate_path=ai/mcp/splunk \
+  -e rotate_field=SPLUNK_MCP_TOKEN -e rotate_domain=ai
+```
+
+`media-rotate` keeps its legacy standing Doppler pair
+(`MEDIA_ROTATE_VAULT_ROLE_ID`/`_SECRET_ID`) — no wrap needed there:
+
+```bash
+doppler run -- ansible-playbook playbooks/rotate-key.yml \
+  -e rotate_domain=media -e rotate_entry=prowlarr -e rotate_field=PROWLARR_API_KEY
+```
+
+Rotating a field this repo cannot mint itself (a third-party API issues the
+value) — `rotate_mint` names an `openbao-rotate-<value>.service` unit already
+deployed on the OpenBao cluster; the playbook only triggers it, waits for it
+to finish, and proves the read-back:
+
+```bash
+bao write -wrap-ttl=5m -f auth/approle/role/ai-rotate/secret-id
+ROTATE_WRAPPING_TOKEN=<wrapping_token> doppler run -- ansible-playbook playbooks/rotate-key.yml \
+  -e rotate_domain=ai -e rotate_entry=some-api -e rotate_field=SOME_API_KEY \
+  -e rotate_mint=some-api
+```
+
+**The re-converge is always a separate, later process.** Roles read secrets
+with `lookup('env', ...)`, resolved once from the environment the ansible
+process started with — a value written to OpenBao mid-run is invisible to the
+run that wrote it. Chaining rotation and re-converge in one playbook would
+appear to work and would silently leave every consumer on the old value:
+
+```bash
+doppler run -- scripts/fetch-openbao-secrets.sh media -- \
+  scripts/run-ansible.sh playbooks/site.yml
+```
+
 ## TLS
 
 `tls_disable = 1` today: TLS terminates at Traefik on the internal VLAN in front
