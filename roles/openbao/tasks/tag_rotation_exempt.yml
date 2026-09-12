@@ -5,7 +5,7 @@
 # carrying this marker instead of flagging it "overdue" for a rotation that
 # would destroy already-stored data. Runs only on the bootstrap host under
 # the admin token, same tier as promote/seed. Called per entry from
-# init/03-kv-mounts-and-seed-secrets.yml with openbao_rotation_exempt_entry.
+# init.yml (after the RBAC/AppRole reconcile) with openbao_rotation_exempt_entry.
 #
 # Idempotent: read the metadata first, patch only when the marker is not
 # already set — `bao kv metadata patch` is itself a write regardless of
