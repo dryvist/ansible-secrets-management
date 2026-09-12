@@ -1,0 +1,69 @@
+---
+# Retires the pre-openbao_rotators Slack-only rotation timer that this repo
+# deployed under the OLD fixed names — openbao-slack-rotate.{service,timer},
+# /usr/local/bin/openbao-slack-rotate.sh, and
+# {{ openbao_config_dir }}/openbao-slack-rotate.env. Every node that already
+# converged before this table-driven rewrite has those four artifacts on
+# disk, enabled and running on their own 6h timer. Nothing else in this repo
+# ever re-templates or removes them (their source template,
+# openbao-slack-rotate.sh.j2, is test-only scaffolding now — see the comment
+# at its top), so left alone they would keep firing forever, racing the new
+# openbao-rotate-slack-admin.timer against the same single-use Slack refresh
+# token and the same KV path: whichever timer wins a given cycle, and if
+# it's this OLD script, the new rotated_<field> metadata stamp never gets
+# written, silently blinding the age auditor to that credential.
+#
+# Included unconditionally alongside the new rotator deploy (main/
+# configure_and_bootstrap.yml) — retirement of a stale artifact does not
+# depend on whether the new rotator table itself is populated, and running
+# it is safe (and a no-op) on a node that never had the old units at all.
+#
+# Stat-gated rather than firing `systemd: state=stopped/enabled=false`
+# unconditionally: `systemctl disable` on a unit whose file genuinely does
+# not exist fails loudly on real systemd ("Unit file ... does not exist"),
+# which would turn "nothing to retire" into a converge failure on every
+# freshly-provisioned node that never had the old rotator. Checking for the
+# unit file first makes both branches idempotent — first run: stat=true,
+# stop+disable+remove (changed); second run: stat=false, nothing to do.
+
+- name: Check whether the old Slack-only rotation timer unit is present
+  ansible.builtin.stat:
+    path: /etc/systemd/system/openbao-slack-rotate.timer
+  register: openbao_old_slack_rotate_timer_unit
+
+- name: Stop and disable the old Slack-only rotation timer
+  ansible.builtin.systemd:
+    name: openbao-slack-rotate.timer
+    state: stopped
+    enabled: false
+  when:
+    - ansible_virtualization_type | default('') != 'docker'
+    - openbao_old_slack_rotate_timer_unit.stat.exists
+
+- name: Stop and disable the old Slack-only rotation service
+  ansible.builtin.systemd:
+    name: openbao-slack-rotate.service
+    state: stopped
+    enabled: false
+  when:
+    - ansible_virtualization_type | default('') != 'docker'
+    - openbao_old_slack_rotate_timer_unit.stat.exists
+
+- name: Remove the old Slack-only rotation unit files, script, and env file
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/systemd/system/openbao-slack-rotate.timer
+    - /etc/systemd/system/openbao-slack-rotate.service
+    - /usr/local/bin/openbao-slack-rotate.sh
+    - "{{ openbao_config_dir }}/openbao-slack-rotate.env"
+  register: openbao_retired_old_slack_rotate_files
+
+- name: Reload systemd after removing the old Slack rotator's unit files
+  ansible.builtin.systemd:
+    daemon_reload: true
+  when:
+    - ansible_virtualization_type | default('') != 'docker'
+    - openbao_old_slack_rotate_timer_unit.stat.exists
+    - openbao_retired_old_slack_rotate_files.results | selectattr('changed') | list | length > 0

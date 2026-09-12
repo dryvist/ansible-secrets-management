@@ -202,3 +202,27 @@ openbao_github_write_lock_ttl: 15m
 # Terrakube native workload identity. The API signs a short-lived JWT per job;
 # OpenBao verifies it through internal OIDC discovery and binds the exact
 # organization/workspace `sub` claim before issuing a short-lived token.
+
+# --- openbao_rotators wave: rotator + audit identities ----------------------
+#   splunk-mcp-rotate — mints+publishes the shared Splunk MCP bearer token;
+#                        read secret/apps/splunk-rotator (its own minter
+#                        creds), read+update secret/ai/mcp/splunk, read+patch
+#                        its metadata. Nothing else.
+#   secret-age-audit   — read-only sibling auditor: list+read every KV
+#                        metadata path (to read rotated_<field> stamps and
+#                        updated_time) plus AppRole secret-id accessor lookup
+#                        (to age secret_ids too). NO data/ capability
+#                        anywhere — it audits freshness, it never reads a
+#                        secret value.
+#   ai-rotate          — human-gated on-demand writer scoped to secret/ai/*
+#                        (rotate-key.yml): no standing secret_id, single-use
+#                        wrap is the approval — see 07e-rotation-approles.yml.
+#   apps-rotate        — same, scoped to secret/apps/*.
+openbao_splunk_mcp_rotate_policy_name: splunk-mcp-rotate
+openbao_splunk_mcp_rotate_approle_name: splunk-mcp-rotate
+openbao_secret_age_audit_policy_name: secret-age-audit
+openbao_secret_age_audit_approle_name: secret-age-audit
+openbao_ai_rotate_policy_name: ai-rotate
+openbao_ai_rotate_approle_name: ai-rotate
+openbao_apps_rotate_policy_name: apps-rotate
+openbao_apps_rotate_approle_name: apps-rotate

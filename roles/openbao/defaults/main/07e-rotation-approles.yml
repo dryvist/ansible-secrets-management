@@ -1,0 +1,36 @@
+---
+# Rotation-plane identities (openbao_rotators, tasks/rotate.yml, the
+# secret-age auditor and the human-gated on-demand rotators). Separate file
+# rather than more rows in 07b: that file is at the per-file size budget CI
+# enforces, and the remedy for that budget is always splitting the source.
+openbao_rotation_approles:
+  # splunk-mcp-rotate: unattended timer identity for the Splunk MCP token
+  # rotator (openbao_rotators.splunk-mcp, tasks/rotate.yml). Standing
+  # secret_id like snapshot/slack-admin — nothing re-mints it on a schedule.
+  - name: "{{ openbao_splunk_mcp_rotate_approle_name }}"
+    policy: "{{ openbao_splunk_mcp_rotate_policy_name }}"
+  # secret-age-audit: read-only sibling auditor over KV metadata + AppRole
+  # secret-id accessors. No standing write anywhere; safe to leave ambient.
+  - name: "{{ openbao_secret_age_audit_approle_name }}"
+    policy: "{{ openbao_secret_age_audit_policy_name }}"
+  # ai-rotate / apps-rotate: HUMAN-GATED subtree writers scoped to
+  # secret/ai/* and secret/apps/* respectively — same shape as the
+  # ai-apply-<svc> tier (06-ai-access-model.yml), not media-rotate. A
+  # whole-subtree read+write grant is the ai-apply blast radius, so unlike
+  # the timer-driven rotators above it carries NO standing secret_id:
+  # manage_secret_id: false excludes it from approle-issuer's unattended
+  # `issuable` filter (rejectattr('manage_secret_id', 'defined')), so a
+  # routine converge can never mint one. The human wrap IS the approval —
+  # an operator runs `bao write -wrap-ttl=90s -f
+  # auth/approle/role/<name>/secret-id`, and `rotate-key.yml` (W1c) unwraps
+  # it for exactly one rotation run (secret_id_num_uses: 1).
+  - name: "{{ openbao_ai_rotate_approle_name }}"
+    policy: "{{ openbao_ai_rotate_policy_name }}"
+    manage_secret_id: false
+    secret_id_ttl: "{{ openbao_ai_elevated_secret_id_ttl }}"
+    secret_id_num_uses: 1
+  - name: "{{ openbao_apps_rotate_approle_name }}"
+    policy: "{{ openbao_apps_rotate_policy_name }}"
+    manage_secret_id: false
+    secret_id_ttl: "{{ openbao_ai_elevated_secret_id_ttl }}"
+    secret_id_num_uses: 1

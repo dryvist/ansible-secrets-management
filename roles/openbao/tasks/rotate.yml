@@ -1,0 +1,107 @@
+---
+# Credential rotation timers (on-box, table-driven). Included from
+# tasks/main/configure_and_bootstrap.yml on every openbao node. Loops
+# openbao_rotators (defaults/main/09-snapshots-and-rotation.yml) and deploys
+# one identically-shaped systemd service+timer pair per entry — differing
+# only in which upstream mint the rendered script delegates to
+# (templates/rotators/<mint>.sh.j2). A rotator whose creds aren't present yet
+# is skipped for this loop iteration (see the `when` below), the same
+# bootstrap-safe pattern the Slack rotator has always used, so a
+# first-bootstrap converge (creds not yet minted) stays green.
+#
+# Deployed on every node, same shape as the snapshot timer: each mint owns
+# its own concurrency story (CAS write-back, adopt-or-fail on conflict)
+# rather than this task file leader-gating anything.
+#
+# `rotator` in each templated file's context is `item.value` with the
+# table's own key folded in as `.name` — the table itself never repeats the
+# name as both key and field.
+
+- name: Render each active rotator's AppRole EnvironmentFile
+  ansible.builtin.template:
+    src: openbao-rotate.env.j2
+    dest: "{{ openbao_config_dir }}/openbao-rotate-{{ item.key }}.env"
+    owner: root
+    group: "{{ openbao_group }}"
+    mode: "0600"
+  vars:
+    rotator: "{{ item.value | combine({'name': item.key}) }}"
+  loop: "{{ openbao_rotators | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  no_log: true
+  notify: Restart openbao rotate timer
+  when:
+    - item.value.enabled | bool
+    - (item.value.role_id | default('')) | length > 0
+    - (item.value.secret_id | default('')) | length > 0
+
+- name: Deploy each active rotator's script
+  ansible.builtin.template:
+    src: openbao-rotate.sh.j2
+    dest: "/usr/local/bin/openbao-rotate-{{ item.key }}.sh"
+    owner: root
+    group: root
+    mode: "0755"
+  vars:
+    rotator: "{{ item.value | combine({'name': item.key}) }}"
+  loop: "{{ openbao_rotators | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  notify: Restart openbao rotate timer
+  when:
+    - item.value.enabled | bool
+    - (item.value.role_id | default('')) | length > 0
+    - (item.value.secret_id | default('')) | length > 0
+
+- name: Deploy each active rotator's systemd service unit
+  ansible.builtin.template:
+    src: openbao-rotate.service.j2
+    dest: "/etc/systemd/system/openbao-rotate-{{ item.key }}.service"
+    owner: root
+    group: root
+    mode: "0644"
+  vars:
+    rotator: "{{ item.value | combine({'name': item.key}) }}"
+  loop: "{{ openbao_rotators | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  notify: Restart openbao rotate timer
+  when:
+    - item.value.enabled | bool
+    - (item.value.role_id | default('')) | length > 0
+    - (item.value.secret_id | default('')) | length > 0
+
+- name: Deploy each active rotator's systemd timer unit
+  ansible.builtin.template:
+    src: openbao-rotate.timer.j2
+    dest: "/etc/systemd/system/openbao-rotate-{{ item.key }}.timer"
+    owner: root
+    group: root
+    mode: "0644"
+  vars:
+    rotator: "{{ item.value | combine({'name': item.key}) }}"
+  loop: "{{ openbao_rotators | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  notify: Restart openbao rotate timer
+  when:
+    - item.value.enabled | bool
+    - (item.value.role_id | default('')) | length > 0
+    - (item.value.secret_id | default('')) | length > 0
+
+# Skipped under Docker (molecule) — no functional systemd init in the container.
+- name: Enable and start each active rotator's timer
+  ansible.builtin.systemd:
+    name: "openbao-rotate-{{ item.key }}.timer"
+    state: started
+    enabled: true
+    daemon_reload: true
+  loop: "{{ openbao_rotators | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  when:
+    - ansible_virtualization_type | default('') != 'docker'
+    - item.value.enabled | bool
+    - (item.value.role_id | default('')) | length > 0
+    - (item.value.secret_id | default('')) | length > 0

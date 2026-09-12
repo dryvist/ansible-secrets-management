@@ -1,0 +1,306 @@
+---
+# Behavioral verification for roles/openbao/templates/rotators/splunk-mcp.sh.j2,
+# composed through the generic roles/openbao/templates/openbao-rotate.sh.j2
+# (the same composition roles/openbao/tasks/rotate.yml renders in production).
+# Executes the rendered script against a stub `curl` on PATH (no live OpenBao,
+# no live Splunk) to prove four load-bearing decisions actually work:
+#
+#   1. skip-when-fresh — a rotation clock inside rotate_at_days must be a
+#      no-op that never mints a Splunk token.
+#   2. mint-then-probe-fail leaves the published KV field untouched — a
+#      minted token that fails its MCP liveness probe must never reach the
+#      CAS write.
+#   3. a CAS write conflict FAILS LOUD (unlike the Slack rotator's adopt
+#      path) — this mint has no single-use-token mutex to make an adopt
+#      safe, so a concurrent writer must abort the run, not silently
+#      overwrite or silently succeed.
+#   4. a successful rotation stamps the rotated_<field> metadata clock and
+#      reconciles (revokes) every other eligible token for that user.
+#
+# GNU `date -u -d` is required (fixture computation below); CI-only, same as
+# the Slack rotate test — do not run locally on macOS (BSD date lacks -d).
+#
+# Usage: ansible-playbook tests/openbao_rotate/verify_splunk_mcp_logic.yml -c local
+
+- name: Verify the Splunk MCP rotation script's skip/probe-fail/CAS/stamp logic
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    ansible_become: false
+    _template_dir: "../../roles/openbao/templates"
+    openbao_api_addr: "http://openbao-test:8200"
+    openbao_kv_mount: "secret"
+    rotator:
+      name: splunk-mcp
+      mint: splunk-mcp
+      approle: splunk-mcp-rotate
+      target: { mount: secret, path: ai/mcp/splunk }
+      field: SPLUNK_MCP_TOKEN
+      rotate_at_days: 30
+      rotate_max_days: 47
+      minter_secret: apps/splunk-rotator
+      ntfy_url: ""
+      healthcheck_url: ""
+
+  tasks:
+    - name: Create a directory unique to this run
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: verify_splunk_mcp_rotate_
+      register: _tmp
+
+    - name: Publish the fixture directory
+      ansible.builtin.set_fact:
+        fixture_dir: "{{ _tmp.path }}"
+
+    - name: Render the actual generic+splunk-mcp composed script
+      ansible.builtin.template:
+        src: "{{ _template_dir }}/openbao-rotate.sh.j2"
+        dest: "{{ fixture_dir }}/openbao-rotate-splunk-mcp.sh"
+        mode: "0755"
+
+    - name: Create the stub-curl bin directory
+      ansible.builtin.file:
+        path: "{{ fixture_dir }}/bin"
+        state: directory
+        mode: "0755"
+
+    # Stubs OpenBao AppRole login, the KV-v2 data+metadata read/write for
+    # secret/ai/mcp/splunk and the minter secret, and Splunk's mint/probe/
+    # list/revoke endpoints. A GET vs POST-write on the same KV data URL is
+    # distinguished by the script's own `-o` flag (kv_write_cas always
+    # passes -o; kv_read never does) — same convention as the Slack test's
+    # stub. The MCP probe ALSO passes -o (for its response body) plus -w, so
+    # it is matched by exact URL first; the token-listing endpoint is called
+    # twice (before/after the mint) and returns one more entry the second
+    # time, which is how the script finds the newly-minted token's id.
+    - name: Install the stub curl
+      ansible.builtin.copy:
+        dest: "{{ fixture_dir }}/bin/curl"
+        mode: "0755"
+        content: |
+          #!/usr/bin/env bash
+          args=("$@")
+          url="${args[-1]}"
+          printf '%s\n' "${url}" >> "${STUB_CALL_LOG:-/dev/null}"
+          outfile=""
+          has_o=0
+          for i in "${!args[@]}"; do
+            if [ "${args[$i]}" = "-o" ]; then
+              has_o=1
+              outfile="${args[$((i + 1))]}"
+            fi
+          done
+          case "${url}" in
+            */auth/approle/login)
+              echo '{"auth":{"client_token":"test-vault-token"}}'
+              ;;
+            *"/metadata/ai/mcp/splunk")
+              is_patch=0
+              for a in "${args[@]}"; do [ "${a}" = "PATCH" ] && is_patch=1; done
+              if [ "${is_patch}" = "1" ]; then
+                : # stamp write (merge-patch) — body discarded by the script
+              else
+                cm="${STUB_CUSTOM_METADATA:-null}"
+                upd="${STUB_UPDATED_TIME:-2020-01-01T00:00:00Z}"
+                echo "{\"data\":{\"custom_metadata\": ${cm}, \"updated_time\":\"${upd}\"}}"
+              fi
+              ;;
+            *"/data/apps/splunk-rotator")
+              echo '{"data":{"data":{"mgmt_url":"https://splunk-test","username":"mcpuser","password":"pw"}}}'
+              ;;
+            *"/data/ai/mcp/splunk")
+              if [ "${has_o}" = "1" ]; then
+                echo "${STUB_WRITE_CODE:-200}"
+              else
+                echo '{"data":{"data":{"SPLUNK_MCP_TOKEN":"oldtoken"},"metadata":{"version":3}}}'
+              fi
+              ;;
+            *"/services/mcp")
+              probe_body="${STUB_PROBE_BODY:-}"
+              [ -n "${probe_body}" ] || probe_body='{"result":{}}'
+              printf '%s' "${probe_body}" >"${outfile}"
+              echo "${STUB_PROBE_STATUS:-200}"
+              ;;
+            *"/services/mcp_token"*)
+              echo '{"token":"tok-new"}'
+              ;;
+            *"/services/authorization/tokens?"*)
+              n=$(($(cat "${STUB_LIST_COUNTER}" 2>/dev/null || echo 0) + 1))
+              echo "${n}" >"${STUB_LIST_COUNTER}"
+              tok_old='{"name":"tok-old","content":{"claims":{"aud":"mcp"}}}'
+              tok_new='{"name":"tok-new","content":{"claims":{"aud":"mcp"}}}'
+              if [ "${n}" -le 1 ]; then
+                echo "{\"entry\":[${tok_old}]}"
+              else
+                echo "{\"entry\":[${tok_old},${tok_new}]}"
+              fi
+              ;;
+            *"/services/authorization/tokens/"*)
+              echo '{}'
+              ;;
+            *)
+              echo "stub curl: unhandled URL: ${url}" >&2
+              exit 1
+              ;;
+          esac
+
+    - name: Compute a recent rotation stamp (well inside rotate_at_days)
+      ansible.builtin.command: date -u -d "-1 day" +%Y-%m-%dT%H:%M:%SZ
+      register: _recent_stamp
+      changed_when: false
+
+    - name: Compute a stale updated_time (past rotate_at_days)
+      ansible.builtin.command: date -u -d "-60 days" +%Y-%m-%dT%H:%M:%SZ
+      register: _stale_updated
+      changed_when: false
+
+    # -------------------------------------------------------------------
+    # Case 1: rotation clock is fresh -> no-op, Splunk never called.
+    # -------------------------------------------------------------------
+    - name: "Case 1: run the script with a fresh rotation stamp"
+      ansible.builtin.command: "{{ fixture_dir }}/openbao-rotate-splunk-mcp.sh"
+      register: _case1
+      changed_when: false
+      environment:
+        PATH: "{{ fixture_dir }}/bin:{{ lookup('env', 'PATH') }}"
+        OPENBAO_APPROLE_SPLUNK_MCP_ROTATE_ROLE_ID: test-role-id
+        OPENBAO_APPROLE_SPLUNK_MCP_ROTATE_SECRET_ID: test-secret-id
+        STUB_CUSTOM_METADATA: "{\"rotated_SPLUNK_MCP_TOKEN\":\"{{ _recent_stamp.stdout }}\"}"
+        STUB_CALL_LOG: "{{ fixture_dir }}/case1-calls.log"
+        STUB_LIST_COUNTER: "{{ fixture_dir }}/case1-list-counter"
+
+    - name: "Case 1: read the stub call log"
+      ansible.builtin.slurp:
+        src: "{{ fixture_dir }}/case1-calls.log"
+      register: _case1_calls
+
+    - name: "Case 1: assert a clean no-op — success, logged, Splunk never called"
+      ansible.builtin.assert:
+        that:
+          - _case1.rc == 0
+          - "'no rotation needed' in (_case1.stdout + _case1.stderr)"
+          - "'splunk-test' not in (_case1_calls.content | b64decode)"
+        fail_msg: >-
+          Case 1 (fresh rotation stamp) must exit 0, log a no-op decision,
+          and never call Splunk. rc={{ _case1.rc }}
+          output={{ _case1.stdout }} {{ _case1.stderr }}
+
+    # -------------------------------------------------------------------
+    # Case 2: stale clock, mint succeeds, probe FAILS -> the published KV
+    # field must never be touched (no write attempt logged).
+    # -------------------------------------------------------------------
+    - name: "Case 2: run the script with a stale clock and a failing MCP probe"
+      ansible.builtin.command: "{{ fixture_dir }}/openbao-rotate-splunk-mcp.sh"
+      register: _case2
+      changed_when: false
+      failed_when: false
+      environment:
+        PATH: "{{ fixture_dir }}/bin:{{ lookup('env', 'PATH') }}"
+        OPENBAO_APPROLE_SPLUNK_MCP_ROTATE_ROLE_ID: test-role-id
+        OPENBAO_APPROLE_SPLUNK_MCP_ROTATE_SECRET_ID: test-secret-id
+        STUB_UPDATED_TIME: "{{ _stale_updated.stdout }}"
+        STUB_PROBE_STATUS: "500"
+        STUB_CALL_LOG: "{{ fixture_dir }}/case2-calls.log"
+        STUB_LIST_COUNTER: "{{ fixture_dir }}/case2-list-counter"
+
+    - name: "Case 2: read the stub call log"
+      ansible.builtin.slurp:
+        src: "{{ fixture_dir }}/case2-calls.log"
+      register: _case2_calls
+
+    - name: "Case 2: assert a probe failure fails loud and never writes the KV field"
+      vars:
+        _calls: "{{ _case2_calls.content | b64decode }}"
+      ansible.builtin.assert:
+        that:
+          - _case2.rc != 0
+          - "'liveness probe' in (_case2.stdout + _case2.stderr)"
+          - "'leaving' in (_case2.stdout + _case2.stderr)"
+          - "'mcp_token' in _calls"
+          - _calls.split('\n') | select('search', '/data/ai/mcp/splunk') | list | length == 0
+        fail_msg: >-
+          Case 2 (mint succeeds, probe fails) must fail loud, mention the
+          liveness probe, and never call the ai/mcp/splunk data path at all
+          (no read, no write) — the field must be left exactly as published.
+          rc={{ _case2.rc }} output={{ _case2.stdout }} {{ _case2.stderr }}
+
+    # -------------------------------------------------------------------
+    # Case 3: mint+probe succeed, CAS write-back is rejected (400) -> FAILS
+    # LOUD (this mint has no single-use-token mutex, unlike Slack's adopt
+    # path — a concurrent writer must abort the run).
+    # -------------------------------------------------------------------
+    - name: "Case 3: run the script with a stale clock and a CAS-rejected write"
+      ansible.builtin.command: "{{ fixture_dir }}/openbao-rotate-splunk-mcp.sh"
+      register: _case3
+      changed_when: false
+      failed_when: false
+      environment:
+        PATH: "{{ fixture_dir }}/bin:{{ lookup('env', 'PATH') }}"
+        OPENBAO_APPROLE_SPLUNK_MCP_ROTATE_ROLE_ID: test-role-id
+        OPENBAO_APPROLE_SPLUNK_MCP_ROTATE_SECRET_ID: test-secret-id
+        STUB_UPDATED_TIME: "{{ _stale_updated.stdout }}"
+        STUB_WRITE_CODE: "400"
+        STUB_CALL_LOG: "{{ fixture_dir }}/case3-calls.log"
+        STUB_LIST_COUNTER: "{{ fixture_dir }}/case3-list-counter"
+
+    - name: "Case 3: assert a CAS conflict fails loud"
+      ansible.builtin.assert:
+        that:
+          - _case3.rc != 0
+          - "'concurrent writer' in (_case3.stdout + _case3.stderr)"
+          - "'refusing' in (_case3.stdout + _case3.stderr)"
+        fail_msg: >-
+          Case 3 (CAS write-back rejected) must fail loud and mention a
+          concurrent writer — this mint has no single-use-token mutex to make
+          silently adopting the other write safe. rc={{ _case3.rc }}
+          output={{ _case3.stdout }} {{ _case3.stderr }}
+
+    # -------------------------------------------------------------------
+    # Case 4: full success -> rotates, stamps the metadata clock, and
+    # reconciles (revokes) every other eligible token for the user.
+    # -------------------------------------------------------------------
+    - name: "Case 4: run the script through a full successful rotation"
+      ansible.builtin.command: "{{ fixture_dir }}/openbao-rotate-splunk-mcp.sh"
+      register: _case4
+      changed_when: false
+      environment:
+        PATH: "{{ fixture_dir }}/bin:{{ lookup('env', 'PATH') }}"
+        OPENBAO_APPROLE_SPLUNK_MCP_ROTATE_ROLE_ID: test-role-id
+        OPENBAO_APPROLE_SPLUNK_MCP_ROTATE_SECRET_ID: test-secret-id
+        STUB_UPDATED_TIME: "{{ _stale_updated.stdout }}"
+        STUB_CALL_LOG: "{{ fixture_dir }}/case4-calls.log"
+        STUB_LIST_COUNTER: "{{ fixture_dir }}/case4-list-counter"
+
+    - name: "Case 4: read the stub call log"
+      ansible.builtin.slurp:
+        src: "{{ fixture_dir }}/case4-calls.log"
+      register: _case4_calls
+
+    - name: "Case 4: assert it rotated, stamped the clock, and revoked the stale token"
+      vars:
+        _calls: "{{ _case4_calls.content | b64decode }}"
+      ansible.builtin.assert:
+        that:
+          - _case4.rc == 0
+          - "'rotated' in (_case4.stdout + _case4.stderr)"
+          # metadata path is hit at least 2x on a full success: the age
+          # check's GET, and stamp_rotation's single merge-patch PATCH.
+          - _calls.split('\n') | select('search', '/metadata/ai/mcp/splunk') | list | length >= 2
+          - "'/services/authorization/tokens/mcpuser' in _calls"
+        fail_msg: >-
+          Case 4 (full success) must rotate, stamp the rotated_SPLUNK_MCP_TOKEN
+          metadata clock, and revoke the stale token for the user.
+          rc={{ _case4.rc }} output={{ _case4.stdout }} {{ _case4.stderr }}
+
+    - name: Splunk MCP rotation script logic verification PASSED
+      ansible.builtin.debug:
+        msg: |
+          rotators/splunk-mcp.sh.j2 behavioral assertions passed:
+          - fresh rotation clock: no-op, Splunk never called
+          - mint succeeds but the MCP probe fails: fails loud, field untouched
+          - CAS write-back rejected: fails loud (no adopt — no single-use mutex)
+          - full success: rotates, stamps rotated_SPLUNK_MCP_TOKEN, revokes
+            every other eligible token for the user

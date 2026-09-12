@@ -249,5 +249,5 @@ openbao_base_approles:
 # Full AppRole set = the static base above + the per-service ai-apply-<svc> actor
 # roles generated from openbao_ai_domains. init.yml loops this combined list.
 openbao_approles: >-
-  {{ openbao_base_approles + openbao_live_only_approles
+  {{ openbao_base_approles + openbao_live_only_approles + openbao_rotation_approles
      + openbao_ai_apply_approles + openbao_github_write_scope_approles }}

@@ -19,12 +19,26 @@
     daemon_reload: true
   when: ansible_virtualization_type | default('') != 'docker'
 
-- name: Restart openbao slack rotate timer
+# One handler for every rotator: a per-notify topic can't carry which
+# rotator's files changed (vanilla Ansible handlers take no arguments), so
+# this restarts every ACTIVE rotator's own timer whenever any of them
+# notifies "Restart openbao rotate timer". Restarting an unchanged timer is
+# a harmless no-op — the timer unit itself didn't change, only the
+# in-flight countdown resets.
+- name: Restart openbao rotate timer
   ansible.builtin.systemd:
-    name: "{{ openbao_slack_rotate_service_name }}.timer"
+    name: "openbao-rotate-{{ item.key }}.timer"
     state: restarted
     daemon_reload: true
-  when: ansible_virtualization_type | default('') != 'docker'
+  loop: "{{ openbao_rotators | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  listen: "Restart openbao rotate timer"
+  when:
+    - ansible_virtualization_type | default('') != 'docker'
+    - item.value.enabled | bool
+    - (item.value.role_id | default('')) | length > 0
+    - (item.value.secret_id | default('')) | length > 0
 
 - name: Restart openbao voter-health timer
   ansible.builtin.systemd:

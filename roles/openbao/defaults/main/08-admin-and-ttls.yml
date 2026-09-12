@@ -178,6 +178,12 @@ openbao_approle_cidr_class_overrides:
   terraform: machine_or_workstation
   vikunja: machine_or_workstation
   media-rotate: machine_or_workstation
+  # Human-gated, operator-driven (rotate-key.yml, W1c): the wrap+unlock and
+  # the rotation run it drives both happen from the operator's own
+  # workstation, not a machine-resident timer — unlike every other rotator
+  # in openbao_rotators, these two carry no standing secret_id at all.
+  ai-rotate: workstation
+  apps-rotate: workstation
 # Every declared role's class, defaults filled in and then overridden — so a
 # lookup never has to cope with a missing key. (`map('extract', dict, default)`
 # does NOT take a default: it raises on the first name absent from the override

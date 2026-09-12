@@ -1,0 +1,31 @@
+{{ ansible_managed | comment }}
+# OpenBao policy for the splunk-mcp-rotate AppRole — the timer identity that
+# mints and publishes the shared Splunk MCP bearer token (see
+# templates/rotators/splunk-mcp.sh.j2). Three exact grants, nothing else:
+#   * read its OWN minter credentials (the Splunk service-account username/
+#     password/mgmt_url this rotator authenticates to Splunk with)
+#   * read + update the published token's data (CAS write-back)
+#   * read the published token's metadata (ages the current credential via
+#     rotated_<field>/updated_time) + patch it (writes the rotated_<field>
+#     stamp via the KV-v2 metadata PATCH primitive — merge-patch, no read-
+#     modify-write)
+# No delete, no list, no wildcard beyond these two exact paths.
+
+path "{{ openbao_kv_mount }}/data/apps/splunk-rotator" {
+  capabilities = ["read"]
+}
+
+path "{{ openbao_kv_mount }}/data/ai/mcp/splunk" {
+  capabilities = ["read", "update"]
+}
+
+# allowed_parameters constrains the PATCH body to custom_metadata only: the
+# KV-v2 metadata PATCH endpoint also accepts max_versions/cas_required/
+# delete_version_after, and this identity's own `update` on data/ above
+# means an unconstrained `patch` here would let it set max_versions=1 and
+# then destroy every prior version with one CAS write — no `delete`
+# capability required. See ai-rotate-policy.hcl.j2 for the full mechanism.
+path "{{ openbao_kv_mount }}/metadata/ai/mcp/splunk" {
+  capabilities       = ["read", "patch"]
+  allowed_parameters = { "custom_metadata" = [] }
+}

@@ -1,0 +1,150 @@
+# Splunk MCP token rotator (mint: splunk-mcp). Mints a fresh MCP-audience
+# token for the managed Splunk service user, proves it works against the MCP
+# JSON-RPC endpoint BEFORE touching OpenBao, CAS-writes ONLY the {{ rotator.field }}
+# field of KV_DATA_PATH (preserving every sibling field), stamps the
+# per-field rotation clock, then revokes every OTHER eligible token for that
+# user so exactly one canonical token exists. Mirrors the mint/probe/publish/
+# reconcile invariants of ansible-splunk's
+# roles/splunk_docker/tasks/manage_one_user.yml, run here from the OpenBao
+# side on a schedule instead of at Splunk-converge time.
+#
+# Bootstrapping secret/ai/mcp/splunk from nothing is NOT this rotator's job:
+# the splunk-mcp-rotate policy grants no `create` on that path, and kv_read
+# below fail()s loud on a read error rather than tolerating a 404. The path
+# is expected to already exist, seeded by ansible-splunk's own converge
+# (roles/splunk_docker/tasks/manage_one_user.yml) before this rotator's
+# first fire — if that ordering is ever violated, every cycle fails loud
+# rather than silently creating a row, which is the correct failure mode
+# for a least-privilege identity that was deliberately given no `create`.
+ROTATE_AT_DAYS={{ rotator.rotate_at_days }}
+FIELD="{{ rotator.field }}"
+MINTER_DATA_PATH="{{ openbao_kv_mount }}/data/{{ rotator.minter_secret }}"
+# Requested Splunk-side token lifetime — lives once in
+# openbao_rotation_max_days (defaults/main/09), not re-typed here.
+MINT_EXPIRES_ON="%2B{{ rotator.rotate_max_days }}d"
+
+# Splunk basic-auth curl wrapper: feeds user:pass to curl via `-K -`
+# (config-on-stdin) instead of `-u user:pass` on the command line, so the
+# service-account password never appears in `ps`/`/proc/<pid>/cmdline` for
+# the process lifetime — unlike bao_login()'s AppRole creds, which travel in
+# a request BODY (`-d`, never visible via ps) and so need no such wrapper.
+# Known corner case: a password containing a literal `"` would break the
+# config-file quoting below; the minter secret is generated, not
+# user-chosen, so this is accepted rather than hardened further.
+splunk_curl() {
+  local user="$1" pass="$2"
+  shift 2
+  printf 'user = "%s:%s"\n' "${user}" "${pass}" | curl -K - "$@"
+}
+
+# Age of the current credential, in whole days: prefer the per-field rotation
+# clock (custom_metadata.rotated_<FIELD>, stamped by stamp_rotation below);
+# fall back to the KV entry's own updated_time when no stamp exists yet
+# (first run after this rotator is declared). Prints nothing (and returns
+# non-zero) when neither is available, which the caller treats as "rotate".
+current_age_days() {
+  local tok="$1" meta stamp updated epoch now
+  meta="$(curl -sf --max-time 10 -H "X-Vault-Token: ${tok}" "${BAO_ADDR}/v1/${KV_METADATA_PATH}")" || return 1
+  stamp="$(json "${meta}" ".data.custom_metadata.rotated_${FIELD}")"
+  if [ -n "${stamp}" ]; then
+    epoch="$(epoch_of "${stamp}")" || return 1
+  else
+    updated="$(json "${meta}" '.data.updated_time')"
+    [ -n "${updated}" ] || return 1
+    epoch="$(epoch_of "${updated}")" || return 1
+  fi
+  now="$(date -u +%s)"
+  echo $(((now - epoch) / 86400))
+}
+
+# Prints one token id (`.name`) per line for every MCP-audience token owned
+# by $2 at $1, using basic auth $2:$3. Used before AND after minting so the
+# fresh token's id can be found by set difference rather than guessed.
+splunk_mcp_token_ids() {
+  local mgmt_url="$1" user="$2" pass="$3"
+  splunk_curl "${user}" "${pass}" -sf --max-time 10 \
+    "${mgmt_url}/services/authorization/tokens?output_mode=json&username=${user}&count=0" \
+    | jq -r '.entry[]? | select(.content.claims.aud=="mcp") | .name' 2>/dev/null
+}
+
+do_rotate() {
+  local bao_tok minter mgmt_url user pass before_ids mint_resp new_tok after_ids new_id \
+        probe_body probe_status probe_file entry cur_ver merged code stale_ids id
+
+  bao_tok="$(bao_login)" || fail "AppRole login failed"
+
+  minter="$(curl -sf --max-time 10 -H "X-Vault-Token: ${bao_tok}" "${BAO_ADDR}/v1/${MINTER_DATA_PATH}")" \
+    || fail "reading minter secret at ${MINTER_DATA_PATH} failed — the splunk-rotator service-account credentials are not seeded"
+  mgmt_url="$(json "${minter}" '.data.data.mgmt_url')"
+  user="$(json "${minter}" '.data.data.username')"
+  pass="$(json "${minter}" '.data.data.password')"
+  [ -n "${mgmt_url}" ] && [ -n "${user}" ] && [ -n "${pass}" ] \
+    || fail "minter secret at ${MINTER_DATA_PATH} is missing mgmt_url/username/password"
+
+  before_ids="$(splunk_mcp_token_ids "${mgmt_url}" "${user}" "${pass}")" || before_ids=""
+
+  mint_resp="$(splunk_curl "${user}" "${pass}" -sf --max-time 20 \
+    "${mgmt_url}/services/mcp_token?username=${user}&expires_on=${MINT_EXPIRES_ON}")" \
+    || fail "minting an MCP token for ${user} failed"
+  new_tok="$(json "${mint_resp}" '.token')"
+  [ -n "${new_tok}" ] || fail "mint response for ${user} carried no token"
+
+  # Prove the minted token works BEFORE it ever reaches OpenBao — a probe
+  # failure must leave the currently-published (working) token untouched.
+  # protocolVersion "2024-11-05" matches the producer's own probe
+  # (ansible-splunk roles/splunk_docker/tasks/probe_mcp_token.yml) exactly —
+  # keep the two in lockstep; a mismatch would make this probe reject a
+  # token the real consumer accepts fine.
+  probe_body='{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"openbao-rotate","version":"1"}}}'
+  probe_file="$(mktemp)"
+  probe_status="$(curl -s --max-time 15 -o "${probe_file}" -w '%{http_code}' \
+    -H "Authorization: Bearer ${new_tok}" -H 'Accept: application/json, text/event-stream' \
+    -H 'Content-Type: application/json' -d "${probe_body}" "${mgmt_url}/services/mcp")"
+  if [ "${probe_status}" != "200" ] || [ -z "$(jq -r '.result // empty' <"${probe_file}" 2>/dev/null)" ]; then
+    rm -f "${probe_file}"
+    fail "minted MCP token for ${user} failed its liveness probe (HTTP ${probe_status}) — leaving ${FIELD} at ${KV_DATA_PATH} untouched"
+  fi
+  rm -f "${probe_file}"
+
+  entry="$(kv_read "${bao_tok}")" || fail "reading ${KV_DATA_PATH} failed"
+  cur_ver="$(json "${entry}" '.data.metadata.version')"
+  case "${cur_ver}" in '' | *[!0-9]*) cur_ver=0 ;; esac
+  merged="$(json "${entry}" '.data.data')"
+  [ -n "${merged}" ] && [ "${merged}" != "null" ] || merged='{}'
+  merged="$(printf '%s' "${merged}" | jq -c --arg k "${FIELD}" --arg v "${new_tok}" '. + {($k): $v}')"
+
+  code="$(kv_write_cas "${bao_tok}" "${cur_ver}" "${merged}")"
+  if [ "${code}" != "200" ]; then
+    fail "CAS write of ${FIELD} to ${KV_DATA_PATH} failed (HTTP ${code}, expected version ${cur_ver}) — a concurrent writer changed this secret; refusing to overwrite blind"
+  fi
+  log "rotated ${FIELD} at ${KV_DATA_PATH} (version ${cur_ver} -> $((cur_ver + 1)))"
+  stamp_rotation "${FIELD}" "${bao_tok}"
+
+  # Reconcile so exactly one canonical MCP token remains for this user. The
+  # published (new) token is already safely stored above; every other
+  # eligible token is now noncanonical. Best-effort per revoke — one failure
+  # is logged, not fatal, since the canonical token already works.
+  after_ids="$(splunk_mcp_token_ids "${mgmt_url}" "${user}" "${pass}")" || after_ids=""
+  new_id="$(comm -13 <(printf '%s\n' "${before_ids}" | sort) <(printf '%s\n' "${after_ids}" | sort) | head -n1)"
+  stale_ids="$(comm -23 <(printf '%s\n' "${after_ids}" | sort) <(printf '%s\n' "${new_id}" | sort))"
+  while IFS= read -r id; do
+    [ -n "${id}" ] || continue
+    splunk_curl "${user}" "${pass}" -sf --max-time 10 -X DELETE \
+      "${mgmt_url}/services/authorization/tokens/${user}?output_mode=json&id=${id}" >/dev/null \
+      || log "WARNING: failed to revoke noncanonical token ${id} for ${user}"
+  done <<STALE_IDS
+${stale_ids}
+STALE_IDS
+}
+
+login_for_age="$(bao_login)" || fail "AppRole login failed"
+age_days="$(current_age_days "${login_for_age}")" || age_days=""
+if [ -n "${age_days}" ] && [ "${age_days}" -lt "${ROTATE_AT_DAYS}" ]; then
+  log "${FIELD} is ${age_days}d old (< ${ROTATE_AT_DAYS}d) — no rotation needed"
+  hc_ping ""
+  exit 0
+fi
+log "${FIELD} is ${age_days:-unknown}d old (>= ${ROTATE_AT_DAYS}d, or no rotation clock on record) — rotating"
+do_rotate
+hc_ping ""
+exit 0

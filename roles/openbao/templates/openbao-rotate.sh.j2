@@ -1,0 +1,114 @@
+#!/usr/bin/env bash
+# {{ ansible_managed }}
+#
+# Generic OpenBao credential rotator. Rendered once per entry in
+# openbao_rotators (see defaults/main/09-snapshots-and-rotation.yml) and run
+# on a systemd timer. Provides the shared plumbing every rotator needs —
+# AppRole login, KV-v2 read/CAS-write helpers, ntfy/healthchecks alerting,
+# and the rotated_<field> metadata stamp every rotator leaves behind — and
+# delegates the upstream-specific mint-and-decide logic to
+# templates/rotators/{{ rotator.mint }}.sh.j2, included below.
+#
+# NOT `set -e`: every failure is handled explicitly via fail() so it ALERTS
+# (ntfy + healthchecks + a non-zero exit systemd records) instead of aborting
+# silently. Never logs a secret VALUE — only KV version numbers and
+# remaining/elapsed lifetime.
+set -uo pipefail
+
+ROTATOR_NAME="{{ rotator.name }}"
+BAO_ADDR="{{ openbao_api_addr }}"
+KV_DATA_PATH="{{ rotator.target.mount }}/data/{{ rotator.target.path }}"
+KV_METADATA_PATH="{{ rotator.target.mount }}/metadata/{{ rotator.target.path }}"
+NTFY_URL="{{ rotator.ntfy_url | default('') }}"
+HC_URL="{{ rotator.healthcheck_url | default('') }}"
+ROLE_ID="${OPENBAO_APPROLE_{{ rotator.approle | upper | replace('-', '_') }}_ROLE_ID}"
+SECRET_ID="${OPENBAO_APPROLE_{{ rotator.approle | upper | replace('-', '_') }}_SECRET_ID}"
+HOST="$(hostname)"
+
+log() { logger -t "openbao-rotate-${ROTATOR_NAME}" "$*"; echo "openbao-rotate-${ROTATOR_NAME}: $*"; }
+
+# Ping a healthchecks endpoint if one is configured; no-op otherwise. $1 is
+# the suffix: "" for the OK ping, "/fail" to signal a breach.
+hc_ping() {
+  [ -n "${HC_URL}" ] || return 0
+  curl -fsS --max-time 8 "${HC_URL}$1" >/dev/null 2>&1 || true
+}
+
+# Alert + signal the deadman failure endpoint, then exit non-zero.
+fail() {
+  local msg="${ROTATOR_NAME} rotation FAILED on ${HOST}: $*"
+  log "${msg}"
+  if [ -n "${NTFY_URL}" ]; then
+    curl -fsS --max-time 8 -H "Title: openbao rotate ${ROTATOR_NAME}" -H "Priority: urgent" \
+      -H "Tags: rotating_light" -d "${msg}" "${NTFY_URL}" >/dev/null 2>&1 || true
+  fi
+  hc_ping /fail
+  exit 1
+}
+
+# Without this, a missing curl/jq reads as "AppRole login failed", which
+# points at the credential rather than at the missing package.
+# requires: curl jq date
+require_binaries() {
+  local missing=""
+  for _bin in $(sed -n 's/^# requires: //p' "$0"); do
+    command -v "${_bin}" >/dev/null 2>&1 || missing="${missing} ${_bin}"
+  done
+  [ -z "${missing# }" ] || fail "required binary not installed:${missing# }"
+}
+require_binaries
+
+# Extract a value from a JSON blob by jq path. Prints nothing when the path is
+# absent or null, so callers keep testing for an empty string.
+json() { printf '%s' "$1" | jq -r "$2 // empty" 2>/dev/null; }
+
+# ISO8601 UTC -> epoch seconds. GNU date (this node's own OS) parses ISO8601
+# directly, no format string needed.
+epoch_of() { date -u -d "$1" +%s 2>/dev/null; }
+
+# AppRole login for this rotator's identity; prints the client_token.
+bao_login() {
+  local resp token
+  resp="$(curl -sf --max-time 10 -X POST \
+    -d "{\"role_id\":\"${ROLE_ID}\",\"secret_id\":\"${SECRET_ID}\"}" \
+    "${BAO_ADDR}/v1/auth/approle/login")" || return 1
+  token="$(json "${resp}" '.auth.client_token')"
+  [ -n "${token}" ] || return 1
+  printf '%s' "${token}"
+}
+
+# Prints the raw OpenBao response for the rotator's own KV-v2 entry.
+kv_read() {
+  curl -sf --max-time 10 -H "X-Vault-Token: $1" "${BAO_ADDR}/v1/${KV_DATA_PATH}"
+}
+
+# Full-body CAS write. $1=token $2=expected version $3=JSON "data" object.
+# Prints the HTTP status code; 200 = written, 400 = a concurrent writer beat
+# us to this version (mints decide for themselves whether that is fatal or
+# an adopt-and-continue).
+kv_write_cas() {
+  local tok="$1" ver="$2" data="$3"
+  curl -s -o /dev/null -w '%{http_code}' --max-time 10 -X POST \
+    -H "X-Vault-Token: ${tok}" \
+    -d "{\"options\":{\"cas\":${ver}},\"data\":${data}}" "${BAO_ADDR}/v1/${KV_DATA_PATH}"
+}
+
+# Stamps custom_metadata.rotated_<field> with the current UTC time — the
+# per-field rotation clock a sibling auditor (e.g. secret-age-audit) reads.
+# Uses the KV-v2 metadata PATCH primitive (RFC 7396 merge-patch): the server
+# merges exactly the keys given into custom_metadata, so this needs only the
+# `patch` capability on the metadata path — no read, no client-side
+# read-merge-write race with a concurrent stamper. FAILS LOUD (via fail(),
+# not a warning): an unstamped rotation is a rotation the age auditor cannot
+# see, which is exactly the false-green a "best effort" stamp would produce.
+stamp_rotation() {
+  local field="$1" tok="$2" now
+  now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  curl -sf --max-time 10 -X PATCH -H "X-Vault-Token: ${tok}" \
+    -H 'Content-Type: application/merge-patch+json' \
+    -d "{\"custom_metadata\": {\"rotated_${field}\": \"${now}\"}}" \
+    "${BAO_ADDR}/v1/${KV_METADATA_PATH}" >/dev/null \
+    || fail "rotated ${field} at ${KV_DATA_PATH} but stamping rotated_${field} metadata failed — the age auditor will not see this rotation"
+}
+
+{% include 'rotators/' ~ rotator.mint ~ '.sh.j2' %}

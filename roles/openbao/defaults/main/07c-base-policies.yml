@@ -127,6 +127,14 @@ openbao_base_policies:
     template: slack-admin-policy.hcl.j2
   - name: "{{ openbao_slack_ops_policy_name }}"
     template: slack-ops-policy.hcl.j2
+  - name: "{{ openbao_splunk_mcp_rotate_policy_name }}"
+    template: splunk-mcp-rotate-policy.hcl.j2
+  - name: "{{ openbao_secret_age_audit_policy_name }}"
+    template: secret-age-audit-policy.hcl.j2
+  - name: "{{ openbao_ai_rotate_policy_name }}"
+    template: ai-rotate-policy.hcl.j2
+  - name: "{{ openbao_apps_rotate_policy_name }}"
+    template: apps-rotate-policy.hcl.j2
 # Full policy set = the static base above + the base read-/write-/github-mint
 # capability leaves generated from openbao_ai_domains + the ssh-sign-<role>
 # leaves generated from openbao_ssh_roles. init.yml renders this list.

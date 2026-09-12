@@ -1,0 +1,30 @@
+{{ ansible_managed | comment }}
+# OpenBao policy for the ai-rotate AppRole — INERT (no standing secret_id;
+# see the AppRole row in defaults/main/07b-base-approles.yml), same
+# human-gated shape as the ai-apply-<svc> tier: a human wraps a single-use
+# secret_id, `rotate-key.yml` (W1c) unwraps it, and the resulting token lives
+# exactly one rotation run. Scoped to secret/ai/*, same subtree as
+# media-rotate. read/update: a rotator reads the current entry before its
+# CAS write and reads it back afterward, so read is load-bearing, not
+# incidental. No `create` — rotation never creates a path, it only replaces
+# a field on one that already exists (the consumer refuses to create). No
+# `patch` on data/ — nothing PATCHes data, only metadata (see below).
+#
+# Metadata `patch` is constrained to `custom_metadata` only. KV-v2's
+# metadata PATCH endpoint also accepts `max_versions`, `cas_required`, and
+# `delete_version_after` — any of which, combined with this identity's own
+# `update` on data/, lets a caller destroy every prior version with NO
+# `delete` capability ever granted (set max_versions=1, then one CAS write
+# prunes history down to it). `allowed_parameters` closes that: only a
+# `custom_metadata` key may appear in the PATCH body, so the version-destroy
+# knobs are refused at the ACL layer regardless of what `update` on data/
+# would otherwise make possible.
+
+path "{{ openbao_kv_mount }}/data/ai/*" {
+  capabilities = ["read", "update"]
+}
+
+path "{{ openbao_kv_mount }}/metadata/ai/*" {
+  capabilities       = ["read", "patch"]
+  allowed_parameters = { "custom_metadata" = [] }
+}
