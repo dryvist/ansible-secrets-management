@@ -240,16 +240,8 @@ openbao_generated_app_secrets:
       authelia_oidc_grafana_client_secret,
       authelia_oidc_litellm_client_secret,
     ]
-# Random length for generated app credentials (alnum). secret_key needs more
-# entropy than a login credential, so it gets its own length (matches the 64-char
-# key the nautobot role generates locally when none is supplied).
-openbao_app_secret_length: 40
-openbao_app_secret_key_length: 64
-# A generated *_username is a real login name, so it is lowercase-only and
-# short enough for the 32-character limit Linux enforces. 16 lowercase letters
-# is ~75 bits, which is far more than a login name needs to be unguessable.
-openbao_app_secret_username_suffix: _username
-openbao_app_secret_username_length: 16
+# Random length/format tunables for generated app secrets:
+# see 01b-app-secret-generation.yml.
 
 # The ONLY `bao` CLI stderr text that means "this path does not exist". A read
 # that fails for any OTHER reason -- 403, an unreachable server, a malformed
