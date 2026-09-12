@@ -192,6 +192,8 @@ openbao_approle_cidr_class_overrides:
   terraform: machine_or_workstation
   vikunja: machine_or_workstation
   media-rotate: machine_or_workstation
+  slack-admin: machine_or_workstation
+  slack-ops: machine_or_workstation
   # Human-gated, operator-driven (rotate-key.yml, W1c): the wrap+unlock and
   # the rotation run it drives both happen from the operator's own
   # workstation, not a machine-resident timer — unlike every other rotator
