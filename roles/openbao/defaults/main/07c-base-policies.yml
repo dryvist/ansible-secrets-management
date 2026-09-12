@@ -89,6 +89,8 @@ openbao_base_policies:
     template: github-write-policy.hcl.j2
   - name: "{{ openbao_github_admin_policy_name }}"
     template: github-admin-policy.hcl.j2
+  - name: "{{ openbao_github_repo_create_policy_name }}"
+    template: github-repo-create-policy.hcl.j2
   - name: "{{ openbao_github_runner_policy_name }}"
     template: github-runner-policy.hcl.j2
   - name: "{{ openbao_github_docs_publisher_policy_name }}"

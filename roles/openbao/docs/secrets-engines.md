@@ -94,6 +94,26 @@ Token access is tiered; the tier IS the privilege boundary:
   `github/token/personal-full-automation`: installation-wide, full App
   ceiling. INERT AppRole — a human response-wraps a single-use secret_id per
   elevation.
+- **repo-create (`github-repo-create`)** — `github/token/dryvist-repo-create`:
+  `administration: write` only, nothing else — no `contents`, so this token
+  can create a repository but never push to one. Standing ambient AppRole,
+  like `github-write`, so repo creation needs no per-call human unlock.
+  Excluded from `github-mint` for the same reason as the publish tier, and
+  more sharply: `administration: write` is the one permission GitHub requires
+  to create or delete a repository, so leaking it into every apply-tier actor
+  is worse than leaking a per-repo write grant. Dryvist installation only —
+  a `personal-repo-create` counterpart is not shipped: GitHub App installation
+  tokens cannot call `POST /user/repos` (creating a repository under a user
+  account needs a user-to-server OAuth token, not an App installation token),
+  so unless the personal account becomes an organization, a personal set would
+  mint a token with no reachable endpoint.
+
+  Sequence to create a repository and then push to it: mint
+  `github/token/dryvist-repo-create`, `POST /orgs/dryvist/repos`, add the new
+  repository's name to `OPENBAO_GITHUB_WRITE_REPOS`, land a converge so
+  `github-write`'s policy allowlists it, then `github/token` (raw, `github-write`)
+  mints the token that actually pushes. The repo-create token is never reused
+  to push — its stored permission map has no `contents` grant to do so.
 
 Estate identities (`ai-apply-*`, `ai-orchestrator`) attach the `github-mint`
 capability policy, which grants the read-tier sets only. No policy except

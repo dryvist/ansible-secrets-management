@@ -74,6 +74,12 @@ openbao_packer_approle_name: packer
 #                                              App ceiling; INERT — minted only
 #                                              via a human response-wrapped
 #                                              single-use secret_id
+#   github-repo-create -> github/token/dryvist-repo-create  administration:write
+#                                              ONLY (no contents, no
+#                                              pull_requests — cannot push);
+#                                              standing ambient identity, like
+#                                              github-write, so repo creation
+#                                              needs no per-call human unlock
 #
 # Deliberately NOT members of openbao_ai_domains: estate AI identities mint
 # via the `github-mint` capability policy (read-tier sets only) instead.
@@ -83,6 +89,8 @@ openbao_github_write_policy_name: github-write
 openbao_github_write_approle_name: github-write
 openbao_github_admin_policy_name: github-admin
 openbao_github_admin_approle_name: github-admin
+openbao_github_repo_create_policy_name: github-repo-create
+openbao_github_repo_create_approle_name: github-repo-create
 openbao_github_runner_policy_name: github-runner
 openbao_github_runner_approle_name: github-runner
 # docs-publisher: the documentation publisher's own identity. Mints exactly
