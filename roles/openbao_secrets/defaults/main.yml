@@ -206,6 +206,18 @@ openbao_secrets_domains:
       # than under each consumer. Without this path the fields never reach
       # bao_apps_secrets and Authelia's mandatory() default fails the converge.
       - apps/authelia
+  - name: ntfy
+    role_id_env: NTFY_VAULT_ROLE_ID
+    secret_id_env: NTFY_VAULT_SECRET_ID
+    paths:
+      # Slack incoming-webhook URLs keyed by topic, for the ntfy alert hub's
+      # Slack fan-out (ntfy_docker role). Internet-reachable Slack
+      # infrastructure, so it lives in secrets-external, not secret/apps.
+      # optional: true — not yet seeded; the ntfy Slack fan-out no-ops (no
+      # routes deployed) until an operator populates this path.
+      - mount: secrets-external
+        path: platform/slack-webhooks
+        optional: true
   - name: local-llm
     role_id_env: LOCAL_LLM_VAULT_ROLE_ID
     secret_id_env: LOCAL_LLM_VAULT_SECRET_ID

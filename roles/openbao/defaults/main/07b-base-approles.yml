@@ -55,6 +55,8 @@ openbao_base_approles_core:
     policy: "{{ openbao_monitoring_policy_name }}"
   - name: "{{ openbao_media_approle_name }}"
     policy: "{{ openbao_media_policy_name }}"
+  - name: "{{ openbao_ntfy_approle_name }}"
+    policy: "{{ openbao_ntfy_policy_name }}"
   - name: "{{ openbao_apps_approle_name }}"
     policy: "{{ openbao_apps_policy_name }}"
   # local-llm additionally attaches the exact external provider-key leaves.

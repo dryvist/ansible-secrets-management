@@ -60,6 +60,8 @@ openbao_base_policies:
     template: monitoring-policy.hcl.j2
   - name: "{{ openbao_media_policy_name }}"
     template: media-policy.hcl.j2
+  - name: "{{ openbao_ntfy_policy_name }}"
+    template: ntfy-policy.hcl.j2
   - name: "{{ openbao_apps_policy_name }}"
     template: apps-policy.hcl.j2
   - name: "{{ openbao_local_llm_policy_name }}"

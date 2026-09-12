@@ -85,6 +85,13 @@ openbao_monitoring_policy_name: monitoring
 openbao_monitoring_approle_name: monitoring
 openbao_media_policy_name: media
 openbao_media_approle_name: media
+# ntfy — read-side AppRole for the ntfy alert hub's Slack fan-out
+# (openbao_secrets domain "ntfy"). Read-only on the single secrets-external
+# entry holding the Slack incoming-webhook URLs keyed by topic; that path is
+# internet-reachable Slack infrastructure, so it lives in secrets-external,
+# not secret/apps like every other ntfy_docker consumer.
+openbao_ntfy_policy_name: ntfy
+openbao_ntfy_approle_name: ntfy
 # apps — read-side AppRole for the shared-Postgres application tier
 # (openbao_secrets domain "apps": Nautobot, Zammad). apps-seed above is the
 # WRITER; this is the enumerated read-only consumer the converge logs in with
