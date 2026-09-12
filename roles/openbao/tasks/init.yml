@@ -73,3 +73,20 @@
 
 - name: Create the AppRoles and write their break-glass material
   ansible.builtin.include_tasks: init/10-approles.yml
+
+# --- Rotation-exempt tagging (idempotent, write-if-changed) ------------------
+# Stamp custom_metadata.rotation=exempt on every operator-declared
+# encryption/signing path (openbao_rotation_exempt) so the secret-age auditor
+# never flags it "overdue" for a rotation that would destroy already-stored
+# data. Runs LAST, after the RBAC/AppRole reconcile above, so a metadata patch
+# this identity is not yet granted (a stale reconcile policy) cannot fail the
+# run before the policies and AppRoles it depends on are reconciled. It still
+# runs after promotion/generation (init/03) so a path declared exempt in the
+# same converge that creates it is tagged immediately rather than waiting for
+# a second converge.
+- name: Tag operator-declared rotation-exempt paths (write-if-changed)
+  ansible.builtin.include_tasks: tag_rotation_exempt.yml
+  loop: "{{ openbao_rotation_exempt }}"
+  loop_control:
+    loop_var: openbao_rotation_exempt_entry
+  when: openbao_bootstrap_token is defined

@@ -85,8 +85,15 @@ openbao_secrets_bao_addr_candidates: >-
 # Everything else in this role READS. This is the one write path, and it is
 # deliberately confined to a single path prefix so a converge can never rewrite
 # platform or external credentials.
-openbao_secrets_publish_role_id: "{{ lookup('env', 'OPENBAO_APPROLE_ANSIBLE_ROLE_ID') | default('', true) }}"
-openbao_secrets_publish_secret_id: "{{ lookup('env', 'OPENBAO_APPROLE_ANSIBLE_SECRET_ID') | default('', true) }}"
+# CONVERGE_ROLE_ID/SECRET_ID is whichever identity scripts/run-ansible.sh
+# actually authenticated as this run; fall back to the ansible pair directly
+# for a caller that bypasses the runner entirely.
+openbao_secrets_publish_role_id: >-
+  {{ lookup('env', 'CONVERGE_ROLE_ID')
+     | default(lookup('env', 'OPENBAO_APPROLE_ANSIBLE_ROLE_ID'), true) }}
+openbao_secrets_publish_secret_id: >-
+  {{ lookup('env', 'CONVERGE_SECRET_ID')
+     | default(lookup('env', 'OPENBAO_APPROLE_ANSIBLE_SECRET_ID'), true) }}
 
 # One entry per resource-domain identity this Ansible converge fetches for.
 # Each domain's role_id/secret_id come from its own env vars — sourced from
@@ -154,6 +161,11 @@ openbao_secrets_domains:
       # (app-namespaced, matches the postgres + vikunja_group consumers) plus the
       # MCP svc-account passwords + API tokens. Merged flat into bao_apps_secrets.
       - apps/vikunja
+      # MCP gateway (IBM mcp-context-forge) — single HTTP/SSE endpoint every
+      # MCP client reaches. SQLite-backed, no shared Postgres cluster, so no
+      # db_password field. Fields generated at source by roles/openbao
+      # openbao_generated_app_secrets.mcp-gateway.
+      - apps/mcp-gateway
       # Shared-apps Postgres replication credential (generated at source by
       # roles/openbao openbao_generated_app_secrets.postgres); consumed by the
       # postgres role on both the primary and the standby.

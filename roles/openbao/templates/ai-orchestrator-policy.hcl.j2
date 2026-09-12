@@ -53,7 +53,12 @@ path "{{ openbao_kv_mount }}/metadata/ai/agents/*" {
 # Mint only the two administrator-defined GitHub App permission sets. The raw
 # github/token endpoint and the engine's config/permissionset administration
 # paths are intentionally absent, so this identity cannot widen the token.
-{% for permission_set in openbao_github_permission_sets %}
+# The publish tier is rejected: its sets carry a stored write permission map
+# scoped to a public repository, and this identity must not be able to mint
+# it. A set with no tier at all (or any tier other than publish) is kept —
+# rejectattr('tier', 'equalto', 'publish') compares false, never raises, on a
+# missing attribute, so it never strips this identity's other grants.
+{% for permission_set in openbao_github_permission_sets | rejectattr('tier', 'equalto', 'publish') %}
 path "{{ openbao_github_mount }}/token/{{ permission_set.name }}" {
   capabilities = ["update"]
 }

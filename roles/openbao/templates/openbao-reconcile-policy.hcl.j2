@@ -101,6 +101,16 @@ path "sys/auth" {
 path "{{ mount.path | default(mount) }}/*" {
   capabilities = ["create", "read", "update", "list"]
 }
+# The rotation-exempt marker (tasks/tag_rotation_exempt.yml) is a metadata
+# PATCH. This longer prefix REPLACES the wildcard's list for metadata/, so it
+# re-states read+list and deliberately drops create/update: nothing here PUTs
+# metadata, and a full metadata write carries the version-destroy knobs.
+# `allowed_parameters` confines the PATCH body to `custom_metadata` for the
+# same reason the rotator policies do (see apps-rotate-policy.hcl.j2).
+path "{{ mount.path | default(mount) }}/metadata/*" {
+  capabilities       = ["read", "list", "patch"]
+  allowed_parameters = { "custom_metadata" = [] }
+}
 {% endfor %}
 # Permission sets are named objects on the GitHub engine, not the raw token
 # endpoint — minting a token is a consumer's job, never the reconciler's.

@@ -1,0 +1,76 @@
+---
+# Behavioral check for roles/openbao/tasks/tag_rotation_exempt.yml: the
+# metadata PATCH runs only when the server says this identity may patch,
+# and only when the marker is not already set. Runs the ACTUAL task file
+# against a stub `bao` on PATH that answers from environment variables and
+# records every patch it receives (no live OpenBao).
+#
+#   G1. capabilities without `patch` -> no patch attempted, converge stays
+#       green (the identity's grant is reconciled by a break-glass run)
+#   G2. capabilities with `patch`, marker absent -> exactly one patch
+#   G3. capabilities with `patch`, marker present -> no patch (idempotent)
+#   G4. capabilities envelope under `data` only -> still recognised as patch
+#
+# Usage: ansible-playbook tests/openbao_exempt_tag/verify_capability_gate.yml -c local
+
+- name: Verify the rotation-exempt tag's capability gate
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    ansible_become: false
+    openbao_api_addr: "http://openbao-test:8200"
+    openbao_bootstrap_token: "stub-token"
+    openbao_absent_stderr_marker: "No value found"
+    openbao_rotation_exempt_entry: "secret:apps/n8n"
+    _task_file: "../../roles/openbao/tasks/tag_rotation_exempt.yml"
+    _cases:
+      - {name: G1, caps: '["read","list"]', meta: '{}', expect: 0}
+      - {name: G2, caps: '["read","list","patch"]', meta: '{}', expect: 1}
+      - {name: G3, caps: '["read","list","patch"]', meta: '{"rotation":"exempt"}', expect: 0}
+      - {name: G4, caps: '["patch"]', meta: '{}', expect: 1, data_only: true}
+
+  # Play-level so it reaches the tasks the real file includes; the per-case
+  # values are facts set by _run_case.yml before each include.
+  environment:
+    PATH: "{{ _tmp.path | default('') }}:{{ lookup('env', 'PATH') }}"
+    STUB_CAPS: "{{ _stub_caps | default('') }}"
+    STUB_META: "{{ _stub_meta | default('') }}"
+    STUB_LOG: "{{ _tmp.path | default('') }}/patches.log"
+    STUB_DATA_ONLY: "{{ _stub_data_only | default('') }}"
+
+  tasks:
+    - name: Create a directory unique to this run
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: verify_exempt_tag_
+      register: _tmp
+
+    - name: Install the stub bao
+      ansible.builtin.copy:
+        dest: "{{ _tmp.path }}/bao"
+        mode: "0755"
+        content: |
+          #!/usr/bin/env bash
+          case "$1 $2 $3" in
+            "kv metadata get")
+              printf '{"data":{"custom_metadata":%s}}\n' "${STUB_META}" ;;
+            "kv metadata patch")
+              printf 'patch %s\n' "${!#}" >>"${STUB_LOG}" ;;
+            "write -format=json sys/capabilities-self")
+              p="${4#paths=}"
+              if [ -n "${STUB_DATA_ONLY:-}" ]; then
+                printf '{"data":{"%s":%s}}\n' "${p}" "${STUB_CAPS}"
+              else
+                printf '{"%s":%s,"data":{"%s":%s}}\n' "${p}" "${STUB_CAPS}" "${p}" "${STUB_CAPS}"
+              fi ;;
+            *) echo "stub bao: unexpected: $*" >&2; exit 64 ;;
+          esac
+
+    - name: Run every case through the real task file
+      ansible.builtin.include_tasks: _run_case.yml
+      loop: "{{ _cases }}"
+      loop_control:
+        loop_var: _case
+        label: "{{ _case.name }}"

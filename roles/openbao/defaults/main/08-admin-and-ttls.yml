@@ -12,12 +12,22 @@ openbao_provisioning_token: >-
 # It excludes the break-glass tiers and its own policy, so it cannot widen
 # itself. Wiring it here is what makes a change to the CONTENT of an
 # already-declared policy land on a routine converge instead of skipping
-# silently. Secret-zero is ambient env (`doppler run`), same as every other
-# AppRole; absent, the role falls back to skipping and says so.
+# silently.
+#
+# CONVERGE_ROLE_ID/SECRET_ID (whichever identity scripts/run-ansible.sh
+# actually authenticated as this run) is preferred: the execution plane's own
+# AppRole already carries the reconcile policy, so a plane-run converge needs
+# no separate reconcile secret-zero at all. The dedicated
+# OPENBAO_APPROLE_OPENBAO_RECONCILE_* pair remains the fallback for a
+# workstation converge that supplies it directly. Secret-zero is ambient env
+# (`doppler run`), same as every other AppRole; absent, the role falls back to
+# skipping and says so.
 openbao_reconcile_role_id: >-
-  {{ lookup('env', 'OPENBAO_APPROLE_OPENBAO_RECONCILE_ROLE_ID') | default('', true) }}
+  {{ lookup('env', 'CONVERGE_ROLE_ID')
+     | default(lookup('env', 'OPENBAO_APPROLE_OPENBAO_RECONCILE_ROLE_ID'), true) }}
 openbao_reconcile_secret_id: >-
-  {{ lookup('env', 'OPENBAO_APPROLE_OPENBAO_RECONCILE_SECRET_ID') | default('', true) }}
+  {{ lookup('env', 'CONVERGE_SECRET_ID')
+     | default(lookup('env', 'OPENBAO_APPROLE_OPENBAO_RECONCILE_SECRET_ID'), true) }}
 # --- Pre-issued reconcile token (the unattended execution plane) -------------
 # An alternative to holding secret-zero: a token that ALREADY carries the
 # reconcile policy, maintained by whatever runs the converge. The plane had
@@ -162,6 +172,14 @@ openbao_approle_cidr_class_overrides:
   # iac-platform-deploy already hit; do not narrow this to `machine` alone
   # without first moving those workstation callers somewhere else.
   openbao-reconcile: machine_or_workstation
+  # approle-audit exists to answer an operator-run sweep (the one that found
+  # no reachable identity could read auth/approle/role/* back) — the same
+  # kind of read-only verification query openbao-reconcile above already
+  # carries this class for, and for the same reason: defaulting to `machine`
+  # would refuse the workstation on source address while the credential
+  # stayed valid, shipping a policy that reads correct on paper but cannot
+  # be exercised from where the operator actually runs it.
+  approle-audit: machine_or_workstation
   # The four live-only identities (05e). The union, matching what they carry in
   # the store today, so the first reconcile does not move them. Narrowing each
   # to the class it truly needs is a per-identity decision and belongs with
