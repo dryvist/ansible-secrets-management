@@ -72,6 +72,34 @@
           Class '{{ cls }}' resolves to an empty range, which binds nothing.
           An empty class is indistinguishable from no binding at all.
 
+    - name: The provisioning tier must reach both the workstation and the store host
+      vars:
+        cls: "{{ openbao_approle_cidr_class_map['admin'] }}"
+      ansible.builtin.assert:
+        that:
+          - cls == 'machine_or_workstation'
+        fail_msg: >-
+          admin declares class '{{ cls }}'. Its secret_id is redeemed on the
+          operator's workstation and the token is then used by the openbao play
+          on the store host, so a single-segment class refuses one of the two
+          with valid credentials and the run reports 403 permission denied.
+
+    # include_vars outranks task vars too, so the fixture realm is a fact.
+    - name: Declare a fixture write realm
+      ansible.builtin.set_fact:
+        openbao_github_write_scopes: {"github-write-fixture": ["fixture-repo"]}
+
+    - name: A write realm inherits github-write's class instead of the machine default
+      vars:
+        cls: "{{ openbao_approle_cidr_class_map['github-write-fixture'] }}"
+      ansible.builtin.assert:
+        that:
+          - cls == openbao_approle_cidr_class_overrides['github-write']
+        fail_msg: >-
+          Realm github-write-fixture declares class '{{ cls }}'. A realm is
+          redeemed from the same workstation as github-write; the machine
+          default refuses it on source address with valid credentials.
+
     - name: The unbound opt-out stays deliberate, not a dumping ground
       vars:
         unbound_names: >-
