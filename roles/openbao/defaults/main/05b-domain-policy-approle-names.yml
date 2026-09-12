@@ -198,6 +198,14 @@ openbao_github_write_scope_approles: >-
 # Realms inherit github-write's short token TTL rather than defining their own
 # looser one; a narrower repository boundary is no reason for a longer-lived
 # token.
+# Realms also inherit github-write's CIDR class: the same operator workstation
+# redeems them, and an unlisted name would otherwise default to `machine` and
+# refuse that workstation on source address with valid credentials.
+openbao_github_write_scope_cidr_classes: >-
+  {{ dict(openbao_github_write_scopes.keys() | list
+          | zip(openbao_github_write_scopes.keys()
+                | map('regex_replace', '^.*$', openbao_approle_cidr_class_overrides['github-write'])
+                | list)) }}
 openbao_github_write_scope_token_ttl: 30m
 
 # Deadman TTL on the per-repo write lease (KV lock under

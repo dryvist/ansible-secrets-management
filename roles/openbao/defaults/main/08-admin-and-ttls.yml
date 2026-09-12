@@ -142,7 +142,10 @@ openbao_approle_default_cidr_class: machine
 # name -> class, for the identities that are not machine-resident.
 openbao_approle_cidr_class_overrides:
   # Workstation-held: the operator's own machine runs git/gh and the unlocks.
-  admin: workstation
+  # admin is also the provisioning tier: redeemed on the workstation, then used
+  # ON the store host by the openbao play (OPENBAO_PROVISIONING_TOKEN). A
+  # workstation-only bound answers those calls 403 -- same shape as flow-lock.
+  admin: machine_or_workstation
   ai-admin: workstation
   github-admin: workstation
   github-read: workstation
@@ -177,13 +180,8 @@ openbao_approle_cidr_class_overrides:
   # iac-platform-deploy already hit; do not narrow this to `machine` alone
   # without first moving those workstation callers somewhere else.
   openbao-reconcile: machine_or_workstation
-  # approle-audit exists to answer an operator-run sweep (the one that found
-  # no reachable identity could read auth/approle/role/* back) — the same
-  # kind of read-only verification query openbao-reconcile above already
-  # carries this class for, and for the same reason: defaulting to `machine`
-  # would refuse the workstation on source address while the credential
-  # stayed valid, shipping a policy that reads correct on paper but cannot
-  # be exercised from where the operator actually runs it.
+  # approle-audit answers an operator-run sweep (read auth/approle/role/* back)
+  # from the workstation as well as the plane -- same reasoning as reconcile.
   approle-audit: machine_or_workstation
   # The four live-only identities (05e). The union, matching what they carry in
   # the store today, so the first reconcile does not move them. Narrowing each
@@ -209,7 +207,8 @@ openbao_approle_cidr_class_map: >-
           | zip(openbao_approles | map(attribute='name')
                 | map('regex_replace', '^.*$', openbao_approle_default_cidr_class)
                 | list))
-     | combine(openbao_approle_cidr_class_overrides) }}
+     | combine(openbao_approle_cidr_class_overrides)
+     | combine(openbao_github_write_scope_cidr_classes) }}
 # The classes that actually carry a role, so the assert in init/10-approles.yml
 # demands only the CIDRs this declaration set really needs. `unbound` is
 # excluded by definition — it is the documented opt-out, not a missing value.
