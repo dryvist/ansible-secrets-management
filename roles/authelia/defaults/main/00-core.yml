@@ -87,6 +87,15 @@ authelia_api_bypass_domains:
   # `sort`/`order` query params) -- a bare `$` would reject those.
   - domain: "semaphore.{{ authelia_cookie_domain }}"
     resource: "^/api/(?:ping|info|apps|projects|project|users|user|events|runners|options)(?:[/?].*)?$"
+  # Deadman receivers. The pushers are machine clients (systemd timers, the
+  # media validators, the mlx watchdog) POSTing with the receiver's own token:
+  # Gatus external-endpoint reports carry a bearer token, Uptime Kuma push
+  # monitors carry theirs in the path. Each bypass is the one report path
+  # only; the dashboards and their login stay gated.
+  - domain: "gatus.{{ authelia_cookie_domain }}"
+    resource: "^/api/v1/endpoints/[^/]+/external(?:[?].*)?$"
+  - domain: "uptime-kuma.{{ authelia_cookie_domain }}"
+    resource: "^/api/push/[^/]+(?:[?].*)?$"
   # Jellyseerr (seerr) is deliberately ABSENT. It serves its browser auth under
   # the same prefix -- /api/v1/auth/me answers 401 and /api/v1/auth/local answers
   # 405 to a GET, i.e. a reachable login POST -- so the default resource would
