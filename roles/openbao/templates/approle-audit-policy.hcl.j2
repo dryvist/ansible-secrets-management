@@ -1,0 +1,29 @@
+{{ ansible_managed | comment }}
+# OpenBao policy for the approle-audit AppRole — read-only visibility into
+# every AppRole's own definition (secret_id TTL, redemption limit,
+# source-address binding, token TTL/max TTL) so those credential-bound
+# settings can be verified without a break-glass token.
+#
+# Deliberately a mount-wide wildcard, same reasoning as config-read: this
+# grant is read/list ONLY, and every OpenBao AppRole operation that produces
+# or reveals a secret_id value (minting, lookup, accessor lookup) requires
+# create or update — capabilities this policy never holds. LIST on a role's
+# secret-id sub-path reveals accessor IDs, never a secret_id value.
+#
+# State this plainly rather than softening it: GET on role-id lets a holder
+# enumerate the role_id of every AppRole in the estate. A role_id is half a
+# credential (see approle-issuer-policy.hcl.j2 — "role-id is a public
+# identifier"), and that half is real reconnaissance value even though this
+# policy cannot pair it with a secret_id to mint anything. Anyone widening
+# this policy should read that sentence before adding a capability, not a
+# comment that makes role-id sound inert.
+path "auth/approle/role/*" {
+  capabilities = ["read", "list"]
+}
+
+# Listing the mount ROOT requests `auth/approle/role` with no trailing
+# segment, which the glob above does not match — without this rule the
+# caller can inspect every named role but cannot enumerate what exists.
+path "auth/approle/role" {
+  capabilities = ["list"]
+}

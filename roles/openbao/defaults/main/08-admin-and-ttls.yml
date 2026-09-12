@@ -162,6 +162,14 @@ openbao_approle_cidr_class_overrides:
   # iac-platform-deploy already hit; do not narrow this to `machine` alone
   # without first moving those workstation callers somewhere else.
   openbao-reconcile: machine_or_workstation
+  # approle-audit exists to answer an operator-run sweep (the one that found
+  # no reachable identity could read auth/approle/role/* back) — the same
+  # kind of read-only verification query openbao-reconcile above already
+  # carries this class for, and for the same reason: defaulting to `machine`
+  # would refuse the workstation on source address while the credential
+  # stayed valid, shipping a policy that reads correct on paper but cannot
+  # be exercised from where the operator actually runs it.
+  approle-audit: machine_or_workstation
   # The four live-only identities (05e). The union, matching what they carry in
   # the store today, so the first reconcile does not move them. Narrowing each
   # to the class it truly needs is a per-identity decision and belongs with

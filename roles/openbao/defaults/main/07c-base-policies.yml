@@ -74,6 +74,8 @@ openbao_base_policies:
     template: ai-donna-policy.hcl.j2
   - name: "{{ openbao_config_read_policy_name }}"
     template: config-read-policy.hcl.j2
+  - name: "{{ openbao_approle_audit_policy_name }}"
+    template: approle-audit-policy.hcl.j2
   - name: "{{ openbao_config_write_policy_name }}"
     template: config-write-policy.hcl.j2
   - name: "{{ openbao_ai_public_policy_name }}"
