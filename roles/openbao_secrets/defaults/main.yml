@@ -154,6 +154,11 @@ openbao_secrets_domains:
       # (app-namespaced, matches the postgres + vikunja_group consumers) plus the
       # MCP svc-account passwords + API tokens. Merged flat into bao_apps_secrets.
       - apps/vikunja
+      # MCP gateway (IBM mcp-context-forge) — single HTTP/SSE endpoint every
+      # MCP client reaches. SQLite-backed, no shared Postgres cluster, so no
+      # db_password field. Fields generated at source by roles/openbao
+      # openbao_generated_app_secrets.mcp-gateway.
+      - apps/mcp-gateway
       # Shared-apps Postgres replication credential (generated at source by
       # roles/openbao openbao_generated_app_secrets.postgres); consumed by the
       # postgres role on both the primary and the standby.

@@ -124,6 +124,13 @@ openbao_generated_app_secrets:
   # puts it in .pgpass). Bare name is safe in the flat bao_apps_secrets merge —
   # no other app path carries a replication_password field.
   postgres: [replication_password]
+  # MCP gateway (IBM mcp-context-forge): admin basic-auth password, JWT signing
+  # secret, and the AES encryption key for its stored per-upstream auth
+  # headers. No db_password — it defaults to SQLite. Any upstream MCP server's
+  # own API key (e.g. Hugging Face, Postman) is a pre-existing external
+  # credential, NOT generated here; it belongs in secrets-external/ and is
+  # referenced by the gateway's per-server config, never written to this map.
+  mcp-gateway: [mcp_gateway_admin_password, mcp_gateway_jwt_secret, mcp_gateway_encryption_secret]
   # Hindsight agent-memory service (ai VLAN): its dedicated ai-VLAN Postgres
   # cluster's DB + replication credentials plus the Control Plane UI access
   # key. App-namespaced for the flat bao_apps_secrets merge. The service's LLM
