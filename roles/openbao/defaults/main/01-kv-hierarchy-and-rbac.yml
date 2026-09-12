@@ -148,6 +148,11 @@ openbao_generated_app_secrets:
   # bao_apps_secrets merge, same as every other field here.
   open-webui: [open_webui_llm_router_key]
   langgraph: [langgraph_llm_router_key]
+  # CI's router key. Generated here like the two above; the workflows that use
+  # it read it as an Actions secret, so an operator copies the value into the
+  # org secret sync once. Scoped to the delegated-work aliases only, so CI
+  # cannot spend on the lead tier and revoking it touches nothing else.
+  github-actions: [github_actions_llm_router_key]
   # The metrics scraper's router key, same contract as the two above. Lands at
   # secret/apps/prometheus. TWO readers, both of which read this exact field:
   # roles/prometheus_stack here (inventory/group_vars/prometheus_group.yml puts
