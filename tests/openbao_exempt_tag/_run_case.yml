@@ -1,0 +1,31 @@
+---
+# One case of verify_capability_gate.yml: reset the patch log, run the real
+# task file under the stub bao, assert the patch count.
+- name: "Reset the patch log for case {{ _case.name }}"
+  ansible.builtin.copy:
+    dest: "{{ _tmp.path }}/patches.log"
+    content: ""
+    mode: "0644"
+
+- name: "Point the stub bao at the answers for case {{ _case.name }}"
+  ansible.builtin.set_fact:
+    _stub_caps: "{{ _case.caps }}"
+    _stub_meta: "{{ _case.meta }}"
+    _stub_data_only: "{{ '1' if _case.data_only | default(false) else '' }}"
+
+- name: "Run tag_rotation_exempt.yml under the stub bao for case {{ _case.name }}"
+  ansible.builtin.include_tasks: "{{ _task_file }}"
+
+- name: "Count the patches the stub received in case {{ _case.name }}"
+  ansible.builtin.command: "grep -c ^patch {{ _tmp.path }}/patches.log"
+  register: _patches
+  changed_when: false
+  failed_when: _patches.rc not in [0, 1]
+
+- name: "Assert the patch count for case {{ _case.name }}"
+  ansible.builtin.assert:
+    that: (_patches.stdout | int) == _case.expect
+    fail_msg: >-
+      {{ _case.name }}: expected {{ _case.expect }} patch(es),
+      stub saw {{ _patches.stdout }}
+    success_msg: "{{ _case.name }}: {{ _case.expect }} patch(es), as expected"

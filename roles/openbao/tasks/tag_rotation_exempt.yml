@@ -15,6 +15,11 @@
     openbao_rotation_exempt_mount: "{{ openbao_rotation_exempt_entry.split(':', 1)[0] }}"
     openbao_rotation_exempt_path: "{{ openbao_rotation_exempt_entry.split(':', 1)[1] }}"
 
+- name: Derive the KV-v2 metadata path the marker lives at
+  ansible.builtin.set_fact:
+    openbao_rotation_exempt_metadata_path: >-
+      {{ openbao_rotation_exempt_mount }}/metadata/{{ openbao_rotation_exempt_path }}
+
 - name: Read the exempt path's current custom_metadata
   ansible.builtin.command:
     cmd: >-
@@ -34,6 +39,47 @@
   changed_when: false
   no_log: true
 
+# Ask the server whether this identity may PATCH the path's metadata before
+# trying. The reconcile identity gains that grant through its own policy
+# (openbao-reconcile-policy.hcl.j2), which only a break-glass run can rewrite;
+# on a cluster whose live reconcile policy predates the grant the patch would
+# 403 and fail the whole converge. sys/capabilities-self reports the per-path
+# list BOTH at the top level and under `data` -- same envelope handling as
+# tasks/init/08-rbac-policies.yml.
+- name: Ask whether this identity may patch the path's metadata
+  ansible.builtin.command:
+    cmd: >-
+      bao write -format=json sys/capabilities-self
+      paths={{ openbao_rotation_exempt_metadata_path }}
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  register: openbao_rotation_exempt_capabilities
+  changed_when: false
+  no_log: true
+
+- name: Resolve whether the exempt marker can be patched by this identity
+  ansible.builtin.set_fact:
+    openbao_rotation_exempt_patchable: >-
+      {{ (_caps | intersect(['patch', 'root'])) | length > 0 }}
+  vars:
+    _body: "{{ openbao_rotation_exempt_capabilities.stdout | from_json }}"
+    _caps: >-
+      {{ (_body.get('data', {}) | combine(_body)).get(openbao_rotation_exempt_metadata_path, []) }}
+
+# Loud, not fatal: the auditor flags the untagged path as overdue on its next
+# run, so a skipped tag cannot pass silently. A break-glass converge both
+# updates the reconcile policy and applies this tag in the same run.
+- name: Report an exempt marker this identity is not allowed to write
+  ansible.builtin.debug:
+    msg: >-
+      {{ openbao_rotation_exempt_metadata_path }}: rotation=exempt not applied --
+      this identity lacks `patch` on the path's metadata; the next break-glass
+      converge (OPENBAO_PROVISIONING_TOKEN) reconciles the grant and the marker.
+  when:
+    - openbao_rotation_exempt_current.rc == 0
+    - not (openbao_rotation_exempt_patchable | bool)
+
 - name: Patch the exempt marker onto the path (only when not already set)
   ansible.builtin.command:
     cmd: >-
@@ -46,5 +92,6 @@
   changed_when: true
   when:
     - openbao_rotation_exempt_current.rc == 0
+    - openbao_rotation_exempt_patchable | bool
     - ((openbao_rotation_exempt_current.stdout | from_json).data.custom_metadata
        | default({}, true)).rotation | default('') != 'exempt'
