@@ -147,6 +147,11 @@ openbao_approle_cidr_class_overrides:
   github-admin: workstation
   github-read: workstation
   github-write: workstation
+  # The write realm is redeemed from the same place as github-write — the
+  # operator's git/gh — so it takes the same class. It carried no override and
+  # declared as `machine`, which refuses the workstation on source address
+  # while the credential stays valid.
+  github-write-x10: workstation
   # Ephemeral CI runners sit on their own isolated segment.
   github-runner: ci
   # Operator-run, not machine-resident: the platform deploy is driven from the

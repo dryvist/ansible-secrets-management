@@ -127,8 +127,12 @@ class TestShippedDeclarationIsClean(unittest.TestCase):
             "openbao_approle_cidr_class_overrides"
         ]
         # Role names are variable references; resolve them off the same defaults.
+        # Every declared list an override may legitimately name: base, the
+        # live-only identities, and the rotators (07b/07c/07d).
         names = _render(
-            "{{ openbao_base_approles | map(attribute='name') | list }}", loaded
+            "{{ (openbao_base_approles + openbao_live_only_approles"
+            " + openbao_rotation_approles) | map(attribute='name') | list }}",
+            loaded,
         )
         self.assertEqual(
             sorted(set(overrides) - set(names)),
