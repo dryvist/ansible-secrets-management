@@ -103,13 +103,11 @@ openbao_base_approles:
   - name: "{{ openbao_github_write_approle_name }}"
     policy: "{{ openbao_github_write_policy_name }}"
     token_ttl: 30m  # write identity gets a short token TTL
-  # github-repo-create: standing ambient identity like github-write (not
-  # inert like github-admin) — its ceiling is administration:write only, so
-  # unlike github-write there is no per-request repository allowlist to pin;
-  # the boundary is entirely the permission map stored in dryvist-repo-create.
+  # github-repo-create: standing ambient identity, ceiling administration:write
+  # only — no per-repo allowlist to pin; boundary is dryvist-repo-create's map.
   - name: "{{ openbao_github_repo_create_approle_name }}"
     policy: "{{ openbao_github_repo_create_policy_name }}"
-    token_ttl: 30m  # narrow, standing identity; short token TTL like github-write
+    token_ttl: 30m  # short TTL like github-write
   - name: "{{ openbao_github_admin_approle_name }}"
     policy: "{{ openbao_github_admin_policy_name }}"
     token_ttl: "{{ openbao_ai_admin_token_ttl }}"
