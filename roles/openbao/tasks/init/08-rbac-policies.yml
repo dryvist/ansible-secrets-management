@@ -172,6 +172,62 @@
   no_log: true
   when: openbao_bootstrap_token is defined
 
+# The docs-publisher permission set only materializes when its repository
+# list is non-empty (see openbao_github_docs_publisher_permission_sets); when
+# the env var is unset the set drops out of openbao_github_permission_sets
+# entirely, and github-docs-publisher-policy.hcl.j2's loop then has nothing to
+# emit. The assert below refuses to WRITE that empty render; this is the
+# separate visibility half, naming the input so the cause is not left to be
+# guessed from the assert failure alone.
+- name: Warn when the docs-publisher repo list is unset (its policy set drops out of the render)
+  ansible.builtin.debug:
+    msg: >-
+      OPENBAO_GITHUB_DOCS_PUBLISHER_REPOS is unset -- the docs-publisher
+      GitHub permission set is omitted from openbao_github_permission_sets,
+      so any policy template that only emits paths for that set (e.g.
+      github-docs-publisher-policy.hcl.j2) renders with no grants. Set the
+      env var (Doppler) to restore it, or leave it unset deliberately if the
+      publisher identity is not yet meant to exist.
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_github_docs_publisher_repos | default([]) | length == 0
+
+# `bao policy write <name> -` REPLACES the whole stored ACL document; there is
+# no merge. A policy template whose only content is conditional on some other
+# input (a permission set, a workspace list, ...) renders as comment lines
+# with no `path` stanza when that input is empty -- and the write task above
+# would then happily overwrite a live policy with a document that grants
+# nothing, reporting success. Refuse before that write ever runs, for EVERY
+# policy scheduled to be written, not one hardcoded name: a future
+# conditionally-rendered policy is covered by construction.
+- name: Assert no scheduled RBAC policy rendered empty
+  ansible.builtin.assert:
+    that:
+      - _openbao_empty_rendered_policies | length == 0
+    fail_msg: >-
+      {{ _openbao_empty_rendered_policies | length }} RBAC polic{{ 'y' if
+      _openbao_empty_rendered_policies | length == 1 else 'ies' }} rendered
+      with no `path` stanza and would REPLACE the live stored policy with an
+      empty document ({{ _openbao_empty_rendered_policies | join(', ') }}).
+      Likely cause: a gating input this policy's template loops over (a
+      permission set, workspace list, or similar, often built from an env
+      var) resolved empty at render time. Fix the input, or if the policy is
+      genuinely meant to grant nothing, remove it from
+      openbao_manageable_policies instead of writing an empty ACL.
+    success_msg: >-
+      All {{ openbao_manageable_policies | length }} scheduled RBAC policies
+      rendered with at least one path stanza.
+  vars:
+    _openbao_rendered: "{{ openbao_rendered_policy_map | default({}) }}"
+    _openbao_non_empty_names: >-
+      {{ _openbao_rendered | dict2items
+         | selectattr('value', 'search', 'path\s+"')
+         | map(attribute='key') | list }}
+    _openbao_empty_rendered_policies: >-
+      {{ openbao_manageable_policies | map(attribute='name') | list
+         | reject('in', _openbao_non_empty_names) | list | sort }}
+  when: openbao_bootstrap_token is defined
+
 - name: List existing policies
   ansible.builtin.command:
     cmd: bao policy list -format=json
