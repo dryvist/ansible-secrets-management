@@ -154,3 +154,39 @@
   loop: "{{ bao_old_slack_rotate_files.results }}"
   loop_control:
     label: "{{ item.item }}"
+
+# --- Secret-age auditor daemon (rendered when secret-age-audit creds are
+# set; converge.yml stubs them). Same shape as the snapshot check above:
+# file presence + perms + the dedicated rsyslog shipping ruleset here; the
+# actual age-classification, false-green, and alert-storm BEHAVIOR is
+# exercised (not just grepped for) by
+# tests/openbao_secret_age/verify_age_logic.yml and
+# verify_age_logic_guards.yml, which run the rendered script against a
+# stubbed bao/curl. ---
+- name: Stat the secret-age auditor daemon files
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - /usr/local/bin/openbao-secret-age.sh
+    - /etc/openbao/openbao-secret-age.env
+    - /etc/systemd/system/openbao-secret-age.service
+    - /etc/systemd/system/openbao-secret-age.timer
+    - /etc/rsyslog.d/21-openbao-secret-age.conf
+  register: bao_secret_age_files
+
+- name: Assert the secret-age auditor's script, env, service, timer, and rsyslog conf all rendered
+  ansible.builtin.assert:
+    that:
+      - item.stat.exists
+    fail_msg: "secret-age auditor file missing: {{ item.item }}"
+  loop: "{{ bao_secret_age_files.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: Assert the secret-age auditor env file is 0600 (holds the AppRole creds)
+  ansible.builtin.assert:
+    that:
+      - bao_secret_age_files.results[1].stat.mode == '0600'
+    fail_msg: >-
+      openbao-secret-age.env must be 0600
+      ({{ bao_secret_age_files.results[1].stat.mode | default('absent') }})

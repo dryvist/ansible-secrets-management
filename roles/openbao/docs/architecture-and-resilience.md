@@ -68,6 +68,47 @@ does not depend on either):
   does not exist yet; OpenBao 2.5.x has no `snapshot inspect` subcommand, so
   `gzip -t` is the strongest safe on-box integrity check today.
 
+### Secret-age auditor (on-box timer)
+
+Rotation is only a durability guarantee if something proves it is actually
+happening. An on-box `openbao-secret-age.timer` (every
+`openbao_secret_age_interval`, default `24h`), leader-gated the same way as
+the snapshot timer, measures how long every stored secret and every AppRole
+secret-id has gone without rotation against two thresholds:
+`openbao_secret_age_target_days` (default 30, "due") and
+`openbao_secret_age_max_days` (default 47, "overdue"). It:
+
+- authenticates with the least-privilege **`secret-age-audit` AppRole**
+  (metadata-only — it cannot read secret data), then walks every KV v2 path
+  under `secret/` and `secrets-external/` plus every AppRole's secret-id
+  population;
+- reads per-field rotation time from a `rotated_<FIELD>` custom-metadata
+  stamp when the rotator that owns a field sets one, falling back to the
+  secret's own `updated_time` (tagged `source: updated_time`) when it does
+  not — a fallback that can overstate freshness for a field a sibling write
+  did not touch;
+- skips any path tagged `custom_metadata.rotation=exempt` (encryption/signing
+  material a rotation would destroy — see `openbao_rotation_exempt`) or
+  `=engine` (ephemeral, engine-minted, nothing stored to age);
+- writes a JSON report to `openbao_secret_age_report_path`
+  (`{{ openbao_audit_log_dir }}/secret-age.json` — the same 0750
+  `openbao:openbao_group` directory the audit log lives in, not the 0700
+  data dir, so the group-member reader below can actually traverse to it)
+  and ships it to Splunk over its own rsyslog ruleset, same shape as the
+  audit-log shipping in [Secrets engines](secrets-engines.md);
+- pages one urgent ntfy digest for every overdue item (never one push per
+  item — a first-day backlog would otherwise open dozens of pages), and a
+  single default-priority digest for everything merely due, plus the
+  healthchecks deadman on every run;
+- counts a denied (never a genuinely absent) read or list at any point in
+  the walk — a mount root, an AppRole-role list, or an unparseable rotation
+  timestamp — and FAILS the run if any occurred, rather than reporting a
+  wrong or incomplete sweep as a clean "0 overdue".
+
+Deployed on every node (so surviving nodes keep auditing after a leadership
+change) and gated on the secret-age-audit AppRole creds being present, same
+bootstrap-safe shape as the Slack rotator.
+
 ## Voter health scoring
 
 An on-box `openbao-voter-health.timer` (every `openbao_voter_health_interval`,
@@ -201,4 +242,3 @@ matters, the real lever is making that host's nodes **non-voters** (they never
 lead and never count toward quorum) — weigh that against the HA math (5 voters
 tolerate 2 down; 3 voters + 2 non-voters tolerate 1). Do not claim hard
 leader-pinning the engine can't do.
-

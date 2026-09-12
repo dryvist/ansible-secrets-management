@@ -1,0 +1,145 @@
+---
+# Shared fixture for roles/openbao/templates/openbao-secret-age.sh.j2
+# behavioral verification. Renders the ACTUAL script into a scratch dir and
+# installs stub `curl`/`bao` binaries on PATH ahead of it (no live OpenBao).
+# Imported (not a standalone playbook) by verify_age_logic.yml and
+# verify_age_logic_guards.yml so the fixture is defined once — kept out of
+# each playbook to stay under the repo's per-file token budget
+# (.token-limits.yaml: 4000 tokens for *.yml).
+#
+# GNU `date -u -d` is required (timestamp computation below); CI-only, same
+# as tests/openbao_slack_rotate/verify_rotate_logic.yml — do not run locally
+# on macOS (BSD date lacks -d).
+
+- name: Create a directory unique to this run
+  ansible.builtin.tempfile:
+    state: directory
+    prefix: verify_secret_age_
+  register: _tmp
+
+- name: Publish the fixture directory
+  ansible.builtin.set_fact:
+    fixture_dir: "{{ _tmp.path }}"
+
+- name: Render the actual openbao-secret-age.sh.j2 script
+  ansible.builtin.template:
+    src: "{{ _template_dir }}/openbao-secret-age.sh.j2"
+    dest: "{{ fixture_dir }}/openbao-secret-age.sh"
+    mode: "0755"
+  vars:
+    openbao_secret_age_report_path: "{{ fixture_dir }}/secret-age.json"
+
+- name: Create the stub-bin directory
+  ansible.builtin.file:
+    path: "{{ fixture_dir }}/bin"
+    state: directory
+    mode: "0755"
+
+- name: Compute the overdue timestamp (past max_days)
+  ansible.builtin.command: date -u -d "-60 days" +%Y-%m-%dT%H:%M:%SZ
+  register: _overdue_ts
+  changed_when: false
+
+- name: Compute the due timestamp (between target_days and max_days)
+  ansible.builtin.command: date -u -d "-35 days" +%Y-%m-%dT%H:%M:%SZ
+  register: _due_ts
+  changed_when: false
+
+- name: Compute a fresh timestamp (well within target_days)
+  ansible.builtin.command: date -u -d "-5 days" +%Y-%m-%dT%H:%M:%SZ
+  register: _fresh_ts
+  changed_when: false
+
+# Stubs the sys/leader unauthenticated read, and logs every ntfy POST
+# (title + body) to CALL_LOG so the B2 case can count how many separate
+# pushes the overdue path sent — one digest, never one per item.
+- name: Install the stub curl
+  ansible.builtin.copy:
+    dest: "{{ fixture_dir }}/bin/curl"
+    mode: "0755"
+    content: |
+      #!/usr/bin/env bash
+      # The leader-gate call passes -o <file> (per openbao-snapshot.sh.j2's
+      # convention) — write the body there, not to stdout, or it pollutes
+      # the script's own JSON report on stdout.
+      url="${!#}"
+      outfile="" title="" prev=""
+      for a in "$@"; do
+        [ "${prev}" = "-o" ] && outfile="${a}"
+        [ "${prev}" = "-H" ] && [[ "${a}" == Title:* ]] && title="${a#Title: }"
+        prev="${a}"
+      done
+      body=""
+      case "${url}" in
+        */v1/sys/leader) body='{"is_self":true}' ;;
+        https://ntfy.example.test/*)
+          [ -n "${CALL_LOG:-}" ] && printf 'ntfy title=%s\n' "${title}" >>"${CALL_LOG}"
+          ;;
+      esac
+      if [ -n "${outfile}" ]; then
+        printf '%s' "${body}" >"${outfile}"
+      else
+        printf '%s' "${body}"
+      fi
+
+# Dispatches on the full argv so each case matches one specific call the
+# script actually makes — login, the two-mount KV walk (secret/ has one
+# directory holding four leaves; secrets-external/ is genuinely empty —
+# `[]`, rc 0, NOT a failure), one metadata read per leaf, and the AppRole
+# secret-id accessor lookup. SIMULATE_ROOT_DENIAL=1 (env, Case B1 only)
+# flips secret/'s root list to a DENIAL (non-zero rc, no ABSENT_MARKER
+# text) instead of its normal listing. SIMULATE_GARBAGE_TS=1 (env, Case
+# R2 only) adds a fifth leaf whose rotated_password value is not a
+# parseable timestamp.
+- name: Install the stub bao
+  ansible.builtin.copy:
+    dest: "{{ fixture_dir }}/bin/bao"
+    mode: "0755"
+    content: |
+      #!/usr/bin/env bash
+      args="$*"
+      case "${args}" in
+        "write -field=token auth/approle/login "*)
+          echo "test-vault-token" ;;
+        "kv list -format=json secret/")
+          if [ "${SIMULATE_ROOT_DENIAL:-0}" = "1" ]; then
+            echo "permission denied" >&2
+            exit 2
+          fi
+          echo '["apps/"]' ;;
+        "kv list -format=json secret/apps/")
+          if [ "${SIMULATE_GARBAGE_TS:-0}" = "1" ]; then
+            echo '["overdue-app","due-app","exempt-app","ok-app","garbage-app"]'
+          else
+            echo '["overdue-app","due-app","exempt-app","ok-app"]'
+          fi ;;
+        "kv list -format=json secrets-external/")
+          echo '[]' ;;
+        "kv metadata get -format=json secret/apps/garbage-app")
+          jq -n '{data:{updated_time:"2026-01-01T00:00:00Z",current_version:1,
+                        custom_metadata:{rotated_password:"not-a-timestamp"}}}' ;;
+        "kv metadata get -format=json secret/apps/overdue-app")
+          jq -n --arg t "{{ _overdue_ts.stdout }}" \
+            '{data:{updated_time:$t,current_version:1,
+                    custom_metadata:{rotated_password:$t}}}' ;;
+        "kv metadata get -format=json secret/apps/due-app")
+          jq -n --arg t "{{ _due_ts.stdout }}" \
+            '{data:{updated_time:$t,current_version:1,
+                    custom_metadata:{rotated_password:$t}}}' ;;
+        "kv metadata get -format=json secret/apps/exempt-app")
+          jq -n --arg t "{{ _overdue_ts.stdout }}" \
+            '{data:{updated_time:$t,current_version:1,
+                    custom_metadata:{rotation:"exempt"}}}' ;;
+        "kv metadata get -format=json secret/apps/ok-app")
+          jq -n --arg t "{{ _fresh_ts.stdout }}" \
+            '{data:{updated_time:$t,current_version:1,custom_metadata:{}}}' ;;
+        "list -format=json auth/approle/role")
+          echo '["test-role"]' ;;
+        "list -format=json auth/approle/role/test-role/secret-id")
+          echo '["accessor1"]' ;;
+        "write -format=json auth/approle/role/test-role/secret-id-accessor/lookup secret_id_accessor=accessor1")
+          echo '{"data":{"creation_time":"{{ _overdue_ts.stdout }}"}}' ;;
+        *)
+          echo "stub bao: unhandled args: ${args}" >&2
+          exit 1 ;;
+      esac

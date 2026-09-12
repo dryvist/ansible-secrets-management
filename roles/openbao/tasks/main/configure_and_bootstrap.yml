@@ -190,3 +190,15 @@
 # whether the new table currently has any active rows.
 - name: Retire the pre-table Slack-only rotation timer, if present
   ansible.builtin.include_tasks: ../retire_slack_rotate.yml
+
+# --- Phase 14: secret-age auditor (all nodes; script leader-gates) ----------
+# Deployed on every openbao node, same shape as the snapshot timer: gated on
+# the secret-age-audit AppRole creds being present so a pre-provisioning
+# converge (creds not yet minted) stays green instead of rendering an
+# empty-cred EnvironmentFile.
+- name: Deploy the secret-age auditor timer
+  ansible.builtin.include_tasks: ../secret_age.yml
+  when:
+    - openbao_secret_age_enabled | bool
+    - openbao_secret_age_role_id | length > 0
+    - openbao_secret_age_secret_id | length > 0
