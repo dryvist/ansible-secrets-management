@@ -122,6 +122,10 @@ openbao_ai_api_key_providers:
   - zai
   - nvidia
   - moonshotai
+  # opencode — subscription-backed provider whose key is read by the
+  # router's local-llm domain. The leaf may be unseeded; the policy grants the
+  # read either way so an absent key surfaces as 404, never 403.
+  - opencode
 openbao_hermes_policy_name: hermes
 openbao_hermes_approle_name: hermes
 openbao_hermes_write_policy_name: hermes-write

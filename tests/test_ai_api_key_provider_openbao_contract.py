@@ -17,6 +17,7 @@ PROVIDERS = [
     "zai",
     "nvidia",
     "moonshotai",
+    "opencode",
 ]
 
 
