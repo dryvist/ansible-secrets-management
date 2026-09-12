@@ -145,6 +145,15 @@ openbao_ai_donna_approle_name: ai-donna
 # least privilege would buy nothing and cost policy churn on every new key.
 openbao_config_read_policy_name: config-read
 openbao_config_read_approle_name: config-read
+# approle-audit: read-only visibility into `auth/approle/role/*` — the
+# credential-bound settings (secret_id TTL/uses, source-address binding, token
+# TTL/max TTL) that no reachable non-break-glass identity could read back
+# before this (verified live 2026-09-12: every tested AppRole, including
+# roles reading their own definition, got permission denied). A declared
+# control nobody can read back cannot be shown to hold. Not break-glass:
+# read + list only, no write/create/delete/sudo anywhere.
+openbao_approle_audit_policy_name: approle-audit
+openbao_approle_audit_approle_name: approle-audit
 # config-write: a capability policy ATTACHED to the three IaC systems that
 # author config (OpenTofu / Ansible / Terrakube), never a standalone AppRole —
 # see the template header for why a fourth credential would be the wrong shape.

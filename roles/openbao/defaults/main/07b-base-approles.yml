@@ -81,6 +81,11 @@ openbao_base_approles:
   # construction — so it is shipped ambiently rather than human-gated.
   - name: "{{ openbao_config_read_approle_name }}"
     policy: "{{ openbao_config_read_policy_name }}"
+  # approle-audit: standing, ambient read-only identity like config-read —
+  # read + list can never mint or reveal a secret_id value (see the policy
+  # template header), so leaking this one costs nothing exploitable.
+  - name: "{{ openbao_approle_audit_approle_name }}"
+    policy: "{{ openbao_approle_audit_policy_name }}"
   # ai-public: read-only fabric-brain domain, its own narrow credential (see
   # the name vars above) — held by the hermes / open_webui brain-sync timers.
   - name: "{{ openbao_ai_public_approle_name }}"
