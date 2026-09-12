@@ -168,6 +168,11 @@ openbao_secrets_domains:
       # ansible-proxmox-ai by roles/llm_router — one field, both ends, so the
       # two cannot drift.
       - apps/llm-router
+      # Metrics scraper's router bearer (prometheus_llm_router_key, generated
+      # at source by openbao_generated_app_secrets.prometheus). Consumed here
+      # by inventory/group_vars/prometheus_group.yml; the same field is
+      # registered on the router by ansible-proxmox-ai roles/llm_router.
+      - apps/prometheus
       # Workflow engine: n8n_db_password (generated at source for its role on
       # the shared cluster) + n8n_encryption_key (PROMOTED — the key that
       # decrypts the credentials already stored in its database, so it must

@@ -150,6 +150,14 @@ openbao_generated_app_secrets:
   # bao_apps_secrets merge, same as every other field here.
   open-webui: [open_webui_llm_router_key]
   langgraph: [langgraph_llm_router_key]
+  # The metrics scraper's router key, same contract as the two above. Lands at
+  # secret/apps/prometheus. TWO readers, both of which read this exact field:
+  # roles/prometheus_stack here (inventory/group_vars/prometheus_group.yml puts
+  # it in the scrape job's bearer) and ansible-proxmox-ai's roles/llm_router
+  # (defaults/main/56-virtual-keys.yml registers it as the `prometheus-scrape`
+  # virtual key, scoped to no model). One field, both ends, so the credential
+  # the scraper presents and the one the router accepts cannot drift.
+  prometheus: [prometheus_llm_router_key]
   # hermes-ui companion web guest (ai VLAN): hermes-workspace's bind password
   # plus mission-control's auth pair. App-namespaced for the flat
   # bao_apps_secrets merge. hermes_ui_hermes_api_token is deliberately NOT
