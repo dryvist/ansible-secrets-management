@@ -107,6 +107,38 @@ doppler run -- scripts/fetch-openbao-secrets.sh media -- \
   scripts/run-ansible.sh playbooks/site.yml
 ```
 
+## Publishing a generated app secret to GitHub Actions
+
+Some `openbao_generated_app_secrets` values exist only to be read by a
+GitHub Actions workflow in another repository — for example the
+`github-actions` and `prometheus` router virtual keys, generated here and
+registered by `ansible-proxmox-ai`'s `roles/llm_router` (`seed-keys.yml`).
+Generating the value here does not make it reach GitHub: GitHub Actions
+secrets in this org are Doppler-managed end to end, and no automation in any
+repo writes to the GitHub secrets API directly — the GitHub App backing every
+minted token deliberately holds no `secrets`/`variables` permission, so a
+call against `/actions/secrets` 403s by design, not by accident.
+
+Publishing a newly generated value is therefore a one-time, human step, never
+an agent-reachable one:
+
+1. Read the value: `bao kv get -field=<field> {{ openbao_kv_mount }}/apps/<app>`
+   with the read-only AppRole; no write unlock needed.
+2. Put it, masked, in the Doppler project/config that syncs to the target
+   GitHub org or repo's Actions secrets:
+   `doppler secrets set <NAME>="<value>" --project <proj> --config <cfg>`.
+3. Let the existing Doppler → GitHub sync propagate it. Never set the value
+   directly in the GitHub UI or API — the next sync overwrites it, which
+   reads as unexplained drift.
+
+This is why a virtual key can sit generated-and-unseeded for a while without
+anything being broken: the router registers it once the OpenBao value exists,
+and reaching GitHub Actions is a separate manual step against a different
+secret store. An agent that finds a CI workflow failing on a missing secret
+(`LLM_ROUTER_API_KEY`, `LLM_ROUTER_BASE_URL`, or any other Doppler-synced
+value) should report which key is missing in which repo and stop — this step
+has no agent-reachable path.
+
 ## TLS
 
 `tls_disable = 1` today: TLS terminates at Traefik on the internal VLAN in front
