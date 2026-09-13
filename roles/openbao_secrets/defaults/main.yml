@@ -206,6 +206,12 @@ openbao_secrets_domains:
       # than under each consumer. Without this path the fields never reach
       # bao_apps_secrets and Authelia's mandatory() default fails the converge.
       - apps/authelia
+      # prometheus-pve-exporter's read-only PVE API token (pve_exporter_token_id,
+      # pve_exporter_token_secret — PROMOTED at source by
+      # openbao_promoted_app_secrets.pve-exporter). Consumed by
+      # roles/prometheus_pve_exporter; absent skips deploying the exporter
+      # rather than rendering a container with no credential.
+      - apps/pve-exporter
   - name: ntfy
     role_id_env: NTFY_VAULT_ROLE_ID
     secret_id_env: NTFY_VAULT_SECRET_ID
