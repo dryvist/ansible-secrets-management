@@ -1,0 +1,76 @@
+---
+# The ai-public and hermes policies each grant read on a small, named set of
+# apps/<name> router-virtual-key leaves (openbao_ai_public_router_key_apps /
+# openbao_hermes_router_key_apps). A list edited for one policy's consumers
+# must not silently reach the other — this renders both with the real
+# defaults and asserts each grants exactly its own set, nothing wider.
+- name: Render and verify the router-key-consumer policies
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    ansible_become: false
+    _fixture_dir: "{{ render_tmp }}"
+    _template_dir: "../../../roles/openbao/templates"
+    ansible_managed: "test fixture"
+
+  tasks:
+    - name: Load the openbao role defaults
+      ansible.builtin.include_vars:
+        dir: ../../../roles/openbao/defaults/main
+
+    - name: Render the ai-public and hermes policies
+      ansible.builtin.template:
+        src: "{{ _template_dir }}/{{ item }}.j2"
+        dest: "{{ _fixture_dir }}/{{ item }}"
+        mode: "0644"
+      loop: &router_key_policies
+        - ai-public-policy.hcl
+        - hermes-policy.hcl
+
+    - name: Read the rendered policies
+      ansible.builtin.slurp:
+        src: "{{ _fixture_dir }}/{{ item }}"
+      register: _router_key_raw
+      loop: *router_key_policies
+
+    - name: Reduce each rendered policy to its apps/ path lines
+      ansible.builtin.set_fact:
+        _ai_public_apps_paths: "{{ _paths[0] }}"
+        _hermes_apps_paths: "{{ _paths[1] }}"
+      vars:
+        _paths: >-
+          {{ _router_key_raw.results | map(attribute='content') | map('b64decode')
+             | map('regex_findall', '(?m)^path "([^"]+/apps/[^"]+)"') | list }}
+
+    - name: Assert ai-public grants exactly its four desktop-CLI apps paths
+      ansible.builtin.assert:
+        that:
+          - _ai_public_apps_paths | length == 8
+          - _ai_public_apps_paths | select('search', '/apps/opencode$') | list | length == 2
+          - _ai_public_apps_paths | select('search', '/apps/raycast$') | list | length == 2
+          - _ai_public_apps_paths | select('search', '/apps/codex$') | list | length == 2
+          - _ai_public_apps_paths | select('search', '/apps/cursor$') | list | length == 2
+          - _ai_public_apps_paths | select('search', '/apps/hermes-') | list | length == 0
+        fail_msg: >-
+          ai-public grants {{ _ai_public_apps_paths }}. It must grant exactly
+          data+metadata for opencode/raycast/codex/cursor and nothing else
+          under apps/.
+
+    - name: Assert hermes grants exactly its four operating-profile apps paths
+      ansible.builtin.assert:
+        that:
+          - _hermes_apps_paths | length == 8
+          - _hermes_apps_paths | select('search', '/apps/hermes-default$') | list | length == 2
+          - _hermes_apps_paths | select('search', '/apps/hermes-splunk-admin$') | list | length == 2
+          - _hermes_apps_paths | select('search', '/apps/hermes-homelab-admin$') | list | length == 2
+          - _hermes_apps_paths | select('search', '/apps/hermes-github-maint$') | list | length == 2
+          - >-
+            _hermes_apps_paths
+            | select('search', '/apps/opencode$|/apps/raycast$|/apps/codex$|/apps/cursor$')
+            | list | length == 0
+        fail_msg: >-
+          hermes grants {{ _hermes_apps_paths }}. It must grant exactly
+          data+metadata for its four operating profiles and nothing else
+          under apps/.

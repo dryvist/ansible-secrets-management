@@ -52,6 +52,11 @@ openbao_base_policies:
   # selects on `workspace` being defined, and this entry has no `workspace`.
   - name: "{{ openbao_semaphore_policy_name }}"
     template: semaphore-policy.hcl.j2
+  # Placed next to ansible-converge for the same reason as semaphore above: it
+  # is a strict SUBSET of that policy, not an independent grant set. No
+  # `workspace` key, so the Terrakube index-drift assert ignores it.
+  - name: openbao-node-converge
+    template: openbao-node-converge-policy.hcl.j2
   - name: "{{ openbao_observability_policy_name }}"
     template: observability-policy.hcl.j2
   - name: "{{ openbao_local_cloud_policy_name }}"
@@ -60,6 +65,8 @@ openbao_base_policies:
     template: monitoring-policy.hcl.j2
   - name: "{{ openbao_media_policy_name }}"
     template: media-policy.hcl.j2
+  - name: "{{ openbao_ntfy_policy_name }}"
+    template: ntfy-policy.hcl.j2
   - name: "{{ openbao_apps_policy_name }}"
     template: apps-policy.hcl.j2
   - name: "{{ openbao_local_llm_policy_name }}"
@@ -89,6 +96,8 @@ openbao_base_policies:
     template: github-write-policy.hcl.j2
   - name: "{{ openbao_github_admin_policy_name }}"
     template: github-admin-policy.hcl.j2
+  - name: "{{ openbao_github_repo_create_policy_name }}"
+    template: github-repo-create-policy.hcl.j2
   - name: "{{ openbao_github_runner_policy_name }}"
     template: github-runner-policy.hcl.j2
   - name: "{{ openbao_github_docs_publisher_policy_name }}"

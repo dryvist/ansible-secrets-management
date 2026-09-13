@@ -1,0 +1,13 @@
+{{ ansible_managed | comment }}
+# OpenBao policy for the ntfy AppRole (openbao_secrets domain "ntfy") — the
+# ntfy alert hub's Slack fan-out (ntfy_docker role). Read-only on the single
+# secrets-external entry holding Slack incoming-webhook URLs keyed by topic;
+# no access to secret/apps or any other domain's credentials.
+
+path "secrets-external/data/platform/slack-webhooks" {
+  capabilities = ["read"]
+}
+
+path "secrets-external/metadata/platform/slack-webhooks" {
+  capabilities = ["read", "list"]
+}

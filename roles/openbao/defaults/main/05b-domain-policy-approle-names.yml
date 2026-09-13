@@ -74,6 +74,12 @@ openbao_packer_approle_name: packer
 #                                              App ceiling; INERT — minted only
 #                                              via a human response-wrapped
 #                                              single-use secret_id
+#   github-repo-create -> github/token/dryvist-repo-create  administration:write
+#                                              ONLY (no contents, no
+#                                              pull_requests — cannot push);
+#                                              standing ambient identity, like
+#                                              github-write, so repo creation
+#                                              needs no per-call human unlock
 #
 # Deliberately NOT members of openbao_ai_domains: estate AI identities mint
 # via the `github-mint` capability policy (read-tier sets only) instead.
@@ -83,6 +89,8 @@ openbao_github_write_policy_name: github-write
 openbao_github_write_approle_name: github-write
 openbao_github_admin_policy_name: github-admin
 openbao_github_admin_approle_name: github-admin
+openbao_github_repo_create_policy_name: github-repo-create
+openbao_github_repo_create_approle_name: github-repo-create
 openbao_github_runner_policy_name: github-runner
 openbao_github_runner_approle_name: github-runner
 # docs-publisher: the documentation publisher's own identity. Mints exactly
@@ -190,6 +198,14 @@ openbao_github_write_scope_approles: >-
 # Realms inherit github-write's short token TTL rather than defining their own
 # looser one; a narrower repository boundary is no reason for a longer-lived
 # token.
+# Realms also inherit github-write's CIDR class: the same operator workstation
+# redeems them, and an unlisted name would otherwise default to `machine` and
+# refuse that workstation on source address with valid credentials.
+openbao_github_write_scope_cidr_classes: >-
+  {{ dict(openbao_github_write_scopes.keys() | list
+          | zip(openbao_github_write_scopes.keys()
+                | map('regex_replace', '^.*$', openbao_approle_cidr_class_overrides['github-write'])
+                | list)) }}
 openbao_github_write_scope_token_ttl: 30m
 
 # Deadman TTL on the per-repo write lease (KV lock under

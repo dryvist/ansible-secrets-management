@@ -1,5 +1,5 @@
 ---
-openbao_base_approles:
+openbao_base_approles_core:
   # terraform-apply is the OpenTofu identity, and OpenTofu authors config —
   # so it composes config-write onto its own policy rather than carrying a
   # second credential for the same job.
@@ -25,7 +25,7 @@ openbao_base_approles:
   # ssh-sign-automation-semaphore rather than ...-ansible, so the principal on
   # the wire says which caller ran the converge.
   #
-  # Unlimited secret_id, with the reason 08-admin-and-ttls.yml requires: nothing
+  # Unlimited secret_id, with the reason 08a-admin-and-ttls.yml requires: nothing
   # re-mints this one. It is written once into the execution plane's stored
   # environment, so a finite bound retires a credential nothing replaces and
   # every scheduled run then fails reporting an expired login. What bounds this
@@ -55,6 +55,8 @@ openbao_base_approles:
     policy: "{{ openbao_monitoring_policy_name }}"
   - name: "{{ openbao_media_approle_name }}"
     policy: "{{ openbao_media_policy_name }}"
+  - name: "{{ openbao_ntfy_approle_name }}"
+    policy: "{{ openbao_ntfy_policy_name }}"
   - name: "{{ openbao_apps_approle_name }}"
     policy: "{{ openbao_apps_policy_name }}"
   # local-llm additionally attaches the exact external provider-key leaves.
@@ -103,6 +105,11 @@ openbao_base_approles:
   - name: "{{ openbao_github_write_approle_name }}"
     policy: "{{ openbao_github_write_policy_name }}"
     token_ttl: 30m  # write identity gets a short token TTL
+  # github-repo-create: standing ambient identity, ceiling administration:write
+  # only — no per-repo allowlist to pin; boundary is dryvist-repo-create's map.
+  - name: "{{ openbao_github_repo_create_approle_name }}"
+    policy: "{{ openbao_github_repo_create_policy_name }}"
+    token_ttl: 30m  # short TTL like github-write
   - name: "{{ openbao_github_admin_approle_name }}"
     policy: "{{ openbao_github_admin_policy_name }}"
     token_ttl: "{{ openbao_ai_admin_token_ttl }}"
@@ -148,109 +155,12 @@ openbao_base_approles:
       {{ openbao_read_all_policies
          + (openbao_ai_readonly_extra_subtrees | map('regex_replace', '^(.+)$', 'read-\1') | list)
          + (['ssh-sign-automation-ai'] if openbao_ssh_engine_enabled else []) }}
-  # iac-platform-deploy: the deploy of the IaC platform compose stack reads its
-  # runtime credentials from secret/platform/* and the two OIDC client secrets
-  # it must hand its services from secret/apps/*. It chains both reads under a
-  # SINGLE token, so it needs one identity holding both — and no workload
-  # identity had both, which made the deploy an operator-only action.
-  #
-  # ai-elevated already carries exactly these grants, and is deliberately the
-  # wrong answer: it is a broad standing READ tier that also attaches
-  # ssh-sign-automation-ai, so pointing a deploy at it would widen a tier whose
-  # scope is justified by a different purpose. A purpose-named role carrying the
-  # two capability leaves it actually needs is narrower and says what it is.
-  #
-  # READ-ONLY by construction — no write-*, no github-mint, no ssh-sign, so it
-  # cannot reach the control plane. Standing secret_id (manage_secret_id
-  # defaults true) because a deploy is routine and unattended; the human-gated
-  # inert pattern is for write tiers.
-  - name: iac-platform-deploy
-    token_policies: ['read-apps', 'read-platform']
-  # ai-apply-all: the read-write-all rollup consumer — a scoped-but-broad WRITE
-  # actor for a genuinely cross-domain task. Composed ONLY of KV read+write base
-  # leaves (+ github-mint), so by construction it CANNOT touch sys/policies, auth,
-  # token/create, or the IaC kernel — the union of leaves has no control-plane
-  # path. Still human-gated + inert like every apply tier (no standing secret_id).
-  - name: ai-apply-all
-    token_policies: >-
-      {{ openbao_read_write_all_policies + ['github-mint']
-         + (['ssh-sign-automation-ai'] if openbao_ssh_engine_enabled else []) }}
-    token_ttl: "{{ openbao_ai_apply_all_token_ttl }}"
-    token_max_ttl: "{{ openbao_ai_apply_all_token_max_ttl }}"
-    manage_secret_id: false
-    secret_id_ttl: "{{ openbao_ai_elevated_secret_id_ttl }}"
-    secret_id_num_uses: 1
-  # ai-admin: break-glass full administrator over everything this role
-  # provisions — enumerated paths, with sudo only where OpenBao requires it, no
-  # longer a bare `path "*"`. NO standing secret_id; a token exists only after a
-  # human one-shot unlock and lives the admin window (1h), alerted on every use.
-  - name: "{{ openbao_ai_admin_approle_name }}"
-    policy: "{{ openbao_ai_admin_policy_name }}"
-    token_ttl: "{{ openbao_ai_admin_token_ttl }}"
-    token_max_ttl: "{{ openbao_ai_admin_token_ttl }}"
-    manage_secret_id: false
-    secret_id_ttl: "{{ openbao_ai_elevated_secret_id_ttl }}"
-    secret_id_num_uses: 1
-  # admin: the human operator's master-administrator identity, carrying the
-  # ai-admin policy. manage_secret_id:false — the role is created inert and the
-  # operator mints its secret_id out-of-band with the break-glass token.
-  #
-  # CHANGED, and this reverses a documented decision — read before reverting.
-  # It previously ran token_ttl 8h / token_max_ttl 0 / secret_id_ttl 0 /
-  # num_uses 0, deliberately STANDING, on the reasoning that the operator is the
-  # root of trust and holds the secret_id in a personal workstation keychain
-  # rather than Doppler, so the "full admin must never be standing" rule was
-  # scoped to AI agents only.
-  #
-  # The trust argument holds; the unbounded credential does not follow from it.
-  # token_max_ttl 0 means no absolute ceiling, and secret_id_ttl 0 with
-  # unlimited uses means the widest credential in the estate is a permanent,
-  # reusable value living on a laptop — where a keychain read, a backup, or a
-  # stolen machine is a full compromise with no expiry to run out. Being the
-  # root of trust is a reason to trust the OPERATOR, not a reason for the
-  # credential to be immortal. Bounds now match the other break-glass tiers.
-  #
-  # If the standing form is genuinely required (an unattended operator workflow
-  # that cannot re-unlock), restore it here deliberately and say which workflow
-  # needs it — do not restore it merely because a converge became inconvenient.
-  - name: admin
-    policy: "{{ openbao_ai_admin_policy_name }}"
-    token_ttl: "{{ openbao_approle_human_secret_id_ttl }}"
-    token_max_ttl: 30m
-    manage_secret_id: false
-    secret_id_ttl: "{{ openbao_approle_human_secret_id_ttl }}"
-    secret_id_num_uses: 1
-  - name: "{{ openbao_snapshot_approle_name }}"
-    policy: "{{ openbao_snapshot_policy_name }}"
-  # apps-seed: Doppler-published writer for secret/apps/* (Terraform vault-secrets).
-  - name: "{{ openbao_apps_seed_approle_name }}"
-    policy: "{{ openbao_apps_seed_policy_name }}"
-  # llm-gate: role_id/secret_id delivered to the Studio's auto-readable keychain
-  # (openbao-run secret-zero); reads only the bearer + ACME creds it injects.
-  - name: "{{ openbao_llm_gate_approle_name }}"
-    policy: "{{ openbao_llm_gate_policy_name }}"
-  # ai-runner: standing, ambient READ identity like local-llm / hermes. The
-  # openbao_secrets prefetch play in ansible-proxmox-ai logs in each converge
-  # with AI_RUNNER_VAULT_ROLE_ID / _SECRET_ID and reads the dispatch-queue +
-  # model-provider keys. secret_id is CIDR-bound to the runner guest's
-  # reservation when openbao_ai_runner_secret_id_cidr is set (env-delivered,
-  # never committed); when unset, the create task leaves it unbound and warns,
-  # and the guest's egress firewall profile is the compensating control.
-  - name: "{{ openbao_ai_runner_approle_name }}"
-    policy: "{{ openbao_ai_runner_policy_name }}"
-    secret_id_bound_cidrs: "{{ openbao_ai_runner_secret_id_cidr }}"
-  - name: "{{ openbao_slack_admin_approle_name }}"
-    policy: "{{ openbao_slack_admin_policy_name }}"
-    token_ttl: "{{ openbao_slack_admin_token_ttl }}"
-    token_max_ttl: "{{ openbao_slack_admin_token_ttl }}"
-    secret_id_ttl: "{{ openbao_slack_admin_secret_id_ttl }}"
-  - name: "{{ openbao_slack_ops_approle_name }}"
-    policy: "{{ openbao_slack_ops_policy_name }}"
-    token_ttl: "{{ openbao_slack_ops_token_ttl }}"
-    token_max_ttl: "{{ openbao_slack_ops_token_ttl }}"
-    secret_id_ttl: "{{ openbao_slack_ops_secret_id_ttl }}"
+# openbao_base_approles_elevated (iac-platform-deploy through slack-ops) lives
+# in 07f-elevated-approles.yml — split for the CI token-limits gate.
+openbao_base_approles: "{{ openbao_base_approles_core + openbao_base_approles_elevated }}"
 # Full AppRole set = the static base above + the per-service ai-apply-<svc> actor
 # roles generated from openbao_ai_domains. init.yml loops this combined list.
 openbao_approles: >-
   {{ openbao_base_approles + openbao_live_only_approles + openbao_rotation_approles
+     + openbao_workstation_approles
      + openbao_ai_apply_approles + openbao_github_write_scope_approles }}

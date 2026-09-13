@@ -21,6 +21,8 @@
     ansible_managed: "test fixture"
     _publisher_path: >-
       {{ openbao_github_mount }}/token/{{ openbao_github_docs_publisher_set_name }}
+    _repo_create_path: >-
+      {{ openbao_github_mount }}/token/dryvist-repo-create
 
   tasks:
     # The real defaults, not a mirrored subset: the composition of
@@ -78,6 +80,7 @@
         - github-docs-publisher-policy.hcl
         - github-mint-policy.hcl
         - github-read-policy.hcl
+        - github-repo-create-policy.hcl
 
     - name: Read the policies rendered with a publisher repository
       ansible.builtin.slurp:
@@ -90,6 +93,7 @@
         _publisher_paths: "{{ _paths[0] }}"
         _mint_paths: "{{ _paths[1] }}"
         _read_paths: "{{ _paths[2] }}"
+        _repo_create_paths: "{{ _paths[3] }}"
       vars:
         _paths: >-
           {{ _tier_raw.results | map(attribute='content') | map('b64decode')
@@ -113,3 +117,24 @@
           A tier other than docs-publisher grants the publisher's set.
           github-mint selects by rejecting tiers, so a new write-bearing tier
           is included there unless it is rejected explicitly.
+
+    - name: Assert the repo-create policy grants exactly its own set
+      ansible.builtin.assert:
+        that:
+          - _repo_create_paths == [_repo_create_path]
+        fail_msg: >-
+          The github-repo-create policy grants {{ _repo_create_paths }}. It
+          must grant exactly the dryvist-repo-create set: no raw token
+          endpoint, no read/publish/admin set.
+
+    - name: Assert no other tier inherits the repo-create grant
+      ansible.builtin.assert:
+        that:
+          - _repo_create_path not in _mint_paths
+          - _repo_create_path not in _read_paths
+        fail_msg: >-
+          A tier other than github-repo-create grants administration:write.
+          github-mint selects by rejecting tiers, so a new tier is included
+          there by default unless it is rejected explicitly — this is the one
+          tier where that omission is worst, since administration:write is
+          the one permission GitHub requires to create or delete a repository.

@@ -124,6 +124,12 @@ openbao_secrets_domains:
     paths:
       # The policy grants `apps/monitoring/*`; the bare path is a 403.
       - apps/monitoring/main
+      # Off-site deadman ping URL (service_deadman role) -- third-party SaaS,
+      # so it is secrets-external, not secret/apps. optional: true -- not yet
+      # seeded; the off-site ping simply no-ops until an operator populates it.
+      - mount: secrets-external
+        path: platform/healthchecks-offsite
+        optional: true
   - name: media
     role_id_env: MEDIA_VAULT_ROLE_ID
     secret_id_env: MEDIA_VAULT_SECRET_ID
@@ -206,6 +212,24 @@ openbao_secrets_domains:
       # than under each consumer. Without this path the fields never reach
       # bao_apps_secrets and Authelia's mandatory() default fails the converge.
       - apps/authelia
+      # prometheus-pve-exporter's read-only PVE API token (pve_exporter_token_id,
+      # pve_exporter_token_secret — PROMOTED at source by
+      # openbao_promoted_app_secrets.pve-exporter). Consumed by
+      # roles/prometheus_pve_exporter; absent skips deploying the exporter
+      # rather than rendering a container with no credential.
+      - apps/pve-exporter
+  - name: ntfy
+    role_id_env: NTFY_VAULT_ROLE_ID
+    secret_id_env: NTFY_VAULT_SECRET_ID
+    paths:
+      # Slack incoming-webhook URLs keyed by topic, for the ntfy alert hub's
+      # Slack fan-out (ntfy_docker role). Internet-reachable Slack
+      # infrastructure, so it lives in secrets-external, not secret/apps.
+      # optional: true — not yet seeded; the ntfy Slack fan-out no-ops (no
+      # routes deployed) until an operator populates this path.
+      - mount: secrets-external
+        path: platform/slack-webhooks
+        optional: true
   - name: local-llm
     role_id_env: LOCAL_LLM_VAULT_ROLE_ID
     secret_id_env: LOCAL_LLM_VAULT_SECRET_ID

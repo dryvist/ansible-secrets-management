@@ -10,10 +10,13 @@
 # identity that needs repo write gets its own parameter-pinned grant, never
 # this leaf widened. The publish tier is rejected here for that reason: its
 # sets carry a stored write permission map, so leaving it in would hand every
-# apply-tier actor the publisher's grant. Attached (via token_policies) to the
-# apply-tier actor roles; carries no self-escalation path, so composing it with
-# KV leaves is safe.
-{% for permission_set in openbao_github_permission_sets | rejectattr('tier', 'equalto', 'admin') | rejectattr('tier', 'equalto', 'publish') %}
+# apply-tier actor the publisher's grant. The repo-create tier is rejected for
+# the same reason and a sharper one: administration:write is the one
+# permission GitHub requires to create or delete a repository, so leaking it
+# to every apply-tier actor is strictly worse than leaking a per-repo write
+# grant. Attached (via token_policies) to the apply-tier actor roles; carries
+# no self-escalation path, so composing it with KV leaves is safe.
+{% for permission_set in openbao_github_permission_sets | rejectattr('tier', 'equalto', 'admin') | rejectattr('tier', 'equalto', 'publish') | rejectattr('tier', 'equalto', 'repo-create') %}
 path "{{ openbao_github_mount }}/token/{{ permission_set.name }}" {
   capabilities = ["create", "update"]
 }

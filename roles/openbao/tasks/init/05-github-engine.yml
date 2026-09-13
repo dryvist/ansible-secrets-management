@@ -194,6 +194,21 @@
     - openbao_bootstrap_token is defined
     - openbao_github_engine_enabled | bool
 
+- name: Assert the repo-create permission map is exactly administration:write
+  ansible.builtin.assert:
+    that:
+      - openbao_github_repo_create_permissions.keys() | list == ['administration']
+      - openbao_github_repo_create_permissions.administration == 'write'
+    fail_msg: >-
+      openbao_github_repo_create_permissions must be exactly
+      {administration: write}. Widening it defeats the narrow-tier design —
+      a token minted from this set must never gain contents/pull_requests
+      (push) or any other permission; add a new tier instead of broadening
+      this one.
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_github_engine_enabled | bool
+
 - name: Read the GitHub token permission sets
   ansible.builtin.command:
     cmd: >-

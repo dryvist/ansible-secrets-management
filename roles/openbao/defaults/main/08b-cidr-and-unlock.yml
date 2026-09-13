@@ -1,102 +1,4 @@
 ---
-# --- External admin token (provisioning against an ALREADY-LIVE cluster) -----
-# The initial `bao operator init` only happens once; after that, adding new
-# policies/AppRoles (e.g. growing openbao_approles/openbao_policies above)
-# needs a privileged token supplied out-of-band, since there is no longer a
-# fresh root token to mint one from. Set via env, never committed/logged.
-openbao_provisioning_token: >-
-  {{ lookup('env', 'OPENBAO_PROVISIONING_TOKEN') | default('', true) }}
-
-# --- Routine reconciliation identity (no operator, no admin token) -----------
-# openbao-reconcile owns, BY NAME, the policies and AppRoles this repo declares.
-# It excludes the break-glass tiers and its own policy, so it cannot widen
-# itself. Wiring it here is what makes a change to the CONTENT of an
-# already-declared policy land on a routine converge instead of skipping
-# silently.
-#
-# CONVERGE_ROLE_ID/SECRET_ID (whichever identity scripts/run-ansible.sh
-# actually authenticated as this run) is preferred: the execution plane's own
-# AppRole already carries the reconcile policy, so a plane-run converge needs
-# no separate reconcile secret-zero at all. The dedicated
-# OPENBAO_APPROLE_OPENBAO_RECONCILE_* pair remains the fallback for a
-# workstation converge that supplies it directly. Secret-zero is ambient env
-# (`doppler run`), same as every other AppRole; absent, the role falls back to
-# skipping and says so.
-openbao_reconcile_role_id: >-
-  {{ lookup('env', 'CONVERGE_ROLE_ID')
-     | default(lookup('env', 'OPENBAO_APPROLE_OPENBAO_RECONCILE_ROLE_ID'), true) }}
-openbao_reconcile_secret_id: >-
-  {{ lookup('env', 'CONVERGE_SECRET_ID')
-     | default(lookup('env', 'OPENBAO_APPROLE_OPENBAO_RECONCILE_SECRET_ID'), true) }}
-# --- Pre-issued reconcile token (the unattended execution plane) -------------
-# An alternative to holding secret-zero: a token that ALREADY carries the
-# reconcile policy, maintained by whatever runs the converge. The plane had
-# neither, so every routine converge skipped the whole provisioning path and
-# still reported success.
-#
-# A standing secret_id is not the fix — a bounded one expires and returns the
-# silence, an unbounded one is what these bounds exist to remove. A token lets
-# an agent hold the long-lived half, so the converge holds no secret_id at all.
-#
-# Treated as the RECONCILE identity, not a provisioning token: the
-# least-privilege filter below still applies.
-# tests/test_reconcile_identity_paths.py asserts the gating.
-openbao_reconcile_token: >-
-  {{ lookup('env', 'OPENBAO_RECONCILE_TOKEN') | default('', true) }}
-
-# The reconcile login is delegated to the controller, so it needs the address
-# the CONTROLLER can reach -- openbao_api_addr is the guest's own bind address.
-# BAO_ADDR is already ambient for every runner invocation.
-openbao_reconcile_addr: >-
-  {{ lookup('env', 'BAO_ADDR') | default('', true) }}
-
-# --- AppRole token TTLs -------------------------------------------------------
-openbao_approle_token_ttl: 1h
-openbao_approle_token_max_ttl: 4h
-
-# --- secret_id lifetime -------------------------------------------------------
-# A secret_id is the long-lived half of an AppRole credential: the role_id is a
-# public identifier, the secret_id is the password. `secret_id_ttl: 0` means it
-# NEVER expires and `secret_id_num_uses: 0` means it may be redeemed forever —
-# so a copy that leaks (a drop file left on a controller, a value pasted into a
-# shell history, an operator's clipboard) stays a working credential until
-# somebody notices and revokes it by hand. Nothing here rotates it, so "rotate
-# manually" was, in practice, never.
-#
-# The defaults below are therefore finite for every identity:
-#
-#   machine / guest / CI identities  secret_id_ttl 24h, num_uses 30
-#     24h bounds an unredeemed grant to one day. num_uses 30 bounds a redeemed
-#     one to roughly a day of converge logins — generous for a loop that logs
-#     in once or twice per run, tight enough that a copied value cannot serve
-#     an attacker indefinitely.
-#   human-unlocked identities        secret_id_ttl 15m, num_uses 1
-#     Already the shape of the elevated tiers (openbao_ai_elevated_secret_id_ttl
-#     in 07a); named here so the human tier is one constant, not a literal.
-#
-# Machine AppRoles in openbao_manageable_approles: create is add-if-missing;
-# init/10-approles.yml then reconciles secret_id_ttl / num_uses / token TTLs
-# on existing roles with the same complete field set as create (a partial
-# write would reset omitted fields). That does not mint a secret_id and does
-# not expire already-issued ones. Break-glass / inert human-gated roles are
-# excluded from the reconcile-managed set BY DESIGN — tightening a default
-# here does not retune them, and a routine converge must not grant an admin
-# token to make that happen.
-openbao_approle_secret_id_ttl: 24h
-openbao_approle_secret_id_num_uses: 30
-# The human-unlock tier: one wrapped, single-use secret_id per window.
-openbao_approle_human_secret_id_ttl: 15m
-
-# Per-role overrides, name -> value. An entry in openbao_base_approles wins over
-# these (it is the more visible declaration); these win over the globals above.
-openbao_approle_secret_id_ttl_overrides: {}
-# num_uses 0 (unlimited redemptions) is permitted ONLY with a reason on the line.
-openbao_approle_secret_id_num_uses_overrides:
-  # Its secret_id is live, non-expiring, and in active use by every agent
-  # session; capping redemptions here would strand them at an arbitrary login.
-  # Bounded instead by the CIDR class below until it is deliberately re-minted.
-  ai-orchestrator: 0
-
 # --- secret_id / token CIDR binding -------------------------------------------
 # `secret_id_bound_cidrs` restricts where a secret_id may be REDEEMED;
 # `token_bound_cidrs` restricts where the resulting token may be USED. Together
@@ -142,11 +44,22 @@ openbao_approle_default_cidr_class: machine
 # name -> class, for the identities that are not machine-resident.
 openbao_approle_cidr_class_overrides:
   # Workstation-held: the operator's own machine runs git/gh and the unlocks.
-  admin: workstation
+  # admin is also the provisioning tier: redeemed on the workstation, then used
+  # ON the store host by the openbao play (OPENBAO_PROVISIONING_TOKEN). A
+  # workstation-only bound answers those calls 403 -- same shape as flow-lock.
+  admin: machine_or_workstation
   ai-admin: workstation
   github-admin: workstation
   github-read: workstation
   github-write: workstation
+  # The write realm is redeemed from the same place as github-write — the
+  # operator's git/gh — so it takes the same class. It carried no override and
+  # declared as `machine`, which refuses the workstation on source address
+  # while the credential stays valid.
+  github-write-x10: workstation
+  # The OpenBao-node play's own converge identity: workstation-only BY DESIGN
+  # (07f), and never machine — the plane does not run that play.
+  openbao-node-converge: workstation
   # Ephemeral CI runners sit on their own isolated segment.
   github-runner: ci
   # Operator-run, not machine-resident: the platform deploy is driven from the
@@ -172,13 +85,8 @@ openbao_approle_cidr_class_overrides:
   # iac-platform-deploy already hit; do not narrow this to `machine` alone
   # without first moving those workstation callers somewhere else.
   openbao-reconcile: machine_or_workstation
-  # approle-audit exists to answer an operator-run sweep (the one that found
-  # no reachable identity could read auth/approle/role/* back) — the same
-  # kind of read-only verification query openbao-reconcile above already
-  # carries this class for, and for the same reason: defaulting to `machine`
-  # would refuse the workstation on source address while the credential
-  # stayed valid, shipping a policy that reads correct on paper but cannot
-  # be exercised from where the operator actually runs it.
+  # approle-audit answers an operator-run sweep (read auth/approle/role/* back)
+  # from the workstation as well as the plane -- same reasoning as reconcile.
   approle-audit: machine_or_workstation
   # The four live-only identities (05e). The union, matching what they carry in
   # the store today, so the first reconcile does not move them. Narrowing each
@@ -189,6 +97,8 @@ openbao_approle_cidr_class_overrides:
   terraform: machine_or_workstation
   vikunja: machine_or_workstation
   media-rotate: machine_or_workstation
+  slack-admin: machine_or_workstation
+  slack-ops: machine_or_workstation
   # Human-gated, operator-driven (rotate-key.yml, W1c): the wrap+unlock and
   # the rotation run it drives both happen from the operator's own
   # workstation, not a machine-resident timer — unlike every other rotator
@@ -204,7 +114,8 @@ openbao_approle_cidr_class_map: >-
           | zip(openbao_approles | map(attribute='name')
                 | map('regex_replace', '^.*$', openbao_approle_default_cidr_class)
                 | list))
-     | combine(openbao_approle_cidr_class_overrides) }}
+     | combine(openbao_approle_cidr_class_overrides)
+     | combine(openbao_github_write_scope_cidr_classes) }}
 # The classes that actually carry a role, so the assert in init/10-approles.yml
 # demands only the CIDRs this declaration set really needs. `unbound` is
 # excluded by definition — it is the documented opt-out, not a missing value.

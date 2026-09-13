@@ -1,0 +1,37 @@
+---
+# Workstation-run converge identities. Separate file rather than more rows in
+# 07b: that file is at the per-file size budget CI enforces, and the remedy for
+# that budget is always splitting the source.
+openbao_workstation_approles:
+  # openbao-node-converge: the converge identity for the OpenBao-node play
+  # (`--tags openbao` on `openbao_group`) — the single converge still run from
+  # a workstation, because its inputs are the seal key and the provisioning
+  # identities (docs/agents/commands-and-testing.md).
+  #
+  # It is NOT ansible-converge with a wider source range. That identity serves
+  # every plane-triggered converge in the estate, so adding a workstation range
+  # to it would widen the broadest converge credential there is to unblock one
+  # play. This one carries a strict SUBSET of its grant (see the policy
+  # template) plus the same SSH signing leaf, bound to the workstation class in
+  # 08b-cidr-and-unlock.yml.
+  #
+  # INERT, like the other break-glass tiers: the play it serves already
+  # requires a human-obtained provisioning token, so the operator is at the
+  # unlock console either way and a standing credential buys nothing. What it
+  # would cost is a laptop-resident credential that can mint `ansible`-principal
+  # SSH certificates for the whole estate. manage_secret_id: false also moves
+  # it from approle-issuer's unattended mint set onto human-unlock's, and
+  # excludes it from what openbao-reconcile may rewrite — both derive from this
+  # one marker, so neither list needs an entry.
+  #
+  # token_max_ttl 2h, not the 4h default: the certificate this token is
+  # minted to sign expires at 2h (openbao_ssh_roles), so a token outliving it
+  # can do nothing the run still needs.
+  - name: openbao-node-converge
+    token_policies: >-
+      {{ ['openbao-node-converge']
+         + (['ssh-sign-automation-ansible'] if openbao_ssh_engine_enabled else []) }}
+    token_max_ttl: 2h
+    manage_secret_id: false
+    secret_id_ttl: "{{ openbao_approle_human_secret_id_ttl }}"
+    secret_id_num_uses: 1

@@ -18,7 +18,7 @@ from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar, trust_as_template
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULTS = ROOT / "roles" / "openbao" / "defaults" / "main" / "08-admin-and-ttls.yml"
+DEFAULTS = ROOT / "roles" / "openbao" / "defaults" / "main" / "08b-cidr-and-unlock.yml"
 
 
 def _defaults():

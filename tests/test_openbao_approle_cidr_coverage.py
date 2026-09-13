@@ -23,7 +23,7 @@ from ansible.template import Templar, trust_as_template
 
 ROOT = Path(__file__).resolve().parents[1]
 TASKS = ROOT / "roles" / "openbao" / "tasks" / "init" / "10-approles.yml"
-DEFAULTS = ROOT / "roles" / "openbao" / "defaults" / "main" / "08-admin-and-ttls.yml"
+DEFAULTS = ROOT / "roles" / "openbao" / "defaults" / "main" / "08b-cidr-and-unlock.yml"
 
 UNCLASSED_TASK = "Assert every AppRole this run creates has a source-address class"
 
@@ -127,8 +127,13 @@ class TestShippedDeclarationIsClean(unittest.TestCase):
             "openbao_approle_cidr_class_overrides"
         ]
         # Role names are variable references; resolve them off the same defaults.
+        # openbao_approles, not openbao_base_approles: that is what the shipped
+        # expression in 08 checks against, and the declarations have since been
+        # split across several files to stay under the per-file size budget.
+        # Reading only the base list reported every role declared in one of the
+        # others as an override naming nothing.
         names = _render(
-            "{{ openbao_base_approles | map(attribute='name') | list }}", loaded
+            "{{ openbao_approles | map(attribute='name') | list }}", loaded
         )
         self.assertEqual(
             sorted(set(overrides) - set(names)),

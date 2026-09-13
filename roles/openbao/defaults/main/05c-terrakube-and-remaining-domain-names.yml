@@ -85,6 +85,13 @@ openbao_monitoring_policy_name: monitoring
 openbao_monitoring_approle_name: monitoring
 openbao_media_policy_name: media
 openbao_media_approle_name: media
+# ntfy — read-side AppRole for the ntfy alert hub's Slack fan-out
+# (openbao_secrets domain "ntfy"). Read-only on the single secrets-external
+# entry holding the Slack incoming-webhook URLs keyed by topic; that path is
+# internet-reachable Slack infrastructure, so it lives in secrets-external,
+# not secret/apps like every other ntfy_docker consumer.
+openbao_ntfy_policy_name: ntfy
+openbao_ntfy_approle_name: ntfy
 # apps — read-side AppRole for the shared-Postgres application tier
 # (openbao_secrets domain "apps": Nautobot, Zammad). apps-seed above is the
 # WRITER; this is the enumerated read-only consumer the converge logs in with
@@ -128,6 +135,15 @@ openbao_ai_api_key_providers:
   - opencode
 openbao_hermes_policy_name: hermes
 openbao_hermes_approle_name: hermes
+# Router virtual keys for the Hermes operating profiles. Shared reader for
+# now (one AppRole, four leaves); a per-profile split is a later follow-up.
+# One secret/apps/<name> leaf each, read only — see
+# openbao_generated_app_secrets.
+openbao_hermes_router_key_apps:
+  - hermes-default
+  - hermes-splunk-admin
+  - hermes-homelab-admin
+  - hermes-github-maint
 openbao_hermes_write_policy_name: hermes-write
 openbao_hermes_write_approle_name: hermes-write
 # llm-router-write: single-purpose writer for the llm-router Redis credential
@@ -173,6 +189,10 @@ openbao_config_write_terrakube_workspaces: >-
 # roles/openbao_secrets (ai-public domain) + roles/hermes_agent brain-sync.
 openbao_ai_public_policy_name: ai-public
 openbao_ai_public_approle_name: ai-public
+# Router virtual keys for the desktop CLIs that authenticate to OpenBao as
+# this same ai-public AppRole (see ~/CLAUDE.local.md "Untrusted tier"). One
+# secret/apps/<name> leaf each, read only — see openbao_generated_app_secrets.
+openbao_ai_public_router_key_apps: [opencode, raycast, codex, cursor]
 openbao_ai_orchestrator_policy_name: ai-orchestrator
 openbao_ai_orchestrator_approle_name: ai-orchestrator
 # ai-readonly / ai-elevated are now ACTOR ROLES that ATTACH base capability

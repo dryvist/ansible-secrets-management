@@ -1,0 +1,70 @@
+{{ ansible_managed | comment }}
+# openbao-node-converge — the workstation-held converge identity for the
+# OpenBao-node play (`--tags openbao` on `openbao_group`), which is the single
+# converge this estate still runs from a workstation rather than the execution
+# plane, because its inputs are the seal key and the provisioning identities
+# (docs/agents/commands-and-testing.md).
+#
+# It exists so that play does not need `ansible-converge`. That identity is the
+# estate-wide consumer inventory and also serves every plane-triggered
+# production converge; adding a workstation source range to it would widen the
+# blast radius of the broadest converge credential there is, to fix one play.
+# This role is instead a strict SUBSET of it — every path below appears
+# verbatim in ansible-converge-policy.hcl.j2 — bound to the workstation CIDR
+# class and inert (no standing secret_id).
+#
+# WHAT THE PLAY ACTUALLY TOUCHES, and therefore all this grants:
+#
+#   platform/object-storage
+#     The shared `inventory_resolve` role fetches the tofu-published inventory
+#     artifact from object storage. Call site: inventory/load_tofu.yml. Without
+#     it the play matches no hosts at all.
+#
+#   platform/ansible/env (both mounts)
+#     The run environment: the env-lookup values roles/openbao asserts on
+#     before it writes anything — the AppRole CIDR classes
+#     (08-admin-and-ttls.yml), the SSH CA source-address list
+#     (05-ssh-ca-engine.yml), the host-key pin. Empty values here do not fail
+#     quietly; they trip the converge's own asserts. Read only — a converge
+#     never writes these.
+#
+# The OpenBao ADMINISTRATIVE work of the play — KV mounts, seeds, policies,
+# AppRoles, engines, snapshots — is NOT granted here and must not be. That
+# plane authenticates with `openbao_bootstrap_token` (the break-glass
+# provisioning token, or openbao-reconcile), never with the converge identity;
+# see roles/openbao/tasks/init/02-initialize-cluster.yml. A grant here would
+# create a second path to the control plane wearing a converge identity's name.
+#
+# DELIBERATELY NOT GRANTED, all of which ansible-converge does carry:
+#   * apps/nas, platform/windows-vdi/win11-admin, platform/defaults — read by
+#     roles this play never runs.
+#   * ai/mcp/{splunk,vikunja,zammad,nautobot} write — MCP publication belongs
+#     to the converges that mint those tokens.
+#   * secrets-external/platform/backblaze-splunk — the ansible-splunk converge.
+#   * the openbao_credential_publish_apps write loop — this play publishes no
+#     app credential.
+#   * config-write — the OpenBao play authors no `config` mount content.
+# SSH certificate signing is not granted here either: it is the existing
+# `ssh-sign-automation-ansible` capability leaf, attached alongside this policy
+# in the AppRole declaration rather than restated as a path.
+
+{% for kv_path in ['platform/object-storage'] %}
+path "{{ openbao_kv_mount }}/data/{{ kv_path }}" {
+  capabilities = ["read"]
+}
+
+path "{{ openbao_kv_mount }}/metadata/{{ kv_path }}" {
+  capabilities = ["read", "list"]
+}
+
+{% endfor %}
+{% for mount in [openbao_kv_mount, 'secrets-external'] %}
+path "{{ mount }}/data/platform/ansible/env" {
+  capabilities = ["read"]
+}
+
+path "{{ mount }}/metadata/platform/ansible/env" {
+  capabilities = ["read"]
+}
+
+{% endfor %}
