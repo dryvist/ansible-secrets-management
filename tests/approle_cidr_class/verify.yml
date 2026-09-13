@@ -84,6 +84,17 @@
           on the store host, so a single-segment class refuses one of the two
           with valid credentials and the run reports 403 permission denied.
 
+    - name: The interactive repo-create identity is redeemed from the workstation
+      vars:
+        cls: "{{ openbao_approle_cidr_class_map['github-repo-create'] }}"
+      ansible.builtin.assert:
+        that:
+          - cls == 'workstation'
+        fail_msg: >-
+          github-repo-create declares class '{{ cls }}'. The helper runs it only
+          from an interactive terminal on the operator's workstation, so any
+          other class refuses every real caller on source address.
+
     # include_vars outranks task vars too, so the fixture realm is a fact.
     - name: Declare a fixture write realm
       ansible.builtin.set_fact:
