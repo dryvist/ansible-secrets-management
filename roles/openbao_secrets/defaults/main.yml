@@ -216,8 +216,11 @@ openbao_secrets_domains:
       # pve_exporter_token_secret — PROMOTED at source by
       # openbao_promoted_app_secrets.pve-exporter). Consumed by
       # roles/prometheus_pve_exporter; absent skips deploying the exporter
-      # rather than rendering a container with no credential.
-      - apps/pve-exporter
+      # rather than rendering a container with no credential. optional: true
+      # -- the path exists only once an operator has promoted the token, so a
+      # 404 must not fail the whole apps prefetch.
+      - path: apps/pve-exporter
+        optional: true
   - name: ntfy
     role_id_env: NTFY_VAULT_ROLE_ID
     secret_id_env: NTFY_VAULT_SECRET_ID

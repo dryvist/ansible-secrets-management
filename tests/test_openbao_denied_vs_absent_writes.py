@@ -37,7 +37,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 # The real markers, read out of the role defaults rather than retyped.
 BAO_ABSENT = yaml.safe_load(
-    (ROOT / "roles/openbao/defaults/main/01-kv-hierarchy-and-rbac.yml").read_text()
+    (ROOT / "roles/openbao/defaults/main/01b-app-secrets.yml").read_text()
 )["openbao_absent_stderr_marker"]
 MOD_ABSENT = yaml.safe_load(
     (ROOT / "roles/openbao_secrets/defaults/main.yml").read_text()
