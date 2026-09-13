@@ -18,11 +18,19 @@ from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar, trust_as_template
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULTS = ROOT / "roles" / "openbao" / "defaults" / "main" / "08b-cidr-and-unlock.yml"
+DEFAULTS_DIR = ROOT / "roles" / "openbao" / "defaults" / "main"
 
 
 def _defaults():
-    return yaml.safe_load(DEFAULTS.read_text(encoding="utf-8"))
+    # openbao_approle_cidr_class_map (08b) references
+    # openbao_github_write_scope_cidr_classes, declared in
+    # 05b-domain-policy-approle-names.yml -- defaults/main/*.yml are merged
+    # into one flat namespace at role-load time, so the real variable
+    # universe is every file in the directory, not 08b alone.
+    merged = {}
+    for f in sorted(DEFAULTS_DIR.glob("*.yml")):
+        merged.update(yaml.safe_load(f.read_text(encoding="utf-8")) or {})
+    return merged
 
 
 def _mark_templates(value):

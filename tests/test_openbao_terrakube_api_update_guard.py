@@ -37,7 +37,7 @@ DEFAULTS = ROOT / "roles/openbao/defaults/main"
 FORBIDDEN = yaml.safe_load((DEFAULTS / "06-ai-access-model.yml").read_text())[
     "openbao_ai_forbidden_subtrees"
 ]
-KV_MOUNT = yaml.safe_load((DEFAULTS / "01-kv-hierarchy-and-rbac.yml").read_text())[
+KV_MOUNT = yaml.safe_load((DEFAULTS / "01a-kv-hierarchy.yml").read_text())[
     "openbao_kv_mount"
 ]
 LIVE_WORKSPACES = yaml.safe_load(
