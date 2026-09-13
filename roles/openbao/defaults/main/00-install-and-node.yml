@@ -53,6 +53,27 @@ openbao_bind_address: >-
 openbao_api_addr: "http://{{ openbao_bind_address }}:{{ openbao_api_port }}"
 openbao_cluster_addr: "https://{{ openbao_bind_address }}:{{ openbao_cluster_port }}"
 
+# Where the bootstrap host sends PROVISIONING WRITES (policies, AppRoles,
+# engine config, KV seeds). Raft accepts a write only on the ACTIVE node; a
+# standby is expected to forward it, and that standby->leader hop is the one
+# that intermittently fails in this estate — the failure surfaces to the client
+# as "cannot write to readonly storage" on the write path and "internal error"
+# on an AppRole login. It is why the ingress health check probes
+# /v1/sys/health WITHOUT standbyok and evicts standbys from the pool
+# (terraform side, verified 2026-07-20).
+#
+# openbao_bootstrap_host is the alphabetically-first group member, chosen for
+# determinism, NOT for leadership — so it is a standby whenever the cluster has
+# elected anyone else, and every provisioning write went over exactly the hop
+# the ingress exists to avoid. Those writes never traversed the ingress, so the
+# eviction protected clients and left the converge unprotected.
+#
+# This default keeps the historic node-local behaviour; init/02 overrides it on
+# the bootstrap host with the live leader_address once the cluster is up, and
+# falls back here when there is no leader yet (fresh init) or the status read
+# does not report one.
+openbao_write_addr: "{{ openbao_api_addr }}"
+
 # --- Ingress addresses whose X-Forwarded-For header is trusted ---------------
 # Every ingress instance's own address plus the floating ingress VIP, both
 # derived from the inventory exactly as the keepalived role derives them — no

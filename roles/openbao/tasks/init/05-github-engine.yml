@@ -26,7 +26,7 @@
       -version={{ openbao_github_plugin_catalog_version }}
       secret {{ openbao_github_plugin_name }}
   environment:
-    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_ADDR: "{{ openbao_write_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
   register: openbao_github_plugin_check
   no_log: true
@@ -45,7 +45,7 @@
       -version={{ openbao_github_plugin_catalog_version }}
       secret {{ openbao_github_plugin_name }}
   environment:
-    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_ADDR: "{{ openbao_write_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
   register: openbao_github_plugin_register
   no_log: true
@@ -62,7 +62,7 @@
       -plugin-version={{ openbao_github_plugin_catalog_version }}
       {{ openbao_github_plugin_name }}
   environment:
-    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_ADDR: "{{ openbao_write_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
   no_log: true
   changed_when: true
@@ -77,7 +77,7 @@
       bao secrets tune -plugin-version={{ openbao_github_plugin_catalog_version }}
       {{ openbao_github_mount }}/
   environment:
-    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_ADDR: "{{ openbao_write_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
   register: openbao_github_plugin_tune
   no_log: true
@@ -94,7 +94,7 @@
   ansible.builtin.command:
     cmd: "bao plugin reload -plugin={{ openbao_github_plugin_name }} -scope=global"
   environment:
-    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_ADDR: "{{ openbao_write_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
   no_log: true
   changed_when: true
@@ -107,7 +107,7 @@
   ansible.builtin.command:
     cmd: "bao read -format=json {{ openbao_github_mount }}/config"
   environment:
-    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_ADDR: "{{ openbao_write_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
   register: openbao_github_config_check
   no_log: true
@@ -215,7 +215,7 @@
       bao read -format=json
       {{ openbao_github_mount }}/permissionset/{{ item.name }}
   environment:
-    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_ADDR: "{{ openbao_write_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
   loop: "{{ openbao_github_permission_sets }}"
   loop_control:

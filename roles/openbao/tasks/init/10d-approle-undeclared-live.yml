@@ -27,7 +27,7 @@
   ansible.builtin.command:
     cmd: "bao list -format=json auth/approle/role"
   environment:
-    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_ADDR: "{{ openbao_write_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
   register: openbao_approle_live_list
   no_log: true

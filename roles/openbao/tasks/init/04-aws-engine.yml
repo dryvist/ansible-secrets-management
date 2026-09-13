@@ -27,7 +27,7 @@
       -version={{ openbao_aws_plugin_catalog_version }}
       secret {{ openbao_aws_plugin_name }}
   environment:
-    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_ADDR: "{{ openbao_write_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
   register: openbao_aws_plugin_check
   no_log: true
@@ -46,7 +46,7 @@
       -version={{ openbao_aws_plugin_catalog_version }}
       secret {{ openbao_aws_plugin_name }}
   environment:
-    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_ADDR: "{{ openbao_write_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
   no_log: true
   register: openbao_aws_plugin_register
@@ -63,7 +63,7 @@
       -plugin-version={{ openbao_aws_plugin_catalog_version }}
       {{ openbao_aws_plugin_name }}
   environment:
-    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_ADDR: "{{ openbao_write_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
   no_log: true
   changed_when: true
@@ -78,7 +78,7 @@
       bao secrets tune -plugin-version={{ openbao_aws_plugin_catalog_version }}
       {{ openbao_aws_mount }}/
   environment:
-    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_ADDR: "{{ openbao_write_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
   no_log: true
   register: openbao_aws_plugin_tune
@@ -95,7 +95,7 @@
   ansible.builtin.command:
     cmd: "bao plugin reload -plugin={{ openbao_aws_plugin_name }} -scope=global"
   environment:
-    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_ADDR: "{{ openbao_write_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
   no_log: true
   changed_when: true
@@ -111,7 +111,7 @@
   ansible.builtin.command:
     cmd: "bao read -format=json {{ openbao_aws_mount }}/config/root"
   environment:
-    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_ADDR: "{{ openbao_write_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
   register: openbao_aws_root_check
   no_log: true
@@ -169,7 +169,7 @@
   ansible.builtin.command:
     cmd: "bao read -format=json {{ openbao_aws_mount }}/roles/{{ openbao_aws_role_name }}"
   environment:
-    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_ADDR: "{{ openbao_write_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
   register: openbao_aws_role_check
   no_log: true
@@ -188,7 +188,7 @@
       default_sts_ttl={{ openbao_aws_default_sts_ttl }}
       max_sts_ttl={{ openbao_aws_max_sts_ttl }}
   environment:
-    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_ADDR: "{{ openbao_write_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
   no_log: true
   changed_when: true
@@ -202,7 +202,7 @@
   ansible.builtin.command:
     cmd: "bao read -format=json {{ openbao_aws_mount }}/roles/{{ openbao_aws_iac_admin_role_name }}"
   environment:
-    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_ADDR: "{{ openbao_write_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
   register: openbao_aws_iac_admin_role_check
   no_log: true
@@ -221,7 +221,7 @@
       default_sts_ttl={{ openbao_aws_iac_admin_default_sts_ttl }}
       max_sts_ttl={{ openbao_aws_iac_admin_max_sts_ttl }}
   environment:
-    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_ADDR: "{{ openbao_write_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
   no_log: true
   changed_when: true

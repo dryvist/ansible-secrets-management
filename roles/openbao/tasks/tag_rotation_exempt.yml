@@ -26,7 +26,7 @@
       bao kv metadata get -format=json
       {{ openbao_rotation_exempt_mount }}/{{ openbao_rotation_exempt_path }}
   environment:
-    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_ADDR: "{{ openbao_write_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
   register: openbao_rotation_exempt_current
   # A DENIED read is not an ABSENT path — see the openbao_absent_stderr_marker
@@ -52,7 +52,7 @@
       bao write -format=json sys/capabilities-self
       paths={{ openbao_rotation_exempt_metadata_path }}
   environment:
-    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_ADDR: "{{ openbao_write_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
   register: openbao_rotation_exempt_capabilities
   changed_when: false
@@ -86,7 +86,7 @@
       bao kv metadata patch -custom-metadata=rotation=exempt
       {{ openbao_rotation_exempt_mount }}/{{ openbao_rotation_exempt_path }}
   environment:
-    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_ADDR: "{{ openbao_write_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
   no_log: true
   changed_when: true

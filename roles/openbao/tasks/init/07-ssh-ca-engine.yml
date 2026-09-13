@@ -16,7 +16,7 @@
   ansible.builtin.command:
     cmd: "bao secrets enable -path={{ openbao_ssh_mount }} ssh"
   environment:
-    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_ADDR: "{{ openbao_write_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
   no_log: true
   changed_when: true
@@ -33,7 +33,7 @@
   ansible.builtin.command:
     cmd: "bao read -format=json {{ openbao_ssh_mount }}/config/ca"
   environment:
-    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_ADDR: "{{ openbao_write_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
   register: openbao_ssh_ca_check
   no_log: true
@@ -75,7 +75,7 @@
   ansible.builtin.command:
     cmd: "bao read -field=public_key {{ openbao_ssh_mount }}/config/ca"
   environment:
-    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_ADDR: "{{ openbao_write_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
   register: openbao_ssh_ca_public_key
   changed_when: false
@@ -122,7 +122,7 @@
   ansible.builtin.command:
     cmd: "bao read -format=json {{ openbao_ssh_mount }}/roles/{{ item.name }}"
   environment:
-    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_ADDR: "{{ openbao_write_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
   loop: "{{ openbao_ssh_roles }}"
   loop_control:
