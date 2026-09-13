@@ -10,3 +10,13 @@ path "{{ openbao_kv_mount }}/data/apps/monitoring/*" {
 path "{{ openbao_kv_mount }}/metadata/apps/monitoring/*" {
   capabilities = ["read", "list"]
 }
+
+# Off-site deadman ping URL (service_deadman role): a third-party SaaS
+# credential, so it lives in secrets-external, not secret/apps.
+path "secrets-external/data/platform/healthchecks-offsite" {
+  capabilities = ["read"]
+}
+
+path "secrets-external/metadata/platform/healthchecks-offsite" {
+  capabilities = ["read", "list"]
+}
