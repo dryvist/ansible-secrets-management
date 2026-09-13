@@ -96,6 +96,16 @@ openbao_approle_secret_id_num_uses_overrides:
   # session; capping redemptions here would strand them at an arbitrary login.
   # Bounded instead by the CIDR class below until it is deliberately re-minted.
   ai-orchestrator: 0
+  # workstation identity redeemed once per short-lived token mint by every
+  # interactive session; bounded by its CIDR class and 24h secret_id TTL instead.
+  github-read: 0
+  # A push-capable identity, redeemed once per short-lived per-repository
+  # token mint; bounded by the workstation address class and the 24h
+  # secret_id TTL instead.
+  github-write: 0
+  # The write realm roles (github-write-x10 etc.) keep the default 30-use cap
+  # deliberately: each is redeemed once per realm session, not once per
+  # token mint, so 30 redemptions/day does not exhaust the same way.
 
 # The AppRole auth mount's own login lockout. OpenBao's lockout config exists
 # only per auth mount, so this tune applies to every AppRole on the mount, not
