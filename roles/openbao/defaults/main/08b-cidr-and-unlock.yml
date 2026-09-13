@@ -52,6 +52,9 @@ openbao_approle_cidr_class_overrides:
   github-admin: workstation
   github-read: workstation
   github-write: workstation
+  # repo-create is an interactive, one-at-a-time operator action (the helper
+  # refuses to run without a terminal), so it is redeemed from the workstation.
+  github-repo-create: workstation
   # The write realm is redeemed from the same place as github-write — the
   # operator's git/gh — so it takes the same class. It carried no override and
   # declared as `machine`, which refuses the workstation on source address
