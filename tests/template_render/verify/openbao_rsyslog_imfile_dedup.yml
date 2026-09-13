@@ -1,0 +1,106 @@
+---
+# =============================================================================
+# openbao's audit-log and secret-age-report rsyslog drop-ins each render an
+# `input(type="imfile" ...)`, and rsyslog hard-fails `rsyslogd -N1` if
+# `module(load="imfile")` appears more than once across the config it loads.
+# Both drop-ins default to enabled and are commonly enabled together on the
+# same host.
+#
+# The audit-log drop-in is deployed by ../audit.yml, whose own include
+# condition (main/configure_and_bootstrap.yml) is
+# `openbao_audit_enabled | bool` AND non-Docker -- audit.yml is also skipped
+# under Docker (no systemd/live API there, e.g. every Molecule scenario).
+# The secret-age drop-in's guard has to mirror BOTH halves of that condition,
+# not just openbao_audit_enabled, or a Docker-hosted run renders neither
+# drop-in's module load and rsyslogd fails "input module name 'imfile' is
+# unknown" (caught in CI: PR #1877, Molecule (openbao) job). Render both
+# scenarios and assert the module load appears exactly once in what would
+# actually reach rsyslog.d in each.
+# =============================================================================
+- name: Render and verify the openbao rsyslog imfile module loads exactly once
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    ansible_become: false
+    _fixture_dir: "{{ render_tmp }}"
+    # Mirror roles/openbao/defaults/main/10-audit-and-breakglass.yml and
+    # 09b-secret-age.yml with scrubbed values.
+    openbao_audit_enabled: true
+    openbao_audit_log_path: /var/log/openbao/audit.log
+    openbao_audit_syslog_host: "syslog.pve.example.com"
+    openbao_audit_syslog_port: 1517
+    openbao_audit_queue_max_disk_space: 256m
+    openbao_audit_rebind_interval: 100
+    openbao_secret_age_report_path: /var/log/openbao/secret-age.json
+    _openbao_template_dir: "{{ playbook_dir }}/../../../roles/openbao/templates"
+
+  tasks:
+    # --- Non-Docker: audit.yml runs, so its drop-in renders too -------------
+    - name: Render the audit-log rsyslog drop-in (non-Docker -- audit.yml runs)
+      ansible.builtin.template:
+        src: "{{ _openbao_template_dir }}/openbao-audit-rsyslog.conf.j2"
+        dest: "{{ _fixture_dir }}/test_openbao_audit_rsyslog.conf"
+        mode: "0644"
+      vars:
+        ansible_virtualization_type: kvm
+
+    - name: Render the secret-age rsyslog drop-in (non-Docker)
+      ansible.builtin.template:
+        src: "{{ _openbao_template_dir }}/openbao-secret-age-rsyslog.conf.j2"
+        dest: "{{ _fixture_dir }}/test_openbao_secret_age_rsyslog_nondocker.conf"
+        mode: "0644"
+      vars:
+        ansible_virtualization_type: kvm
+
+    # --- Docker: audit.yml is skipped, so only secret-age's drop-in exists --
+    - name: Render the secret-age rsyslog drop-in (Docker -- audit.yml is skipped)
+      ansible.builtin.template:
+        src: "{{ _openbao_template_dir }}/openbao-secret-age-rsyslog.conf.j2"
+        dest: "{{ _fixture_dir }}/test_openbao_secret_age_rsyslog_docker.conf"
+        mode: "0644"
+      vars:
+        ansible_virtualization_type: docker
+
+    - name: Read every rendered drop-in
+      ansible.builtin.slurp:
+        src: "{{ _fixture_dir }}/{{ item }}"
+      loop:
+        - test_openbao_audit_rsyslog.conf
+        - test_openbao_secret_age_rsyslog_nondocker.conf
+        - test_openbao_secret_age_rsyslog_docker.conf
+      register: _openbao_rsyslog_raw
+
+    - name: Decode each rendered drop-in
+      ansible.builtin.set_fact:
+        _openbao_rsyslog_by_name: >-
+          {{ _openbao_rsyslog_by_name | default({})
+             | combine({item.item: item.content | b64decode}) }}
+      loop: "{{ _openbao_rsyslog_raw.results }}"
+
+    - name: Assert the module load appears exactly once in the non-Docker set
+      ansible.builtin.assert:
+        that:
+          - >-
+            (_openbao_rsyslog_by_name['test_openbao_audit_rsyslog.conf']
+             ~ _openbao_rsyslog_by_name['test_openbao_secret_age_rsyslog_nondocker.conf'])
+            .count('module(load="imfile")') == 1
+        fail_msg: >-
+          module(load="imfile") must render in exactly one of the two openbao
+          rsyslog drop-ins when both audit and secret-age are enabled on a
+          non-Docker host -- rsyslogd -N1 hard-fails config validation on a
+          duplicate module load.
+
+    - name: Assert the module load appears exactly once under Docker (audit.yml skipped)
+      ansible.builtin.assert:
+        that:
+          - >-
+            _openbao_rsyslog_by_name['test_openbao_secret_age_rsyslog_docker.conf']
+            .count('module(load="imfile")') == 1
+        fail_msg: >-
+          Under Docker, ../audit.yml never runs (no systemd/live API), so the
+          secret-age drop-in is the ONLY one of the pair rendered -- it must
+          load imfile itself in that case, or rsyslogd -N1 fails "input
+          module name 'imfile' is unknown" (regressed in PR #1877, Molecule
+          (openbao) job).
