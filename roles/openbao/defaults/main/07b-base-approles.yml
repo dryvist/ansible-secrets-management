@@ -86,8 +86,11 @@ openbao_base_approles_core:
   # approle-audit: standing, ambient read-only identity like config-read —
   # read + list can never mint or reveal a secret_id value (see the policy
   # template header), so leaking this one costs nothing exploitable.
+  # Nothing re-mints it; bounded by address class and a read-only grant.
   - name: "{{ openbao_approle_audit_approle_name }}"
     policy: "{{ openbao_approle_audit_policy_name }}"
+    secret_id_ttl: "0s"
+    secret_id_num_uses: 0
   # ai-public: read-only fabric-brain domain, its own narrow credential (see
   # the name vars above) — held by the hermes / open_webui brain-sync timers.
   - name: "{{ openbao_ai_public_approle_name }}"
@@ -100,16 +103,25 @@ openbao_base_approles_core:
   # human gate (user decision 2026-07-17: ambient for allowlisted repos).
   # github-admin is INERT break-glass like ai-admin: no standing secret_id; a
   # human wraps a single-use secret_id per elevation.
+  # secret_id_ttl "0s" + num_uses 0: nothing re-mints these, so a finite bound
+  # expires a credential nothing replaces. Same reason as semaphore above and
+  # the four in 07d. "0s" not 0: 10c compares via to_seconds.
   - name: "{{ openbao_github_read_approle_name }}"
     policy: "{{ openbao_github_read_policy_name }}"
+    secret_id_ttl: "0s"
+    secret_id_num_uses: 0
   - name: "{{ openbao_github_write_approle_name }}"
     policy: "{{ openbao_github_write_policy_name }}"
     token_ttl: 30m  # write identity gets a short token TTL
+    secret_id_ttl: "0s"
+    secret_id_num_uses: 0
   # github-repo-create: standing ambient identity, ceiling administration:write
   # only — no per-repo allowlist to pin; boundary is dryvist-repo-create's map.
   - name: "{{ openbao_github_repo_create_approle_name }}"
     policy: "{{ openbao_github_repo_create_policy_name }}"
     token_ttl: 30m  # short TTL like github-write
+    secret_id_ttl: "0s"
+    secret_id_num_uses: 0
   - name: "{{ openbao_github_admin_approle_name }}"
     policy: "{{ openbao_github_admin_policy_name }}"
     token_ttl: "{{ openbao_ai_admin_token_ttl }}"
@@ -127,10 +139,15 @@ openbao_base_approles_core:
   # approle-issuer: mints secret_ids for the enumerated non-break-glass roles
   # and does nothing else. Its own token TTL is short because a mint is a
   # single operation, not a session — nothing legitimate holds this for hours.
+  # Its secret_id must not expire: this is the only identity that may mint a
+  # secret_id, and its policy excludes its own role, so nothing but the human
+  # tier can replace it. Bounded by its address class and a mint-only policy.
   - name: "{{ openbao_approle_issuer_approle_name }}"
     policy: "{{ openbao_approle_issuer_policy_name }}"
     token_ttl: 15m
     token_max_ttl: 30m
+    secret_id_ttl: "0s"
+    secret_id_num_uses: 0
   # ai-orchestrator: role_id/secret_id are operator-held in Doppler tier-0
   # (services BAO_AI_ORCHESTRATOR_ROLE_ID / _SECRET_ID), consumed as ambient env.
   # This AppRole already exists LIVE with a non-expiring secret_id in active
