@@ -91,10 +91,13 @@ openbao_base_approles_core:
     policy: "{{ openbao_approle_audit_policy_name }}"
     secret_id_ttl: "0s"
     secret_id_num_uses: 0
-  # ai-public: read-only fabric-brain domain, its own narrow credential (see
-  # the name vars above) — held by the hermes / open_webui brain-sync timers.
+  # ai-public: read-only fabric-brain domain, held by the brain-sync timers and
+  # now the lower-trust harness tier. Nothing re-mints it; its read-only grant
+  # is the bound.
   - name: "{{ openbao_ai_public_approle_name }}"
     policy: "{{ openbao_ai_public_policy_name }}"
+    secret_id_ttl: "0s"
+    secret_id_num_uses: 0
   # GitHub token tiers: engine mints, tokens never stored. github-read and
   # github-write are standing ambient identities consumed by nix-darwin's
   # `openbao-github-creds` (role_id/secret_id operator-held in Doppler,
@@ -161,8 +164,11 @@ openbao_base_approles_core:
   # ai-readonly = read-all (every read-<svc>); ai-elevated = read-all + the
   # read-only extras (secret/platform/*). Adding a service to openbao_ai_domains
   # auto-widens read-all, so both tiers grow from one list entry.
+  # Redeemed interactively by `aikey`; nothing re-mints it.
   - name: "{{ openbao_ai_readonly_approle_name }}"
     token_policies: "{{ openbao_read_all_policies }}"
+    secret_id_ttl: "0s"
+    secret_id_num_uses: 0
   # ai-elevated additionally attaches ssh-sign-automation-ai: the STANDING
   # ability to mint 1h ai-agent SSH certs. Deliberate, documented tradeoff
   # (agents must pull SSH access friction-free) — bounded by non-root

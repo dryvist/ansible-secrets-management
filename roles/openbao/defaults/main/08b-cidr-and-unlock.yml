@@ -63,6 +63,13 @@ openbao_approle_cidr_class_overrides:
   # The OpenBao-node play's own converge identity: workstation-only BY DESIGN
   # (07f), and never machine — the plane does not run that play.
   openbao-node-converge: workstation
+  # Redeemed from both: the brain-sync timers on their guests, and the
+  # lower-trust harnesses on the workstation. The union is a superset of the
+  # machine default, so no existing holder loses access.
+  ai-public: machine_or_workstation
+  # Backs the interactive `aikey <harness>` function, which runs on the
+  # workstation.
+  ai-readonly: machine_or_workstation
   # Ephemeral CI runners sit on their own isolated segment.
   github-runner: ci
   # Operator-run, not machine-resident: the platform deploy is driven from the
