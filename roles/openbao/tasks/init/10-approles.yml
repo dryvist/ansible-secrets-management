@@ -85,7 +85,7 @@
   ansible.builtin.command:
     cmd: "bao read -format=json auth/approle/role/{{ item.name }}"
   environment:
-    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_ADDR: "{{ openbao_write_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
   loop: "{{ openbao_manageable_approles }}"
   loop_control:
@@ -166,7 +166,7 @@
           ' token_bound_cidrs=' ~ approle_bound_cidrs)
          if (approle_bound_cidrs | length > 0) else '' }}
   environment:
-    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_ADDR: "{{ openbao_write_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
   loop: "{{ openbao_manageable_approles | zip(openbao_approle_checks.results | default([])) | list }}"
   loop_control:
@@ -194,7 +194,7 @@
       bao write auth/approle/role/{{ item.0.name }}/policies
       token_policies={{ (item.0.token_policies | default([item.0.policy])) | join(',') }}
   environment:
-    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_ADDR: "{{ openbao_write_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
   loop: "{{ openbao_manageable_approles | zip(openbao_approle_checks.results | default([])) | list }}"
   loop_control:

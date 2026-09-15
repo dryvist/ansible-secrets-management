@@ -3,7 +3,7 @@
   ansible.builtin.command:
     cmd: bao auth list -format=json
   environment:
-    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_ADDR: "{{ openbao_write_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
   register: openbao_auth_raw
   no_log: true
@@ -14,7 +14,7 @@
   ansible.builtin.command:
     cmd: bao auth enable approle
   environment:
-    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_ADDR: "{{ openbao_write_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
   no_log: true
   changed_when: true
@@ -32,7 +32,7 @@
   ansible.builtin.command:
     cmd: bao read -format=json sys/auth/approle/tune
   environment:
-    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_ADDR: "{{ openbao_write_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
   register: openbao_approle_mount_tune_current
   no_log: true
@@ -59,7 +59,7 @@
       -user-lockout-counter-reset-duration={{ openbao_approle_lockout_counter_reset }}s
       approle
   environment:
-    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_ADDR: "{{ openbao_write_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
   no_log: true
   changed_when: true
@@ -79,7 +79,7 @@
   ansible.builtin.command:
     cmd: "bao auth enable -path={{ openbao_terrakube_jwt_auth_path }} jwt"
   environment:
-    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_ADDR: "{{ openbao_write_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
   no_log: true
   changed_when: true
@@ -91,7 +91,7 @@
   ansible.builtin.command:
     cmd: "bao read -format=json auth/{{ openbao_terrakube_jwt_auth_path }}/config"
   environment:
-    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_ADDR: "{{ openbao_write_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
   register: openbao_terrakube_jwt_config_current
   no_log: true
@@ -106,7 +106,7 @@
       {{ {'oidc_discovery_url': openbao_terrakube_jwt_issuer,
             'bound_issuer': openbao_terrakube_jwt_issuer} | to_json }}
   environment:
-    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_ADDR: "{{ openbao_write_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
   no_log: true
   changed_when: true
@@ -125,7 +125,7 @@
   ansible.builtin.command:
     cmd: "bao read -format=json auth/{{ openbao_terrakube_jwt_auth_path }}/role/terrakube-{{ item.name }}"
   environment:
-    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_ADDR: "{{ openbao_write_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
   loop: "{{ openbao_terrakube_workspaces }}"
   loop_control:
@@ -158,7 +158,7 @@
                             else [])) | sort,
             'token_ttl': openbao_terrakube_jwt_token_ttl} | to_json }}
   environment:
-    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_ADDR: "{{ openbao_write_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
   loop: "{{ openbao_terrakube_workspaces | zip(openbao_terrakube_jwt_role_reads.results | default([])) | list }}"
   loop_control:

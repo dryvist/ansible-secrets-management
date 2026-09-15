@@ -226,3 +226,45 @@
   when: openbao_bootstrap_token is not defined
 
 # --- KV v2 mount (add-if-missing) -------------------------------------------
+
+# --- Resolve where provisioning writes go ------------------------------------
+# Everything below this point in init.yml WRITES: policies, AppRoles, engine
+# config, KV seeds, rotation-exempt metadata. Raft accepts a write only on the
+# active node. Sending it to this host's own listener makes every one of those
+# writes depend on the standby->leader forwarding hop, which is the hop that
+# intermittently fails here — see openbao_write_addr in
+# defaults/main/00-install-and-node.yml for the full reasoning and the audit
+# signature it produces.
+#
+# The status is re-read rather than reusing init/01's: a fresh init may have
+# happened in between, and 01's copy predates the leader existing.
+#
+# `bao status` exits 2 on a sealed node and 0 otherwise; a sealed node has no
+# leader to resolve, so both are tolerated and the fallback covers it.
+- name: Read OpenBao status again to resolve the current Raft leader
+  ansible.builtin.command:
+    cmd: bao status -format=json
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+  register: openbao_leader_status_raw
+  changed_when: false
+  failed_when: false
+
+# leader_address is the leader's advertised api_addr, reachable from this host
+# on the same VLAN the retry_join peers use. Absent, empty, or unparseable
+# status all fall back to this node's own listener — the pre-existing
+# behaviour, so a resolution failure degrades rather than breaks the converge.
+- name: Point provisioning writes at the Raft leader
+  ansible.builtin.set_fact:
+    openbao_write_addr: >-
+      {{ ((openbao_leader_status_raw.stdout | default('{}', true) | from_json)
+          .leader_address | default('', true)) or openbao_api_addr }}
+
+- name: Report where this run's provisioning writes are going
+  ansible.builtin.debug:
+    msg: >-
+      OpenBao provisioning writes on {{ inventory_hostname }} target
+      {{ openbao_write_addr }}
+      ({{ 'the Raft leader' if openbao_write_addr != openbao_api_addr
+          else 'this node itself — no leader resolved, so writes depend on the
+                standby forwarding hop' }}).
