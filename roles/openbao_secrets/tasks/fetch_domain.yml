@@ -84,8 +84,17 @@
         url: "{{ hostvars['localhost'].openbao_secrets_active_addr | default(openbao_secrets_bao_addr, true) }}"
         auth_method: token
         token: "{{ openbao_secrets_domain_login.login.auth.client_token }}"
+        # item.mount (direct attribute access) used to fall back to Jinja's
+        # lenient Undefined when a mapping omitted `mount`. ansible-core 2.21's
+        # "Finalization of task args" resolves this with raw Python attribute
+        # semantics instead, so a mapping without `mount` raised
+        # `AttributeError: object of type 'dict' has no attribute 'mount'` and
+        # aborted the whole domain's read (e.g. apps/pve-exporter declared as
+        # {optional: true, path: ...} with no mount key). dict.get() is a real
+        # bound method present on every dict regardless of finalization
+        # semantics, so it never hits that path.
         engine_mount_point: >-
-          {{ item.mount if item is mapping else openbao_secrets_kv_mount }}
+          {{ item.get('mount', openbao_secrets_kv_mount) if item is mapping else openbao_secrets_kv_mount }}
         path: "{{ item.path if item is mapping else item }}"
         validate_certs: "{{ openbao_secrets_validate_certs }}"
       loop: "{{ openbao_domain.paths }}"

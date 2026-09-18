@@ -14,9 +14,19 @@
 # be mistaken for an absent secret. A successful read carries no `msg`.
 - name: Fail on any unreadable required KV path for {{ openbao_domain.name }}
   ansible.builtin.fail:
+    # item.item.mount used to be `| default(openbao_secrets_kv_mount)` over a
+    # direct attribute access -- verified (tests/test_openbao_secrets_mount_
+    # point_shapes.py) that the default() filter DOES rescue a missing key
+    # here, unlike fetch_domain.yml's bare ternary, so this was never actually
+    # broken. Switched to `.get()` anyway for one consistent, unambiguous
+    # pattern with fetch_domain.yml's own fix. item.item can also be a bare
+    # string (no `.get` at all), so branch on `is mapping` first, same as
+    # fetch_domain.yml.
     msg: >-
       OpenBao read failed for
-      '{{ item.item.mount | default(openbao_secrets_kv_mount) }}/{{ item.item.path | default(item.item) }}'
+      '{{ (item.item.get("mount", openbao_secrets_kv_mount)
+      if item.item is mapping else openbao_secrets_kv_mount) }}/{{
+      (item.item.path if item.item is mapping else item.item) }}'
       in the {{ openbao_domain.name }} domain: {{ item.msg }}
       Refusing to continue with a partial secret set — consumers render
       these values into live config. If this path is a key that is only
@@ -36,9 +46,12 @@
 # consumer resolving empty is traceable to the exact unseeded path.
 - name: Warn about optional paths that are not seeded for {{ openbao_domain.name }}
   ansible.builtin.debug:
+    # Reached only when item.item is mapping and optional (the `when:`
+    # below), so item.item.path is always safe here -- but mount still
+    # needs the same is-mapping-aware .get(), see the fail task above.
     msg: >-
       OpenBao path
-      '{{ item.item.mount | default(openbao_secrets_kv_mount) }}/{{ item.item.path }}'
+      '{{ item.item.get("mount", openbao_secrets_kv_mount) }}/{{ item.item.path }}'
       is declared optional and returned 404 (not seeded). Skipping it — any
       consumer of a field from this path will resolve empty.
   loop: "{{ openbao_secrets_domain_reads.results }}"
