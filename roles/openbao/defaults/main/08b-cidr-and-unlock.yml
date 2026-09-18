@@ -59,7 +59,7 @@ openbao_approle_cidr_class_overrides:
   # operator's git/gh — so it takes the same class. It carried no override and
   # declared as `machine`, which refuses the workstation on source address
   # while the credential stays valid.
-  github-write-x10: workstation
+  github-write-work: workstation
   # The OpenBao-node play's own converge identity: workstation-only BY DESIGN
   # (07f), and never machine — the plane does not run that play.
   openbao-node-converge: workstation

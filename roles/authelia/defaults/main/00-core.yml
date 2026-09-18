@@ -69,6 +69,21 @@ authelia_api_bypass_domains:
   # Narrowed to the ingest path: the UI and its login surface stay gated.
   - domain: "phoenix.{{ authelia_cookie_domain }}"
     resource: "^/v1/traces(?:/.*)?$"
+  # The metrics store accepts OTLP pushes under /opentelemetry and Prometheus
+  # remote_write under /api/v1/write. Every client is a machine exporter that
+  # cannot complete a browser login, so without this each push is redirected
+  # to the portal and dropped while the exporter reports success.
+  #
+  # Narrowed to the write paths deliberately. This service carries NO
+  # authentication of its own, so the gate is the only thing in front of its
+  # query surface and its admin surface -- which includes series deletion.
+  # Widening this resource to the whole host would expose both.
+  # Two entries rather than one alternation: each anchors plainly at its own
+  # machine-API root, which is what the bypass-scope guard checks for.
+  - domain: "vm.{{ authelia_cookie_domain }}"
+    resource: "^/opentelemetry/v1/(?:metrics|traces|logs)(?:/.*)?$"
+  - domain: "vm.{{ authelia_cookie_domain }}"
+    resource: "^/api/v1/write(?:/.*)?$"
   # Sonarr and Radarr enforce their API key across their whole /api surface --
   # probed live, every path under it answers 401 without a key, including
   # /api/v3/auth and /api/login. Their browser login is /login, outside the
