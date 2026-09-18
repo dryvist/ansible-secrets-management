@@ -54,7 +54,7 @@
          | map('regex_replace', '^', 'paths=sys/policies/acl/')
          | join(' ') }}
   environment:
-    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_ADDR: "{{ openbao_write_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
   register: openbao_policy_capabilities
   changed_when: false
@@ -232,7 +232,7 @@
   ansible.builtin.command:
     cmd: bao policy list -format=json
   environment:
-    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_ADDR: "{{ openbao_write_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
   register: openbao_policies_raw
   no_log: true
@@ -243,7 +243,7 @@
   ansible.builtin.command:
     cmd: "bao policy read -format=json {{ item.name }}"
   environment:
-    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_ADDR: "{{ openbao_write_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
   loop: "{{ openbao_manageable_policies }}"
   loop_control:
@@ -294,7 +294,7 @@
     cmd: "bao policy write {{ item.name }} -"
     stdin: "{{ (openbao_rendered_policy_map | default({}))[item.name] }}"
   environment:
-    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_ADDR: "{{ openbao_write_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
   loop: "{{ openbao_manageable_policies }}"
   loop_control:

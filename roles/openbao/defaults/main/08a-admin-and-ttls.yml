@@ -96,13 +96,8 @@ openbao_approle_secret_id_num_uses_overrides:
   # session; capping redemptions here would strand them at an arbitrary login.
   # Bounded instead by the CIDR class below until it is deliberately re-minted.
   ai-orchestrator: 0
-  # workstation identity redeemed once per short-lived token mint by every
-  # interactive session; bounded by its CIDR class and 24h secret_id TTL instead.
-  github-read: 0
-  # A push-capable identity, redeemed once per short-lived per-repository
-  # token mint; bounded by the workstation address class and the 24h
-  # secret_id TTL instead.
-  github-write: 0
+  # github-read / github-write moved to their 07b declarations, next to the
+  # secret_id_ttl they pair with.
   # The write realm roles (github-write-x10 etc.) keep the default 30-use cap
   # deliberately: each is redeemed once per realm session, not once per
   # token mint, so 30 redemptions/day does not exhaust the same way.

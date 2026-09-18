@@ -16,7 +16,7 @@
   ansible.builtin.command:
     cmd: bao auth enable userpass
   environment:
-    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_ADDR: "{{ openbao_write_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
   no_log: true
   changed_when: true
@@ -33,7 +33,7 @@
   ansible.builtin.command:
     cmd: "bao read -format=json auth/userpass/users/{{ openbao_human_unlock_user }}"
   environment:
-    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_ADDR: "{{ openbao_write_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
   register: openbao_human_unlock_user_check
   no_log: true
@@ -67,7 +67,7 @@
       {{ ('token_bound_cidrs=' ~ openbao_approle_cidr_classes[openbao_human_unlock_cidr_class])
          if (openbao_approle_cidr_classes[openbao_human_unlock_cidr_class] | length > 0) else '' }}
   environment:
-    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_ADDR: "{{ openbao_write_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
   no_log: true
   changed_when: true
@@ -83,7 +83,7 @@
   ansible.builtin.command:
     cmd: bao list -format=json identity/mfa/method/totp
   environment:
-    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_ADDR: "{{ openbao_write_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
   register: openbao_mfa_totp_list
   no_log: true
@@ -105,7 +105,7 @@
   ansible.builtin.command:
     cmd: bao write -format=json sys/capabilities-self paths=identity/mfa/method/totp
   environment:
-    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_ADDR: "{{ openbao_write_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
   register: openbao_mfa_capabilities
   changed_when: false
@@ -152,7 +152,7 @@
   ansible.builtin.command:
     cmd: "bao read -format=json identity/mfa/method/totp/{{ item }}"
   environment:
-    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_ADDR: "{{ openbao_write_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
   loop: >-
     {{ (openbao_mfa_totp_list.stdout | default('[]') | from_json)
@@ -184,7 +184,7 @@
       method_name={{ openbao_human_unlock_mfa_method_name }}
       issuer={{ openbao_human_unlock_mfa_issuer }}
   environment:
-    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_ADDR: "{{ openbao_write_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
   register: openbao_mfa_totp_created
   no_log: true
@@ -220,7 +220,7 @@
   ansible.builtin.command:
     cmd: bao auth list -format=json
   environment:
-    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_ADDR: "{{ openbao_write_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
   register: openbao_auth_raw_after
   no_log: true
@@ -258,7 +258,7 @@
       mfa_method_ids={{ openbao_mfa_totp_method_id }}
       auth_method_accessors={{ (openbao_auth_raw_after.stdout | from_json)['userpass/'].accessor }}
   environment:
-    BAO_ADDR: "{{ openbao_api_addr }}"
+    BAO_ADDR: "{{ openbao_write_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
   no_log: true
   changed_when: true
