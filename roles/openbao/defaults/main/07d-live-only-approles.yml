@@ -26,7 +26,7 @@ openbao_live_only_approles:
     policy: "{{ openbao_media_rotate_live_policy_name }}"
     secret_id_ttl: "0s"
     secret_id_num_uses: 0
-  - name: "{{ openbao_github_write_x10_approle_name }}"
-    policy: "{{ openbao_github_write_x10_live_policy_name }}"
+  - name: "{{ openbao_github_write_work_approle_name }}"
+    policy: "{{ openbao_github_write_work_live_policy_name }}"
     secret_id_ttl: "0s"
     secret_id_num_uses: 0

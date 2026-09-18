@@ -98,7 +98,7 @@ openbao_approle_secret_id_num_uses_overrides:
   ai-orchestrator: 0
   # github-read / github-write moved to their 07b declarations, next to the
   # secret_id_ttl they pair with.
-  # The write realm roles (github-write-x10 etc.) keep the default 30-use cap
+  # The write realm roles (github-write-work etc.) keep the default 30-use cap
   # deliberately: each is redeemed once per realm session, not once per
   # token mint, so 30 redemptions/day does not exhaust the same way.
 
