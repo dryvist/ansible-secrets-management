@@ -81,12 +81,19 @@
   ansible.builtin.include_tasks: 10d-approle-undeclared-live.yml
   when: openbao_bootstrap_token is defined
 
+# Runs on the controller (openbao_cli_host, resolved in init/02): measured on
+# the target at 328s, one module execution per role. Same CLI, same
+# rc/stderr, so the denied-vs-absent classifier below reads unchanged.
 - name: Check whether each AppRole already exists
   ansible.builtin.command:
     cmd: "bao read -format=json auth/approle/role/{{ item.name }}"
   environment:
-    BAO_ADDR: "{{ openbao_write_addr }}"
+    BAO_ADDR: "{{ openbao_cli_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
   loop: "{{ openbao_manageable_approles }}"
   loop_control:
     label: "{{ item.name }}"
