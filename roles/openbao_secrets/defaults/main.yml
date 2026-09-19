@@ -221,6 +221,15 @@ openbao_secrets_domains:
       # 404 must not fail the whole apps prefetch.
       - path: apps/pve-exporter
         optional: true
+      # ARC pilot's dedicated GitHub App id/installation_id/private_key
+      # (github_runner_arc_*, PROMOTED at source by
+      # roles/openbao openbao_promoted_app_secrets.github-runner-arc).
+      # Consumed by roles/github_runner_arc. optional: true — the path
+      # exists only once the operator has created the dedicated App and
+      # promoted its credentials; until then the role's own assert fails
+      # loud on the empty values rather than the KV prefetch failing here.
+      - path: apps/github-runner-arc
+        optional: true
   - name: ntfy
     role_id_env: NTFY_VAULT_ROLE_ID
     secret_id_env: NTFY_VAULT_SECRET_ID
