@@ -170,8 +170,8 @@
       {{ (openbao_mfa_totp_reads.results | default([])
           | rejectattr('skipped', 'defined')
           | map(attribute='stdout') | map('from_json') | map(attribute='data')
-          | selectattr('method_name', 'defined')
-          | selectattr('method_name', 'equalto', openbao_human_unlock_mfa_method_name)
+          | selectattr('name', 'defined')
+          | selectattr('name', 'equalto', openbao_human_unlock_mfa_method_name)
           | map(attribute='id') | list | first) | default('', true) }}
   when:
     - openbao_bootstrap_token is defined
@@ -207,10 +207,13 @@
       {{ (openbao_mfa_totp_created.stdout | from_json).data.method_id
          | default((openbao_mfa_totp_created.stdout | from_json).data.id, true) }}
   no_log: true
+  # A registered result carries `skipped` only when the task was skipped, so
+  # the default for a task that RAN must be false — defaulting it to true
+  # skips this exactly when there is a new id to use.
   when:
     - openbao_bootstrap_token is defined
     - openbao_human_unlock_mfa_enabled | bool
-    - not (openbao_mfa_totp_created.skipped | default(true))
+    - not (openbao_mfa_totp_created.skipped | default(false))
 
 # openbao_auth_raw was registered at the top of this file, BEFORE userpass may
 # have been enabled by this same run — on a first bootstrap it therefore has no

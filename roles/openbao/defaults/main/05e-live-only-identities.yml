@@ -25,5 +25,5 @@ openbao_vikunja_approle_name: vikunja
 openbao_vikunja_live_policy_name: vikunja
 openbao_media_rotate_approle_name: media-rotate
 openbao_media_rotate_live_policy_name: media-rotate
-openbao_github_write_x10_approle_name: github-write-x10
-openbao_github_write_x10_live_policy_name: github-write-x10
+openbao_github_write_work_approle_name: github-write-work
+openbao_github_write_work_live_policy_name: github-write-work

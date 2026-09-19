@@ -27,3 +27,16 @@ path "{{ openbao_github_mount }}/token/{{ permission_set.name }}" {
 }
 
 {% endfor %}
+# The e2e suite's Splunk credentials, one app bucket and nothing beside it.
+# KV because no engine mints a Splunk login; the values are promoted there by
+# openbao_promoted_app_secrets. The per-host agent renders them into an env
+# file for the runner containers (roles/github_runner/openbao-agent.hcl.j2).
+# metadata read is what makes an absent path a clean 404 rather than a 403
+# indistinguishable from a policy gap.
+path "{{ openbao_kv_mount }}/data/apps/splunk" {
+  capabilities = ["read"]
+}
+
+path "{{ openbao_kv_mount }}/metadata/apps/splunk" {
+  capabilities = ["read"]
+}

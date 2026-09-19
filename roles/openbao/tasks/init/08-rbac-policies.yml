@@ -228,12 +228,20 @@
          | reject('in', _openbao_non_empty_names) | list | sort }}
   when: openbao_bootstrap_token is defined
 
+# The reads below run on the controller (openbao_cli_host, resolved in
+# init/02). Measured on the target: 559s for the per-policy reads alone, one
+# module execution per policy on proxmox_pct_remote. Same `bao` CLI, same
+# rc/stdout/stderr, so the map build and the write gate below are unchanged.
 - name: List existing policies
   ansible.builtin.command:
     cmd: bao policy list -format=json
   environment:
-    BAO_ADDR: "{{ openbao_write_addr }}"
+    BAO_ADDR: "{{ openbao_cli_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
   register: openbao_policies_raw
   no_log: true
   changed_when: false
@@ -243,8 +251,12 @@
   ansible.builtin.command:
     cmd: "bao policy read -format=json {{ item.name }}"
   environment:
-    BAO_ADDR: "{{ openbao_write_addr }}"
+    BAO_ADDR: "{{ openbao_cli_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
   loop: "{{ openbao_manageable_policies }}"
   loop_control:
     label: "{{ item.name }}"

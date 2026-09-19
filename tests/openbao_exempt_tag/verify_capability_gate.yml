@@ -21,6 +21,10 @@
   vars:
     ansible_become: false
     openbao_api_addr: "http://openbao-test:8200"
+    # Same fallback as roles/openbao/defaults/main/00-install-and-node.yml:
+    # this fixture never exercises the raft-leader override, so both BAO_ADDR
+    # values are the stub address.
+    openbao_write_addr: "{{ openbao_api_addr }}"
     openbao_bootstrap_token: "stub-token"
     openbao_absent_stderr_marker: "No value found"
     openbao_rotation_exempt_entry: "secret:apps/n8n"

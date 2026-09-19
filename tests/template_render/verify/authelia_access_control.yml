@@ -70,18 +70,26 @@
             | selectattr('policy', 'eq', 'bypass')
             | rejectattr('resources', 'defined')
             | list | length == 0
-          # Two machine-API roots are allowed, and only these two. Most apps
-          # serve theirs under /api. OTLP collectors do not: the protocol puts
-          # ingest at /v1/<signal> off the root, so a trace sink's bypass can
-          # never match /api. Both alternatives stay anchored and narrow, which
-          # is the property this guard actually protects.
+          # Three machine-API roots are allowed, and only these three. Most
+          # apps serve theirs under /api. OTLP collectors do not: the protocol
+          # puts ingest at /v1/<signal> off the root, so a trace sink's bypass
+          # can never match /api. A metrics store that also serves a query and
+          # admin surface from the same origin namespaces its OTLP ingest
+          # instead, at /opentelemetry/v1/<signal>, so that a bypass can select
+          # ingest WITHOUT exposing the rest -- which is exactly the property
+          # this guard protects, not a loosening of it. All three alternatives
+          # stay anchored to the root and select a prefix rather than a host.
+          #
+          # Adding a fourth root is a deliberate decision, not a formality: it
+          # must name a path that carries ingest ONLY, never one that also
+          # reaches a query, admin or browser surface.
           - _authelia_rules
             | selectattr('policy', 'eq', 'bypass')
             | map(attribute='resources') | flatten
-            | reject('match', '\\^/(api|v1/)') | list | length == 0
+            | reject('match', '\\^/(api|v1/|opentelemetry/v1/)') | list | length == 0
         fail_msg: >-
           an Authelia bypass rule is missing a resource scope or does not
-          anchor to /api or /v1/: {{ _authelia_rules }}
+          anchor to /api, /v1/ or /opentelemetry/v1/: {{ _authelia_rules }}
 
     - name: Assert Phoenix bypasses only its OTLP ingest, leaving the UI gated
       ansible.builtin.assert:

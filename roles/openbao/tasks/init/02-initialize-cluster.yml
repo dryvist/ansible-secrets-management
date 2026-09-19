@@ -268,3 +268,23 @@
       ({{ 'the Raft leader' if openbao_write_addr != openbao_api_addr
           else 'this node itself — no leader resolved, so writes depend on the
                 standby forwarding hop' }}).
+
+# --- Where the bao CLI runs ----------------------------------------------------
+# Every `bao` invocation from here on is one module execution against the
+# target, and each one pays the flat per-task transport cost ansible.cfg
+# documents (~6s on proxmox_pct_remote). The provisioning loops below run
+# ~150 of them on a single host on a converge that changes nothing --
+# measured at 559s for the policy reads and 328s for the AppRole checks
+# alone. The controller has the same `bao` binary (scripts/run-ansible.sh
+# drives it) and, via BAO_ADDR, reaches the ingress name that health-checks
+# to the ACTIVE node, so a delegated call also skips the standby-forward hop
+# openbao_write_addr exists to work around. Same CLI, same rc/stdout/stderr,
+# so every changed_when, when and denied-vs-absent guard reads unchanged.
+#
+# The switch itself (openbao_cli_host / _addr / _become) is a role default,
+# not a fact -- see defaults/main/00-install-and-node.yml for why.
+- name: Report where this run's bao invocations run from
+  ansible.builtin.debug:
+    msg: >-
+      OpenBao provisioning for {{ inventory_hostname }} runs the bao CLI on
+      {{ openbao_cli_host }} against {{ openbao_cli_addr }}.

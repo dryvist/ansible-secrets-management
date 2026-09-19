@@ -22,6 +22,8 @@
     github_runner_token_path: github/token/runner-register-dryvist
     github_runner_openbao_role_id: "role-id-not-a-real-credential"
     github_runner_openbao_secret_id: "secret-id-not-a-real-credential"
+    github_runner_kv_mount: secret
+    github_runner_e2e_env_file: /etc/github-runner/e2e.env
 
   tasks:
     - name: Render the agent config and unit
@@ -92,10 +94,24 @@
           organization_self_hosted_runners:write and nothing else -- any other
           path is both denied and a wider credential than the fleet needs.
 
+    - name: Assert the e2e credentials are rendered from the one Splunk bucket
+      ansible.builtin.assert:
+        that:
+          - _hcl | select('search', 'secret/data/apps/splunk') | length == 1
+          - _hcl | select('search', 'SPLUNK_PASSWORD=.*Data\.data\.splunk_admin_password') | length == 1
+          - _hcl | select('search', 'SPLUNK_HEC_TOKEN=.*Data\.data\.splunk_hec_token') | length == 1
+          - _hcl | select('search', 'destination\s*=\s*"/etc/github-runner/e2e.env"') | length == 1
+        fail_msg: >-
+          The agent does not render the e2e Splunk credentials from
+          secret/data/apps/splunk into the e2e env file. Those two variable
+          names are what tests/e2e/conftest.py reads; a KV v2 field sits under
+          .Data.data, and reading any other path is both denied by the
+          github-runner policy and wider than the suite needs.
+
     - name: Assert a missing token fails the render rather than emptying it
       ansible.builtin.assert:
         that:
-          - _hcl | select('search', 'error_on_missing_key\s*=\s*true') | length > 0
+          - _hcl | select('search', 'error_on_missing_key\s*=\s*true') | length == 2
         fail_msg: >-
           error_on_missing_key is not true, so a response the template cannot
           read renders an EMPTY ACCESS_TOKEN instead of failing. The containers
