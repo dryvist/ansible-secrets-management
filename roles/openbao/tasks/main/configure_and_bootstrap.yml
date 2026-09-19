@@ -202,3 +202,37 @@
     - openbao_secret_age_enabled | bool
     - openbao_secret_age_role_id | length > 0
     - openbao_secret_age_secret_id | length > 0
+
+# The report's rsyslog drop-in is NOT behind the creds gate: it carries the
+# imfile guard, and a host whose copy predates that guard fails Phase 15 on
+# every converge until something re-renders it. A converge without the creds
+# (the execution plane's environment carries none) must still be able to.
+- name: Ship the secret-age report over rsyslog
+  ansible.builtin.include_tasks: ../secret_age_rsyslog.yml
+  when: openbao_secret_age_enabled | bool
+
+# --- Phase 15: rsyslog validation, once, after every drop-in writer ---------
+# Phases 10 and 14 each write a rsyslog.d drop-in and both can load imfile.
+# Validate the assembled config exactly once, here, after the last writer.
+# Full-config check, not a fragment `validate: rsyslogd -N1 -f %s`: the
+# fragment alone has no global workDirectory in scope (it lives in
+# rsyslog.conf), and imfile hard-fails validation without one. On failure the
+# play aborts here, so the notified restart never flushes and the running
+# rsyslog keeps its previous config. Same Docker gate as audit.yml: no
+# systemd there, and no drop-in was written.
+- name: Validate the full rsyslog configuration
+  ansible.builtin.command: rsyslogd -N1
+  changed_when: false
+  when:
+    - openbao_audit_enabled | bool or openbao_secret_age_enabled | bool
+    - ansible_virtualization_type | default('') != 'docker'
+
+# No unit files are written here, so no daemon_reload.
+- name: Enable and start rsyslog
+  ansible.builtin.systemd:
+    name: rsyslog
+    state: started
+    enabled: true
+  when:
+    - openbao_audit_enabled | bool or openbao_secret_age_enabled | bool
+    - ansible_virtualization_type | default('') != 'docker'
