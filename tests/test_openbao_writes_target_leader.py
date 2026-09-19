@@ -190,7 +190,7 @@ class BaoCliRunsOnTheController(unittest.TestCase):
 # The loops that were measured, by task name. A revert to openbao_write_addr
 # on either puts the minutes back without failing anything else.
 MEASURED_READ_LOOPS = {
-    "init/08-rbac-policies.yml": "Read existing RBAC policy contents",
+    "init/08b-rbac-policy-writes.yml": "Read existing RBAC policy contents",
     "init/10-approles.yml": "Check whether each AppRole already exists",
 }
 

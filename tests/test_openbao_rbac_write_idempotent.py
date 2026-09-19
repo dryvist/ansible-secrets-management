@@ -30,7 +30,7 @@ from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar, trust_as_template
 
 ROOT = Path(__file__).resolve().parents[1]
-TASKS = ROOT / "roles" / "openbao" / "tasks" / "init" / "08-rbac-policies.yml"
+TASKS = ROOT / "roles" / "openbao" / "tasks" / "init" / "08b-rbac-policy-writes.yml"
 EXISTING_TASK = "Build the existing RBAC policy content map"
 WRITE_TASK = "Write the RBAC policies that are missing or changed"
 
