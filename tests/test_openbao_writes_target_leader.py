@@ -30,6 +30,7 @@ fails.
 """
 
 from pathlib import Path
+import re
 import unittest
 
 import yaml
@@ -189,7 +190,7 @@ class BaoCliRunsOnTheController(unittest.TestCase):
 # The loops that were measured, by task name. A revert to openbao_write_addr
 # on either puts the minutes back without failing anything else.
 MEASURED_READ_LOOPS = {
-    "init/08-rbac-policies.yml": "Read existing RBAC policy contents",
+    "init/08b-rbac-policy-writes.yml": "Read existing RBAC policy contents",
     "init/10-approles.yml": "Check whether each AppRole already exists",
 }
 
@@ -223,6 +224,54 @@ class DelegatedBaoCallsAreConsistent(unittest.TestCase):
         delegated = {(name, task.get("name")) for name, task in self._delegated_tasks()}
         for path, task_name in MEASURED_READ_LOOPS.items():
             self.assertIn((path, task_name), delegated, f"{path}: '{task_name}' is back on the target")
+
+
+# Read-only bao subcommands: a loop of these on the target is exactly the
+# per-item transport cost (~6s each on proxmox_pct_remote) this switch
+# exists to avoid. Write subcommands (write/policy write/auth/kv put/plugin
+# register/...) are excluded on purpose -- those stay target-side.
+READ_ONLY_BAO_CMD = re.compile(
+    r"\bbao\s+(read\b|list\b|policy\s+read\b|policy\s+list\b|secrets\s+list\b|kv\s+get\b)"
+)
+
+
+class EveryReadLoopIsDelegated(unittest.TestCase):
+    """Enumerates every `bao` read/list command run in a `loop:`, independent
+    of whether it already carries the openbao_cli_* switch -- so a future
+    read loop added without it, or one that regresses back to
+    openbao_write_addr, fails this test instead of silently costing minutes
+    again."""
+
+    def _cmd_of(self, task):
+        cmd = (task.get("ansible.builtin.command") or {}).get("cmd")
+        return cmd if isinstance(cmd, str) else ""
+
+    def _read_loop_tasks(self):
+        for path in sorted(TASKS.rglob("*.yml")):
+            if path.name in NODE_LOCAL:
+                continue  # deliberate exception: no leader/reconcile addr yet
+            for task in _walk_tasks(yaml.safe_load(path.read_text(encoding="utf-8"))):
+                if task.get("loop") and READ_ONLY_BAO_CMD.search(self._cmd_of(task)):
+                    yield str(path.relative_to(TASKS)), task
+
+    def test_every_read_loop_carries_the_full_delegation_triple(self):
+        broken = []
+        for name, task in self._read_loop_tasks():
+            env = task.get("environment") or {}
+            ok = (
+                env.get("BAO_ADDR") == "{{ openbao_cli_addr }}"
+                and task.get("delegate_to") == "{{ openbao_cli_host }}"
+                and task.get("become") == "{{ openbao_cli_become }}"
+                and (task.get("vars") or {}).get("ansible_become") == "{{ openbao_cli_become }}"
+            )
+            if not ok:
+                broken.append(f"{name}: {task.get('name')}")
+        self.assertEqual(
+            broken,
+            [],
+            "read loop(s) running target-side, back to the per-item transport "
+            "cost this switch exists to avoid: " + ", ".join(broken),
+        )
 
 
 if __name__ == "__main__":

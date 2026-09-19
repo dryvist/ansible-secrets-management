@@ -148,12 +148,19 @@
     - openbao_human_unlock_mfa_enabled | bool
     - not (openbao_mfa_administrable | default(false))
 
+# Runs on the controller (openbao_cli_host, resolved in init/02): one module
+# execution per configured TOTP method. Same CLI, same rc/stdout, so the
+# method-id resolution below reads unchanged.
 - name: Read each configured TOTP MFA method
   ansible.builtin.command:
     cmd: "bao read -format=json identity/mfa/method/totp/{{ item }}"
   environment:
-    BAO_ADDR: "{{ openbao_write_addr }}"
+    BAO_ADDR: "{{ openbao_cli_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
   loop: >-
     {{ (openbao_mfa_totp_list.stdout | default('[]') | from_json)
        if (openbao_mfa_totp_list.rc | default(1)) == 0 else [] }}
