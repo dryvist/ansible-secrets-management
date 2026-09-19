@@ -1,0 +1,30 @@
+{{ ansible_managed | comment }}
+# github-exporter — the CI-metrics exporter's standing identity (github_exporter
+# role, prometheus host). Mints ONLY the exporter-tier permission sets, whose
+# stored map is actions:read + administration:read and nothing else (the
+# permission-set token path ignores request bodies at plugin v2.3.2, so a
+# holder cannot widen the stored scope).
+#
+# This tier exists so the exporter holds no personal access token. A GitHub
+# App installation token expires in about an hour, so the capability to mint
+# one has to be standing; making it an AppRole makes it revocable, audited,
+# and scoped to exactly the two read-only permissions the exporter's
+# collectors need.
+#
+# The raw {{ openbao_github_mount }}/token endpoint, the *-full-automation
+# admin sets, the read-* sets, the runner set, and the engine's config/* +
+# permissionset/* administration paths are all absent: a leaked exporter
+# secret-zero can read workflow run/job/runner metadata and nothing else — no
+# repository content, no write of any kind.
+#
+# `read` is here alongside create/update for the same reason as
+# github-runner-policy.hcl.j2: the OpenBao Agent's template engine issues a
+# GET, and the plugin registers ReadOperation against the same mint callback
+# as CreateOperation, so withholding `read` denies no capability but makes an
+# agent-rendered token 403 while a hand-run POST succeeds.
+{% for permission_set in openbao_github_permission_sets | selectattr('tier', 'equalto', 'exporter') %}
+path "{{ openbao_github_mount }}/token/{{ permission_set.name }}" {
+  capabilities = ["read", "create", "update"]
+}
+
+{% endfor %}

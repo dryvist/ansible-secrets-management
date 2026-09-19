@@ -59,6 +59,13 @@ openbao_github_repo_create_permissions:
 # repository, and only mints the short-lived registration token a runner needs.
 openbao_github_runner_permissions:
   organization_self_hosted_runners: write
+# CI-metrics exporter (github_exporter role, prometheus host). Read-only,
+# organization-scoped: `actions:read` for the workflow_runs/workflow_jobs/
+# runners collectors, `administration:read` for the org-level runners listing.
+# No `contents`/`pull_requests`/`issues` — this identity never reads source.
+openbao_github_exporter_permissions:
+  actions: read
+  administration: read
 # Publish tier: the ONE set that both WRITES and is repository-scoped. The
 # scope lives in the set itself — installation_id, the repository list and the
 # permission map are all stored server-side, and the permission-set token path
@@ -123,6 +130,10 @@ openbao_github_base_permission_sets:
     tier: runner
     installation_id: "{{ openbao_github_dryvist_installation_id }}"
     permissions: "{{ openbao_github_runner_permissions }}"
+  - name: exporter-dryvist
+    tier: exporter
+    installation_id: "{{ openbao_github_dryvist_installation_id }}"
+    permissions: "{{ openbao_github_exporter_permissions }}"
 # Full set list = the static base above + the publish tier, which exists only
 # when its repository list is configured.
 openbao_github_permission_sets: >-
