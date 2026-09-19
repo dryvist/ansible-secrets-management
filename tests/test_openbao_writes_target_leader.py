@@ -39,6 +39,7 @@ from ansible.template import Templar, trust_as_template
 ROOT = Path(__file__).resolve().parents[1]
 TASKS = ROOT / "roles/openbao/tasks"
 INIT_02 = TASKS / "init/02-initialize-cluster.yml"
+DEFAULTS_00 = ROOT / "roles/openbao/defaults/main/00-install-and-node.yml"
 
 # Node-local by design: they talk to THIS node before/while a leader exists.
 NODE_LOCAL = {"01-preflight-and-cluster-probe.yml", "02-initialize-cluster.yml"}
@@ -53,16 +54,35 @@ def _render(expr, variables):
     return templar.template(trust_as_template(expr))
 
 
-def _write_addr_expr():
+def _set_fact_expr(name):
     tasks = yaml.safe_load(INIT_02.read_text(encoding="utf-8"))
     for task in tasks:
         fact = task.get("ansible.builtin.set_fact") or {}
-        if "openbao_write_addr" in fact:
-            return fact["openbao_write_addr"]
-    raise AssertionError(
-        "init/02 no longer sets openbao_write_addr -- provisioning writes are "
-        "back on whichever node the bootstrap host happens to be."
-    )
+        if name in fact:
+            return fact[name]
+    raise AssertionError(f"init/02 no longer sets {name}")
+
+
+def _write_addr_expr():
+    try:
+        return _set_fact_expr("openbao_write_addr")
+    except AssertionError:
+        raise AssertionError(
+            "init/02 no longer sets openbao_write_addr -- provisioning writes are "
+            "back on whichever node the bootstrap host happens to be."
+        ) from None
+
+
+def _walk_tasks(node):
+    """Every task mapping in a task file, descending into block/rescue/always."""
+    if isinstance(node, list):
+        for item in node:
+            yield from _walk_tasks(item)
+    elif isinstance(node, dict):
+        yield node
+        for key in ("block", "rescue", "always"):
+            if key in node:
+                yield from _walk_tasks(node[key])
 
 
 def _resolve(stdout):
@@ -119,6 +139,90 @@ class NoProvisioningWriteIsPinnedToThisNode(unittest.TestCase):
             self.assertTrue(
                 (TASKS / "init" / name).is_file(), f"{name} is gone; update NODE_LOCAL"
             )
+
+
+RECONCILE_ADDR = "https://openbao.ingress.example.test"
+
+
+CLI_SWITCH = ("openbao_cli_host", "openbao_cli_addr", "openbao_cli_become")
+
+
+def _resolve_cli(reconcile_addr):
+    defaults = yaml.safe_load(DEFAULTS_00.read_text(encoding="utf-8"))
+    variables = {
+        "openbao_reconcile_addr": reconcile_addr,
+        "openbao_write_addr": LEADER_ADDR,
+        "inventory_hostname": "openbao-11",
+    }
+    return {name: _render(defaults[name], variables) for name in CLI_SWITCH}
+
+
+class BaoCliRunsOnTheController(unittest.TestCase):
+    """The provisioning reads cost one module execution per item on the
+    target (measured: 559s for the policy reads, 328s for the AppRole checks).
+    init/02 resolves ONE switch that moves them to the controller when it can
+    reach the store, and falls back to the node for a first bootstrap."""
+
+    def test_with_a_controller_endpoint_the_cli_runs_locally(self):
+        cli = _resolve_cli(RECONCILE_ADDR)
+        self.assertEqual(cli["openbao_cli_host"], "localhost")
+        self.assertEqual(cli["openbao_cli_addr"], RECONCILE_ADDR)
+        self.assertIs(cli["openbao_cli_become"], False)
+
+    def test_without_one_the_cli_stays_on_the_node_with_become(self):
+        cli = _resolve_cli("")
+        self.assertEqual(cli["openbao_cli_host"], "openbao-11")
+        self.assertEqual(cli["openbao_cli_addr"], LEADER_ADDR)
+        self.assertIs(cli["openbao_cli_become"], True)
+
+    def test_the_switch_is_a_default_not_a_fact(self):
+        """openbao_cli_become is consumed as `vars: ansible_become:` on
+        delegated tasks, and a connection variable there is resolved in the
+        DELEGATED host's scope. A set_fact on the openbao node is invisible
+        there ('openbao_cli_become' is undefined). A role default is in
+        scope for every host in the play."""
+        for name in CLI_SWITCH:
+            with self.assertRaises(AssertionError, msg=f"{name} is set as a fact again"):
+                _set_fact_expr(name)
+
+
+# The loops that were measured, by task name. A revert to openbao_write_addr
+# on either puts the minutes back without failing anything else.
+MEASURED_READ_LOOPS = {
+    "init/08-rbac-policies.yml": "Read existing RBAC policy contents",
+    "init/10-approles.yml": "Check whether each AppRole already exists",
+}
+
+
+class DelegatedBaoCallsAreConsistent(unittest.TestCase):
+    def _delegated_tasks(self):
+        for path in sorted(TASKS.rglob("*.yml")):
+            for task in _walk_tasks(yaml.safe_load(path.read_text(encoding="utf-8"))):
+                env = task.get("environment") or {}
+                addr = env.get("BAO_ADDR") if isinstance(env, dict) else None
+                if addr == "{{ openbao_cli_addr }}" or task.get("delegate_to") == "{{ openbao_cli_host }}":
+                    yield str(path.relative_to(TASKS)), task
+
+    def test_the_switch_is_applied_whole_or_not_at_all(self):
+        # A controller-side call against a node-local address cannot reach it;
+        # a node-side call without become cannot run bao. Either half alone is
+        # a converge that fails somewhere far from the cause.
+        broken = []
+        for name, task in self._delegated_tasks():
+            ok = (
+                task["environment"]["BAO_ADDR"] == "{{ openbao_cli_addr }}"
+                and task.get("delegate_to") == "{{ openbao_cli_host }}"
+                and task.get("become") == "{{ openbao_cli_become }}"
+                and (task.get("vars") or {}).get("ansible_become") == "{{ openbao_cli_become }}"
+            )
+            if not ok:
+                broken.append(f"{name}: {task.get('name')}")
+        self.assertEqual(broken, [], "partial openbao_cli_* switch on: " + ", ".join(broken))
+
+    def test_the_measured_read_loops_run_on_the_controller(self):
+        delegated = {(name, task.get("name")) for name, task in self._delegated_tasks()}
+        for path, task_name in MEASURED_READ_LOOPS.items():
+            self.assertIn((path, task_name), delegated, f"{path}: '{task_name}' is back on the target")
 
 
 if __name__ == "__main__":

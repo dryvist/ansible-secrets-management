@@ -74,6 +74,23 @@ openbao_cluster_addr: "https://{{ openbao_bind_address }}:{{ openbao_cluster_por
 # does not report one.
 openbao_write_addr: "{{ openbao_api_addr }}"
 
+# --- Where the provisioning bao CLI runs -------------------------------------
+# One switch for every read and write in init/03 onward. With a reconcile
+# address the CLI runs on the controller (the reads cost one module execution
+# per item on the target: measured 559 s for policy reads, 328 s for AppRole
+# checks) against the active node; without one -- a first-ever bootstrap, no
+# BAO_ADDR ambient yet -- it stays on the node with become.
+#
+# Defaults, deliberately not set_fact: openbao_cli_become is consumed as
+# `vars: ansible_become:` on delegated tasks, and a connection variable on a
+# delegated task is resolved in the DELEGATED host's scope, where a fact set
+# on the openbao node does not exist ('openbao_cli_become' is undefined). A
+# role default is in scope for every host the play touches. Lazy, so
+# openbao_write_addr's init/02 override is still honoured at use time.
+openbao_cli_host: "{{ 'localhost' if openbao_reconcile_addr | length > 0 else inventory_hostname }}"
+openbao_cli_addr: "{{ openbao_reconcile_addr | default(openbao_write_addr, true) }}"
+openbao_cli_become: "{{ openbao_reconcile_addr | length == 0 }}"
+
 # --- Ingress addresses whose X-Forwarded-For header is trusted ---------------
 # Every ingress instance's own address plus the floating ingress VIP, both
 # derived from the inventory exactly as the keepalived role derives them — no
