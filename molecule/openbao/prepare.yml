@@ -19,6 +19,9 @@
     - name: Gather facts
       ansible.builtin.setup:
 
+    - name: Point apt at the estate cache when one is declared
+      ansible.builtin.include_tasks: ../resources/tasks/apt_proxy.yml
+
     - name: Update apt cache (Debian/Ubuntu)
       ansible.builtin.apt:
         update_cache: true
