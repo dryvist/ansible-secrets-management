@@ -209,14 +209,21 @@
     - openbao_bootstrap_token is defined
     - openbao_github_engine_enabled | bool
 
+# Runs on the controller (openbao_cli_host, resolved in init/02): one module
+# execution per declared permission set. Same CLI, same rc/stdout, so the
+# drift comparison below reads unchanged.
 - name: Read the GitHub token permission sets
   ansible.builtin.command:
     cmd: >-
       bao read -format=json
       {{ openbao_github_mount }}/permissionset/{{ item.name }}
   environment:
-    BAO_ADDR: "{{ openbao_write_addr }}"
+    BAO_ADDR: "{{ openbao_cli_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
   loop: "{{ openbao_github_permission_sets }}"
   loop_control:
     label: "{{ item.name }}"

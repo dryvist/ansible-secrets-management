@@ -161,14 +161,19 @@
 # identical -- it just never leaves the controller. The write below feeds it to
 # `bao policy write` on stdin, so no file is created and none has to be cleaned
 # up. Remote operations for this phase: 180 -> 0.
+# A per-item `combine` here re-copies the whole accumulated dict on every
+# iteration (O(n^2) over ~60 policies). Appending {key, value} pairs to a
+# plain list is O(1) per item; items2dict builds the final dict once.
 - name: Render the RBAC policies on the controller
   ansible.builtin.set_fact:
-    openbao_rendered_policy_map: >-
-      {{ openbao_rendered_policy_map | default({})
-         | combine({ item.name: lookup('template', item.template) | trim }) }}
-  loop: "{{ openbao_manageable_policies }}"
-  loop_control:
-    label: "{{ item.name }}"
+    openbao_rendered_policy_map: "{{ _openbao_rendered_policy_pairs | items2dict }}"
+  vars:
+    _openbao_rendered_policy_pairs: >-
+      {%- set _pairs = [] -%}
+      {%- for item in openbao_manageable_policies -%}
+      {%- set _ = _pairs.append({'key': item.name, 'value': (lookup('template', item.template) | trim)}) -%}
+      {%- endfor -%}
+      {{ _pairs }}
   no_log: true
   when: openbao_bootstrap_token is defined
 
@@ -287,19 +292,25 @@
 # newline, `stripped_equal` true on every sampled policy. Either defect alone
 # rewrites all 56 policies on every run while honestly reporting "changed", so
 # fixing only one would have looked like a fix and changed nothing.
+# Same O(n^2)-combine-loop fix as the render task above: build {key, value}
+# pairs in a plain list (O(1) append) and dict-ify once at the end, rather
+# than re-copying the accumulated dict on every one of ~60 iterations.
 - name: Build the existing RBAC policy content map
   ansible.builtin.set_fact:
-    openbao_existing_policy_map: >-
-      {{ openbao_existing_policy_map | default({})
-         | combine({ item.item.name: ((item.stdout | default('{}') | from_json).policy | default('')) | trim }) }}
-  loop: "{{ openbao_existing_policy_reads.results | default([]) }}"
-  loop_control:
-    label: "{{ item.item.name }}"
+    openbao_existing_policy_map: "{{ _openbao_existing_policy_pairs | items2dict }}"
+  vars:
+    _openbao_existing_policy_pairs: >-
+      {%- set _pairs = [] -%}
+      {%- for result in (openbao_existing_policy_reads.results | default([])) -%}
+      {%- if not (result.skipped | default(false)) and (result.rc | default(1)) == 0 -%}
+      {%- set _policy = (result.stdout | default('{}') | from_json).policy -%}
+      {%- set _ = _pairs.append(
+          {'key': result.item.name, 'value': (_policy | default('') | trim)}) -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {{ _pairs }}
   no_log: true
-  when:
-    - openbao_bootstrap_token is defined
-    - not (item.skipped | default(false))
-    - (item.rc | default(1)) == 0
+  when: openbao_bootstrap_token is defined
 
 - name: Write the RBAC policies that are missing or changed
   ansible.builtin.command:

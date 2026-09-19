@@ -118,12 +118,19 @@
     - openbao_ssh_engine_enabled | bool
     - openbao_ssh_source_address_cidrs | length == 0
 
+# Runs on the controller (openbao_cli_host, resolved in init/02): one module
+# execution per declared SSH signing role. Same CLI, same rc/stderr, so the
+# add-if-missing gate below reads unchanged.
 - name: Check which SSH signing roles already exist
   ansible.builtin.command:
     cmd: "bao read -format=json {{ openbao_ssh_mount }}/roles/{{ item.name }}"
   environment:
-    BAO_ADDR: "{{ openbao_write_addr }}"
+    BAO_ADDR: "{{ openbao_cli_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
   loop: "{{ openbao_ssh_roles }}"
   loop_control:
     label: "{{ item.name }}"
