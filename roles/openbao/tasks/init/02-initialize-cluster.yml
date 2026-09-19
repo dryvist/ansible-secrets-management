@@ -269,7 +269,7 @@
           else 'this node itself — no leader resolved, so writes depend on the
                 standby forwarding hop' }}).
 
-# --- Resolve where the bao CLI runs -----------------------------------------
+# --- Where the bao CLI runs ----------------------------------------------------
 # Every `bao` invocation from here on is one module execution against the
 # target, and each one pays the flat per-task transport cost ansible.cfg
 # documents (~6s on proxmox_pct_remote). The provisioning loops below run
@@ -281,16 +281,8 @@
 # openbao_write_addr exists to work around. Same CLI, same rc/stdout/stderr,
 # so every changed_when, when and denied-vs-absent guard reads unchanged.
 #
-# The fallback to the node itself covers a first-ever bootstrap, when no
-# BAO_ADDR is ambient yet. become is forced off on the controller: a
-# delegated task inherits the PLAY's become and would otherwise escalate on
-# the control node (same shape as the reconcile login above).
-- name: Resolve where this run's bao invocations run from
-  ansible.builtin.set_fact:
-    openbao_cli_host: "{{ 'localhost' if openbao_reconcile_addr | length > 0 else inventory_hostname }}"
-    openbao_cli_addr: "{{ openbao_reconcile_addr | default(openbao_write_addr, true) }}"
-    openbao_cli_become: "{{ openbao_reconcile_addr | length == 0 }}"
-
+# The switch itself (openbao_cli_host / _addr / _become) is a role default,
+# not a fact -- see defaults/main/00-install-and-node.yml for why.
 - name: Report where this run's bao invocations run from
   ansible.builtin.debug:
     msg: >-

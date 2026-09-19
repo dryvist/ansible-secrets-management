@@ -39,6 +39,7 @@ from ansible.template import Templar, trust_as_template
 ROOT = Path(__file__).resolve().parents[1]
 TASKS = ROOT / "roles/openbao/tasks"
 INIT_02 = TASKS / "init/02-initialize-cluster.yml"
+DEFAULTS_00 = ROOT / "roles/openbao/defaults/main/00-install-and-node.yml"
 
 # Node-local by design: they talk to THIS node before/while a leader exists.
 NODE_LOCAL = {"01-preflight-and-cluster-probe.yml", "02-initialize-cluster.yml"}
@@ -143,16 +144,17 @@ class NoProvisioningWriteIsPinnedToThisNode(unittest.TestCase):
 RECONCILE_ADDR = "https://openbao.ingress.example.test"
 
 
+CLI_SWITCH = ("openbao_cli_host", "openbao_cli_addr", "openbao_cli_become")
+
+
 def _resolve_cli(reconcile_addr):
+    defaults = yaml.safe_load(DEFAULTS_00.read_text(encoding="utf-8"))
     variables = {
         "openbao_reconcile_addr": reconcile_addr,
         "openbao_write_addr": LEADER_ADDR,
         "inventory_hostname": "openbao-11",
     }
-    return {
-        name: _render(_set_fact_expr(name), variables)
-        for name in ("openbao_cli_host", "openbao_cli_addr", "openbao_cli_become")
-    }
+    return {name: _render(defaults[name], variables) for name in CLI_SWITCH}
 
 
 class BaoCliRunsOnTheController(unittest.TestCase):
@@ -172,6 +174,16 @@ class BaoCliRunsOnTheController(unittest.TestCase):
         self.assertEqual(cli["openbao_cli_host"], "openbao-11")
         self.assertEqual(cli["openbao_cli_addr"], LEADER_ADDR)
         self.assertIs(cli["openbao_cli_become"], True)
+
+    def test_the_switch_is_a_default_not_a_fact(self):
+        """openbao_cli_become is consumed as `vars: ansible_become:` on
+        delegated tasks, and a connection variable there is resolved in the
+        DELEGATED host's scope. A set_fact on the openbao node is invisible
+        there ('openbao_cli_become' is undefined). A role default is in
+        scope for every host in the play."""
+        for name in CLI_SWITCH:
+            with self.assertRaises(AssertionError, msg=f"{name} is set as a fact again"):
+                _set_fact_expr(name)
 
 
 # The loops that were measured, by task name. A revert to openbao_write_addr
