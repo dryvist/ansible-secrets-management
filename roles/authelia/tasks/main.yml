@@ -139,6 +139,92 @@
 # ansible_become: false on the delegated tasks is REQUIRED — Ansible inherits
 # the play's become: true on delegated tasks regardless of task-level become,
 # which fails with "sudo: a password is required" on the controller.
+#
+# The expected hash comes from Authelia's own signed release manifest, not a
+# static pin next to authelia_version -- see defaults/main/00-core.yml for why
+# (a pin desyncs the moment Renovate bumps the version; this can't).
+- name: Stage the Authelia release checksum manifest on controller
+  ansible.builtin.get_url:
+    url: "{{ authelia_release_checksums_url }}"
+    dest: "/tmp/authelia-{{ authelia_release_checksums_filename }}"
+    mode: "0644"
+    force: true
+  delegate_to: localhost
+  connection: local
+  become: false
+  vars:
+    ansible_become: false
+  run_once: true
+  check_mode: false
+
+- name: Stage the Authelia release checksum manifest signature on controller
+  ansible.builtin.get_url:
+    url: "{{ authelia_release_checksums_signature_url }}"
+    dest: "/tmp/authelia-{{ authelia_release_checksums_filename }}.sig"
+    mode: "0644"
+    force: true
+  delegate_to: localhost
+  connection: local
+  become: false
+  vars:
+    ansible_become: false
+  run_once: true
+  check_mode: false
+
+- name: Build the Authelia release verification keyring on controller
+  ansible.builtin.command:
+    argv:
+      - gpg
+      - --batch
+      - --yes
+      - --dearmor
+      - --output
+      - /tmp/authelia-security.gpg
+      - "{{ role_path }}/files/authelia-security.asc"
+  delegate_to: localhost
+  connection: local
+  become: false
+  vars:
+    ansible_become: false
+  run_once: true
+  changed_when: false
+  check_mode: false
+
+- name: Verify the Authelia release checksum manifest signature
+  ansible.builtin.command:
+    argv:
+      - gpgv
+      - --keyring
+      - /tmp/authelia-security.gpg
+      - "/tmp/authelia-{{ authelia_release_checksums_filename }}.sig"
+      - "/tmp/authelia-{{ authelia_release_checksums_filename }}"
+  delegate_to: localhost
+  connection: local
+  become: false
+  vars:
+    ansible_become: false
+  run_once: true
+  changed_when: false
+  check_mode: false
+
+- name: Read the expected SHA256 for the Authelia release tarball
+  ansible.builtin.set_fact:
+    authelia_release_tgz_sha256: >-
+      {{ (lookup('file', '/tmp/authelia-' ~ authelia_release_checksums_filename)
+          | regex_search('([0-9a-f]{64})\s+\*?' ~ (authelia_release_tgz | regex_escape) ~ '$', '\1', multiline=True)
+          | first) }}
+  run_once: true
+
+- name: Assert a checksum was found for the Authelia release tarball
+  ansible.builtin.assert:
+    that:
+      - authelia_release_tgz_sha256 is defined
+      - authelia_release_tgz_sha256 | length == 64
+    fail_msg: >-
+      Could not find {{ authelia_release_tgz }} in the signed Authelia
+      checksum manifest for v{{ authelia_version }}.
+  run_once: true
+
 - name: Stage the Authelia release tarball on controller (checksum-verified)
   ansible.builtin.get_url:
     url: "{{ authelia_release_tgz_url }}"
@@ -152,6 +238,7 @@
   vars:
     ansible_become: false
   run_once: true
+  check_mode: false
 
 # Extract into a VERSIONED staging dir: the tarball's binary is named bare
 # `authelia`, so an unversioned creates-guard would keep copying a stale

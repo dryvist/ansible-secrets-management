@@ -93,6 +93,8 @@ openbao_github_repo_create_policy_name: github-repo-create
 openbao_github_repo_create_approle_name: github-repo-create
 openbao_github_runner_policy_name: github-runner
 openbao_github_runner_approle_name: github-runner
+openbao_github_exporter_policy_name: github-exporter
+openbao_github_exporter_approle_name: github-exporter
 # docs-publisher: the documentation publisher's own identity. Mints exactly
 # one repository-scoped write set and nothing else — it holds no read set, no
 # raw token path and no lock subtree, so a leaked secret-zero can open a pull
