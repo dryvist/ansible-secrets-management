@@ -16,6 +16,9 @@
         # nothing on the healthy path.
         timeout: 180
 
+    - name: Wait for the instance to finish booting
+      ansible.builtin.include_tasks: ../resources/tasks/wait_for_boot.yml
+
     - name: Gather facts
       ansible.builtin.setup:
 
