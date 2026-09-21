@@ -156,6 +156,7 @@
     owner: root
     group: "{{ openbao_group }}"
     mode: "0750"
+  register: openbao_aws_plugin_install_task
   when: openbao_aws_engine_enabled | bool
 
 # --- Phase 5d: stage the GitHub secrets engine plugin (external, all nodes) --
@@ -270,6 +271,7 @@
     owner: root
     group: "{{ openbao_group }}"
     mode: "0750"
+  register: openbao_github_plugin_install_task
   when: openbao_github_engine_enabled | bool
 
 # --- Phase 5e: stage OAuthapp (external, all voters) -----------------------
@@ -330,6 +332,7 @@
     owner: root
     group: "{{ openbao_group }}"
     mode: "0750"
+  register: openbao_oauthapp_plugin_install_task
   when: openbao_oauthapp_engine_enabled | bool
 
 # --- Phase 6: configuration --------------------------------------------------

@@ -101,7 +101,9 @@
   when:
     - openbao_bootstrap_token is defined
     - openbao_github_engine_enabled | bool
-    - openbao_github_plugin_tune is changed
+    - >-
+      openbao_github_plugin_tune is changed
+      or openbao_github_plugin_install_task is changed
 
 - name: Read the GitHub engine configuration
   ansible.builtin.command:
