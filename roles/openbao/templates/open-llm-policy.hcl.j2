@@ -15,12 +15,14 @@
 #     open-llm on the SAME read boundary as the other lower-trust harnesses
 #     rather than growing a second copy of the same grant.
 #
-# Deliberately absent: anything under secrets-external/, any write capability,
-# any github/* path (a public-repo-scoped write realm is provisioned
-# separately via the github-write-scope mechanism — see
-# defaults/main/05b-domain-policy-approle-names.yml — because that mechanism
-# is keyed by the operator-held OPENBAO_GITHUB_WRITE_SCOPES env var, not a
-# name declared in this policy).
+# Deliberately absent: anything under secrets-external/, any KV write
+# capability, the raw github/token endpoint, every other permission set.
+# The one github grant below mints ONLY the open-llm-write permission set
+# (openbao_github_open_llm_set_name, 03-github-engine.yml) — a repository-
+# scoped write token whose scope is stored server-side (installation_id +
+# an explicit repo list + contents/pull_requests only), same shape as
+# docs-publisher. This identity cannot name another repository or ask for
+# another permission.
 
 path "{{ openbao_kv_mount }}/data/apps/open-llm" {
   capabilities = ["read"]
@@ -37,3 +39,12 @@ path "{{ openbao_kv_mount }}/data/ai/public/*" {
 path "{{ openbao_kv_mount }}/metadata/ai/public/*" {
   capabilities = ["read"]
 }
+
+# Renders nothing when OPENBAO_GITHUB_OPEN_LLM_REPOS is unset (the set
+# drops out of openbao_github_permission_sets entirely) — same as
+# github-docs-publisher-policy.hcl.j2.
+{% for permission_set in openbao_github_permission_sets | selectattr('name', 'equalto', openbao_github_open_llm_set_name) %}
+path "{{ openbao_github_mount }}/token/{{ permission_set.name }}" {
+  capabilities = ["create", "read", "update"]
+}
+{% endfor %}
