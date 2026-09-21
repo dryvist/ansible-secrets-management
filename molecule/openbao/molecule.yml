@@ -6,7 +6,7 @@
 platforms:
   - name: openbao-test${CI_INSTANCE_SUFFIX}
     # No stable version tags published; geerlingguy only ships :latest.
-    image: ${MOLECULE_BASE_IMAGE:-geerlingguy/docker-debian12-ansible:latest}
+    image: geerlingguy/docker-debian12-ansible:latest
     privileged: true
     command: ""
     pre_build_image: true
