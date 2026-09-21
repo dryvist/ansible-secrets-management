@@ -47,18 +47,38 @@ openbao_base_approles_core:
       {{ [openbao_ansible_converge_policy_name, openbao_semaphore_policy_name,
           openbao_reconcile_policy_name]
          + (['ssh-sign-automation-semaphore'] if openbao_ssh_engine_enabled else []) }}
+  # These six are the converge-domain prefetch identities (same
+  # openbao_secrets_domains loop noted at their machine_or_workstation CIDR
+  # entries in 08b). The 24h default secret_id_ttl meant each pair went stale
+  # within a day with nothing to re-mint it, isolating the domain's hosts on
+  # the next converge (Vikunja 3197). "0s" not 0: 10c compares via
+  # to_seconds, which splits its input. Bounded by the machine_or_workstation
+  # source class instead of a lifetime, same as semaphore/approle-audit/
+  # ai-public above.
   - name: "{{ openbao_observability_approle_name }}"
     policy: "{{ openbao_observability_policy_name }}"
+    secret_id_ttl: "0s"
+    secret_id_num_uses: 0
   - name: "{{ openbao_local_cloud_approle_name }}"
     policy: "{{ openbao_local_cloud_policy_name }}"
+    secret_id_ttl: "0s"
+    secret_id_num_uses: 0
   - name: "{{ openbao_monitoring_approle_name }}"
     policy: "{{ openbao_monitoring_policy_name }}"
+    secret_id_ttl: "0s"
+    secret_id_num_uses: 0
   - name: "{{ openbao_media_approle_name }}"
     policy: "{{ openbao_media_policy_name }}"
+    secret_id_ttl: "0s"
+    secret_id_num_uses: 0
   - name: "{{ openbao_ntfy_approle_name }}"
     policy: "{{ openbao_ntfy_policy_name }}"
+    secret_id_ttl: "0s"
+    secret_id_num_uses: 0
   - name: "{{ openbao_apps_approle_name }}"
     policy: "{{ openbao_apps_policy_name }}"
+    secret_id_ttl: "0s"
+    secret_id_num_uses: 0
   # local-llm additionally attaches the exact external provider-key leaves.
   # Model selection and limits remain in LiteLLM configuration; adding a
   # provider to the inventory does not enable a model or require the leaf to
@@ -135,6 +155,9 @@ openbao_base_approles_core:
   - name: "{{ openbao_github_runner_approle_name }}"
     policy: "{{ openbao_github_runner_policy_name }}"
     token_ttl: 15m
+  - name: "{{ openbao_github_exporter_approle_name }}"
+    policy: "{{ openbao_github_exporter_policy_name }}"
+    token_ttl: 15m
   - name: "{{ openbao_reconcile_approle_name }}"
     policy: "{{ openbao_reconcile_policy_name }}"
     token_ttl: 30m
@@ -159,6 +182,13 @@ openbao_base_approles_core:
   - name: "{{ openbao_ai_orchestrator_approle_name }}"
     policy: "{{ openbao_ai_orchestrator_policy_name }}"
     token_ttl: 30m  # demoted: broad-write identity gets a short token TTL
+  # open-llm: standing (ambient) read-only identity for the successor
+  # harness, minted like any other base AppRole (24h secret_id, default
+  # num_uses) — it holds no write power, so it needs no shorter TTL or
+  # human-unlock gate the way ai-orchestrator/openbao-node-converge do.
+  - name: "{{ openbao_open_llm_approle_name }}"
+    policy: "{{ openbao_open_llm_policy_name }}"
+    token_ttl: 30m
   # ai-readonly / ai-elevated ACTOR roles: standing (ambient) READ tiers. Their
   # token_policies ATTACH composed rollups — no standalone ai-* policy object.
   # ai-readonly = read-all (every read-<svc>); ai-elevated = read-all + the

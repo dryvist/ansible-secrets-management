@@ -1,7 +1,7 @@
 """Every openbao_secrets prefetch-loop domain needs a workstation CIDR class.
 
 roles/openbao_secrets/tasks/fetch_domain.yml logs into one AppRole per
-`openbao_secrets_domains` entry (roles/openbao_secrets/defaults/main.yml) --
+`openbao_secrets_domains` entry (roles/openbao_secrets/defaults/main/) --
 observability, local-cloud, monitoring, media, apps, ntfy, local-llm -- for
 every workstation-run converge (`scripts/run-ansible.sh` from a dev shell).
 None of them had a CIDR class override, so all seven defaulted to `machine`
@@ -21,16 +21,24 @@ import unittest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
-DOMAINS_FILE = ROOT / "roles" / "openbao_secrets" / "defaults" / "main.yml"
+DOMAINS_DIR = ROOT / "roles" / "openbao_secrets" / "defaults" / "main"
 OVERRIDES_FILE = ROOT / "roles" / "openbao" / "defaults" / "main" / "08b-cidr-and-unlock.yml"
+
+
+def _load_role_defaults(main_dir: Path) -> dict:
+    """Merge defaults/main/*.yml like Ansible does for a directory-form role."""
+    merged: dict = {}
+    for path in sorted(main_dir.glob("*.yml")):
+        merged.update(yaml.safe_load(path.read_text(encoding="utf-8")) or {})
+    return merged
 
 
 class PrefetchDomainsHaveAWorkstationClass(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        domains_cfg = yaml.safe_load(DOMAINS_FILE.read_text(encoding="utf-8"))
+        domains_cfg = _load_role_defaults(DOMAINS_DIR)
         cls.domain_names = [d["name"] for d in domains_cfg["openbao_secrets_domains"]]
-        assert cls.domain_names, f"no domains found in {DOMAINS_FILE}"
+        assert cls.domain_names, f"no domains found in {DOMAINS_DIR}"
 
         cls.overrides = yaml.safe_load(OVERRIDES_FILE.read_text(encoding="utf-8"))[
             "openbao_approle_cidr_class_overrides"

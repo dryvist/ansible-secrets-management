@@ -121,12 +121,19 @@
           | default({}, true)).bound_issuer | default('')
          != openbao_terrakube_jwt_issuer
 
+# Runs on the controller (openbao_cli_host, resolved in init/02): one module
+# execution per workspace. Same CLI, same rc/stdout, so the drift compare
+# further down reads unchanged.
 - name: Read Terrakube workspace JWT roles
   ansible.builtin.command:
     cmd: "bao read -format=json auth/{{ openbao_terrakube_jwt_auth_path }}/role/terrakube-{{ item.name }}"
   environment:
-    BAO_ADDR: "{{ openbao_write_addr }}"
+    BAO_ADDR: "{{ openbao_cli_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
   loop: "{{ openbao_terrakube_workspaces }}"
   loop_control:
     label: "{{ item.name }}"

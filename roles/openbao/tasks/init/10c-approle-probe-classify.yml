@@ -1,0 +1,66 @@
+---
+# Split out of 10b-approle-secret-ids.yml (token-limit gate) -- classifies
+# the liveness probe's results from the SAME openbao_approle_probes fact,
+# registered there just before this file is included.
+
+# OpenBao returns the SAME HTTP 400 for "this secret_id is actually dead"
+# and for "this secret_id is fine but your CIDR-bound role refuses this
+# source address" (e.g. github-runner, scoped to CI-runner subnets only —
+# this probe never runs from one). status_code alone cannot tell them apart;
+# only the error text can ("... unauthorized by CIDR restrictions on the
+# role"). Treating a CIDR refusal as "dead" was reminting a perfectly good
+# secret_id on every privileged run, discarding a credential a real consumer
+# may still be using.
+- name: Determine which existing AppRoles hold a dead stored secret_id
+  ansible.builtin.set_fact:
+    openbao_approle_dead_names: >-
+      {%- set _dead = [] -%}
+      {%- for result in (openbao_approle_probes.results | default([])) -%}
+      {%- if not (result.skipped | default(false)) and (result.status | default(200)) != 200 -%}
+      {%- set _errs = (result.json.errors | default([])) | join(' ') -%}
+      {%- if 'CIDR restrictions' not in _errs -%}
+      {%- set _ = _dead.append(result.item.name) -%}
+      {%- endif -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {{ _dead }}
+  no_log: true
+  when: openbao_bootstrap_token is defined
+
+# Same probe results, the CIDR-refused half: not proven dead, not provable
+# alive from this host either — surfaced so an operator can distinguish
+# "needs reminting" from "needs probing from an allowed host", instead of
+# both looking identical in the recap.
+- name: Determine which existing AppRoles could not be probed from this host (CIDR-bound)
+  ansible.builtin.set_fact:
+    openbao_approle_cidr_inconclusive_names: >-
+      {%- set _names = [] -%}
+      {%- for result in (openbao_approle_probes.results | default([])) -%}
+      {%- if not (result.skipped | default(false)) and (result.status | default(200)) != 200 -%}
+      {%- set _errs = (result.json.errors | default([])) | join(' ') -%}
+      {%- if 'CIDR restrictions' in _errs -%}
+      {%- set _ = _names.append(result.item.name) -%}
+      {%- endif -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {{ _names }}
+  no_log: true
+  when: openbao_bootstrap_token is defined
+
+- name: Report which existing AppRoles' stored secret_id failed to authenticate
+  ansible.builtin.debug:
+    msg: >-
+      Dead stored secret_id (login probe failed): {{ (openbao_approle_dead_names | default([])) | join(', ') }}
+  when:
+    - openbao_bootstrap_token is defined
+    - (openbao_approle_dead_names | default([])) | length > 0
+
+- name: Report which existing AppRoles' stored secret_id could not be probed (CIDR-bound role)
+  ansible.builtin.debug:
+    msg: >-
+      Skipped as inconclusive, not reminted (source address refused by the
+      role's own CIDR bind, not a dead credential):
+      {{ (openbao_approle_cidr_inconclusive_names | default([])) | join(', ') }}
+  when:
+    - openbao_bootstrap_token is defined
+    - (openbao_approle_cidr_inconclusive_names | default([])) | length > 0

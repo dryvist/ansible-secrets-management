@@ -67,11 +67,18 @@ openbao_approle_cidr_class_overrides:
   # lower-trust harnesses on the workstation. The union is a superset of the
   # machine default, so no existing holder loses access.
   ai-public: machine_or_workstation
+  # open-llm runs as a macOS local user on the operator's own machine —
+  # same class as ai-public, the other desktop-CLI identity it shares a
+  # read leaf with.
+  open-llm: machine_or_workstation
   # Backs the interactive `aikey <harness>` function, which runs on the
   # workstation.
   ai-readonly: machine_or_workstation
   # Ephemeral CI runners sit on their own isolated segment.
   github-runner: ci
+  # CI-metrics exporter runs on a regular infra guest (the prometheus host),
+  # not the isolated CI segment or a human workstation.
+  github-exporter: machine
   # Operator-run, not machine-resident: the platform deploy is driven from the
   # operator's workstation against a remote engine, so it belongs to the same
   # class as the other identities that machine holds. It defaulted to the
@@ -110,7 +117,7 @@ openbao_approle_cidr_class_overrides:
   slack-admin: machine_or_workstation
   slack-ops: machine_or_workstation
   # Every openbao_secrets_domains entry (ansible-proxmox-apps
-  # roles/openbao_secrets/defaults/main.yml) the prefetch loop logs into for a
+  # roles/openbao_secrets/defaults/main/) the prefetch loop logs into for a
   # workstation converge -- same failure as the entries above.
   observability: machine_or_workstation
   local-cloud: machine_or_workstation

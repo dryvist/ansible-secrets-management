@@ -87,7 +87,10 @@ def test_legacy_internal_provider_area_remains_denied():
 
 def test_ai_runner_uses_external_provider_leaves():
     runner_policy = _read("roles/openbao/templates/ai-runner-policy.hcl.j2")
-    fetch_defaults = _read("roles/openbao_secrets/defaults/main.yml")
+    fetch_defaults = "".join(
+        _read(f"roles/openbao_secrets/defaults/main/{name}")
+        for name in ("00-connection-and-publish.yml", "01-domains.yml")
+    )
 
     assert "{{ openbao_ai_api_key_mount }}/data/{{ openbao_ai_api_key_path_prefix }}/{{ provider }}" in runner_policy
     assert "{{ openbao_ai_api_key_mount }}/metadata/{{ openbao_ai_api_key_path_prefix }}/{{ provider }}" in runner_policy

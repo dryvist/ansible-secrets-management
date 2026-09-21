@@ -40,7 +40,7 @@ BAO_ABSENT = yaml.safe_load(
     (ROOT / "roles/openbao/defaults/main/01b-app-secrets.yml").read_text()
 )["openbao_absent_stderr_marker"]
 MOD_ABSENT = yaml.safe_load(
-    (ROOT / "roles/openbao_secrets/defaults/main.yml").read_text()
+    (ROOT / "roles/openbao_secrets/defaults/main/01-domains.yml").read_text()
 )["openbao_secrets_absent_msg_marker"]
 
 # What the two tools actually emit, taken from the CLI and from

@@ -59,6 +59,13 @@ openbao_github_repo_create_permissions:
 # repository, and only mints the short-lived registration token a runner needs.
 openbao_github_runner_permissions:
   organization_self_hosted_runners: write
+# CI-metrics exporter (github_exporter role, prometheus host). Read-only,
+# organization-scoped: `actions:read` for the workflow_runs/workflow_jobs/
+# runners collectors, `administration:read` for the org-level runners listing.
+# No `contents`/`pull_requests`/`issues` — this identity never reads source.
+openbao_github_exporter_permissions:
+  actions: read
+  administration: read
 # Publish tier: the ONE set that both WRITES and is repository-scoped. The
 # scope lives in the set itself — installation_id, the repository list and the
 # permission map are all stored server-side, and the permission-set token path
@@ -86,6 +93,27 @@ openbao_github_docs_publisher_permission_sets: >-
        'repositories': openbao_github_docs_publisher_repos,
        'permissions': openbao_github_docs_publisher_permissions}]
      if openbao_github_docs_publisher_repos | length > 0 else [] }}
+# open-llm write tier: same shape as docs-publisher — the ONE set that
+# both writes and is repository-scoped, scope stored server-side so the
+# holder (the open-llm AppRole) cannot widen it. Lets open-llm push a
+# branch and open a PR (step 4 smoke test) on an explicit allowlist of
+# PUBLIC dryvist repos only — no contents/pull_requests grant exists
+# anywhere else on the open-llm policy. Unset env -> no set, same as
+# docs-publisher: an unconfigured allowlist must not exist unbounded.
+openbao_github_open_llm_set_name: open-llm-write
+openbao_github_open_llm_permissions:
+  contents: write
+  pull_requests: write
+openbao_github_open_llm_repos: >-
+  {{ (lookup('env', 'OPENBAO_GITHUB_OPEN_LLM_REPOS') | default('', true)).split(',')
+     | map('trim') | reject('equalto', '') | list }}
+openbao_github_open_llm_permission_sets: >-
+  {{ [{'name': openbao_github_open_llm_set_name,
+       'tier': 'publish',
+       'installation_id': openbao_github_dryvist_installation_id,
+       'repositories': openbao_github_open_llm_repos,
+       'permissions': openbao_github_open_llm_permissions}]
+     if openbao_github_open_llm_repos | length > 0 else [] }}
 # tier drives which identities may mint a set (see the github-*-policy
 # templates): `read` sets are ambient; `admin` sets (installation-wide, full
 # App ceiling) are minted only through the inert, human-gated github-admin
@@ -123,8 +151,13 @@ openbao_github_base_permission_sets:
     tier: runner
     installation_id: "{{ openbao_github_dryvist_installation_id }}"
     permissions: "{{ openbao_github_runner_permissions }}"
+  - name: exporter-dryvist
+    tier: exporter
+    installation_id: "{{ openbao_github_dryvist_installation_id }}"
+    permissions: "{{ openbao_github_exporter_permissions }}"
 # Full set list = the static base above + the publish tier, which exists only
 # when its repository list is configured.
 openbao_github_permission_sets: >-
   {{ openbao_github_base_permission_sets
-     + openbao_github_docs_publisher_permission_sets }}
+     + openbao_github_docs_publisher_permission_sets
+     + openbao_github_open_llm_permission_sets }}

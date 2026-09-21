@@ -30,7 +30,7 @@ from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar, trust_as_template
 
 ROOT = Path(__file__).resolve().parents[1]
-TASKS = ROOT / "roles" / "openbao" / "tasks" / "init" / "08-rbac-policies.yml"
+TASKS = ROOT / "roles" / "openbao" / "tasks" / "init" / "08b-rbac-policy-writes.yml"
 EXISTING_TASK = "Build the existing RBAC policy content map"
 WRITE_TASK = "Write the RBAC policies that are missing or changed"
 
@@ -55,17 +55,17 @@ def _render(expr, variables, wrap=False):
 
 
 def existing_map(name, stdout):
-    """Render the existing-map expression for one read result."""
-    expr = _task(EXISTING_TASK)["ansible.builtin.set_fact"][
-        "openbao_existing_policy_map"
-    ]
-    return _render(
-        expr,
-        {
-            "openbao_existing_policy_map": {},
-            "item": {"item": {"name": name}, "stdout": stdout, "rc": 0},
-        },
+    """Render the existing-map expression for one read result, exactly as the
+    real task does: the `vars` pairs-builder first, then the final
+    items2dict expression fed from that result."""
+    task = _task(EXISTING_TASK)
+    pairs_expr = task["vars"]["_openbao_existing_policy_pairs"]
+    final_expr = task["ansible.builtin.set_fact"]["openbao_existing_policy_map"]
+    results = [{"item": {"name": name}, "stdout": stdout, "rc": 0}]
+    pairs = _render(
+        pairs_expr, {"openbao_existing_policy_reads": {"results": results}}
     )
+    return _render(final_expr, {"_openbao_existing_policy_pairs": pairs})
 
 
 def write_fires(name, existing, rendered):
@@ -122,6 +122,39 @@ class WriteIsIdempotent(unittest.TestCase):
         self.assertFalse(
             write_fires("apps", existing, {"apps": POLICY_BODY.strip()})
         )
+
+
+class CombineLoopCollapseIsEquivalent(unittest.TestCase):
+    """Both the render and existing-map tasks moved from a per-item `combine`
+    (O(n^2) over ~60 policies -- every iteration re-copies the whole
+    accumulated dict) to appending {key, value} pairs once and dict-ifying
+    at the end. Proves the two reductions agree on the same input,
+    independent of `lookup('template', ...)` or a live bao read."""
+
+    SAMPLE = {"apps": "path a", "aws-write": "path b", "ssh-ca": "path c"}
+
+    def _old_combine_result(self):
+        acc = {}
+        for name, value in self.SAMPLE.items():
+            acc = _render(
+                "{{ acc | combine({name_: value_}) }}",
+                {"acc": acc, "name_": name, "value_": value},
+            )
+        return acc
+
+    def _new_pairs_result(self):
+        pairs_expr = (
+            "{%- set _pairs = [] -%}"
+            "{%- for name, value in items -%}"
+            "{%- set _ = _pairs.append({'key': name, 'value': value}) -%}"
+            "{%- endfor -%}"
+            "{{ _pairs }}"
+        )
+        pairs = _render(pairs_expr, {"items": list(self.SAMPLE.items())})
+        return _render("{{ pairs | items2dict }}", {"pairs": pairs})
+
+    def test_old_and_new_reductions_agree(self):
+        self.assertEqual(self._old_combine_result(), self._new_pairs_result())
 
 
 if __name__ == "__main__":

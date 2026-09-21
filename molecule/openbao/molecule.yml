@@ -2,13 +2,6 @@
 # Molecule scenario for the openbao role.
 # CI-only gate: local runs are known-broken in this repo (see AGENTS.md /
 # project memory). Do not run locally.
-dependency:
-  name: galaxy
-  options:
-    requirements-file: ${MOLECULE_PROJECT_DIRECTORY}/requirements.yml
-
-driver:
-  name: docker
 
 platforms:
   - name: openbao-test${CI_INSTANCE_SUFFIX}
@@ -40,9 +33,6 @@ provisioner:
     defaults:
       interpreter_python: auto_silent
       roles_path: ${MOLECULE_PROJECT_DIRECTORY}/roles
-
-verifier:
-  name: ansible
 
 scenario:
   name: openbao

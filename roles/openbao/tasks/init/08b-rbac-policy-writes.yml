@@ -1,0 +1,105 @@
+---
+# Split out of 08-rbac-policies.yml to stay inside the per-file token budget.
+# The seam is RENDER (there: build the desired content for every declared
+# policy on the controller) vs RECONCILE (here: read what is actually stored
+# and write only what differs). Included last from 08-rbac-policies.yml, so
+# task order and names are unchanged from before the split.
+# The reads below run on the controller (openbao_cli_host, resolved in
+# init/02). Measured on the target: 559s for the per-policy reads alone, one
+# module execution per policy on proxmox_pct_remote. Same `bao` CLI, same
+# rc/stdout/stderr, so the map build and the write gate below are unchanged.
+- name: List existing policies
+  ansible.builtin.command:
+    cmd: bao policy list -format=json
+  environment:
+    BAO_ADDR: "{{ openbao_cli_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
+  register: openbao_policies_raw
+  no_log: true
+  changed_when: false
+  when: openbao_bootstrap_token is defined
+
+- name: Read existing RBAC policy contents
+  ansible.builtin.command:
+    cmd: "bao policy read -format=json {{ item.name }}"
+  environment:
+    BAO_ADDR: "{{ openbao_cli_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
+  loop: "{{ openbao_manageable_policies }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: openbao_existing_policy_reads
+  no_log: true
+  changed_when: false
+  # Every other probe in this file tolerates a non-zero rc; this one did not, so
+  # a single denied read aborted the whole block before any policy was written.
+  # The map build below already guards on `rc == 0`, so a failed read is an
+  # expected, handled input -- not a reason to stop. The capability gate above
+  # is what turns a genuine scope shortfall into a loud failure.
+  failed_when: false
+  when:
+    - openbao_bootstrap_token is defined
+    - item.name in (openbao_policies_raw.stdout | from_json)
+
+# Both sides are `trim`ed and read from the CORRECT key, because the write below
+# is a no-op only when the two compare equal -- and it was never equal:
+#
+#   * `bao policy read -format=json` returns {"policy": ...} at TOP LEVEL. The
+#     old expression read `.data.policy`, which does not exist, so every entry
+#     resolved to '' and every policy looked changed on every converge.
+#   * The server appends a trailing newline on write, so even with the right key
+#     the stored text is the rendered text plus "\n" and an exact != is always
+#     true.
+#
+# Measured live: rendered 475 bytes vs stored 476, differing only in that
+# newline, `stripped_equal` true on every sampled policy. Either defect alone
+# rewrites all 56 policies on every run while honestly reporting "changed", so
+# fixing only one would have looked like a fix and changed nothing.
+# Same O(n^2)-combine-loop fix as the render task above: build {key, value}
+# pairs in a plain list (O(1) append) and dict-ify once at the end, rather
+# than re-copying the accumulated dict on every one of ~60 iterations.
+- name: Build the existing RBAC policy content map
+  ansible.builtin.set_fact:
+    openbao_existing_policy_map: "{{ _openbao_existing_policy_pairs | items2dict }}"
+  vars:
+    _openbao_existing_policy_pairs: >-
+      {%- set _pairs = [] -%}
+      {%- for result in (openbao_existing_policy_reads.results | default([])) -%}
+      {%- if not (result.skipped | default(false)) and (result.rc | default(1)) == 0 -%}
+      {%- set _policy = (result.stdout | default('{}') | from_json).policy -%}
+      {%- set _ = _pairs.append(
+          {'key': result.item.name, 'value': (_policy | default('') | trim)}) -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {{ _pairs }}
+  no_log: true
+  when: openbao_bootstrap_token is defined
+
+- name: Write the RBAC policies that are missing or changed
+  ansible.builtin.command:
+    cmd: "bao policy write {{ item.name }} -"
+    stdin: "{{ (openbao_rendered_policy_map | default({}))[item.name] }}"
+  environment:
+    BAO_ADDR: "{{ openbao_write_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  loop: "{{ openbao_manageable_policies }}"
+  loop_control:
+    label: "{{ item.name }}"
+  no_log: true
+  changed_when: true
+  when:
+    - openbao_bootstrap_token is defined
+    - >-
+      item.name not in (openbao_policies_raw.stdout | from_json)
+      or
+      (openbao_existing_policy_map | default({})).get(item.name, '')
+      !=
+      (openbao_rendered_policy_map | default({})).get(item.name, '')

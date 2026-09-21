@@ -100,7 +100,9 @@
   when:
     - openbao_bootstrap_token is defined
     - openbao_oauthapp_engine_enabled | bool
-    - openbao_oauthapp_plugin_tune is changed
+    - >-
+      openbao_oauthapp_plugin_tune is changed
+      or openbao_oauthapp_plugin_install_task is changed
 
 # --- SSH secrets engine (builtin — the SSH client CA) ------------------------
 # Signed short-TTL client certificates per the ssh-certificate-authority ADR.

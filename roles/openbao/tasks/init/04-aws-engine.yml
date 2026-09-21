@@ -102,7 +102,9 @@
   when:
     - openbao_bootstrap_token is defined
     - openbao_aws_engine_enabled | bool
-    - openbao_aws_plugin_tune is changed
+    - >-
+      openbao_aws_plugin_tune is changed
+      or openbao_aws_plugin_install_task is changed
 
 # Root config holds the ONE long-lived AWS base-user key OpenBao uses to call
 # sts:AssumeRole. Checked via `bao read`, not the mounts list above — a mount
