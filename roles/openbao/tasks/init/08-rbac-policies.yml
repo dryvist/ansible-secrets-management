@@ -164,6 +164,14 @@
 # A per-item `combine` here re-copies the whole accumulated dict on every
 # iteration (O(n^2) over ~60 policies). Appending {key, value} pairs to a
 # plain list is O(1) per item; items2dict builds the final dict once.
+#
+# `item` inside the for-loop below is a Jinja loop variable local to THIS
+# expression's own render pass -- it is never added to the task's vars, which
+# is the context `lookup('template', ...)` hands to the sub-template it
+# renders. A policy template that references `item` (terrakube-workspace-
+# policy.hcl.j2 does, for `item.workspace.name`) therefore renders against a
+# context where `item` was never set, failing with "'item' is undefined".
+# `template_vars` injects it into that sub-render explicitly.
 - name: Render the RBAC policies on the controller
   ansible.builtin.set_fact:
     openbao_rendered_policy_map: "{{ _openbao_rendered_policy_pairs | items2dict }}"
@@ -171,7 +179,8 @@
     _openbao_rendered_policy_pairs: >-
       {%- set _pairs = [] -%}
       {%- for item in openbao_manageable_policies -%}
-      {%- set _ = _pairs.append({'key': item.name, 'value': (lookup('template', item.template) | trim)}) -%}
+      {%- set _rendered = lookup('template', item.template, template_vars={'item': item}) | trim -%}
+      {%- set _ = _pairs.append({'key': item.name, 'value': _rendered}) -%}
       {%- endfor -%}
       {{ _pairs }}
   no_log: true
