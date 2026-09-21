@@ -113,7 +113,7 @@ openbao_approle_cidr_class_overrides:
   slack-admin: machine_or_workstation
   slack-ops: machine_or_workstation
   # Every openbao_secrets_domains entry (ansible-proxmox-apps
-  # roles/openbao_secrets/defaults/main.yml) the prefetch loop logs into for a
+  # roles/openbao_secrets/defaults/main/) the prefetch loop logs into for a
   # workstation converge -- same failure as the entries above.
   observability: machine_or_workstation
   local-cloud: machine_or_workstation

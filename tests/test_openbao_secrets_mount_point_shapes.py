@@ -39,7 +39,7 @@ CLASSIFY_READS = ROOT / "roles" / "openbao_secrets" / "tasks" / "classify_reads.
 KV_MOUNT = "secret"
 
 # The three shapes a `paths` entry can take, per fetch_domain.yml's own
-# comment and openbao_secrets/defaults/main.yml's documented example.
+# comment and openbao_secrets/defaults/main/'s documented example.
 BARE_STRING = "observability/grafana"
 MAPPING_WITH_MOUNT = {"path": "apps/homarr", "mount": "custom-mount"}
 MAPPING_NO_MOUNT = {"optional": True, "path": "apps/pve-exporter"}

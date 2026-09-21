@@ -1,106 +1,4 @@
 ---
-# openbao_secrets role defaults — a controller-side pre-play that logs in to
-# OpenBao, once per resource-domain identity, and reads that domain's KV
-# subtree into a per-domain fact (`bao_<domain>_secrets`, hyphens become
-# underscores — e.g. `local-cloud` -> `bao_local_cloud_secrets`). Consumer
-# roles then read from OpenBao and fail when the value is absent or empty:
-#   X: >-
-#     {{ bao_<domain>_secrets.X | default(undef(), true)
-#        | mandatory('X missing: OpenBao fetch did not supply it') }}
-#
-# Each domain authenticates with its OWN least-privilege AppRole (see
-# terraform-proxmox docs/SECRETS_HIERARCHY.md) rather than one broad shared
-# identity — a domain's credentials only ever unlock that domain's KV subtree.
-#
-# FAILS LOUD. A fetch that cannot happen is an error, never an empty value:
-#   - No OpenBao endpoint configured at all (BAO_ADDR unset AND no openbao-tagged
-#     node in the tofu inventory): the role no-ops. This is the only silent path,
-#     and it is the pre-migration case where nothing was ever asked of OpenBao.
-#   - Configured but NO candidate endpoint answers /v1/sys/health 200: the role
-#     FAILS. A total-OpenBao outage stops the converge instead of handing every
-#     consumer an empty secret.
-#   - A domain whose role_id/secret_id envs are missing: the role FAILS, unless
-#     that domain is named in `openbao_secrets_optional_domains` — the documented
-#     opt-out for migrating one domain at a time.
-#   - A KV read that errors: the role FAILS, naming the path. The ONE tolerated
-#     case is a 404 on a path declared `optional: true` in its mapping form —
-#     see openbao_secrets_optional_domains below. A 403 means the credential is
-#     wrong, not the secret absent, and always fails.
-#
-# Under --check the login and the KV reads run FOR REAL (check_mode: false —
-# they change no state), so a check run resolves genuine values and templates
-# diff against them instead of against blanks. publish.yml WRITES and still
-# honours check mode.
-# The bite this replaces: every one of the above used to produce an empty value
-# that consumers happily rendered, which is how a live database password was
-# overwritten with an empty string.
-#
-# Consumers of a secret-valued variable must therefore NOT carry an env
-# fallback; they end in `| default(undef(), true) | mandatory('...')` so an
-# absent secret aborts the play. `| default('', true) | mandatory(...)` NEVER
-# fires — mandatory only raises on undefined, and '' is defined.
-
-# Shared connection inputs.
-openbao_secrets_bao_addr: "{{ lookup('env', 'BAO_ADDR') | default('', true) }}"
-# TLS terminates at the OpenBao Traefik ingress (a real cert), so verify by
-# default; override only for a direct-to-node http bootstrap endpoint.
-openbao_secrets_validate_certs: true
-openbao_secrets_kv_mount: secret
-# Documented opt-out from the fail-loud contract, by domain NAME.
-#
-# A single PATH may also be declared optional, independently of its domain, by
-# giving it the mapping form instead of a bare string:
-#   - mount: secret          # optional, defaults to openbao_secrets_kv_mount
-#     path: apps/foo/vendor
-#     optional: true
-# A 404 on such a path is skipped with a visible warning naming it; a 403 and
-# every other error still fail. A bare string path is always REQUIRED, so a 404
-# on one fails the play — an undeclared-but-expected key is a real defect.
-# A domain
-# listed here may have no role_id/secret_id in the environment and is skipped
-# with a warning instead of failing the play — the migration escape hatch for
-# a domain whose AppRole is not provisioned yet. Empty by default: every
-# configured domain is required.
-openbao_secrets_optional_domains: []
-# Client failover across the OpenBao nodes: probe an ordered candidate list and
-# use the first reachable endpoint. See README for the full ordering + rationale.
-openbao_secrets_openbao_api_port: "{{ tofu_data['constants']['service_ports']['openbao_api'] | default(8200) }}"
-openbao_secrets_node_addrs: >-
-  {{ tofu_data['containers'] | default({}) | dict2items
-     | selectattr('value.tags', 'defined')
-     | selectattr('value.tags', 'contains', 'openbao')
-     | map(attribute='value.ip', default='') | reject('equalto', '')
-     | map('regex_replace', '^(.+)$', 'http://\1:' ~ (openbao_secrets_openbao_api_port | string))
-     | list }}
-openbao_secrets_bao_addr_candidates: >-
-  {{ (([openbao_secrets_bao_addr] if openbao_secrets_bao_addr | length > 0 else [])
-      + openbao_secrets_node_addrs) | unique }}
-
-# --- Credential PUBLISHING (tasks/publish.yml) ---------------------------------
-# Identity used to write guest-generated credentials back into OpenBao under
-# secret/apps/<app>. This is the ansible-converge AppRole, whose policy is
-# extended with create/update (NOT delete, NOT read of unrelated paths) on
-# secret/data/apps/* — see roles/openbao `openbao_policies`.
-#
-# Everything else in this role READS. This is the one write path, and it is
-# deliberately confined to a single path prefix so a converge can never rewrite
-# platform or external credentials.
-# CONVERGE_ROLE_ID/SECRET_ID is whichever identity scripts/run-ansible.sh
-# actually authenticated as this run; fall back to the ansible pair directly
-# for a caller that bypasses the runner entirely.
-openbao_secrets_publish_role_id: >-
-  {{ lookup('env', 'CONVERGE_ROLE_ID')
-     | default(lookup('env', 'OPENBAO_APPROLE_ANSIBLE_ROLE_ID'), true) }}
-openbao_secrets_publish_secret_id: >-
-  {{ lookup('env', 'CONVERGE_SECRET_ID')
-     | default(lookup('env', 'OPENBAO_APPROLE_ANSIBLE_SECRET_ID'), true) }}
-
-# One entry per resource-domain identity this Ansible converge fetches for.
-# Each domain's role_id/secret_id come from its own env vars — sourced from
-# the operator's keychain-backed resolver on macOS, or a root-only systemd
-# credential on Linux (never a shared/broad credential). Add a domain here as
-# new consumer roles are wired to read bao-first; each needs a matching
-# AppRole + policy in roles/openbao's `openbao_approles`/`openbao_policies`.
 openbao_secrets_domains:
   - name: observability
     role_id_env: OBSERVABILITY_VAULT_ROLE_ID
@@ -220,6 +118,14 @@ openbao_secrets_domains:
       # -- the path exists only once an operator has promoted the token, so a
       # 404 must not fail the whole apps prefetch.
       - path: apps/pve-exporter
+        optional: true
+      # Cribl Stream management API (:9000) admin password
+      # (cribl_admin_password, generated at source by
+      # openbao_generated_app_secrets.cribl-stream). Consumed by
+      # inventory/group_vars/cribl_stream_group.yml. optional: true — the
+      # path exists only once the generation converge has seeded it, so a
+      # first-run 404 must not fail the whole apps prefetch.
+      - path: apps/cribl-stream
         optional: true
       # ARC pilot's dedicated GitHub App id/installation_id/private_key
       # (github_runner_arc_*, PROMOTED at source by
