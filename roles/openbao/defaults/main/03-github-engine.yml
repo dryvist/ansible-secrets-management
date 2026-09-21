@@ -93,6 +93,27 @@ openbao_github_docs_publisher_permission_sets: >-
        'repositories': openbao_github_docs_publisher_repos,
        'permissions': openbao_github_docs_publisher_permissions}]
      if openbao_github_docs_publisher_repos | length > 0 else [] }}
+# open-llm write tier: same shape as docs-publisher — the ONE set that
+# both writes and is repository-scoped, scope stored server-side so the
+# holder (the open-llm AppRole) cannot widen it. Lets open-llm push a
+# branch and open a PR (step 4 smoke test) on an explicit allowlist of
+# PUBLIC dryvist repos only — no contents/pull_requests grant exists
+# anywhere else on the open-llm policy. Unset env -> no set, same as
+# docs-publisher: an unconfigured allowlist must not exist unbounded.
+openbao_github_open_llm_set_name: open-llm-write
+openbao_github_open_llm_permissions:
+  contents: write
+  pull_requests: write
+openbao_github_open_llm_repos: >-
+  {{ (lookup('env', 'OPENBAO_GITHUB_OPEN_LLM_REPOS') | default('', true)).split(',')
+     | map('trim') | reject('equalto', '') | list }}
+openbao_github_open_llm_permission_sets: >-
+  {{ [{'name': openbao_github_open_llm_set_name,
+       'tier': 'publish',
+       'installation_id': openbao_github_dryvist_installation_id,
+       'repositories': openbao_github_open_llm_repos,
+       'permissions': openbao_github_open_llm_permissions}]
+     if openbao_github_open_llm_repos | length > 0 else [] }}
 # tier drives which identities may mint a set (see the github-*-policy
 # templates): `read` sets are ambient; `admin` sets (installation-wide, full
 # App ceiling) are minted only through the inert, human-gated github-admin
@@ -138,4 +159,5 @@ openbao_github_base_permission_sets:
 # when its repository list is configured.
 openbao_github_permission_sets: >-
   {{ openbao_github_base_permission_sets
-     + openbao_github_docs_publisher_permission_sets }}
+     + openbao_github_docs_publisher_permission_sets
+     + openbao_github_open_llm_permission_sets }}

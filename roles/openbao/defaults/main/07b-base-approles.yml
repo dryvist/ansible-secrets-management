@@ -182,6 +182,13 @@ openbao_base_approles_core:
   - name: "{{ openbao_ai_orchestrator_approle_name }}"
     policy: "{{ openbao_ai_orchestrator_policy_name }}"
     token_ttl: 30m  # demoted: broad-write identity gets a short token TTL
+  # open-llm: standing (ambient) read-only identity for the successor
+  # harness, minted like any other base AppRole (24h secret_id, default
+  # num_uses) — it holds no write power, so it needs no shorter TTL or
+  # human-unlock gate the way ai-orchestrator/openbao-node-converge do.
+  - name: "{{ openbao_open_llm_approle_name }}"
+    policy: "{{ openbao_open_llm_policy_name }}"
+    token_ttl: 30m
   # ai-readonly / ai-elevated ACTOR roles: standing (ambient) READ tiers. Their
   # token_policies ATTACH composed rollups — no standalone ai-* policy object.
   # ai-readonly = read-all (every read-<svc>); ai-elevated = read-all + the

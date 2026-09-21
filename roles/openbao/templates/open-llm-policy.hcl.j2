@@ -1,0 +1,50 @@
+{{ ansible_managed | comment }}
+# OpenBao policy for the open-llm AppRole — the successor-harness automation
+# identity (macOS user `open-llm`, modules/darwin/agent-identity.nix in
+# nix-darwin). Read-only, mirrors the ai-orchestrator/ai-public shape: this
+# identity never writes its own secrets — a converge promotes them into
+# secret/apps/open-llm — so no create/update capability appears below.
+#
+# Two subtrees:
+#   - secret/apps/open-llm — this identity's own bucket, promoted like every
+#     other app (roles/openbao/tasks/promote_app_secret.yml): Z.ai
+#     subscription key + copies of the Vikunja/Zammad tokens it needs.
+#     Promoted from the converge environment, never written by open-llm.
+#   - secret/ai/public/*   — the shared jevans-tier leaf every desktop CLI
+#     already reads (ai-public-policy.hcl.j2). Reusing the leaf here keeps
+#     open-llm on the SAME read boundary as the other lower-trust harnesses
+#     rather than growing a second copy of the same grant.
+#
+# Deliberately absent: anything under secrets-external/, any KV write
+# capability, the raw github/token endpoint, every other permission set.
+# The one github grant below mints ONLY the open-llm-write permission set
+# (openbao_github_open_llm_set_name, 03-github-engine.yml) — a repository-
+# scoped write token whose scope is stored server-side (installation_id +
+# an explicit repo list + contents/pull_requests only), same shape as
+# docs-publisher. This identity cannot name another repository or ask for
+# another permission.
+
+path "{{ openbao_kv_mount }}/data/apps/open-llm" {
+  capabilities = ["read"]
+}
+
+path "{{ openbao_kv_mount }}/metadata/apps/open-llm" {
+  capabilities = ["read", "list"]
+}
+
+path "{{ openbao_kv_mount }}/data/ai/public/*" {
+  capabilities = ["read"]
+}
+
+path "{{ openbao_kv_mount }}/metadata/ai/public/*" {
+  capabilities = ["read"]
+}
+
+# Renders nothing when OPENBAO_GITHUB_OPEN_LLM_REPOS is unset (the set
+# drops out of openbao_github_permission_sets entirely) — same as
+# github-docs-publisher-policy.hcl.j2.
+{% for permission_set in openbao_github_permission_sets | selectattr('name', 'equalto', openbao_github_open_llm_set_name) %}
+path "{{ openbao_github_mount }}/token/{{ permission_set.name }}" {
+  capabilities = ["create", "read", "update"]
+}
+{% endfor %}

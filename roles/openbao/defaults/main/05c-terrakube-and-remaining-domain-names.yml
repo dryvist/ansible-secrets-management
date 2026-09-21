@@ -195,6 +195,11 @@ openbao_ai_public_approle_name: ai-public
 openbao_ai_public_router_key_apps: [opencode, raycast, codex, cursor]
 openbao_ai_orchestrator_policy_name: ai-orchestrator
 openbao_ai_orchestrator_approle_name: ai-orchestrator
+# open-llm — the successor-harness automation identity (macOS `open-llm`
+# user). Read-only: secret/open-llm/* (its own domain, operator-seeded) +
+# the shared ai-public leaf. See open-llm-policy.hcl.j2.
+openbao_open_llm_policy_name: open-llm
+openbao_open_llm_approle_name: open-llm
 # ai-readonly / ai-elevated are now ACTOR ROLES that ATTACH base capability
 # policies (below) — they no longer own a standalone `ai-*` policy object. Only
 # the AppRole names survive as vars; their token_policies are composed rollups.

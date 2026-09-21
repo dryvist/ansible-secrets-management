@@ -67,6 +67,10 @@ openbao_approle_cidr_class_overrides:
   # lower-trust harnesses on the workstation. The union is a superset of the
   # machine default, so no existing holder loses access.
   ai-public: machine_or_workstation
+  # open-llm runs as a macOS local user on the operator's own machine —
+  # same class as ai-public, the other desktop-CLI identity it shares a
+  # read leaf with.
+  open-llm: machine_or_workstation
   # Backs the interactive `aikey <harness>` function, which runs on the
   # workstation.
   ai-readonly: machine_or_workstation
