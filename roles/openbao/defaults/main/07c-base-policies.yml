@@ -148,6 +148,8 @@ openbao_base_policies:
     template: ai-rotate-policy.hcl.j2
   - name: "{{ openbao_apps_rotate_policy_name }}"
     template: apps-rotate-policy.hcl.j2
+  - name: "{{ openbao_approle_secret_id_rotate_policy_name }}"
+    template: approle-secret-id-rotate-policy.hcl.j2
 # Full policy set = the static base above + the base read-/write-/github-mint
 # capability leaves generated from openbao_ai_domains + the ssh-sign-<role>
 # leaves generated from openbao_ssh_roles. init.yml renders this list.

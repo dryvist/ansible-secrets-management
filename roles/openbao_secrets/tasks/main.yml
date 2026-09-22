@@ -99,6 +99,7 @@
 - name: Initialize the per-domain secrets accumulator
   ansible.builtin.set_fact:
     openbao_secrets_by_domain: {}
+    openbao_secrets_isolated_failures: []
   delegate_to: localhost
   delegate_facts: true
   connection: local
@@ -123,3 +124,17 @@
       loop_control:
         loop_var: openbao_domain
         label: "{{ openbao_domain.name }}"
+
+    # Loud, never silent: an all-optional domain that failed to fetch
+    # (fetch_domain.yml's rescue) is recorded but does not abort this loop.
+    # Report the full tally once, after every domain has had its turn, so a
+    # partial-failure run is never mistaken for a clean one just because
+    # nothing raised.
+    - name: Report every isolated domain failure from this run
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: {{ openbao_secrets_isolated_failures | length }} domain(s)
+          failed to fetch this run and were isolated (each has only optional
+          paths, so their consumers simply resolve nothing):
+          {{ openbao_secrets_isolated_failures | join(' | ') }}
+      when: (openbao_secrets_isolated_failures | default([])) | length > 0

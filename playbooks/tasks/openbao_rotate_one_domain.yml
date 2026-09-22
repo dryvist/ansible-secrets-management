@@ -1,0 +1,198 @@
+---
+# One domain's secret_id rotation, invoked once per name in
+# rotate_domain_names by openbao-rotate-approles.yml. Order is load-bearing:
+# mint -> write -> prove -> destroy old. Nothing is destroyed until the
+# replacement is proven to authenticate.
+#
+# `no_log: true` covers every task that carries a secret_id or a token in
+# its args or response; `no_log: false` is set explicitly on the handful of
+# tasks whose message is domain names and HTTP status only, so failures stay
+# loud instead of vanishing into a blanket no_log.
+
+- name: Compute env-var name prefixes for {{ rotate_domain_name }}
+  ansible.builtin.set_fact:
+    rotate_new_prefix: >-
+      OPENBAO_APPROLE_{{ rotate_domain_name | upper | regex_replace('[^A-Z0-9]', '_') }}
+    rotate_legacy_prefix: >-
+      {{ rotate_domain_name | upper | regex_replace('[^A-Z0-9]', '_') }}_VAULT
+  no_log: false
+
+- name: Read the AppRole's declared secret_id TTL for {{ rotate_domain_name }}
+  ansible.builtin.uri:
+    url: "{{ rotate_bao_addr }}/v1/auth/approle/role/{{ rotate_domain_name }}"
+    method: GET
+    headers:
+      X-Vault-Token: "{{ rotate_login.json.auth.client_token }}"
+    status_code: 200
+  register: rotate_role_config
+  changed_when: false
+  no_log: false
+
+- name: Refuse a non-expiring secret_id TTL for {{ rotate_domain_name }}
+  ansible.builtin.assert:
+    that:
+      - (rotate_role_config.json.data.secret_id_ttl | int) > 0
+    fail_msg: >-
+      {{ rotate_domain_name }}'s AppRole declares secret_id_ttl=0 (never
+      expires). Rotation refuses to mint a non-expiring credential; fix the
+      role's declared TTL (roles/openbao/defaults/main/01-domains.yml
+      declarations feed roles/openbao's 07b-base-approles.yml) before
+      rotating it.
+    quiet: true
+
+- name: Read the AppRole's role_id for {{ rotate_domain_name }}
+  ansible.builtin.uri:
+    url: "{{ rotate_bao_addr }}/v1/auth/approle/role/{{ rotate_domain_name }}/role-id"
+    method: GET
+    headers:
+      X-Vault-Token: "{{ rotate_login.json.auth.client_token }}"
+    status_code: 200
+  register: rotate_role_id_read
+  changed_when: false
+  no_log: false
+
+- name: Mint a fresh secret_id for {{ rotate_domain_name }}
+  ansible.builtin.uri:
+    url: "{{ rotate_bao_addr }}/v1/auth/approle/role/{{ rotate_domain_name }}/secret-id"
+    method: POST
+    headers:
+      X-Vault-Token: "{{ rotate_login.json.auth.client_token }}"
+    body_format: json
+    body:
+      ttl: "{{ rotate_role_config.json.data.secret_id_ttl }}s"
+    status_code: 200
+  register: rotate_new_secret_id
+  changed_when: true
+  no_log: true
+
+# Read-modify-write: the env document holds every domain's pair, so a naive
+# write would clobber every sibling domain's keys. CAS pins the write to the
+# version just read.
+- name: Read the env document as it stands
+  ansible.builtin.uri:
+    url: "{{ rotate_bao_addr }}/v1/{{ rotate_kv_mount }}/data/{{ rotate_env_path }}"
+    method: GET
+    headers:
+      X-Vault-Token: "{{ rotate_login.json.auth.client_token }}"
+    status_code: 200
+  register: rotate_env_current
+  changed_when: false
+  no_log: true
+
+# Whichever of the new/legacy secret_id keys is currently populated for this
+# domain is the value the previous rotation (or the pre-migration seed) left
+# live -- that is the one to destroy once the new pair is proven.
+- name: Resolve this domain's currently-live secret_id, for later destruction
+  ansible.builtin.set_fact:
+    rotate_old_secret_id: >-
+      {{ rotate_env_current.json.data.data[rotate_new_prefix ~ '_SECRET_ID']
+         | default(rotate_env_current.json.data.data[rotate_legacy_prefix ~ '_SECRET_ID'], true)
+         | default('', true) }}
+  no_log: true
+
+- name: Build the env document with this domain's pair rotated
+  ansible.builtin.set_fact:
+    rotate_env_new_data: >-
+      {{ (rotate_env_current.json.data.data
+          | combine({
+              (rotate_new_prefix ~ '_ROLE_ID'): rotate_role_id_read.json.data.role_id,
+              (rotate_new_prefix ~ '_SECRET_ID'): rotate_new_secret_id.json.data.secret_id,
+            }))
+         | dict2items
+         | rejectattr('key', 'in', [rotate_legacy_prefix ~ '_ROLE_ID', rotate_legacy_prefix ~ '_SECRET_ID'])
+         | items2dict }}
+  no_log: true
+
+- name: Write the rotated env document, siblings preserved
+  ansible.builtin.uri:
+    url: "{{ rotate_bao_addr }}/v1/{{ rotate_kv_mount }}/data/{{ rotate_env_path }}"
+    method: POST
+    headers:
+      X-Vault-Token: "{{ rotate_login.json.auth.client_token }}"
+    body_format: json
+    body:
+      options:
+        cas: "{{ rotate_env_current.json.data.metadata.version | int }}"
+      data: "{{ rotate_env_new_data }}"
+    status_code: 200
+  changed_when: true
+  no_log: true
+
+- name: Prove the new pair authenticates for {{ rotate_domain_name }}
+  ansible.builtin.uri:
+    url: "{{ rotate_bao_addr }}/v1/auth/approle/login"
+    method: POST
+    body_format: json
+    body:
+      role_id: "{{ rotate_role_id_read.json.data.role_id }}"
+      secret_id: "{{ rotate_new_secret_id.json.data.secret_id }}"
+    status_code: 200
+  changed_when: false
+  no_log: true
+
+# Only reached once the new pair has proven it authenticates. A previous
+# rotation of an already-migrated domain has no legacy value left to find --
+# rotate_old_secret_id is then empty and there is nothing to look up.
+- name: Look up the previous secret_id's accessor and expiry for {{ rotate_domain_name }}
+  ansible.builtin.uri:
+    url: "{{ rotate_bao_addr }}/v1/auth/approle/role/{{ rotate_domain_name }}/secret-id/lookup"
+    method: POST
+    headers:
+      X-Vault-Token: "{{ rotate_login.json.auth.client_token }}"
+    body_format: json
+    body:
+      secret_id: "{{ rotate_old_secret_id }}"
+    status_code: 200
+  register: rotate_old_secret_id_lookup
+  changed_when: false
+  no_log: true
+  when: rotate_old_secret_id | length > 0
+
+# A previous secret_id with a FINITE ttl may still be in active use by a
+# converge that already logged in under it and is mid-play -- destroying it
+# out from under that run would break it. Only a NEVER-expiring one is
+# destroyed here; a finite one is left to expire on its own. OpenBao/Vault
+# (Go's zero time.Time) serializes a never-set expiration_time as
+# "0001-01-01T00:00:00Z", not "" -- treat both an empty string and that
+# zero-time value as never-expiring (the pre-hardening shape this rotation
+# exists to retire). This same expression is exercised directly by
+# tests/openbao_secrets/verify_rotation_naming.yml -- keep them identical.
+- name: Decide whether the previous secret_id never expires for {{ rotate_domain_name }}
+  ansible.builtin.set_fact:
+    rotate_old_secret_id_never_expires: >-
+      {{ (rotate_old_secret_id_lookup.json.data.expiration_time | default('', true))
+         is match('^(0001-01-01T00:00:00Z?)?$') }}
+  no_log: false
+  when: rotate_old_secret_id | length > 0
+
+- name: Destroy the previous secret_id for {{ rotate_domain_name }}
+  ansible.builtin.uri:
+    url: "{{ rotate_bao_addr }}/v1/auth/approle/role/{{ rotate_domain_name }}/secret-id-accessor/destroy"
+    method: POST
+    headers:
+      X-Vault-Token: "{{ rotate_login.json.auth.client_token }}"
+    body_format: json
+    body:
+      secret_id_accessor: "{{ rotate_old_secret_id_lookup.json.data.secret_id_accessor }}"
+    status_code: 204
+  changed_when: true
+  no_log: true
+  when:
+    - rotate_old_secret_id | length > 0
+    - rotate_old_secret_id_never_expires | bool
+
+- name: Report this domain rotated
+  vars:
+    _expires_at: "{{ rotate_old_secret_id_lookup.json.data.expiration_time | default('', true) }}"
+    _finite_msg: "previous secret_id left to expire at {{ _expires_at }} (finite TTL, may still be in use)"
+    _never_expiring_msg: "previous secret_id destroyed (it never expired)"
+    _old_status: >-
+      {{ (rotate_old_secret_id | length == 0)
+         | ternary('none found to destroy',
+             (rotate_old_secret_id_never_expires | default(false) | bool)
+             | ternary(_never_expiring_msg, _finite_msg)) }}
+  ansible.builtin.debug:
+    msg: >-
+      {{ rotate_domain_name }}: rotated
+      ({{ rotate_new_prefix }}_ROLE_ID/_SECRET_ID written; {{ _old_status }}).
+  no_log: false

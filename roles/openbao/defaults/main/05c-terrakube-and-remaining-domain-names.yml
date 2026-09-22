@@ -107,6 +107,19 @@ openbao_apps_read_apps: >-
       + (openbao_promoted_app_secrets.keys() | list)) | unique | sort }}
 openbao_local_llm_policy_name: local-llm
 openbao_local_llm_approle_name: local-llm
+# Every openbao_secrets domain AppRole, by name -- these ARE the domain
+# names (each pair declared 1:1 above), so this is the one place approle-
+# secret-id-rotate-policy.hcl.j2 scopes its secret-id
+# mint/destroy grants to, instead of a second hand-typed list that could
+# drift from the pairs above.
+openbao_secrets_domain_approle_names:
+  - "{{ openbao_observability_approle_name }}"
+  - "{{ openbao_local_cloud_approle_name }}"
+  - "{{ openbao_monitoring_approle_name }}"
+  - "{{ openbao_media_approle_name }}"
+  - "{{ openbao_ntfy_approle_name }}"
+  - "{{ openbao_apps_approle_name }}"
+  - "{{ openbao_local_llm_approle_name }}"
 # Provider-level API credentials live on exact leaves under a separately
 # supplied external KV location. Public configuration carries no path literal.
 openbao_ai_api_key_mount: >-

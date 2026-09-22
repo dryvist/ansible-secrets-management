@@ -1,24 +1,23 @@
 ---
+# Each domain's AppRole env-var pair is DERIVED (fetch_domain.yml), not
+# listed here: OPENBAO_APPROLE_<NAME>_{ROLE,SECRET}_ID, name upper-cased
+# with non-alphanumerics -> '_' -- the same formula every other AppRole
+# credential helper in this estate already uses. A legacy
+# <NAME>_VAULT_{ROLE,SECRET}_ID pair is tried second for migration safety.
 openbao_secrets_domains:
   - name: observability
-    role_id_env: OBSERVABILITY_VAULT_ROLE_ID
-    secret_id_env: OBSERVABILITY_VAULT_SECRET_ID
     paths:
       # The store holds the `/main` keys, and the policy grants
       # `platform/<app>/*` — the bare `platform/splunk` is a 403, not a 404.
       - platform/splunk/main
       - platform/cribl/main
   - name: local-cloud
-    role_id_env: LOCAL_CLOUD_VAULT_ROLE_ID
-    secret_id_env: LOCAL_CLOUD_VAULT_SECRET_ID
     paths:
       # As above: the policy grants `platform/object-storage/*` only, so the
       # bare key is a 403 even though it exists.
       - platform/object-storage/main
       # platform/compute is not declared: the path holds no keys at all.
   - name: monitoring
-    role_id_env: MONITORING_VAULT_ROLE_ID
-    secret_id_env: MONITORING_VAULT_SECRET_ID
     paths:
       # The policy grants `apps/monitoring/*`; the bare path is a 403.
       - apps/monitoring/main
@@ -29,8 +28,6 @@ openbao_secrets_domains:
         path: platform/healthchecks-offsite
         optional: true
   - name: media
-    role_id_env: MEDIA_VAULT_ROLE_ID
-    secret_id_env: MEDIA_VAULT_SECRET_ID
     paths:
       # One path per KV ENTRY. `vault_kv2_get` reads a single entry and does not
       # walk a subtree, and the media policy grants `apps/media/*` — which does
@@ -43,8 +40,6 @@ openbao_secrets_domains:
       - apps/media/prowlarr
       - apps/media/qbittorrent
   - name: apps
-    role_id_env: APPS_VAULT_ROLE_ID
-    secret_id_env: APPS_VAULT_SECRET_ID
     paths:
       # Nautobot IPAM/DCIM (issue #138). The apps/nautobot KV path carries the
       # fields db_password, secret_key, superuser_password (the #138 secret
@@ -137,8 +132,6 @@ openbao_secrets_domains:
       - path: apps/github-runner-arc
         optional: true
   - name: ntfy
-    role_id_env: NTFY_VAULT_ROLE_ID
-    secret_id_env: NTFY_VAULT_SECRET_ID
     paths:
       # Slack incoming-webhook URLs keyed by topic, for the ntfy alert hub's
       # Slack fan-out (ntfy_docker role). Internet-reachable Slack
@@ -149,8 +142,6 @@ openbao_secrets_domains:
         path: platform/slack-webhooks
         optional: true
   - name: local-llm
-    role_id_env: LOCAL_LLM_VAULT_ROLE_ID
-    secret_id_env: LOCAL_LLM_VAULT_SECRET_ID
     paths:
       - ai/llm         # LLM_ROUTER_MASTER_KEY, LLM_LARGE_BEARER_TOKEN (single seeded KV path)
       - ai/qdrant      # QDRANT_API_KEY

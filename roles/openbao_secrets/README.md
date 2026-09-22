@@ -61,8 +61,9 @@ it from a pre-fetch play — no Galaxy install needed:
 
 ## Usage
 
-Set `BAO_ADDR` plus each domain's `<DOMAIN>_VAULT_ROLE_ID` / `_SECRET_ID`
-(see [Inputs (env)](#inputs-env)), then run through the normal wrapper:
+Set `BAO_ADDR` plus each domain's `OPENBAO_APPROLE_<DOMAIN>_ROLE_ID` /
+`_SECRET_ID` (see [Inputs (env)](#inputs-env)), then run through the normal
+wrapper:
 
 ```sh
 doppler run -- ansible-playbook playbooks/site.yml --tags openbao_secrets
@@ -89,11 +90,17 @@ server-side quorum HA needs a fourth node and is out of scope.
 
 | Domain | AppRole env vars | KV paths | Consumers |
 | --- | --- | --- | --- |
-| `observability` | `OBSERVABILITY_VAULT_ROLE_ID` / `_SECRET_ID` | `platform/splunk`, `platform/cribl` | splunk_docker, cribl_* roles |
-| `local-cloud` | `LOCAL_CLOUD_VAULT_ROLE_ID` / `_SECRET_ID` | `platform/object-storage`, `platform/compute` | object_storage role |
-| `monitoring` | `MONITORING_VAULT_ROLE_ID` / `_SECRET_ID` | `apps/monitoring` | netmon, unifi_metrics, prometheus_stack |
-| `media` | `MEDIA_VAULT_ROLE_ID` / `_SECRET_ID` | `apps/media` | *arr/qBittorrent/Plex roles |
-| `local-llm` | `LOCAL_LLM_VAULT_ROLE_ID` / `_SECRET_ID` | `ai/*` (router/llm-large/qdrant/open-webui/hermes) | LLM serving roles |
+| `observability` | `OPENBAO_APPROLE_OBSERVABILITY_ROLE_ID` / `_SECRET_ID` | `platform/splunk`, `platform/cribl` | splunk_docker, cribl_* roles |
+| `local-cloud` | `OPENBAO_APPROLE_LOCAL_CLOUD_ROLE_ID` / `_SECRET_ID` | `platform/object-storage`, `platform/compute` | object_storage role |
+| `monitoring` | `OPENBAO_APPROLE_MONITORING_ROLE_ID` / `_SECRET_ID` | `apps/monitoring` | netmon, unifi_metrics, prometheus_stack |
+| `media` | `OPENBAO_APPROLE_MEDIA_ROLE_ID` / `_SECRET_ID` | `apps/media` | *arr/qBittorrent/Plex roles |
+| `local-llm` | `OPENBAO_APPROLE_LOCAL_LLM_ROLE_ID` / `_SECRET_ID` | `ai/*` (router/llm-large/qdrant/open-webui/hermes) | LLM serving roles |
+
+Each pair is derived from the domain name (upper-cased, non-alphanumerics ->
+`_`) -- the same formula every other AppRole credential helper in this
+estate uses, so a new domain needs no new env-var declaration anywhere. A
+legacy `<DOMAIN>_VAULT_ROLE_ID` / `_SECRET_ID` pair (this role's pre-rotation
+shape) is tried second, so an unmigrated converge wrapper keeps working.
 
 `local-llm` replaces the old `ai-readonly`-backed `bao_ai_secrets` for the LLM
 **serving stack** — `ai-readonly`/`ai-elevated` are reserved for AI AGENT
@@ -109,8 +116,11 @@ All readable path keys for a domain are merged flat into that domain's
 
 | Env var | Purpose |
 | --- | --- |
-| `BAO_ADDR` | OpenBao ingress URL (`https://openbao.<subdomain>`). Unset **and** no openbao-tagged node ⇒ the role no-ops (the pre-migration case). Set but unreachable ⇒ fail. |
-| `<DOMAIN>_VAULT_ROLE_ID` / `_SECRET_ID` | That domain's own AppRole credentials. Unset ⇒ fail, unless the domain is in `openbao_secrets_optional_domains`. |
+| `BAO_ADDR` | OpenBao ingress URL. Unset **and** no openbao-tagged node ⇒ no-op (pre-migration case). Set but unreachable ⇒ fail. |
+| `OPENBAO_APPROLE_<DOMAIN>_ROLE_ID` / `_SECRET_ID` | That domain's AppRole creds. Unset ⇒ fail, unless in `openbao_secrets_optional_domains`. |
+
+A legacy `<DOMAIN>_VAULT_ROLE_ID` / `_SECRET_ID` pair is also accepted, tried
+second -- see [Domains fetched](#domains-fetched-openbao_secrets_domains).
 
 On macOS these are sourced from the operator's dedicated `openbao.keychain-db`
 keychain (72h auto-lock — the keychain's lock state is the access boundary,
