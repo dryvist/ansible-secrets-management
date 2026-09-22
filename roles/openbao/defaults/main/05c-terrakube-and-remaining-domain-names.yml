@@ -44,6 +44,9 @@ openbao_terrakube_workspaces:
     api_update: [aws/sts/tofu-runs-on]
   - name: tofu-proxmox
     kv_read: [infrastructure/proxmox, platform/object-storage]
+    # ssh-client-ca/config/ca: read-only (api_read) access to the SSH-CA
+    # public key.
+    api_read: [ssh-client-ca/config/ca]
   - name: tofu-proxmox-aws-infra
     api_update: [aws/sts/tf-proxmox]
   - name: tofu-proxmox-servarr-config
