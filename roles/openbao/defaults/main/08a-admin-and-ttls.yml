@@ -87,9 +87,43 @@ openbao_approle_secret_id_num_uses: 30
 # The human-unlock tier: one wrapped, single-use secret_id per window.
 openbao_approle_human_secret_id_ttl: 15m
 
+# The declared secret_id_ttl for every AppRole playbooks/openbao-rotate-
+# approles.yml mints: the openbao_secrets converge-domain prefetch
+# identities (all seven -- 07b-base-approles.yml declares their policy but
+# not their ttl, see the comment there) plus the scheduled rotate identity
+# itself, rotating its own secret_id last. Nothing here re-mints ANY of
+# these EXCEPT that scheduled rotation, so the ttl must outlast a missed
+# run, never a single cycle.
+#
+# iac-platform tofu/semaphore/schedules.tf's openbao_rotate_scheduled
+# schedule (Semaphore project schedule id 5, template 40, resource
+# semaphoreui_project_schedule.openbao_rotate_scheduled) runs
+# openbao-rotate-approles-scheduled on cron "13 3,15 * * *" -- every 12h.
+# 3x that interval is the margin for one missed run before a domain's
+# env-document credential goes stale (Vikunja 3197's isolation failure,
+# the reason #1963 made these never-expire in the first place -- scheduled
+# rotation is now the thing that re-mints them, so a finite bound no
+# longer reproduces that failure).
+openbao_rotated_domain_secret_id_ttl: 36h
+
 # Per-role overrides, name -> value. An entry in openbao_base_approles wins over
 # these (it is the more visible declaration); these win over the globals above.
-openbao_approle_secret_id_ttl_overrides: {}
+#
+# playbooks/openbao-rotate-approles.yml reads this map directly, by role
+# name, to learn each rotated identity's declared secret_id_ttl without a
+# live `auth/approle/role/<name>` read the rotate identity's policy does
+# not (and must not) grant. All eight share the one variable above --
+# never a per-role literal, so the missed-run margin is a single number to
+# tune.
+openbao_approle_secret_id_ttl_overrides:
+  observability: "{{ openbao_rotated_domain_secret_id_ttl }}"
+  local-cloud: "{{ openbao_rotated_domain_secret_id_ttl }}"
+  monitoring: "{{ openbao_rotated_domain_secret_id_ttl }}"
+  media: "{{ openbao_rotated_domain_secret_id_ttl }}"
+  ntfy: "{{ openbao_rotated_domain_secret_id_ttl }}"
+  apps: "{{ openbao_rotated_domain_secret_id_ttl }}"
+  local-llm: "{{ openbao_rotated_domain_secret_id_ttl }}"
+  approle-secret-id-rotate-scheduled: "{{ openbao_rotated_domain_secret_id_ttl }}"
 # num_uses 0 (unlimited redemptions) is permitted ONLY with a reason on the line.
 openbao_approle_secret_id_num_uses_overrides:
   # Its secret_id is live, non-expiring, and in active use by every agent

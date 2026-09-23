@@ -49,35 +49,39 @@ openbao_base_approles_core:
          + (['ssh-sign-automation-semaphore'] if openbao_ssh_engine_enabled else []) }}
   # These six are the converge-domain prefetch identities (same
   # openbao_secrets_domains loop noted at their machine_or_workstation CIDR
-  # entries in 08b). The 24h default secret_id_ttl meant each pair went stale
-  # within a day with nothing to re-mint it, isolating the domain's hosts on
-  # the next converge (Vikunja 3197). "0s" not 0: 10c compares via
-  # to_seconds, which splits its input. Bounded by the machine_or_workstation
-  # source class instead of a lifetime, same as semaphore/approle-audit/
-  # ai-public above.
+  # entries in 08b). The 24h default secret_id_ttl once meant each pair went
+  # stale within a day with nothing to re-mint it, isolating the domain's
+  # hosts on the next converge (Vikunja 3197) -- that is what made these
+  # non-expiring. playbooks/openbao-rotate-approles.yml (scheduled, every
+  # 12h) is now the thing that re-mints them, so a finite bound no longer
+  # reproduces that failure; bounded by both the machine_or_workstation
+  # source class and the rotation schedule's own margin.
+  #
+  # secret_id_ttl is declared in openbao_approle_secret_id_ttl_overrides
+  # (08a-admin-and-ttls.yml, openbao_rotated_domain_secret_id_ttl), not
+  # inline here: playbooks/openbao-rotate-approles.yml reads that override
+  # map directly to learn each domain's bound without a live
+  # `auth/approle/role/<name>` read, so the ttl must live somewhere a
+  # standalone playbook can include without pulling in this whole file's
+  # other item fields (several reference vars, such as
+  # openbao_read_all_policies, that playbook never loads).
   - name: "{{ openbao_observability_approle_name }}"
     policy: "{{ openbao_observability_policy_name }}"
-    secret_id_ttl: "0s"
     secret_id_num_uses: 0
   - name: "{{ openbao_local_cloud_approle_name }}"
     policy: "{{ openbao_local_cloud_policy_name }}"
-    secret_id_ttl: "0s"
     secret_id_num_uses: 0
   - name: "{{ openbao_monitoring_approle_name }}"
     policy: "{{ openbao_monitoring_policy_name }}"
-    secret_id_ttl: "0s"
     secret_id_num_uses: 0
   - name: "{{ openbao_media_approle_name }}"
     policy: "{{ openbao_media_policy_name }}"
-    secret_id_ttl: "0s"
     secret_id_num_uses: 0
   - name: "{{ openbao_ntfy_approle_name }}"
     policy: "{{ openbao_ntfy_policy_name }}"
-    secret_id_ttl: "0s"
     secret_id_num_uses: 0
   - name: "{{ openbao_apps_approle_name }}"
     policy: "{{ openbao_apps_policy_name }}"
-    secret_id_ttl: "0s"
     secret_id_num_uses: 0
   # local-llm additionally attaches the exact external provider-key leaves.
   # Model selection and limits remain in LiteLLM configuration; adding a
