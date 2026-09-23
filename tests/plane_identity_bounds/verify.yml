@@ -62,6 +62,19 @@
           bounds and generated application secrets — and still reports success.
           That is exactly the silence this attachment exists to end.
 
+    - name: It syncs the reconcile policy, and reconcile cannot rewrite policy-sync
+      vars:
+        plane: >-
+          {{ openbao_approles
+             | selectattr('name', 'equalto', openbao_semaphore_approle_name) | first }}
+      ansible.builtin.assert:
+        that:
+          - openbao_policy_sync_policy_name in (plane.token_policies | default([]))
+          - openbao_policy_sync_policy_name in openbao_reconcile_excluded_policies
+        fail_msg: >-
+          The plane identity must carry policy-sync, and policy-sync must be in
+          openbao_reconcile_excluded_policies so reconcile cannot rewrite it.
+
     - name: It cannot reconcile its own role and retune its own bounds
       ansible.builtin.assert:
         that:
