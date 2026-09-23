@@ -17,7 +17,8 @@
 #                      apps/* wildcard) — see the consumer inventory at the top
 #                      of ansible-converge-policy.hcl.j2 — plus exact
 #                      publication grants for secret/ai/mcp/{splunk,vikunja,
-#                      zammad,nautobot}; no broad secret/ai/* access
+#                      zammad,nautobot} and secret/ai/hermes (Hermes bridge
+#                      identity tokens); no broad secret/ai/* access
 #   observability    — splunk + cribl; read-only, secret/platform/{splunk,cribl}
 #   local-cloud      — object-storage/S3/compute; read-only,
 #                      secret/platform/{object-storage,compute}
