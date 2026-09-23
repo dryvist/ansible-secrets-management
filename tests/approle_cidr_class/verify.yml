@@ -95,15 +95,15 @@
           from an interactive terminal on the operator's workstation, so any
           other class refuses every real caller on source address.
 
-    - name: The claude-only repo-create identity is redeemed from the workstation
+    - name: The unattended admin identity is redeemed from the workstation
       vars:
         cls: "{{ openbao_approle_cidr_class_map['github-admin-claude'] }}"
       ansible.builtin.assert:
         that:
           - cls == 'workstation'
         fail_msg: >-
-          github-admin-claude declares class '{{ cls }}'. Its only holder is
-          the `claude` account on the workstation.
+          The unattended admin identity declares class '{{ cls }}'; it is
+          redeemed only from the workstation.
 
     # include_vars outranks task vars too, so the fixture realm is a fact.
     - name: Declare a fixture write realm
