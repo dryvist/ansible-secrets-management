@@ -62,18 +62,25 @@
           bounds and generated application secrets — and still reports success.
           That is exactly the silence this attachment exists to end.
 
-    - name: It syncs the reconcile policy, and reconcile cannot rewrite policy-sync
+    - name: Only the inert provisioning identity carries policy-sync
       vars:
         plane: >-
           {{ openbao_approles
              | selectattr('name', 'equalto', openbao_semaphore_approle_name) | first }}
+        holder: >-
+          {{ openbao_workstation_approles
+             | selectattr('name', 'equalto', openbao_policy_sync_approle_name) | first }}
       ansible.builtin.assert:
         that:
-          - openbao_policy_sync_policy_name in (plane.token_policies | default([]))
+          - openbao_policy_sync_policy_name not in (plane.token_policies | default([]))
+          - openbao_policy_sync_policy_name in holder.token_policies
+          - not holder.manage_secret_id
+          - holder.secret_id_num_uses == 1
           - openbao_policy_sync_policy_name in openbao_reconcile_excluded_policies
         fail_msg: >-
-          The plane identity must carry policy-sync, and policy-sync must be in
-          openbao_reconcile_excluded_policies so reconcile cannot rewrite it.
+          policy-sync must be held only by the inert, single-use
+          openbao-policy-sync AppRole, never by the plane identity, and must be
+          in openbao_reconcile_excluded_policies so reconcile cannot rewrite it.
 
     - name: It cannot reconcile its own role and retune its own bounds
       ansible.builtin.assert:
