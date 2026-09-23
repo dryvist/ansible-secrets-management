@@ -37,6 +37,12 @@ path "{{ path }}" {
   capabilities = ["read", "update"]
 }
 {% endfor %}
+{% for path in item.workspace.api_read | default([]) %}
+
+path "{{ path }}" {
+  capabilities = ["read"]
+}
+{% endfor %}
 {% for permission_set in item.workspace.github_mint | default([]) %}
 
 # Ephemeral GitHub App installation token, minted per run. Same capability

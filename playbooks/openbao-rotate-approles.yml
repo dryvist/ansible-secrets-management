@@ -1,0 +1,207 @@
+---
+# Rotates the secret_id half of one or more openbao_secrets domain AppRoles
+# then rewrites the environment document those
+# domains' converges read their credentials from.
+#
+# Two ways in, exactly one per run:
+#
+#   Human mode (ad hoc, any domain subset):
+#     ansible-playbook playbooks/openbao-rotate-approles.yml
+#       -e ROTATE_WRAPPING_TOKEN=<wrap from `bao write -wrap-ttl=90s -f
+#          auth/approle/role/approle-secret-id-rotate/secret-id>
+#       [-e openbao_rotate_domains=observability,media]
+#
+#   Scheduled mode (unattended, e.g. a Semaphore template on a timer):
+#     ambient OPENBAO_APPROLE_APPROLE_SECRET_ID_ROTATE_SCHEDULED_ROLE_ID /
+#     _SECRET_ID (the standing approle-secret-id-rotate-scheduled AppRole,
+#     delivered through the same platform/ansible/env document every other
+#     machine identity's secret-zero already rides -- see
+#     roles/openbao_secrets/README.md "Inputs (env)"). No -e needed; every
+#     domain rotates each run.
+#
+#   Semaphore template spec for the scheduled path: a template running this
+#   playbook every 12h, environment sourced from the same env-document
+#   secret-zero every other Semaphore template already uses, no
+#   ROTATE_WRAPPING_TOKEN variable group attached (scheduled mode never
+#   touches it).
+#
+# Per domain, in this exact order (see roles/openbao/templates/
+# approle-secret-id-rotate-policy.hcl.j2 for why this identity, not
+# approle-issuer, holds the grants this needs):
+#   1. mint a fresh secret_id (TTL taken from the role's OWN declared bound,
+#      never 0 -- see 07e-rotation-approles.yml, never invented here)
+#   2. CAS-write it into the env document under the OPENBAO_APPROLE_<NAME>_
+#      {ROLE,SECRET}_ID names, removing the domain's legacy
+#      <NAME>_VAULT_{ROLE,SECRET}_ID keys if present, every sibling domain's
+#      keys untouched
+#   3. prove the new pair logs in
+#   4. only THEN look up the previous secret_id's expiration and destroy it
+#      IF AND ONLY IF it never expires (expiration_time == ""); a previous
+#      secret_id minted with a finite TTL is left to expire on its own,
+#      because a converge already logged in under it may still be running
+#      the rest of its play and destroying it out from under that run would
+#      break it mid-converge
+#
+# so a failure at any step before (4) leaves the OLD credential still valid
+# -- nothing is destroyed until the replacement is proven. A failure at any
+# step stops the run immediately, naming the domain; already-rotated domains
+# earlier in the loop are NOT rolled back (each is independently proven
+# before this playbook moves on).
+#
+# Scheduled mode only: after every domain, this run rotates the
+# approle-secret-id-rotate-scheduled identity's OWN secret_id last, through
+# the same steps 1-4 above, targeted at itself. Its previous secret_id is
+# left to expire (step 4's same finite-TTL rule), never destroyed outright.
+#
+# This does NOT re-converge anything. Consumers still hold the old value in
+# their own process environment until a fresh `doppler run -- ...
+# scripts/run-ansible.sh playbooks/site.yml` -- same reasoning as
+# rotate-key.yml.
+- name: Rotate openbao_secrets domain AppRole secret_ids
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_become: false
+    rotate_bao_addr: "{{ lookup('env', 'BAO_ADDR') | default('', true) }}"
+    # Human mode: no standing secret_id (manage_secret_id: false on
+    # approle-secret-id-rotate) -- a human-issued, single-use wrapped
+    # secret_id is the only way in, same pattern as rotate-key.yml's
+    # ai-rotate/apps-rotate path.
+    rotate_human_role_id: "{{ lookup('env', 'OPENBAO_APPROLE_APPROLE_SECRET_ID_ROTATE_ROLE_ID') | default('', true) }}"
+    rotate_wrapping_token: "{{ lookup('env', 'ROTATE_WRAPPING_TOKEN') | default('', true) }}"
+    # Scheduled mode: approle-secret-id-rotate-scheduled carries a standing
+    # secret_id (same machine defaults as splunk-mcp-rotate), for a run with
+    # no operator present to wrap one each cycle.
+    rotate_scheduled_role_id: >-
+      {{ lookup('env', 'OPENBAO_APPROLE_APPROLE_SECRET_ID_ROTATE_SCHEDULED_ROLE_ID') | default('', true) }}
+    rotate_scheduled_secret_id: >-
+      {{ lookup('env', 'OPENBAO_APPROLE_APPROLE_SECRET_ID_ROTATE_SCHEDULED_SECRET_ID') | default('', true) }}
+    rotate_kv_mount: secret
+    rotate_env_path: platform/ansible/env
+    # Single source: the same domain declarations openbao_secrets itself
+    # reads, loaded directly rather than duplicated into a second list.
+    rotate_domains_file: "{{ playbook_dir }}/../roles/openbao_secrets/defaults/main/01-domains.yml"
+    # Comma-separated domain names, or unset/empty for every domain.
+    openbao_rotate_domains: ""
+
+  tasks:
+    - name: Decide which auth mode this run supplies
+      ansible.builtin.set_fact:
+        rotate_human_mode: "{{ rotate_wrapping_token | length > 0 }}"
+        rotate_scheduled_mode: >-
+          {{ (rotate_scheduled_role_id | length > 0) and (rotate_scheduled_secret_id | length > 0) }}
+
+    - name: Refuse to run without an endpoint and exactly one auth mode
+      ansible.builtin.assert:
+        that:
+          - rotate_bao_addr | length > 0
+          - (rotate_human_mode | bool) or (rotate_scheduled_mode | bool)
+          - not ((rotate_human_mode | bool) and (rotate_scheduled_mode | bool))
+        fail_msg: >-
+          Needs BAO_ADDR and exactly ONE of: -e ROTATE_WRAPPING_TOKEN=<a
+          human-issued, single-use wrap of the approle-secret-id-rotate
+          AppRole's secret_id> (human mode), or ambient
+          OPENBAO_APPROLE_APPROLE_SECRET_ID_ROTATE_SCHEDULED_ROLE_ID /
+          _SECRET_ID (scheduled mode). Refusing rather than rotating
+          anything unintended, or guessing which identity to authenticate
+          as when both are present.
+        quiet: true
+
+    - name: Refuse human mode without its role_id
+      ansible.builtin.assert:
+        that:
+          - rotate_human_role_id | length > 0
+        fail_msg: >-
+          ROTATE_WRAPPING_TOKEN was given but
+          OPENBAO_APPROLE_APPROLE_SECRET_ID_ROTATE_ROLE_ID is not set (run
+          under `doppler run`).
+        quiet: true
+      when: rotate_human_mode | bool
+
+    - name: Load the domain declarations
+      ansible.builtin.include_vars:
+        file: "{{ rotate_domains_file }}"
+
+    - name: Resolve the domains to rotate this run
+      ansible.builtin.set_fact:
+        rotate_domain_names: >-
+          {{ (openbao_rotate_domains | trim | length > 0)
+             | ternary(
+                 openbao_rotate_domains.split(',') | map('trim') | reject('equalto', '') | list,
+                 openbao_secrets_domains | map(attribute='name') | list
+               ) }}
+
+    - name: Refuse an unknown domain name
+      vars:
+        _known: "{{ openbao_secrets_domains | map(attribute='name') | list }}"
+        _unknown: "{{ rotate_domain_names | reject('in', _known) | list }}"
+      ansible.builtin.assert:
+        that:
+          - _unknown | length == 0
+        fail_msg: >-
+          openbao_rotate_domains named a domain that is not in
+          {{ rotate_domains_file }}: {{ _unknown }}.
+        quiet: true
+
+    - name: Unwrap the single-use secret_id (human mode)
+      ansible.builtin.uri:
+        url: "{{ rotate_bao_addr }}/v1/sys/wrapping/unwrap"
+        method: POST
+        headers:
+          X-Vault-Token: "{{ rotate_wrapping_token }}"
+        status_code: 200
+      register: rotate_unwrap
+      changed_when: false
+      no_log: true
+      when: rotate_human_mode | bool
+
+    - name: Resolve the role_id/secret_id to authenticate with this run
+      ansible.builtin.set_fact:
+        rotate_login_role_id: >-
+          {{ rotate_human_role_id if (rotate_human_mode | bool) else rotate_scheduled_role_id }}
+        rotate_login_secret_id: >-
+          {{ (rotate_unwrap.json.data.secret_id if (rotate_human_mode | bool) else rotate_scheduled_secret_id) }}
+      no_log: true
+
+    - name: Authenticate as approle-secret-id-rotate
+      ansible.builtin.uri:
+        url: "{{ rotate_bao_addr }}/v1/auth/approle/login"
+        method: POST
+        body_format: json
+        body:
+          role_id: "{{ rotate_login_role_id }}"
+          secret_id: "{{ rotate_login_secret_id }}"
+        status_code: 200
+      register: rotate_login
+      changed_when: false
+      no_log: true
+
+    - name: Rotate each domain's AppRole secret_id in turn
+      ansible.builtin.include_tasks: tasks/openbao_rotate_one_domain.yml
+      loop: "{{ rotate_domain_names }}"
+      loop_control:
+        loop_var: rotate_domain_name
+
+    - name: Load the scheduled identity's own AppRole name (scheduled mode)
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../roles/openbao/defaults/main/05b-domain-policy-approle-names.yml"
+      when: rotate_scheduled_mode | bool
+
+    # Same tasks file, targeted at approle-secret-id-rotate-scheduled itself,
+    # run last so every domain is already rotated first. Its own previous
+    # secret_id is left to expire, same as any other finite-TTL previous
+    # value -- never destroyed by this step.
+    - name: Rotate the scheduled identity's own secret_id (scheduled mode)
+      ansible.builtin.include_tasks: tasks/openbao_rotate_one_domain.yml
+      vars:
+        rotate_domain_name: "{{ openbao_approle_secret_id_rotate_scheduled_approle_name }}"
+      when: rotate_scheduled_mode | bool
+
+    - name: Say what must happen next
+      ansible.builtin.debug:
+        msg: >-
+          Rotated {{ rotate_domain_names | join(', ') }}. Nothing is live yet
+          -- every consumer still holds its old credential until you
+          re-converge in a fresh process (a value read at process start by
+          `lookup('env', ...)` is invisible to the run that wrote it).

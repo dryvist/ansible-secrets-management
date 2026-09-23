@@ -9,6 +9,13 @@ openbao_rotation_approles:
   # secret_id like snapshot/slack-admin — nothing re-mints it on a schedule.
   - name: "{{ openbao_splunk_mcp_rotate_approle_name }}"
     policy: "{{ openbao_splunk_mcp_rotate_policy_name }}"
+  # approle-secret-id-rotate-scheduled: unattended timer identity for
+  # playbooks/openbao-rotate-approles.yml, same shape as splunk-mcp-rotate
+  # above (standing secret_id, machine defaults, nothing special) -- it
+  # attaches the approle-secret-id-rotate POLICY, so it can do exactly what
+  # the human-gated approle-secret-id-rotate AppRole can and nothing more.
+  - name: "{{ openbao_approle_secret_id_rotate_scheduled_approle_name }}"
+    policy: "{{ openbao_approle_secret_id_rotate_policy_name }}"
   # secret-age-audit: read-only sibling auditor over KV metadata + AppRole
   # secret-id accessors. No standing write anywhere; safe to leave ambient.
   - name: "{{ openbao_secret_age_audit_approle_name }}"
@@ -31,6 +38,15 @@ openbao_rotation_approles:
     secret_id_num_uses: 1
   - name: "{{ openbao_apps_rotate_approle_name }}"
     policy: "{{ openbao_apps_rotate_policy_name }}"
+    manage_secret_id: false
+    secret_id_ttl: "{{ openbao_ai_elevated_secret_id_ttl }}"
+    secret_id_num_uses: 1
+  # approle-secret-id-rotate: HUMAN-GATED identity for
+  # playbooks/openbao-rotate-approles.yml (openbao_secrets domain AppRole
+  # secret_id rotation). Same shape as ai-rotate/apps-rotate -- no standing
+  # secret_id, an operator wraps a single-use one per rotation run.
+  - name: "{{ openbao_approle_secret_id_rotate_approle_name }}"
+    policy: "{{ openbao_approle_secret_id_rotate_policy_name }}"
     manage_secret_id: false
     secret_id_ttl: "{{ openbao_ai_elevated_secret_id_ttl }}"
     secret_id_num_uses: 1

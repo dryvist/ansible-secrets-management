@@ -9,6 +9,12 @@ openbao_service_enabled: true
 # --- UI ----------------------------------------------------------------------
 openbao_enable_ui: true
 
+# --- Prometheus telemetry -----------------------------------------------------
+# How long metrics stay in memory for a Prometheus scrape to collect.
+openbao_prometheus_retention_time: "24h"
+# Serves /v1/sys/metrics without a token, including on standby nodes.
+openbao_unauthenticated_metrics_access: true
+
 # --- Voter health telemetry (read-only; no Raft/policy/AppRole changes) -----
 # An on-box systemd timer, deployed on every openbao_group member, samples
 # every voter's OWN plain-HTTP api_addr (never the Traefik ingress VIP — see

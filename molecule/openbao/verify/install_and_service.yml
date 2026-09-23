@@ -61,7 +61,12 @@
       # address:port form ('0.0.0.0:') so the template's explanatory comment
       # (which mentions 0.0.0.0) does not false-trip this assertion.
       - "'0.0.0.0:' not in (bao_cfg_content.content | b64decode)"
-      - "'192.0.2.210:8200' in (bao_cfg_content.content | b64decode)"
+      - "'192.168.20.210:8200' in (bao_cfg_content.content | b64decode)"
+      # Prometheus telemetry: retention stanza plus unauthenticated scrape
+      # access nested under the listener (never a separate 0.0.0.0 listener).
+      - "'telemetry {' in (bao_cfg_content.content | b64decode)"
+      - "'prometheus_retention_time' in (bao_cfg_content.content | b64decode)"
+      - "'unauthenticated_metrics_access = true' in (bao_cfg_content.content | b64decode)"
     fail_msg: "openbao.hcl missing expected stanzas, has awskms, or bound to 0.0.0.0"
 
 - name: Check the env file exists with 0600

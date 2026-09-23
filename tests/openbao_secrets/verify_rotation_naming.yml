@@ -1,0 +1,132 @@
+---
+# Self-check for the two pieces of new logic added to
+# fetch_domain.yml: the OPENBAO_APPROLE_<NAME>_* prefix derivation (and its
+# legacy fallback), and the "every path is optional" decision the isolated-
+# failure rescue gates on. No live OpenBao needed -- run directly:
+#
+#   ansible-playbook tests/openbao_secrets/verify_rotation_naming.yml
+- name: Verify the domain env-prefix derivation and the all-optional decision
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_become: false
+    _cases:
+      - name: observability
+        expect_new: OPENBAO_APPROLE_OBSERVABILITY
+        expect_legacy: OBSERVABILITY_VAULT
+      - name: local-cloud
+        expect_new: OPENBAO_APPROLE_LOCAL_CLOUD
+        expect_legacy: LOCAL_CLOUD_VAULT
+      - name: ntfy
+        expect_new: OPENBAO_APPROLE_NTFY
+        expect_legacy: NTFY_VAULT
+  tasks:
+    - name: Assert the derived prefixes match the estate-wide convention
+      vars:
+        _new: "OPENBAO_APPROLE_{{ item.name | upper | regex_replace('[^A-Z0-9]', '_') }}"
+        _legacy: "{{ item.name | upper | regex_replace('[^A-Z0-9]', '_') }}_VAULT"
+      ansible.builtin.assert:
+        that:
+          - _new == item.expect_new
+          - _legacy == item.expect_legacy
+        fail_msg: >-
+          {{ item.name }}: derived {{ _new }} / {{ _legacy }}, expected
+          {{ item.expect_new }} / {{ item.expect_legacy }}
+        quiet: true
+      loop: "{{ _cases }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: Assert the all-optional decision on a fully-optional path list
+      vars:
+        _paths:
+          - mount: secrets-external
+            path: platform/slack-webhooks
+            optional: true
+        _all: >-
+          {%- set _not_optional = [] -%}
+          {%- for p in _paths -%}
+          {%- if not (p is mapping and (p.optional | default(false) | bool)) -%}
+          {%- set _ = _not_optional.append(p) -%}
+          {%- endif -%}
+          {%- endfor -%}
+          {{ _not_optional | length == 0 }}
+      ansible.builtin.assert:
+        that:
+          - _all | bool
+        fail_msg: "a domain with only optional mapping paths must be all-optional"
+        quiet: true
+
+    - name: Assert the all-optional decision on a mixed required/optional path list
+      vars:
+        _paths:
+          - apps/monitoring/main
+          - mount: secrets-external
+            path: platform/healthchecks-offsite
+            optional: true
+        _all: >-
+          {%- set _not_optional = [] -%}
+          {%- for p in _paths -%}
+          {%- if not (p is mapping and (p.optional | default(false) | bool)) -%}
+          {%- set _ = _not_optional.append(p) -%}
+          {%- endif -%}
+          {%- endfor -%}
+          {{ _not_optional | length == 0 }}
+      ansible.builtin.assert:
+        that:
+          - not (_all | bool)
+        fail_msg: "a domain with even one bare-string (required) path must NOT be all-optional"
+        quiet: true
+
+    - name: Assert the all-optional decision on a fully-required path list
+      vars:
+        _paths:
+          - platform/splunk/main
+          - platform/cribl/main
+        _all: >-
+          {%- set _not_optional = [] -%}
+          {%- for p in _paths -%}
+          {%- if not (p is mapping and (p.optional | default(false) | bool)) -%}
+          {%- set _ = _not_optional.append(p) -%}
+          {%- endif -%}
+          {%- endfor -%}
+          {{ _not_optional | length == 0 }}
+      ansible.builtin.assert:
+        that:
+          - not (_all | bool)
+        fail_msg: "a domain with only bare-string paths must NOT be all-optional"
+        quiet: true
+
+    # Same match expression playbooks/tasks/openbao_rotate_one_domain.yml uses
+    # to decide rotate_old_secret_id_never_expires -- keep both identical.
+    - name: Assert the never-expiring-destroy decision on a future finite expiration_time
+      vars:
+        _never_expires: "{{ ('2027-01-01T00:00:00Z' | default('', true)) is match('^(0001-01-01T00:00:00Z?)?$') }}"
+      ansible.builtin.assert:
+        that:
+          - not (_never_expires | bool)
+        fail_msg: "a future, non-zero-time expiration_time must NOT be treated as never-expiring"
+        quiet: true
+
+    - name: Assert the never-expiring-destroy decision on Go's zero-time expiration_time
+      vars:
+        _never_expires: "{{ ('0001-01-01T00:00:00Z' | default('', true)) is match('^(0001-01-01T00:00:00Z?)?$') }}"
+      ansible.builtin.assert:
+        that:
+          - _never_expires | bool
+        fail_msg: "OpenBao/Vault's zero-time expiration_time (0001-01-01T00:00:00Z) must be treated as never-expiring"
+        quiet: true
+
+    - name: Assert the never-expiring-destroy decision on an empty expiration_time
+      vars:
+        _never_expires: "{{ ('' | default('', true)) is match('^(0001-01-01T00:00:00Z?)?$') }}"
+      ansible.builtin.assert:
+        that:
+          - _never_expires | bool
+        fail_msg: "an empty expiration_time must be treated as never-expiring"
+        quiet: true
+
+    - name: Report success
+      ansible.builtin.debug:
+        msg: "All rotation-naming, all-optional and expiry-decision self-checks passed."

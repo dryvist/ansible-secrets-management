@@ -91,6 +91,7 @@ openbao_github_admin_policy_name: github-admin
 openbao_github_admin_approle_name: github-admin
 openbao_github_repo_create_policy_name: github-repo-create
 openbao_github_repo_create_approle_name: github-repo-create
+openbao_github_admin_claude_approle_name: github-admin-claude
 openbao_github_runner_policy_name: github-runner
 openbao_github_runner_approle_name: github-runner
 openbao_github_exporter_policy_name: github-exporter
@@ -241,3 +242,22 @@ openbao_ai_rotate_policy_name: ai-rotate
 openbao_ai_rotate_approle_name: ai-rotate
 openbao_apps_rotate_policy_name: apps-rotate
 openbao_apps_rotate_approle_name: apps-rotate
+# approle-secret-id-rotate — narrower than approle-issuer: it may mint and
+# destroy a secret-id ONLY for the openbao_secrets domain AppRoles, and CAS
+# read+write the one KV document those domains' credentials live in
+# (secret/platform/ansible/env) -- approle-issuer can mint for every
+# issuable role but holds neither the destroy nor the KV-write capability.
+# Same human-gated, inert, single-use shape as ai-rotate/apps-rotate: minting
+# a fresh domain credential and retiring the old one is a deliberate act, not
+# a routine unattended one.
+openbao_approle_secret_id_rotate_policy_name: approle-secret-id-rotate
+openbao_approle_secret_id_rotate_approle_name: approle-secret-id-rotate
+# approle-secret-id-rotate-scheduled — the SAME policy as above, attached to
+# a second, standing-credential AppRole so a scheduled run (no operator to
+# wrap a secret_id every cycle) can authenticate. Same machine class and
+# same secret_id lifetime as every other unattended machine identity
+# (openbao_approle_cidr_class_map's default + openbao_approle_secret_id_ttl
+# / _num_uses -- no override, see splunk-mcp-rotate for the identical
+# precedent): liveness-probed and re-minted by a provisioning run exactly
+# like the domain AppRoles this identity itself rotates.
+openbao_approle_secret_id_rotate_scheduled_approle_name: approle-secret-id-rotate-scheduled

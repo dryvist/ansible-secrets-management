@@ -9,20 +9,44 @@
 # render an empty credential. Per PATH, a 404 fails too unless that path is
 # declared `optional: true` in its mapping form; a 403 always fails.
 
+# The env-var shape is derived from the domain name, not stored per-domain:
+# it is the SAME OPENBAO_APPROLE_<NAME>_{ROLE,SECRET}_ID convention every
+# other AppRole credential helper in this estate already uses (see
+# roles/openbao/tasks/init/10b-approle-secret-ids.yml and
+# playbooks/verify-approle-ttls.yml) — one formula, not a literal per domain
+# that could drift from it. `<NAME>_VAULT_{ROLE,SECRET}_ID` (this role's
+# pre-existing shape) is tried second, so a converge wrapper that has not
+# been migrated yet keeps working; drop the fallback once every consumer's
+# env is confirmed rewritten to the new names (the rotation playbook does
+# that rewrite).
 - name: Resolve role_id/secret_id from env for {{ openbao_domain.name }}
   ansible.builtin.set_fact:
-    openbao_secrets_domain_role_id: "{{ lookup('env', openbao_domain.role_id_env) | default('', true) }}"
-    openbao_secrets_domain_secret_id: "{{ lookup('env', openbao_domain.secret_id_env) | default('', true) }}"
+    openbao_secrets_domain_env_new_prefix: >-
+      OPENBAO_APPROLE_{{ openbao_domain.name | upper | regex_replace('[^A-Z0-9]', '_') }}
+    openbao_secrets_domain_env_legacy_prefix: >-
+      {{ openbao_domain.name | upper | regex_replace('[^A-Z0-9]', '_') }}_VAULT
+  no_log: true
+
+- name: Resolve role_id/secret_id values, new name first then legacy for {{ openbao_domain.name }}
+  ansible.builtin.set_fact:
+    openbao_secrets_domain_role_id: >-
+      {{ lookup('env', openbao_secrets_domain_env_new_prefix ~ '_ROLE_ID')
+         | default(lookup('env', openbao_secrets_domain_env_legacy_prefix ~ '_ROLE_ID'), true) }}
+    openbao_secrets_domain_secret_id: >-
+      {{ lookup('env', openbao_secrets_domain_env_new_prefix ~ '_SECRET_ID')
+         | default(lookup('env', openbao_secrets_domain_env_legacy_prefix ~ '_SECRET_ID'), true) }}
   no_log: true
 
 - name: Fail on missing credentials for {{ openbao_domain.name }}
   ansible.builtin.fail:
     msg: >-
-      {{ openbao_domain.role_id_env }} / {{ openbao_domain.secret_id_env }}
-      not both set, so the {{ openbao_domain.name }} domain cannot be read and
-      every one of its consumers would render an empty credential. Provide both
-      (the converge wrapper sources them), or add '{{ openbao_domain.name }}' to
-      openbao_secrets_optional_domains to opt this domain out deliberately.
+      Neither {{ openbao_secrets_domain_env_new_prefix }}_ROLE_ID/_SECRET_ID
+      nor the legacy {{ openbao_secrets_domain_env_legacy_prefix }}_ROLE_ID/
+      _SECRET_ID are both set, so the {{ openbao_domain.name }} domain cannot
+      be read and every one of its consumers would render an empty
+      credential. Provide one pair (the converge wrapper sources them), or
+      add '{{ openbao_domain.name }}' to openbao_secrets_optional_domains to
+      opt this domain out deliberately.
   when:
     - openbao_domain.name not in openbao_secrets_optional_domains
     - >-
@@ -41,88 +65,154 @@
       openbao_secrets_domain_role_id | length == 0
       or openbao_secrets_domain_secret_id | length == 0
 
+# block/rescue, not the site.yml-wide record_isolated_failure.yml mechanism:
+# that helper aggregates PLAY-level all-hosts-failed aborts across
+# inventory hosts (issue #672); this loop runs once on the controller with
+# no inventory host of its own, so there is nothing for it to key a
+# per-host fact off. This is a narrower, domain-scoped instance of the same
+# idea — isolate one failure, keep going, fail the run loudly at the end —
+# using its own accumulator instead.
 - name: Fetch and merge secrets for {{ openbao_domain.name }}
   when:
     - openbao_secrets_domain_role_id | length > 0
     - openbao_secrets_domain_secret_id | length > 0
-  no_log: true
   block:
-    # set_fact persists for the rest of the play, so without an explicit reset
-    # here the SECOND domain's merge would start from the FIRST domain's
-    # leftover data (facts aren't automatically scoped per loop iteration).
-    - name: Reset the per-domain merge accumulator for {{ openbao_domain.name }}
-      ansible.builtin.set_fact:
-        openbao_secrets_domain_merged: {}
+    - name: Attempt the fetch for {{ openbao_domain.name }}
+      no_log: true
+      block:
+        # set_fact persists for the rest of the play, so without an explicit reset
+        # here the SECOND domain's merge would start from the FIRST domain's
+        # leftover data (facts aren't automatically scoped per loop iteration).
+        - name: Reset the per-domain merge accumulator for {{ openbao_domain.name }}
+          ansible.builtin.set_fact:
+            openbao_secrets_domain_merged: {}
 
-    - name: Log in with the AppRole for {{ openbao_domain.name }}
-      community.hashi_vault.vault_login:
-        url: "{{ hostvars['localhost'].openbao_secrets_active_addr | default(openbao_secrets_bao_addr, true) }}"
-        auth_method: approle
-        role_id: "{{ openbao_secrets_domain_role_id }}"
-        secret_id: "{{ openbao_secrets_domain_secret_id }}"
-        validate_certs: "{{ openbao_secrets_validate_certs }}"
-      register: openbao_secrets_domain_login
-      # Reads only. vault_login declares check-mode support but short-circuits
-      # to a null client_token, which makes every downstream read fail and every
-      # domain merge empty — a --check run then looks exactly like a missing
-      # credential. Running it for real under --check costs nothing (no state
-      # changes) and lets templates diff against real values.
-      check_mode: false
+        - name: Log in with the AppRole for {{ openbao_domain.name }}
+          community.hashi_vault.vault_login:
+            url: "{{ hostvars['localhost'].openbao_secrets_active_addr | default(openbao_secrets_bao_addr, true) }}"
+            auth_method: approle
+            role_id: "{{ openbao_secrets_domain_role_id }}"
+            secret_id: "{{ openbao_secrets_domain_secret_id }}"
+            validate_certs: "{{ openbao_secrets_validate_certs }}"
+          register: openbao_secrets_domain_login
+          # Reads only. vault_login declares check-mode support but short-circuits
+          # to a null client_token, which makes every downstream read fail and every
+          # domain merge empty — a --check run then looks exactly like a missing
+          # credential. Running it for real under --check costs nothing (no state
+          # changes) and lets templates diff against real values.
+          check_mode: false
 
-    # `failed_when: false` here no longer SWALLOWS anything — every error is
-    # re-raised by the explicit gate immediately below, which is what lets one
-    # bad path be classified instead of aborting the loop at the first one. Do
-    # NOT read it as the old tolerate-everything behaviour.
-    #
-    # It has to be done this way: a bare `msg` is NOT injected as a variable
-    # into a per-item `failed_when` on ansible-core 2.21 (verified — a
-    # `failed_when: msg is defined` on a task that really did fail evaluates
-    # FALSE and the task reports ok), so the classification is only reliable
-    # against the REGISTERED results.
-    - name: Read each KV path for {{ openbao_domain.name }}
-      community.hashi_vault.vault_kv2_get:
-        url: "{{ hostvars['localhost'].openbao_secrets_active_addr | default(openbao_secrets_bao_addr, true) }}"
-        auth_method: token
-        token: "{{ openbao_secrets_domain_login.login.auth.client_token }}"
-        # item.mount (direct attribute access) used to fall back to Jinja's
-        # lenient Undefined when a mapping omitted `mount`. ansible-core 2.21's
-        # "Finalization of task args" resolves this with raw Python attribute
-        # semantics instead, so a mapping without `mount` raised
-        # `AttributeError: object of type 'dict' has no attribute 'mount'` and
-        # aborted the whole domain's read (e.g. apps/pve-exporter declared as
-        # {optional: true, path: ...} with no mount key). dict.get() is a real
-        # bound method present on every dict regardless of finalization
-        # semantics, so it never hits that path.
-        engine_mount_point: >-
-          {{ item.get('mount', openbao_secrets_kv_mount) if item is mapping else openbao_secrets_kv_mount }}
-        path: "{{ item.path if item is mapping else item }}"
-        validate_certs: "{{ openbao_secrets_validate_certs }}"
-      loop: "{{ openbao_domain.paths }}"
-      register: openbao_secrets_domain_reads
-      # Reads only — see the vault_login note above. publish.yml WRITES and
-      # deliberately keeps honouring check mode.
-      check_mode: false
-      failed_when: false
+        # `failed_when: false` here no longer SWALLOWS anything — every error is
+        # re-raised by the explicit gate immediately below, which is what lets one
+        # bad path be classified instead of aborting the loop at the first one. Do
+        # NOT read it as the old tolerate-everything behaviour.
+        #
+        # It has to be done this way: a bare `msg` is NOT injected as a variable
+        # into a per-item `failed_when` on ansible-core 2.21 (verified — a
+        # `failed_when: msg is defined` on a task that really did fail evaluates
+        # FALSE and the task reports ok), so the classification is only reliable
+        # against the REGISTERED results.
+        - name: Read each KV path for {{ openbao_domain.name }}
+          community.hashi_vault.vault_kv2_get:
+            url: "{{ hostvars['localhost'].openbao_secrets_active_addr | default(openbao_secrets_bao_addr, true) }}"
+            auth_method: token
+            token: "{{ openbao_secrets_domain_login.login.auth.client_token }}"
+            # item.mount (direct attribute access) used to fall back to Jinja's
+            # lenient Undefined when a mapping omitted `mount`. ansible-core 2.21's
+            # "Finalization of task args" resolves this with raw Python attribute
+            # semantics instead, so a mapping without `mount` raised
+            # `AttributeError: object of type 'dict' has no attribute 'mount'` and
+            # aborted the whole domain's read (e.g. apps/pve-exporter declared as
+            # {optional: true, path: ...} with no mount key). dict.get() is a real
+            # bound method present on every dict regardless of finalization
+            # semantics, so it never hits that path.
+            engine_mount_point: >-
+              {{ item.get('mount', openbao_secrets_kv_mount) if item is mapping else openbao_secrets_kv_mount }}
+            path: "{{ item.path if item is mapping else item }}"
+            validate_certs: "{{ openbao_secrets_validate_certs }}"
+          loop: "{{ openbao_domain.paths }}"
+          register: openbao_secrets_domain_reads
+          # Reads only — see the vault_login note above. publish.yml WRITES and
+          # deliberately keeps honouring check mode.
+          check_mode: false
+          failed_when: false
 
-    # Classify the read results. Factored into its own file so the gate can be
-    # exercised against synthetic results without a live OpenBao.
-    - name: Classify the KV read results for {{ openbao_domain.name }}
-      ansible.builtin.include_tasks: classify_reads.yml
+        # Classify the read results. Factored into its own file so the gate can be
+        # exercised against synthetic results without a live OpenBao.
+        - name: Classify the KV read results for {{ openbao_domain.name }}
+          ansible.builtin.include_tasks: classify_reads.yml
 
-    - name: Merge readable paths into one dict for {{ openbao_domain.name }}
-      ansible.builtin.set_fact:
-        openbao_secrets_domain_merged: "{{ openbao_secrets_domain_merged | combine(item.secret) }}"
-      loop: "{{ openbao_secrets_domain_reads.results }}"
-      loop_control:
-        label: "{{ item.item }}"
-      when: item.secret is defined and item.secret is mapping
+        - name: Merge readable paths into one dict for {{ openbao_domain.name }}
+          ansible.builtin.set_fact:
+            openbao_secrets_domain_merged: "{{ openbao_secrets_domain_merged | combine(item.secret) }}"
+          loop: "{{ openbao_secrets_domain_reads.results }}"
+          loop_control:
+            label: "{{ item.item }}"
+          when: item.secret is defined and item.secret is mapping
 
-    # delegate_facts + reading hostvars['localhost'] keep the single accumulator
-    # on localhost (see the note on the init task in main.yml). Reading the bare
-    # var here would resolve the play-host copy and silently drop earlier domains.
-    - name: Accumulate into the by-domain dict for {{ openbao_domain.name }}
-      ansible.builtin.set_fact:
-        openbao_secrets_by_domain: >-
-          {{ hostvars['localhost'].openbao_secrets_by_domain
-             | combine({ openbao_domain.name: openbao_secrets_domain_merged }) }}
-      delegate_facts: true
+        # delegate_facts + reading hostvars['localhost'] keep the single accumulator
+        # on localhost (see the note on the init task in main.yml). Reading the bare
+        # var here would resolve the play-host copy and silently drop earlier domains.
+        - name: Accumulate into the by-domain dict for {{ openbao_domain.name }}
+          ansible.builtin.set_fact:
+            openbao_secrets_by_domain: >-
+              {{ hostvars['localhost'].openbao_secrets_by_domain
+                 | combine({ openbao_domain.name: openbao_secrets_domain_merged }) }}
+          delegate_facts: true
+      rescue:
+        # Only a domain whose EVERY declared path is already marked
+        # `optional: true` may isolate a failure here — such a domain has no
+        # consumer that requires it to resolve at all, by its own
+        # declaration, so a dead secret_id or a CIDR refusal degrades it to
+        # "nothing from this domain this run" instead of aborting the whole
+        # controller-level fetch loop. A domain with even one required path
+        # re-raises: its consumers cannot tell a real credential apart from
+        # a silently-skipped one.
+        - name: Decide whether every path is optional for {{ openbao_domain.name }}
+          ansible.builtin.set_fact:
+            # A bare-string path entry is never optional (only the mapping
+            # form carries `optional: true`), so it always flips this false.
+            openbao_secrets_domain_all_optional: >-
+              {%- set _not_optional = [] -%}
+              {%- for p in openbao_domain.paths -%}
+              {%- if not (p is mapping and (p.optional | default(false) | bool)) -%}
+              {%- set _ = _not_optional.append(p) -%}
+              {%- endif -%}
+              {%- endfor -%}
+              {{ _not_optional | length == 0 }}
+          no_log: false
+
+        - name: Record and continue past an isolated failure for {{ openbao_domain.name }}
+          ansible.builtin.set_fact:
+            openbao_secrets_isolated_failures: >-
+              {{ (hostvars['localhost'].openbao_secrets_isolated_failures | default([]))
+                 + [openbao_domain.name ~ ': ' ~
+                    (ansible_failed_result.msg
+                     | default(ansible_failed_result.login.msg
+                                | default('fetch failed', true), true))] }}
+          delegate_to: localhost
+          delegate_facts: true
+          no_log: false
+          when: openbao_secrets_domain_all_optional
+
+        - name: Warn that the fetch failed and was isolated for {{ openbao_domain.name }}
+          ansible.builtin.debug:
+            msg: >-
+              WARNING: the {{ openbao_domain.name }} domain failed to fetch
+              (every one of its paths is declared optional, so this is
+              isolated rather than aborting the run): {{
+              ansible_failed_result.msg | default(ansible_failed_result.login.msg
+              | default('fetch failed', true), true) }}. Its consumers
+              resolve nothing from OpenBao on this run.
+          when: openbao_secrets_domain_all_optional
+
+        - name: Re-raise because a required path prevents isolation for {{ openbao_domain.name }}
+          ansible.builtin.fail:
+            msg: >-
+              {{ ansible_failed_result.msg
+                 | default(ansible_failed_result.login.msg | default('fetch failed', true), true) }}
+              ({{ openbao_domain.name }} has at least one path that is not
+              declared optional, so this domain's failure cannot be isolated
+              — its consumers cannot distinguish a missing credential from a
+              live one.)
+          when: not openbao_secrets_domain_all_optional
