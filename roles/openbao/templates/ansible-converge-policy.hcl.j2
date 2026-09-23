@@ -120,6 +120,21 @@ path "{{ openbao_kv_mount }}/metadata/ai/mcp/nautobot" {
   capabilities = ["read"]
 }
 
+# Transitional exact-path exception (Hermes bridge identity tokens): the
+# vikunja role's hermes_bridge_identity_one.yml publishes each Hermes bridge
+# identity's minted token here (e.g. DONNA_VIKUNJA_API_TOKEN). Same narrow
+# create/update/read on the SINGLE secret as the grants above — deliberately
+# NOT a wildcard, and NOT the broader secret/ai/* access ai-orchestrator
+# holds. This path is also written by the separate hermes-write policy (the
+# one-time Hermes credential seed); both grants target the same exact secret.
+path "{{ openbao_kv_mount }}/data/ai/hermes" {
+  capabilities = ["create", "update", "read"]
+}
+
+path "{{ openbao_kv_mount }}/metadata/ai/hermes" {
+  capabilities = ["read"]
+}
+
 # Transitional exact-path exception (Splunk frozen-archive B2 credential): the
 # ansible-splunk converge reads the Backblaze B2 credential for the frozen
 # archive on the external-SaaS mount. Narrow read on the SINGLE secret —

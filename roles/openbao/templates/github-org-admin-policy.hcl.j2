@@ -1,0 +1,10 @@
+{{ ansible_managed | comment }}
+# github-org-admin — mint the org-admin tier set(s) only:
+# organization_administration:write (org rulesets and settings), nothing else.
+# No repository, read, write, publish or full-automation set.
+{% for permission_set in openbao_github_permission_sets | selectattr('tier', 'equalto', 'org-admin') %}
+path "{{ openbao_github_mount }}/token/{{ permission_set.name }}" {
+  capabilities = ["create", "update"]
+}
+
+{% endfor %}

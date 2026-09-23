@@ -17,7 +17,8 @@
 #                      apps/* wildcard) — see the consumer inventory at the top
 #                      of ansible-converge-policy.hcl.j2 — plus exact
 #                      publication grants for secret/ai/mcp/{splunk,vikunja,
-#                      zammad,nautobot}; no broad secret/ai/* access
+#                      zammad,nautobot} and secret/ai/hermes (Hermes bridge
+#                      identity tokens); no broad secret/ai/* access
 #   observability    — splunk + cribl; read-only, secret/platform/{splunk,cribl}
 #   local-cloud      — object-storage/S3/compute; read-only,
 #                      secret/platform/{object-storage,compute}
@@ -91,7 +92,10 @@ openbao_github_admin_policy_name: github-admin
 openbao_github_admin_approle_name: github-admin
 openbao_github_repo_create_policy_name: github-repo-create
 openbao_github_repo_create_approle_name: github-repo-create
+openbao_github_org_admin_policy_name: github-org-admin
 openbao_github_admin_claude_approle_name: github-admin-claude
+openbao_github_admin_claude_issuer_policy_name: github-admin-claude-issuer
+openbao_claude_identity_approle_name: claude-identity
 openbao_github_runner_policy_name: github-runner
 openbao_github_runner_approle_name: github-runner
 openbao_github_exporter_policy_name: github-exporter

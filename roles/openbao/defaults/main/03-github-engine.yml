@@ -54,6 +54,10 @@ openbao_github_read_permissions:
 # one) — asserted verbatim in tasks/init/05-github-engine.yml.
 openbao_github_repo_create_permissions:
   administration: write
+# org-admin tier: exactly one permission, organization-level. Org rulesets and
+# other organization settings; asserted verbatim like the repo-create map.
+openbao_github_org_admin_permissions:
+  organization_administration: write
 # Runner registration is organization-scoped.  This is deliberately separate
 # from repository read/write credentials: it cannot read source or name a
 # repository, and only mints the short-lived registration token a runner needs.
@@ -139,6 +143,10 @@ openbao_github_base_permission_sets:
     tier: repo-create
     installation_id: "{{ openbao_github_dryvist_installation_id }}"
     permissions: "{{ openbao_github_repo_create_permissions }}"
+  - name: dryvist-org-admin
+    tier: org-admin
+    installation_id: "{{ openbao_github_dryvist_installation_id }}"
+    permissions: "{{ openbao_github_org_admin_permissions }}"
   - name: read-dryvist-all
     tier: read
     installation_id: "{{ openbao_github_dryvist_installation_id }}"

@@ -1,0 +1,8 @@
+{{ ansible_managed | comment }}
+# policy-sync — write the openbao-reconcile policy and nothing else. The
+# converge renders that policy from the repository, so its content is whatever
+# was reviewed and merged. Excluded from reconcile's own grant, so reconcile
+# cannot rewrite this one.
+path "sys/policies/acl/{{ openbao_reconcile_policy_name }}" {
+  capabilities = ["create", "read", "update"]
+}

@@ -98,6 +98,10 @@ openbao_base_policies:
     template: github-admin-policy.hcl.j2
   - name: "{{ openbao_github_repo_create_policy_name }}"
     template: github-repo-create-policy.hcl.j2
+  - name: "{{ openbao_github_org_admin_policy_name }}"
+    template: github-org-admin-policy.hcl.j2
+  - name: "{{ openbao_github_admin_claude_issuer_policy_name }}"
+    template: github-admin-claude-issuer-policy.hcl.j2
   - name: "{{ openbao_github_runner_policy_name }}"
     template: github-runner-policy.hcl.j2
   - name: "{{ openbao_github_exporter_policy_name }}"
@@ -106,6 +110,8 @@ openbao_base_policies:
     template: github-docs-publisher-policy.hcl.j2
   - name: "{{ openbao_reconcile_policy_name }}"
     template: openbao-reconcile-policy.hcl.j2
+  - name: "{{ openbao_policy_sync_policy_name }}"
+    template: policy-sync-policy.hcl.j2
   # approle-issuer: the secret_id minting half, split off openbao-reconcile so
   # a leaked reconcile credential is not a credential factory. See the template.
   - name: "{{ openbao_approle_issuer_policy_name }}"
