@@ -109,7 +109,8 @@ openbao_base_approles_elevated:
     token_policies: >-
       {{ [openbao_apps_policy_name, openbao_media_policy_name,
           openbao_monitoring_policy_name, openbao_local_cloud_policy_name,
-          openbao_observability_policy_name, openbao_local_llm_policy_name]
+          openbao_observability_policy_name, openbao_local_llm_policy_name,
+          openbao_vikunja_mcp_policy_name]
          + openbao_ai_api_key_policy_names }}
     secret_id_ttl: "0s"
     secret_id_num_uses: 0
