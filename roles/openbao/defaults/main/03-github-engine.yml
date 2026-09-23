@@ -90,6 +90,8 @@ openbao_github_docs_publisher_permissions:
 openbao_github_docs_publisher_repos: >-
   {{ (lookup('env', 'OPENBAO_GITHUB_DOCS_PUBLISHER_REPOS') | default('', true)).split(',')
      | map('trim') | reject('equalto', '') | list }}
+# App bucket the publisher policy may read (01c-app-secrets-generated.yml).
+openbao_github_docs_publisher_kv_app: github-actions
 openbao_github_docs_publisher_permission_sets: >-
   {{ [{'name': openbao_github_docs_publisher_set_name,
        'tier': 'publish',
