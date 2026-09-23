@@ -77,6 +77,8 @@ openbao_approle_cidr_class_overrides:
   open-llm: machine_or_workstation
   # The Vikunja MCP server launches from the operator's own machine.
   vikunja-mcp: workstation
+  # The operator workstation identity (07f).
+  operator-workstation: workstation
   # Backs the interactive `aikey <harness>` function, which runs on the
   # workstation.
   ai-readonly: machine_or_workstation
