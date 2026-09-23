@@ -37,6 +37,8 @@
     openbao_audit_device_name: file
     openbao_audit_log_path: /var/log/openbao/audit.log
     openbao_enable_ui: true
+    openbao_prometheus_retention_time: "24h"
+    openbao_unauthenticated_metrics_access: true
     _xff_addrs: ["192.0.2.10", "192.0.2.11"]
 
   tasks:
@@ -103,3 +105,18 @@
           The listener emitted X-Forwarded-For parameters with no authorized
           addresses supplied. OpenBao then trusts the header from nothing at
           all, which rejects every client that presents one.
+
+    - name: Assert both renders carry the Prometheus telemetry stanza
+      ansible.builtin.assert:
+        that:
+          - _on | select('search', 'prometheus_retention_time') | length > 0
+          - >-
+            _on | select('search',
+              'unauthenticated_metrics_access\s*=\s*true') | length > 0
+          - _off | select('search', 'prometheus_retention_time') | length > 0
+          - >-
+            _off | select('search',
+              'unauthenticated_metrics_access\s*=\s*true') | length > 0
+        fail_msg: >-
+          openbao.hcl is missing the Prometheus telemetry stanza or the
+          listener's unauthenticated_metrics_access setting.
