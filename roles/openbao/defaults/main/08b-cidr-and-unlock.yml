@@ -80,6 +80,7 @@ openbao_approle_cidr_class_overrides:
   # The operator workstation identity (07f).
   operator-workstation: workstation
   agent-workstation: workstation
+  open-llm-workstation: workstation
   # Backs the interactive `aikey <harness>` function, which runs on the
   # workstation.
   ai-readonly: machine_or_workstation
