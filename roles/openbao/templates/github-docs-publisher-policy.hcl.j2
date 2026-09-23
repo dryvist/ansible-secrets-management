@@ -20,3 +20,13 @@ path "{{ openbao_github_mount }}/token/{{ permission_set.name }}" {
 }
 
 {% endfor %}
+{% if openbao_github_docs_publisher_repos | length > 0 %}
+# One app bucket, read only.
+path "{{ openbao_kv_mount }}/data/apps/{{ openbao_github_docs_publisher_kv_app }}" {
+  capabilities = ["read"]
+}
+
+path "{{ openbao_kv_mount }}/metadata/apps/{{ openbao_github_docs_publisher_kv_app }}" {
+  capabilities = ["read"]
+}
+{% endif %}

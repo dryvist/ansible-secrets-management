@@ -21,6 +21,9 @@
     ansible_managed: "test fixture"
     _publisher_path: >-
       {{ openbao_github_mount }}/token/{{ openbao_github_docs_publisher_set_name }}
+    _publisher_kv_paths:
+      - "{{ openbao_kv_mount }}/data/apps/{{ openbao_github_docs_publisher_kv_app }}"
+      - "{{ openbao_kv_mount }}/metadata/apps/{{ openbao_github_docs_publisher_kv_app }}"
     _repo_create_path: >-
       {{ openbao_github_mount }}/token/dryvist-repo-create
     _org_admin_path: >-
@@ -106,11 +109,11 @@
     - name: Assert the publisher policy grants exactly its own set
       ansible.builtin.assert:
         that:
-          - _publisher_paths == [_publisher_path]
+          - _publisher_paths == [_publisher_path] + _publisher_kv_paths
         fail_msg: >-
           The docs-publisher policy grants {{ _publisher_paths }}. It must
-          grant exactly its own permission set: no raw token endpoint, no read
-          or admin set, no lock subtree.
+          grant exactly its own permission set and one app bucket:
+          no raw token endpoint, no read or admin set, no lock subtree.
 
     - name: Assert no other tier inherits the publisher's grant
       ansible.builtin.assert:

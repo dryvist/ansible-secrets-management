@@ -88,6 +88,11 @@ openbao_apps_seed_approle_name: apps-seed
 # by openbao-run (the doppler-free replacement for the gate's ~/.doppler token).
 openbao_llm_gate_policy_name: llm-gate
 openbao_llm_gate_approle_name: llm-gate
+# vikunja-mcp — the workstation Vikunja MCP launch. Reads EXACTLY
+# secret/ai/mcp/vikunja (the token + URL the vikunja role publishes), nothing
+# else in the ai subtree.
+openbao_vikunja_mcp_policy_name: vikunja-mcp
+openbao_vikunja_mcp_approle_name: vikunja-mcp
 # ai-runner — the headless AI job-runner guests (ai_runner role in
 # ansible-proxmox-ai, WS7A). Own least-privilege reader for EXACTLY the three
 # third-party KV secrets the runner's job worker consumes: the Vikunja

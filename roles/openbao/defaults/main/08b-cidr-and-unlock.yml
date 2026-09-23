@@ -74,6 +74,8 @@ openbao_approle_cidr_class_overrides:
   # same class as ai-public, the other desktop-CLI identity it shares a
   # read leaf with.
   open-llm: machine_or_workstation
+  # The Vikunja MCP server launches from the operator's own machine.
+  vikunja-mcp: workstation
   # Backs the interactive `aikey <harness>` function, which runs on the
   # workstation.
   ai-readonly: machine_or_workstation
