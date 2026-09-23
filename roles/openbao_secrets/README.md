@@ -101,6 +101,8 @@ Each pair is derived from the domain name (upper-cased, non-alphanumerics ->
 estate uses, so a new domain needs no new env-var declaration anywhere. A
 legacy `<DOMAIN>_VAULT_ROLE_ID` / `_SECRET_ID` pair (this role's pre-rotation
 shape) is tried second, so an unmigrated converge wrapper keeps working.
+An `OPERATOR_VAULT_ROLE_ID` / `_SECRET_ID` pair is tried last: one operator
+identity whose policies cover every domain.
 
 `local-llm` replaces the old `ai-readonly`-backed `bao_ai_secrets` for the LLM
 **serving stack** — `ai-readonly`/`ai-elevated` are reserved for AI AGENT
