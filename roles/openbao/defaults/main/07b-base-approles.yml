@@ -45,7 +45,7 @@ openbao_base_approles_core:
     secret_id_num_uses: 0
     token_policies: >-
       {{ [openbao_ansible_converge_policy_name, openbao_semaphore_policy_name,
-          openbao_reconcile_policy_name]
+          openbao_reconcile_policy_name, openbao_policy_sync_policy_name]
          + (['ssh-sign-automation-semaphore'] if openbao_ssh_engine_enabled else []) }}
   # These six are the converge-domain prefetch identities (same
   # openbao_secrets_domains loop noted at their machine_or_workstation CIDR

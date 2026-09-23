@@ -9,6 +9,11 @@
 # APPROLE names when filtering AppRoles, so a name belongs here for either
 # half. Anything that can rewrite its own grant, or grant the break-glass
 # unlock, goes here — an identity able to edit its own bounds has no bounds.
+# policy-sync: one capability, write the reconcile policy. Held by the
+# execution plane's identity so a routine plane converge brings the reconcile
+# policy in step with reviewed git on main, instead of that edit needing a
+# privileged token every time a name is added.
+openbao_policy_sync_policy_name: policy-sync
 openbao_reconcile_excluded_policies:
   - "{{ openbao_approle_issuer_policy_name }}"
   # Anything that can rewrite this policy can grant itself the break-glass
@@ -18,6 +23,9 @@ openbao_reconcile_excluded_policies:
   - "{{ openbao_github_admin_policy_name }}"
   - "{{ openbao_slack_admin_policy_name }}"
   - "{{ openbao_reconcile_policy_name }}"
+  # policy-sync may rewrite the reconcile policy, so reconcile must not be able
+  # to rewrite policy-sync.
+  - "{{ openbao_policy_sync_policy_name }}"
   # This list is matched against POLICY names when filtering policies and
   # against APPROLE names when filtering AppRoles, so a name belongs here for
   # either half. This entry is the AppRole half.
