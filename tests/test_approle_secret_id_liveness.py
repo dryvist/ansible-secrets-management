@@ -32,10 +32,9 @@ import yaml
 from jinja2 import Environment
 from jinja2.nativetypes import NativeEnvironment
 
-TASKS = (
-    Path(__file__).resolve().parent.parent
-    / "roles" / "openbao" / "tasks" / "init" / "10b-approle-secret-ids.yml"
-)
+INIT = Path(__file__).resolve().parent.parent / "roles" / "openbao" / "tasks" / "init"
+# 10b registers the probe results; 10c (included from 10b) classifies them.
+TASK_FILES = (INIT / "10b-approle-secret-ids.yml", INIT / "10c-approle-probe-classify.yml")
 
 PROBE = "Probe whether each existing AppRole's stored secret_id still authenticates"
 DEAD_NAMES = "Determine which existing AppRoles hold a dead stored secret_id"
@@ -59,9 +58,11 @@ def _tasks(node):
 class ApproleSecretIdLiveness(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.tasks = {t["name"]: t for t in _tasks(yaml.safe_load(TASKS.read_text()))}
+        cls.tasks = {
+            t["name"]: t for f in TASK_FILES for t in _tasks(yaml.safe_load(f.read_text()))
+        }
         for name in (PROBE, DEAD_NAMES, MINT_NAMES, MINT, RECONCILE_FAIL):
-            assert name in cls.tasks, f"{name!r} not found in {TASKS}"
+            assert name in cls.tasks, f"{name!r} not found in {TASK_FILES}"
         cls.env = Environment()
         # NativeEnvironment gives back the real Python object (a list) for an
         # expression whose template is nothing but that one expression --
@@ -90,12 +91,22 @@ class ApproleSecretIdLiveness(unittest.TestCase):
         ))
 
     def test_a_failed_probe_marks_the_role_dead(self):
-        results = [{"item": {"name": "observability"}, "status": 400}]
+        results = [{"item": {"name": "observability"}, "status": 400,
+                    "json": {"errors": ["invalid role or secret ID"]}}]
         self.assertEqual(self._dead_names(results), ["observability"])
 
     def test_a_refused_probe_also_marks_the_role_dead(self):
-        results = [{"item": {"name": "observability"}, "status": 403}]
+        results = [{"item": {"name": "observability"}, "status": 403,
+                    "json": {"errors": ["invalid role or secret ID"]}}]
         self.assertEqual(self._dead_names(results), ["observability"])
+
+    def test_a_cidr_refused_probe_is_not_evidence_of_death(self):
+        results = [{
+            "item": {"name": "github-runner"},
+            "status": 400,
+            "json": {"errors": ["source address unauthorized by CIDR restrictions on the role"]},
+        }]
+        self.assertEqual(self._dead_names(results), [])
 
     def test_a_clean_probe_leaves_the_role_alive(self):
         results = [{"item": {"name": "observability"}, "status": 200}]
