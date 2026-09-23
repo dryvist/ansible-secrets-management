@@ -98,6 +98,17 @@ path "{{ openbao_kv_mount }}/metadata/ai/mcp/vikunja" {
   capabilities = ["read"]
 }
 
+# Exact-path exception (dispatch-queue token): the vikunja role publishes the
+# queue poller's narrow token here. Same create/update/read on the SINGLE
+# secret — not a wildcard.
+path "{{ openbao_kv_mount }}/data/ai/vikunja" {
+  capabilities = ["create", "update", "read"]
+}
+
+path "{{ openbao_kv_mount }}/metadata/ai/vikunja" {
+  capabilities = ["read"]
+}
+
 # Transitional exact-path exception (Zammad MCP): the converge publishes the
 # minted Zammad MCP connection here. Same narrow create/update/read on the
 # SINGLE secret as the splunk grant above — deliberately NOT a wildcard.
