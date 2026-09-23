@@ -64,3 +64,14 @@ openbao_workstation_approles:
     manage_secret_id: false
     secret_id_ttl: "0s"
     secret_id_num_uses: 0
+  # openbao-policy-sync: the only holder of policy-sync, used solely by a
+  # provisioning run that syncs the reconcile policy. INERT and single-use, so
+  # no credential for it is stored anywhere, including the execution plane.
+  - name: "{{ openbao_policy_sync_approle_name }}"
+    token_policies:
+      - "{{ openbao_reconcile_policy_name }}"
+      - "{{ openbao_policy_sync_policy_name }}"
+    token_max_ttl: 2h
+    manage_secret_id: false
+    secret_id_ttl: "{{ openbao_approle_human_secret_id_ttl }}"
+    secret_id_num_uses: 1

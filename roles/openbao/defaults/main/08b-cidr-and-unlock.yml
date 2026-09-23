@@ -58,6 +58,7 @@ openbao_approle_cidr_class_overrides:
   # Held only by the `claude` account on the same machine.
   github-admin-claude: workstation
   claude-identity: workstation
+  openbao-policy-sync: workstation
   # The write realm is redeemed from the same place as github-write — the
   # operator's git/gh — so it takes the same class. It carried no override and
   # declared as `machine`, which refuses the workstation on source address
