@@ -35,3 +35,16 @@ openbao_workstation_approles:
     manage_secret_id: false
     secret_id_ttl: "{{ openbao_approle_human_secret_id_ttl }}"
     secret_id_num_uses: 1
+  # github-admin-claude: unattended repo creation for the `claude` macOS
+  # automation account only. Same grant as github-repo-create (the
+  # dryvist-repo-create set, administration:write only). INERT: the converge
+  # never mints its secret_id, so none lands in the controller output or any
+  # shared store; the operator issues one secret_id straight into that
+  # account's home at mode 0600. Token lives 10m.
+  - name: "{{ openbao_github_admin_claude_approle_name }}"
+    policy: "{{ openbao_github_repo_create_policy_name }}"
+    token_ttl: 10m
+    token_max_ttl: 10m
+    manage_secret_id: false
+    secret_id_ttl: "0s"
+    secret_id_num_uses: 0

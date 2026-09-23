@@ -91,6 +91,7 @@ openbao_github_admin_policy_name: github-admin
 openbao_github_admin_approle_name: github-admin
 openbao_github_repo_create_policy_name: github-repo-create
 openbao_github_repo_create_approle_name: github-repo-create
+openbao_github_admin_claude_approle_name: github-admin-claude
 openbao_github_runner_policy_name: github-runner
 openbao_github_runner_approle_name: github-runner
 openbao_github_exporter_policy_name: github-exporter
