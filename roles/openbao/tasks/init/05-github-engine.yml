@@ -211,6 +211,19 @@
     - openbao_bootstrap_token is defined
     - openbao_github_engine_enabled | bool
 
+- name: Assert the org-admin permission map is exactly organization_administration:write
+  ansible.builtin.assert:
+    that:
+      - openbao_github_org_admin_permissions.keys() | list == ['organization_administration']
+      - openbao_github_org_admin_permissions.organization_administration == 'write'
+    fail_msg: >-
+      openbao_github_org_admin_permissions must be exactly
+      {organization_administration: write}; add a new tier instead of
+      broadening this one.
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_github_engine_enabled | bool
+
 # Runs on the controller (openbao_cli_host, resolved in init/02): one module
 # execution per declared permission set. Same CLI, same rc/stdout, so the
 # drift comparison below reads unchanged.

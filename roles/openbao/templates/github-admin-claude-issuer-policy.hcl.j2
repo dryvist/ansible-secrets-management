@@ -1,0 +1,11 @@
+{{ ansible_managed | comment }}
+# github-admin-claude-issuer — lets the `claude` account's own identity mint a
+# secret_id for the inert github-admin-claude AppRole (15m, single use, bounds
+# enforced by the role) and read that role's role_id. Nothing else.
+path "auth/approle/role/{{ openbao_github_admin_claude_approle_name }}/secret-id" {
+  capabilities = ["update"]
+}
+
+path "auth/approle/role/{{ openbao_github_admin_claude_approle_name }}/role-id" {
+  capabilities = ["read"]
+}

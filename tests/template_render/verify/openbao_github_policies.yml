@@ -23,6 +23,8 @@
       {{ openbao_github_mount }}/token/{{ openbao_github_docs_publisher_set_name }}
     _repo_create_path: >-
       {{ openbao_github_mount }}/token/dryvist-repo-create
+    _org_admin_path: >-
+      {{ openbao_github_mount }}/token/dryvist-org-admin
 
   tasks:
     # The real defaults, not a mirrored subset: the composition of
@@ -81,6 +83,7 @@
         - github-mint-policy.hcl
         - github-read-policy.hcl
         - github-repo-create-policy.hcl
+        - github-org-admin-policy.hcl
 
     - name: Read the policies rendered with a publisher repository
       ansible.builtin.slurp:
@@ -94,6 +97,7 @@
         _mint_paths: "{{ _paths[1] }}"
         _read_paths: "{{ _paths[2] }}"
         _repo_create_paths: "{{ _paths[3] }}"
+        _org_admin_paths: "{{ _paths[4] }}"
       vars:
         _paths: >-
           {{ _tier_raw.results | map(attribute='content') | map('b64decode')
@@ -138,3 +142,15 @@
           there by default unless it is rejected explicitly — this is the one
           tier where that omission is worst, since administration:write is
           the one permission GitHub requires to create or delete a repository.
+
+    - name: Assert the org-admin policy grants exactly its own set, and no other tier does
+      ansible.builtin.assert:
+        that:
+          - _org_admin_paths == [_org_admin_path]
+          - _org_admin_path not in _mint_paths
+          - _org_admin_path not in _read_paths
+          - _org_admin_path not in _repo_create_paths
+        fail_msg: >-
+          github-org-admin grants {{ _org_admin_paths }}, or another tier
+          grants organization_administration:write. It must be exactly the
+          dryvist-org-admin set and appear nowhere else.
