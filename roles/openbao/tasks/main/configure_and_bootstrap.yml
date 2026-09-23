@@ -33,6 +33,44 @@
     mode: "0640"
   notify: Restart openbao
 
+# The seal key normally arrives from the environment. When it is unset, keep
+# the key already rendered on the nodes instead: every node carries the same
+# key, so any node's existing file is authoritative. Never render an empty key.
+- name: Read the existing static-seal EnvironmentFile from every node
+  ansible.builtin.slurp:
+    src: "{{ openbao_env_file }}"
+  register: openbao_existing_seal_env
+  delegate_to: "{{ item }}"
+  loop: "{{ ansible_play_hosts_all }}"
+  run_once: true
+  failed_when: false
+  no_log: true
+  when: openbao_static_seal_key | default('', true) | length == 0
+
+- name: Take the seal key from an existing node file when the environment has none
+  ansible.builtin.set_fact:
+    openbao_static_seal_key: >-
+      {{ (openbao_existing_seal_env.results
+          | selectattr('content', 'defined')
+          | map(attribute='content') | map('b64decode')
+          | map('regex_findall', '(?m)^OPENBAO_STATIC_SEAL_KEY=(\S+)$')
+          | flatten | unique | list) | first | default('') }}
+  run_once: true
+  no_log: true
+  when: openbao_static_seal_key | default('', true) | length == 0
+
+- name: Refuse to render an empty or malformed static-seal key
+  ansible.builtin.assert:
+    that:
+      - openbao_static_seal_key | default('', true) | length > 0
+      - (openbao_static_seal_key | b64decode(encoding='latin-1') | length) == 32
+    fail_msg: >-
+      No usable static-seal key: OPENBAO_STATIC_SEAL_KEY is unset and no node
+      carries an existing {{ openbao_env_file }} with one, or the key is not a
+      base64 32-byte value. Rendering would seal every node on its next restart.
+    quiet: true
+  no_log: true
+
 - name: Render OpenBao static-seal EnvironmentFile
   ansible.builtin.template:
     src: openbao.env.j2
