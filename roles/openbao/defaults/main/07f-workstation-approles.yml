@@ -35,14 +35,12 @@ openbao_workstation_approles:
     manage_secret_id: false
     secret_id_ttl: "{{ openbao_approle_human_secret_id_ttl }}"
     secret_id_num_uses: 1
-  # github-admin-claude: unattended repository creation and organization
-  # settings for the `claude` macOS account only. Two narrow sets:
-  # dryvist-repo-create (administration:write) and dryvist-org-admin
+  # Unattended repository creation and organization settings. Two narrow
+  # sets: dryvist-repo-create (administration:write) and dryvist-org-admin
   # (organization_administration:write). INERT, so neither the converge nor
   # approle-issuer ever mints its secret_id. The only standing path to one is
-  # github-admin-claude-issuer, attached solely to the identity whose
-  # secret-zero lives in that account; each secret_id it mints is single-use and
-  # lives 15m, so nothing long-lived exists. Token lives 10m.
+  # the issuer policy on the identity below; each secret_id it mints is
+  # single-use and lives 15m, so nothing long-lived exists. Token lives 10m.
   - name: "{{ openbao_github_admin_claude_approle_name }}"
     token_policies:
       - "{{ openbao_github_repo_create_policy_name }}"
@@ -52,11 +50,10 @@ openbao_workstation_approles:
     manage_secret_id: false
     secret_id_ttl: 15m
     secret_id_num_uses: 1
-  # claude-identity: the `claude` macOS account's own OpenBao identity. Its
-  # only grant is minting github-admin-claude secret_ids, and its pair lives
-  # only in that account's own store, so nothing else reaches the admin path.
-  # INERT and non-expiring: issued once, never re-minted by the converge or
-  # approle-issuer; bounded by the workstation class and a one-path policy.
+  # The issuer identity: its only grant is minting secret_ids for the role
+  # above and rotating its own. INERT and non-expiring: issued once, never
+  # re-minted by the converge or approle-issuer; bounded by the workstation
+  # class and its issuer policy.
   - name: "{{ openbao_claude_identity_approle_name }}"
     policy: "{{ openbao_github_admin_claude_issuer_policy_name }}"
     token_ttl: 10m
