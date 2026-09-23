@@ -17,27 +17,28 @@
       {{ rotate_domain_name | upper | regex_replace('[^A-Z0-9]', '_') }}_VAULT
   no_log: false
 
-- name: Read the AppRole's declared secret_id TTL for {{ rotate_domain_name }}
-  ansible.builtin.uri:
-    url: "{{ rotate_bao_addr }}/v1/auth/approle/role/{{ rotate_domain_name }}"
-    method: GET
-    headers:
-      X-Vault-Token: "{{ rotate_login.json.auth.client_token }}"
-    status_code: 200
-  register: rotate_role_config
-  changed_when: false
+- name: Resolve the AppRole's declared secret_id TTL for {{ rotate_domain_name }}
+  # The repo declares the role (roles/openbao's init/10-approles.yml writes
+  # exactly this cascade to the live role), so declared == live and no
+  # `auth/approle/role/{{ rotate_domain_name }}` read is needed -- the
+  # rotate identity's policy grants mint/destroy on named roles only, not a
+  # read of the role's own config. openbao-rotate-approles.yml include_vars
+  # 08a-admin-and-ttls.yml for this map.
+  ansible.builtin.set_fact:
+    rotate_secret_id_ttl: >-
+      {{ openbao_approle_secret_id_ttl_overrides[rotate_domain_name]
+         | default(openbao_approle_secret_id_ttl) }}
   no_log: false
 
 - name: Refuse a non-expiring secret_id TTL for {{ rotate_domain_name }}
   ansible.builtin.assert:
     that:
-      - (rotate_role_config.json.data.secret_id_ttl | int) > 0
+      - (rotate_secret_id_ttl | community.general.to_seconds) > 0
     fail_msg: >-
-      {{ rotate_domain_name }}'s AppRole declares secret_id_ttl=0 (never
-      expires). Rotation refuses to mint a non-expiring credential; fix the
-      role's declared TTL (roles/openbao/defaults/main/01-domains.yml
-      declarations feed roles/openbao's 07b-base-approles.yml) before
-      rotating it.
+      {{ rotate_domain_name }}'s AppRole declares secret_id_ttl={{ rotate_secret_id_ttl }}
+      (never expires). Rotation refuses to mint a non-expiring credential; fix the
+      role's declared TTL (openbao_approle_secret_id_ttl_overrides in
+      roles/openbao/defaults/main/08a-admin-and-ttls.yml) before rotating it.
     quiet: true
 
 - name: Read the AppRole's role_id for {{ rotate_domain_name }}
@@ -59,7 +60,7 @@
       X-Vault-Token: "{{ rotate_login.json.auth.client_token }}"
     body_format: json
     body:
-      ttl: "{{ rotate_role_config.json.data.secret_id_ttl }}s"
+      ttl: "{{ rotate_secret_id_ttl }}"
     status_code: 200
   register: rotate_new_secret_id
   changed_when: true

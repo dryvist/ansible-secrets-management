@@ -96,6 +96,7 @@ openbao_github_org_admin_policy_name: github-org-admin
 openbao_github_admin_claude_approle_name: github-admin-claude
 openbao_github_admin_claude_issuer_policy_name: github-admin-claude-issuer
 openbao_claude_identity_approle_name: claude-identity
+openbao_policy_sync_approle_name: openbao-policy-sync
 openbao_github_runner_policy_name: github-runner
 openbao_github_runner_approle_name: github-runner
 openbao_github_exporter_policy_name: github-exporter

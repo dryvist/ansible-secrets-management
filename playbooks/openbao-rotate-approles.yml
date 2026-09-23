@@ -123,6 +123,15 @@
       ansible.builtin.include_vars:
         file: "{{ rotate_domains_file }}"
 
+    # openbao_approle_secret_id_ttl_overrides / openbao_approle_secret_id_ttl:
+    # the same declared secret_id_ttl cascade roles/openbao's init/10-approles.yml
+    # writes to the live role. tasks/openbao_rotate_one_domain.yml reads it
+    # instead of a live `auth/approle/role/<name>` GET, which this identity's
+    # policy does not grant (see approle-secret-id-rotate-policy.hcl.j2).
+    - name: Load the declared secret_id TTL defaults and overrides
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../roles/openbao/defaults/main/08a-admin-and-ttls.yml"
+
     - name: Resolve the domains to rotate this run
       ansible.builtin.set_fact:
         rotate_domain_names: >-
