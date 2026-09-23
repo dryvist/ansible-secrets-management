@@ -82,8 +82,13 @@ openbao_base_approles_elevated:
   - name: "{{ openbao_llm_gate_approle_name }}"
     policy: "{{ openbao_llm_gate_policy_name }}"
   # vikunja-mcp: workstation MCP launch secret-zero; reads only ai/mcp/vikunja.
+  # secret_id_ttl "0s" + num_uses 0: every MCP launch logs in once and nothing
+  # re-mints this secret_id, so a finite bound strands the launch. Bounded by
+  # the workstation CIDR class and a read-only single-path policy instead.
   - name: "{{ openbao_vikunja_mcp_approle_name }}"
     policy: "{{ openbao_vikunja_mcp_policy_name }}"
+    secret_id_ttl: "0s"
+    secret_id_num_uses: 0
   # ai-runner: standing, ambient READ identity like local-llm / hermes. The
   # openbao_secrets prefetch play in ansible-proxmox-ai logs in each converge
   # with AI_RUNNER_VAULT_ROLE_ID / _SECRET_ID and reads the dispatch-queue +
