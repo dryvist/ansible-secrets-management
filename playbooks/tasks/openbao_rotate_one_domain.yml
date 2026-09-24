@@ -157,6 +157,34 @@
       changed_when: false
       no_log: true
 
+    # Only reached once the new pair has proven it authenticates -- never
+    # publish an unproven credential. Only the workstation-consumed domains
+    # (openbao_rotate_doppler_sync_domains, 08c-rotator-doppler-sync.yml) have a
+    # Doppler copy to keep in sync; every other domain's only consumer reads
+    # secret/platform/ansible/env directly and needs no republish. A failure
+    # here stops the run the same as any other step: the old secret_id (not
+    # yet destroyed -- that is step 4, below) is still what Doppler holds and
+    # still valid.
+    - name: Republish the rotated pair into Doppler for {{ rotate_domain_name }}
+      ansible.builtin.uri:
+        url: https://api.doppler.com/v3/configs/config/secrets
+        method: POST
+        headers:
+          Authorization: "Bearer {{ rotate_doppler_token }}"
+        body_format: json
+        body:
+          project: "{{ openbao_rotate_doppler_project }}"
+          config: "{{ openbao_rotate_doppler_config }}"
+          secrets: >-
+            {{ {
+                 (rotate_new_prefix ~ '_ROLE_ID'): rotate_role_id_read.json.data.role_id,
+                 (rotate_new_prefix ~ '_SECRET_ID'): rotate_new_secret_id.json.data.secret_id,
+               } }}
+        status_code: 200
+      changed_when: true
+      no_log: true
+      when: rotate_domain_name in openbao_rotate_doppler_sync_domains
+
     # Only reached once the new pair has proven it authenticates. A previous
     # rotation of an already-migrated domain has no legacy value left to find --
     # rotate_old_secret_id is then empty and there is nothing to look up.

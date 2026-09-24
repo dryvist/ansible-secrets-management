@@ -142,6 +142,30 @@
       ansible.builtin.include_vars:
         file: "{{ playbook_dir }}/../roles/openbao/defaults/main/08a-admin-and-ttls.yml"
 
+    # openbao_rotate_doppler_project / openbao_rotate_doppler_config / openbao_rotate_doppler_token_kv_path
+    # / openbao_rotate_doppler_sync_domains -- see that file for why these six.
+    - name: Load the Doppler republish config
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../roles/openbao/defaults/main/08c-rotator-doppler-sync.yml"
+
+    # Every real invocation (human or scheduled) already runs under `doppler
+    # run -p <project> -c <config> -- ...`, so these are always ambient --
+    # empty here means the run was invoked wrong (not under doppler run),
+    # never a domain-scoping choice. A seed run never republishes to
+    # Doppler at all (bootstrap_seed_only rotates host secret-zero
+    # identities, none of which are workstation-consumed), so it is exempt.
+    - name: Refuse to run without the ambient Doppler project/config
+      ansible.builtin.assert:
+        that:
+          - openbao_rotate_doppler_project | length > 0
+          - openbao_rotate_doppler_config | length > 0
+        fail_msg: >-
+          DOPPLER_PROJECT/DOPPLER_CONFIG are not ambient -- this playbook
+          must run under `doppler run -p <project> -c <config> -- ...`
+          (see scripts/run-ansible.sh), not invoked bare.
+        quiet: true
+      when: not (bootstrap_seed_only | bool)
+
     - name: Resolve the domains to rotate this run
       ansible.builtin.set_fact:
         rotate_domain_names: >-
@@ -196,6 +220,25 @@
         status_code: 200
       register: rotate_login
       changed_when: false
+      no_log: true
+
+    # One read, reused by every domain's Doppler-republish task below --
+    # never ambient env, never stored in Doppler itself (see
+    # 08c-rotator-doppler-sync.yml).
+    - name: Read the Doppler sync token
+      ansible.builtin.uri:
+        url: "{{ rotate_bao_addr }}/v1/{{ rotate_kv_mount }}/data/{{ openbao_rotate_doppler_token_kv_path }}"
+        method: GET
+        headers:
+          X-Vault-Token: "{{ rotate_login.json.auth.client_token }}"
+        status_code: 200
+      register: openbao_rotate_doppler_token_read
+      changed_when: false
+      no_log: true
+
+    - name: Resolve the Doppler sync token
+      ansible.builtin.set_fact:
+        rotate_doppler_token: "{{ openbao_rotate_doppler_token_read.json.data.data.doppler_token }}"
       no_log: true
 
     - name: Rotate each domain's AppRole secret_id in turn
