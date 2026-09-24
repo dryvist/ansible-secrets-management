@@ -1,10 +1,8 @@
 {{ ansible_managed | comment }}
-# github-admin-claude-issuer — lets the `claude` account's own identity mint a
-# secret_id for the inert github-admin-claude AppRole (15m, single use, bounds
-# enforced by the role) and read that role's role_id, and rotate its OWN
-# claude-identity secret_id: mint a replacement, then destroy the old one by
-# value. Its non-expiring credential therefore never has to outlive a rotation.
-# Nothing else.
+# Issuer policy: mint a secret_id for the inert unattended admin AppRole (15m,
+# single use, bounds enforced by the role), read that role's role_id, and
+# rotate the issuer identity's OWN secret_id: mint a replacement, then destroy
+# the old one by value. Nothing else.
 path "auth/approle/role/{{ openbao_github_admin_claude_approle_name }}/secret-id" {
   capabilities = ["update"]
 }

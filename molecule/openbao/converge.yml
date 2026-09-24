@@ -20,7 +20,7 @@
     # the config + env templates render. The service never starts under Docker,
     # so this is an inert placeholder (not a real key).
     openbao_seal_key_id: "static-test-1"
-    openbao_static_seal_key: "ZXhhbXBsZS1zdGF0aWMtc2VhbC1rZXktMzJieXRlcy0wMA=="
+    openbao_static_seal_key: "ZXhhbXBsZS1zdGF0aWMtc2VhbC1rZXktMzJieXRlcyE="
     # Snapshot AppRole creds + alert targets come from tier-0 / load_tofu in
     # production; stub them so the snapshot daemon templates render under Docker.
     # The timer never starts here (the systemd task is guarded off under Docker),

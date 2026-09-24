@@ -110,6 +110,19 @@ openbao_apps_read_apps: >-
       + (openbao_promoted_app_secrets.keys() | list)) | unique | sort }}
 openbao_local_llm_policy_name: local-llm
 openbao_local_llm_approle_name: local-llm
+# Host identities whose secret-zero is delivered to guests through the env
+# document (secret/platform/ansible/env) rather than the converge operator's
+# environment. openbao-rotate-approles.yml writes them only on an explicit
+# `-e bootstrap_seed_only=true` run; scheduled rotation skips them.
+openbao_host_secret_zero_approle_names:
+  - "{{ openbao_slack_admin_approle_name }}"
+  - "{{ openbao_slack_ops_approle_name }}"
+  - "{{ openbao_terraform_approle_name }}"
+  - "{{ openbao_approle_audit_approle_name }}"
+  - "{{ openbao_approle_issuer_approle_name }}"
+  - "{{ openbao_reconcile_approle_name }}"
+  - "{{ openbao_flow_lock_approle_name }}"
+  - iac-platform-deploy
 # Every openbao_secrets domain AppRole, by name -- these ARE the domain
 # names (each pair declared 1:1 above), so this is the one place approle-
 # secret-id-rotate-policy.hcl.j2 scopes its secret-id

@@ -84,6 +84,11 @@
     rotate_domains_file: "{{ playbook_dir }}/../roles/openbao_secrets/defaults/main/01-domains.yml"
     # Comma-separated domain names, or unset/empty for every domain.
     openbao_rotate_domains: ""
+    # One-time seed of openbao_host_secret_zero_approle_names into the env
+    # document, in either auth mode. Mints at each role's current declared TTL
+    # and skips any identity the document already carries. Scheduled
+    # rotation never touches these identities.
+    bootstrap_seed_only: false
 
   tasks:
     - name: Decide which auth mode this run supplies
@@ -123,6 +128,11 @@
       ansible.builtin.include_vars:
         file: "{{ rotate_domains_file }}"
 
+    - name: Load the host secret-zero identity list (seed run)
+      ansible.builtin.include_vars:
+        dir: "{{ playbook_dir }}/../roles/openbao/defaults/main"
+      when: bootstrap_seed_only | bool
+
     # openbao_approle_secret_id_ttl_overrides / openbao_approle_secret_id_ttl:
     # the same declared secret_id_ttl cascade roles/openbao's init/10-approles.yml
     # writes to the live role. tasks/openbao_rotate_one_domain.yml reads it
@@ -135,13 +145,15 @@
     - name: Resolve the domains to rotate this run
       ansible.builtin.set_fact:
         rotate_domain_names: >-
-          {{ (openbao_rotate_domains | trim | length > 0)
+          {{ openbao_host_secret_zero_approle_names if (bootstrap_seed_only | bool) else
+             (openbao_rotate_domains | trim | length > 0)
              | ternary(
                  openbao_rotate_domains.split(',') | map('trim') | reject('equalto', '') | list,
                  openbao_secrets_domains | map(attribute='name') | list
                ) }}
 
     - name: Refuse an unknown domain name
+      when: not (bootstrap_seed_only | bool)
       vars:
         _known: "{{ openbao_secrets_domains | map(attribute='name') | list }}"
         _unknown: "{{ rotate_domain_names | reject('in', _known) | list }}"

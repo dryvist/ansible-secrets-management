@@ -53,6 +53,12 @@ path "{{ openbao_kv_mount }}/metadata/platform/splunk/main" {
   capabilities = ["read", "list"]
 }
 
+# The converge wrapper reads the machine-identity env document with the
+# identity it logged in as.
+path "{{ openbao_kv_mount }}/data/platform/ansible/env" {
+  capabilities = ["read"]
+}
+
 # The execution plane checks out the Ansible repositories it runs, one of which
 # carries a private submodule, so every checkout needs a GitHub credential and
 # has no human to supply one. Its git credential helper mints an ephemeral

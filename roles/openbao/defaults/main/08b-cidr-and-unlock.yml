@@ -55,7 +55,7 @@ openbao_approle_cidr_class_overrides:
   # repo-create is an interactive, one-at-a-time operator action (the helper
   # refuses to run without a terminal), so it is redeemed from the workstation.
   github-repo-create: workstation
-  # Held only by the `claude` account on the same machine.
+  # The unattended admin identity and its issuer, both workstation-held.
   github-admin-claude: workstation
   claude-identity: workstation
   openbao-policy-sync: workstation
@@ -77,6 +77,10 @@ openbao_approle_cidr_class_overrides:
   open-llm: machine_or_workstation
   # The Vikunja MCP server launches from the operator's own machine.
   vikunja-mcp: workstation
+  # The operator workstation identity (07f).
+  operator-workstation: workstation
+  agent-workstation: workstation
+  open-llm-workstation: workstation
   # Backs the interactive `aikey <harness>` function, which runs on the
   # workstation.
   ai-readonly: machine_or_workstation
