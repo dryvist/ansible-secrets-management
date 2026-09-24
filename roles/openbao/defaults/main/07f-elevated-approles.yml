@@ -99,7 +99,7 @@ openbao_base_approles_elevated:
       {{ [openbao_apps_policy_name, openbao_media_policy_name,
           openbao_monitoring_policy_name, openbao_local_cloud_policy_name,
           openbao_observability_policy_name, openbao_local_llm_policy_name,
-          openbao_github_read_policy_name]
+          openbao_github_read_policy_name, openbao_vikunja_live_policy_name]
          + openbao_ai_api_key_policy_names + openbao_read_all_policies }}
     secret_id_ttl: "0s"
     secret_id_num_uses: 0
@@ -112,9 +112,12 @@ openbao_base_approles_elevated:
           openbao_monitoring_policy_name, openbao_local_cloud_policy_name,
           openbao_observability_policy_name, openbao_local_llm_policy_name,
           openbao_vikunja_mcp_policy_name, openbao_github_read_policy_name,
-          openbao_github_write_policy_name]
+          openbao_github_write_policy_name, openbao_ansible_converge_policy_name,
+          openbao_flow_lock_policy_name,
+          openbao_vikunja_live_policy_name, 'read-apps', 'read-platform']
          + openbao_ai_api_key_policy_names
-         + (openbao_github_write_scopes.keys() | list) }}
+         + (openbao_github_write_scopes.keys() | list)
+         + (['ssh-sign-automation-ansible'] if openbao_ssh_engine_enabled else []) }}
     secret_id_ttl: "0s"
     secret_id_num_uses: 0
   # open-llm-workstation: the lower-trust harness account on the operator
