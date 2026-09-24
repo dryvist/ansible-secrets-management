@@ -148,21 +148,21 @@
       ansible.builtin.include_vars:
         file: "{{ playbook_dir }}/../roles/openbao/defaults/main/08c-rotator-doppler-sync.yml"
 
-    # Every real invocation (human or scheduled) already runs under `doppler
-    # run -p <project> -c <config> -- ...`, so these are always ambient --
-    # empty here means the run was invoked wrong (not under doppler run),
-    # never a domain-scoping choice. A seed run never republishes to
+    # The scheduled run reads OPENBAO_ROTATE_DOPPLER_PROJECT/_CONFIG from the
+    # platform env document; a workstation run under `doppler run` falls back
+    # to DOPPLER_PROJECT/_CONFIG (08c-rotator-doppler-sync.yml). Empty here
+    # means neither source is present. A seed run never republishes to
     # Doppler at all (bootstrap_seed_only rotates host secret-zero
     # identities, none of which are workstation-consumed), so it is exempt.
-    - name: Refuse to run without the ambient Doppler project/config
+    - name: Refuse to run without a Doppler project/config target
       ansible.builtin.assert:
         that:
           - openbao_rotate_doppler_project | length > 0
           - openbao_rotate_doppler_config | length > 0
         fail_msg: >-
-          DOPPLER_PROJECT/DOPPLER_CONFIG are not ambient -- this playbook
-          must run under `doppler run -p <project> -c <config> -- ...`
-          (see scripts/run-ansible.sh), not invoked bare.
+          No Doppler republish target: set OPENBAO_ROTATE_DOPPLER_PROJECT and
+          OPENBAO_ROTATE_DOPPLER_CONFIG in config/platform/ansible/env, or run
+          under `doppler run -p <project> -c <config> -- ...`.
         quiet: true
       when: not (bootstrap_seed_only | bool)
 
