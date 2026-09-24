@@ -85,7 +85,7 @@
     # Comma-separated domain names, or unset/empty for every domain.
     openbao_rotate_domains: ""
     # One-time seed of openbao_host_secret_zero_approle_names into the env
-    # document (human mode only). Mints at each role's current declared TTL
+    # document, in either auth mode. Mints at each role's current declared TTL
     # and skips any identity the document already carries. Scheduled
     # rotation never touches these identities.
     bootstrap_seed_only: false
@@ -127,14 +127,6 @@
     - name: Load the domain declarations
       ansible.builtin.include_vars:
         file: "{{ rotate_domains_file }}"
-
-    - name: Refuse a seed run outside human mode
-      ansible.builtin.assert:
-        that:
-          - rotate_human_mode | bool
-        fail_msg: bootstrap_seed_only=true needs human mode (ROTATE_WRAPPING_TOKEN).
-        quiet: true
-      when: bootstrap_seed_only | bool
 
     - name: Load the host secret-zero identity list (seed run)
       ansible.builtin.include_vars:
