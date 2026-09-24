@@ -7,13 +7,17 @@
 #
 # openbao_rotate_doppler_project/_config are NEVER a literal project/config
 # name here (that identity belongs in the runtime secret store, not a public
-# repo) -- every invocation of this playbook already runs under `doppler run
-# -p <project> -c <config> -- ...` (see run-ansible.sh's own header), which
-# Doppler's CLI itself exports as DOPPLER_PROJECT/DOPPLER_CONFIG ambient env,
-# the same way rotate_bao_addr already reads BAO_ADDR. No separate secret-zero
-# needed for these two.
-openbao_rotate_doppler_project: "{{ lookup('env', 'DOPPLER_PROJECT') | default('', true) }}"
-openbao_rotate_doppler_config: "{{ lookup('env', 'DOPPLER_CONFIG') | default('', true) }}"
+# repo). The scheduled run on the execution plane reads them from
+# OPENBAO_ROTATE_DOPPLER_PROJECT/_CONFIG in config/platform/ansible/env, which
+# the runner exports like every other key in that document. A workstation run
+# under `doppler run -p <project> -c <config> -- ...` falls back to the
+# DOPPLER_PROJECT/DOPPLER_CONFIG that Doppler's CLI exports.
+openbao_rotate_doppler_project: >-
+  {{ lookup('env', 'OPENBAO_ROTATE_DOPPLER_PROJECT')
+     | default(lookup('env', 'DOPPLER_PROJECT'), true) }}
+openbao_rotate_doppler_config: >-
+  {{ lookup('env', 'OPENBAO_ROTATE_DOPPLER_CONFIG')
+     | default(lookup('env', 'DOPPLER_CONFIG'), true) }}
 # The token that authenticates the Doppler write is never ambient env and
 # never lives in Doppler itself -- it is minted once (read/write, scoped to
 # exactly openbao_rotate_doppler_project/_config) and stored at this KV path,
