@@ -224,7 +224,8 @@
 
     # One read, reused by every domain's Doppler-republish task below --
     # never ambient env, never stored in Doppler itself (see
-    # 08c-rotator-doppler-sync.yml).
+    # 08c-rotator-doppler-sync.yml). A seed run never republishes to
+    # Doppler, so it skips the read.
     - name: Read the Doppler sync token
       ansible.builtin.uri:
         url: "{{ rotate_bao_addr }}/v1/{{ rotate_kv_mount }}/data/{{ openbao_rotate_doppler_token_kv_path }}"
@@ -235,11 +236,13 @@
       register: openbao_rotate_doppler_token_read
       changed_when: false
       no_log: true
+      when: not (bootstrap_seed_only | bool)
 
     - name: Resolve the Doppler sync token
       ansible.builtin.set_fact:
         rotate_doppler_token: "{{ openbao_rotate_doppler_token_read.json.data.data.doppler_token }}"
       no_log: true
+      when: not (bootstrap_seed_only | bool)
 
     - name: Rotate each domain's AppRole secret_id in turn
       ansible.builtin.include_tasks: tasks/openbao_rotate_one_domain.yml
