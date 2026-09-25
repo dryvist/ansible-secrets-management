@@ -38,6 +38,9 @@
     # Supplied by inventory/group_vars/all.yml at run time.
     ingress_domain: example.test
     grafana_hostname: grafana
+    # What the role derives from WALL_KIOSK_CLIENTS at converge time
+    # (documentation-range address).
+    authelia_wall_kiosk_networks: ["192.0.2.10/32"]
 
   tasks:
     - name: Load the authelia role defaults
@@ -69,6 +72,7 @@
           - _authelia_rules
             | selectattr('policy', 'eq', 'bypass')
             | rejectattr('resources', 'defined')
+            | rejectattr('networks', 'defined')
             | list | length == 0
           # Three machine-API roots are allowed, and only these three. Most
           # apps serve theirs under /api. OTLP collectors do not: the protocol
@@ -85,11 +89,29 @@
           # reaches a query, admin or browser surface.
           - _authelia_rules
             | selectattr('policy', 'eq', 'bypass')
+            | selectattr('resources', 'defined')
             | map(attribute='resources') | flatten
             | reject('match', '\\^/(api|v1/|opentelemetry/v1/)') | list | length == 0
         fail_msg: >-
           an Authelia bypass rule is missing a resource scope or does not
           anchor to /api, /v1/ or /opentelemetry/v1/: {{ _authelia_rules }}
+
+    - name: Assert a network-scoped bypass admits single hosts on the wall only
+      ansible.builtin.assert:
+        that:
+          # The kiosk rule is the one bypass scoped by client address instead
+          # of path. It must name single hosts, and only the wall host: a
+          # wider network or another domain would open real UIs.
+          - _net_rules | length == 1
+          - _net_rules[0].domain == ['wall.example.test']
+          - _net_rules[0].networks == ['192.0.2.10/32']
+          - _net_rules | map(attribute='networks') | flatten
+            | reject('match', '^[0-9.]+/32$') | list | length == 0
+        fail_msg: "kiosk bypass is not /32-scoped to the wall host: {{ _net_rules }}"
+      vars:
+        _net_rules: >-
+          {{ _authelia_rules | selectattr('policy', 'eq', 'bypass')
+             | selectattr('networks', 'defined') | list }}
 
     - name: Assert Phoenix bypasses only its OTLP ingest, leaving the UI gated
       ansible.builtin.assert:

@@ -290,6 +290,9 @@
 - name: Provision the confidential OIDC client-secret digests
   ansible.builtin.import_tasks: oidc_client_secrets.yml
 
+- name: Resolve the wall kiosk client networks
+  ansible.builtin.import_tasks: wall_kiosk.yml
+
 - name: Render Authelia config
   ansible.builtin.template:
     src: configuration.yml.j2

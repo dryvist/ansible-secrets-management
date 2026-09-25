@@ -239,6 +239,18 @@ access_control:
       resources:
         - "{{ bypass.resource | default(authelia_api_bypass_default_resource) }}"
 {% endfor %}
+{% if authelia_wall_kiosk_networks | default([]) | length > 0 %}
+    # Display-only kiosks: the wall host, from the kiosk clients only.
+    - domain:
+{% for d in authelia_wall_kiosk_domains %}
+        - "{{ d }}"
+{% endfor %}
+      policy: bypass
+      networks:
+{% for n in authelia_wall_kiosk_networks %}
+        - "{{ n }}"
+{% endfor %}
+{% endif %}
     # Every Traefik-fronted UI under the ingress base domain. two_factor is
     # required so Authelia exposes passkey/WebAuthn enrolment at all (it hides
     # it when nothing needs a second factor); a UV passkey satisfies it in one
