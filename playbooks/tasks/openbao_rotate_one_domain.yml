@@ -15,6 +15,10 @@
       OPENBAO_APPROLE_{{ rotate_domain_name | upper | regex_replace('[^A-Z0-9]', '_') }}
     rotate_legacy_prefix: >-
       {{ rotate_domain_name | upper | regex_replace('[^A-Z0-9]', '_') }}_VAULT
+    # Declared class (08b-cidr-and-unlock.yml), same cascade the role applies.
+    rotate_domain_workstation_bound: >-
+      {{ (openbao_approle_cidr_class_overrides[rotate_domain_name]
+          | default(openbao_approle_default_cidr_class)) == 'workstation' }}
   no_log: false
 
 - name: Resolve the AppRole's declared secret_id TTL for {{ rotate_domain_name }}
@@ -156,6 +160,28 @@
         status_code: 200
       changed_when: false
       no_log: true
+      when: not (rotate_domain_workstation_bound | bool)
+
+    # A workstation-bound pair cannot log in from this host by design, so the
+    # proof is that the new secret_id is live on its role -- the one thing a
+    # login would add is the source-address check this host must fail.
+    - name: Prove the new secret_id is live for workstation-bound {{ rotate_domain_name }}
+      ansible.builtin.uri:
+        url: "{{ rotate_bao_addr }}/v1/auth/approle/role/{{ rotate_domain_name }}/secret-id/lookup"
+        method: POST
+        headers:
+          X-Vault-Token: "{{ rotate_login.json.auth.client_token }}"
+        body_format: json
+        body:
+          secret_id: "{{ rotate_new_secret_id.json.data.secret_id }}"
+        status_code: 200
+      register: rotate_new_secret_id_lookup
+      changed_when: false
+      failed_when: >-
+        rotate_new_secret_id_lookup.status != 200
+        or (rotate_new_secret_id_lookup.json.data | default(none)) is none
+      no_log: true
+      when: rotate_domain_workstation_bound | bool
 
     # Only reached once the new pair has proven it authenticates -- never
     # publish an unproven credential. Only the workstation-consumed domains

@@ -142,6 +142,15 @@
       ansible.builtin.include_vars:
         file: "{{ playbook_dir }}/../roles/openbao/defaults/main/08a-admin-and-ttls.yml"
 
+    # openbao_approle_cidr_class_overrides / openbao_approle_default_cidr_class:
+    # which domains are bound to the workstation class. This play runs on the
+    # plane, so a login with such a pair is refused on source address whatever
+    # the credential -- tasks/openbao_rotate_one_domain.yml proves those pairs
+    # by lookup instead.
+    - name: Load the declared AppRole address classes
+      ansible.builtin.include_vars:
+        file: "{{ playbook_dir }}/../roles/openbao/defaults/main/08b-cidr-and-unlock.yml"
+
     # openbao_rotate_doppler_project / openbao_rotate_doppler_config / openbao_rotate_doppler_token_kv_path
     # / openbao_rotate_doppler_sync_domains -- see that file for why these six.
     - name: Load the Doppler republish config
