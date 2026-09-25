@@ -1,0 +1,19 @@
+---
+# Split out of 05b-domain-policy-approle-names.yml (that file hit the repo's
+# per-file token gate) rather than inline there. Subject: the uicheck
+# identity that the ai-workflows-testing `_ui-live.yml` reusable workflow uses
+# to read the uicheck UI login and generate its TOTP code.
+openbao_uicheck_policy_name: uicheck
+# TOTP secrets engine mount, enabled by playbooks/provision-uicheck-totp.yml.
+openbao_totp_mount: totp
+# uicheck authenticates via GitHub Actions OIDC (see
+# init/09c-github-oidc.yml), not an AppRole: _ui-live.yml runs on the
+# uicheck self-hosted runner group, so the job's own GitHub-minted token
+# is the credential — nothing is stored on the runner. Bound to the reusable
+# workflow itself (stable across every repo that calls it), not to a caller
+# repository, plus the org that may call it.
+openbao_uicheck_job_workflow_ref: >-
+  dryvist/ai-workflows-testing/.github/workflows/_ui-live.yml@refs/heads/main
+openbao_uicheck_repository_owner: dryvist
+openbao_uicheck_token_ttl: 10m
+openbao_uicheck_token_max_ttl: 15m

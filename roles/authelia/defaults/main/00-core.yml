@@ -168,6 +168,24 @@ authelia_admin_display_name: "Jacob Evans"
 authelia_admin_email: "{{ authelia_admin_user }}@{{ tofu_data.domain }}"
 authelia_bootstrap_password_file: "{{ authelia_config_dir }}/.bootstrap_password"
 
+authelia_service_users:
+  - username: svc-uicheck
+    display_name: UI Check
+    email: "svc-uicheck@{{ tofu_data.domain }}"
+    groups: [uicheck]
+    # `| default('', true) | mandatory(...)` never fires — see the NOTE in
+    # roles/authelia/defaults/main/01-oidc-clients.yml. `or undef(hint=...)`
+    # raises on both the empty and the undefined case.
+    password: >-
+      {{ (bao_apps_secrets.authelia_uicheck_password | default('', true))
+         or undef(hint='authelia_uicheck_password missing from OpenBao secret/apps/authelia') }}
+# Routine rotation-wise no-op (per seed_generated_app_secret.yml). To rotate:
+# ansible-playbook playbooks/rotate-key.yml -e rotate_domain=apps
+#   -e rotate_mount=secret -e rotate_path=apps/authelia
+#   -e rotate_field=authelia_uicheck_password
+# then re-converge in a fresh process so this role picks up the new value.
+authelia_service_users_rotate_passwords: false
+
 # --- Service secrets: generated at the source, no shared store ---------------
 # JWT / session / storage-encryption secrets have no second consumer, so per
 # the workspace generate-at-source rule they are generated-if-absent on the

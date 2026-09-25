@@ -1,0 +1,171 @@
+---
+# Runs the ACTUAL playbooks/provision-uicheck-totp.yml as a subprocess,
+# against a fake_bao_server.py HTTP stub (fixtures/, stdlib http.server) and
+# the fake_authelia CLI stub, substituted in via BAO_ADDR pointed at the stub
+# server and -e authelia_binary_path=, to prove the real idempotency and
+# fail-loud behavior, not just that the code parses:
+#
+#   1. neither side seeded yet -> both get seeded, exit 0
+#   2. both sides already seeded -> no-op, exit 0
+#   3. OpenBao empty but Authelia already has a config (half-seeded pair) ->
+#      FAILS LOUDLY with the documented refusal message
+#
+# fake_bao_server.py and fake_authelia share one KEY=VALUE state file so both
+# sides of a test case agree on what has and has not been seeded — the
+# server re-reads it on every request rather than caching, so Case 3 can
+# rewrite it under a still-running server.
+#
+# Usage: ansible-playbook tests/openbao_totp_provision/verify_provision_uicheck_totp.yml -c local
+- name: Verify provision-uicheck-totp.yml against a stubbed OpenBao API and Authelia CLI
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_become: false
+    _fixtures_dir: "{{ playbook_dir }}/fixtures"
+    _playbook: "{{ playbook_dir }}/../../playbooks/provision-uicheck-totp.yml"
+    # ponytail: fixed port, not safe for concurrent runs on one host — move
+    # to a dynamically-allocated port if that ever matters for this suite.
+    _bao_port: 18219
+
+  tasks:
+    - name: Create a directory unique to this run
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: verify_provision_uicheck_totp_
+      register: _tmp
+
+    # ansible.cfg restricts [inventory] enable_plugins to yaml, so an .ini
+    # source is silently unparsed — the inventory here must be YAML.
+    - name: Build a local-only inventory (both groups resolve to localhost)
+      ansible.builtin.copy:
+        dest: "{{ _tmp.path }}/inventory.yml"
+        mode: "0600"
+        content: |
+          all:
+            children:
+              authelia_group:
+                hosts:
+                  localhost:
+                    ansible_connection: local
+              openbao_group:
+                hosts:
+                  localhost:
+                    ansible_connection: local
+
+    - name: Common environment for every provision-uicheck-totp.yml invocation
+      ansible.builtin.set_fact:
+        _provision_env:
+          BAO_ADDR: "http://127.0.0.1:{{ _bao_port }}"
+          BAO_TOKEN: test-privileged-token
+          TOTP_STATE_FILE: "{{ _tmp.path }}/state.env"
+        _provision_cmd: >-
+          ansible-playbook {{ _playbook }} -i {{ _tmp.path }}/inventory.yml -c local
+          -e authelia_binary_path={{ _fixtures_dir }}/fake_authelia
+
+    - name: Run the stubbed OpenBao API server for the test cases below
+      block:
+        - name: Start the fake OpenBao HTTP API server
+          ansible.builtin.shell:
+            cmd: >-
+              nohup python3 {{ _fixtures_dir }}/fake_bao_server.py {{ _bao_port }}
+              >{{ _tmp.path }}/fake_bao_server.log 2>&1 & echo $!
+            executable: /bin/bash
+          environment:
+            TOTP_STATE_FILE: "{{ _tmp.path }}/state.env"
+          register: _fake_bao_server
+          changed_when: false
+
+        - name: Wait for the fake OpenBao server to accept connections
+          ansible.builtin.wait_for:
+            host: 127.0.0.1
+            port: "{{ _bao_port }}"
+            timeout: 5
+
+        # -------------------------------------------------------------------
+        # Case 1: neither side has a config yet.
+        # -------------------------------------------------------------------
+        - name: "Case 1: seed a fresh pair"
+          ansible.builtin.command: "{{ _provision_cmd }}"
+          register: _case1
+          changed_when: false
+          failed_when: false
+          environment: "{{ _provision_env }}"
+
+        - name: "Case 1: assert the run succeeded and seeded both sides"
+          ansible.builtin.assert:
+            that:
+              - _case1.rc == 0
+              - "'engine_enabled=true' in lookup('file', _tmp.path ~ '/state.env')"
+              - "'key_exists=true' in lookup('file', _tmp.path ~ '/state.env')"
+              - "'authelia_has_totp=true' in lookup('file', _tmp.path ~ '/state.env')"
+            fail_msg: >-
+              Case 1 (clean seed) must exit 0 and leave both the fake OpenBao
+              server and fake_authelia state seeded. rc={{ _case1.rc }}
+              stdout={{ _case1.stdout }} stderr={{ _case1.stderr }}
+
+        # -------------------------------------------------------------------
+        # Case 2: both sides already seeded (Case 1's state, unchanged) -> no-op.
+        # -------------------------------------------------------------------
+        - name: "Case 2: run again against an already-seeded pair"
+          ansible.builtin.command: "{{ _provision_cmd }}"
+          register: _case2
+          changed_when: false
+          failed_when: false
+          environment: "{{ _provision_env }}"
+
+        - name: "Case 2: assert the run succeeded and reported no change"
+          ansible.builtin.assert:
+            that:
+              - _case2.rc == 0
+              - "'changed=0' in _case2.stdout"
+              - "'failed=0' in _case2.stdout"
+            fail_msg: >-
+              Case 2 (already-seeded pair) must exit 0 with no change — it must
+              not attempt to re-seed either side. rc={{ _case2.rc }}
+              stdout={{ _case2.stdout }} stderr={{ _case2.stderr }}
+
+        # -------------------------------------------------------------------
+        # Case 3: half-seeded pair — OpenBao empty, Authelia already configured.
+        # -------------------------------------------------------------------
+        - name: "Case 3: reset to a half-seeded pair (Authelia has it, OpenBao does not)"
+          ansible.builtin.copy:
+            dest: "{{ _tmp.path }}/state.env"
+            mode: "0600"
+            content: |
+              engine_enabled=true
+              authelia_has_totp=true
+
+        - name: "Case 3: attempt to provision against the half-seeded pair"
+          ansible.builtin.command: "{{ _provision_cmd }}"
+          register: _case3
+          changed_when: false
+          failed_when: false
+          environment: "{{ _provision_env }}"
+
+        - name: "Case 3: assert the run failed loudly with the half-seeded refusal"
+          ansible.builtin.assert:
+            that:
+              - _case3.rc != 0
+              - "'half-seeded pair' in (_case3.stdout + _case3.stderr)"
+              - "'key_exists=true' not in lookup('file', _tmp.path ~ '/state.env')"
+            fail_msg: >-
+              Case 3 (half-seeded pair) must refuse with the documented
+              "half-seeded pair" message, and must NOT write a mismatched key
+              into OpenBao. rc={{ _case3.rc }} stdout={{ _case3.stdout }}
+              stderr={{ _case3.stderr }}
+
+        - name: Provision-uicheck-totp.yml behavioral assertions passed
+          ansible.builtin.debug:
+            msg: |
+              provision-uicheck-totp.yml verified against a stubbed OpenBao API
+              and Authelia CLI:
+              - clean pair: seeds both sides, exits 0
+              - already-seeded pair: no-op, exits 0
+              - half-seeded pair (OpenBao empty, Authelia has it): refused, unchanged
+      always:
+        - name: Stop the fake OpenBao HTTP API server
+          ansible.builtin.command: "kill {{ _fake_bao_server.stdout | trim }}"
+          changed_when: false
+          failed_when: false
+          when: _fake_bao_server.stdout is defined

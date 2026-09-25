@@ -134,3 +134,74 @@
          != (_docs_token_ttl_s | int)
       or (_docs_role_live.token_max_ttl | default(0) | int)
          != (_docs_token_max_ttl_s | int)
+
+# uicheck: the _ui-live.yml reusable workflow's own identity, bound to
+# job_workflow_ref rather than repository/ref. _ui-live.yml lives in
+# ai-workflows-testing but is CALLED from every consumer repo (homelab-wall
+# and others), so binding on the calling repository would need one role per
+# caller; job_workflow_ref instead names the reusable workflow itself and is
+# identical no matter which repository calls it. repository_owner confines it
+# to the org — the same two-claim shape docs-publisher uses for repository +
+# ref. user_claim is job_workflow_ref too: the only claim this role's own
+# bound_claims already guarantees is present and stable.
+- name: Read the uicheck OIDC role
+  ansible.builtin.command:
+    cmd: >-
+      bao read -format=json
+      auth/{{ openbao_github_oidc_auth_path }}/role/{{ openbao_uicheck_policy_name }}
+  environment:
+    BAO_ADDR: "{{ openbao_write_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  register: openbao_github_oidc_uicheck_role_current
+  no_log: true
+  changed_when: false
+  failed_when: false
+  when: openbao_bootstrap_token is defined
+
+- name: Reconcile the uicheck OIDC role
+  vars:
+    _uicheck_role_claims:
+      job_workflow_ref: "{{ openbao_uicheck_job_workflow_ref }}"
+      repository_owner: "{{ openbao_uicheck_repository_owner }}"
+    _uicheck_role_live: >-
+      {{ (openbao_github_oidc_uicheck_role_current.stdout | default('{}') | from_json).data
+         | default({}, true) }}
+    _uicheck_token_ttl_s: "{{ openbao_uicheck_token_ttl | community.general.to_seconds | int }}"
+    _uicheck_token_max_ttl_s: >-
+      {{ openbao_uicheck_token_max_ttl | community.general.to_seconds | int }}
+  ansible.builtin.command:
+    cmd: >-
+      bao write
+      auth/{{ openbao_github_oidc_auth_path }}/role/{{ openbao_uicheck_policy_name }} -
+    stdin: >-
+      {{ {'role_type': 'jwt',
+            'user_claim': 'job_workflow_ref',
+            'bound_audiences': [openbao_github_oidc_audience],
+            'bound_claims': _uicheck_role_claims,
+            'bound_claims_type': 'string',
+            'token_policies': [openbao_uicheck_policy_name],
+            'token_ttl': openbao_uicheck_token_ttl,
+            'token_max_ttl': openbao_uicheck_token_max_ttl} | to_json }}
+  environment:
+    BAO_ADDR: "{{ openbao_write_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  no_log: true
+  changed_when: true
+  when:
+    - openbao_bootstrap_token is defined
+    - >-
+      (openbao_github_oidc_uicheck_role_current.rc | default(1)) != 0
+      or (_uicheck_role_live.bound_audiences | default([]))
+         != [openbao_github_oidc_audience]
+      or (_uicheck_role_live.bound_claims | default({}, true))
+         != _uicheck_role_claims
+      or (_uicheck_role_live.bound_claims_type | default(''))
+         != 'string'
+      or (_uicheck_role_live.user_claim | default(''))
+         != 'job_workflow_ref'
+      or (_uicheck_role_live.token_policies | default([]) | sort)
+         != [openbao_uicheck_policy_name]
+      or (_uicheck_role_live.token_ttl | default(0) | int)
+         != (_uicheck_token_ttl_s | int)
+      or (_uicheck_role_live.token_max_ttl | default(0) | int)
+         != (_uicheck_token_max_ttl_s | int)

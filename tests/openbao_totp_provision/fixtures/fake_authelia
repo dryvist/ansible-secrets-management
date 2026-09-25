@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# Minimal stub of the `authelia` binary for verify_provision_uicheck_totp.yml,
+# covering only `storage user totp generate` — the one subcommand
+# playbooks/provision-uicheck-totp.yml invokes. Mirrors the real CLI's
+# documented behavior: refuses (rc=1, "already has a TOTP configuration") when
+# a config already exists and --force was not passed.
+set -euo pipefail
+
+state_file="${TOTP_STATE_FILE:?TOTP_STATE_FILE must be set}"
+# shellcheck disable=SC1090
+[ -f "$state_file" ] && source "$state_file"
+authelia_has_totp="${authelia_has_totp:-false}"
+
+if [ "$authelia_has_totp" = "true" ]; then
+  echo "svc-uicheck already has a TOTP configuration, use --force to overwrite" >&2
+  exit 1
+fi
+
+echo "authelia_has_totp=true" >> "$state_file"

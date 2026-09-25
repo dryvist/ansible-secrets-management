@@ -1,0 +1,38 @@
+---
+- name: Read the live users database for service-user reconciliation
+  ansible.builtin.slurp:
+    src: "{{ authelia_users_file }}"
+  register: authelia_service_users_raw
+  no_log: true
+
+- name: Decode the live users database
+  ansible.builtin.set_fact:
+    authelia_service_user_document: "{{ authelia_service_users_raw.content | b64decode | from_yaml }}"
+  no_log: true
+
+- name: Validate declarative service-user identities
+  ansible.builtin.assert:
+    that:
+      - >-
+        authelia_service_users | map(attribute='username') | list | unique | length
+        == authelia_service_users | length
+      - >-
+        authelia_service_users | map(attribute='username')
+        | select('match', '^[a-z0-9][a-z0-9-]*$') | list | length
+        == authelia_service_users | length
+      - >-
+        authelia_service_users | map(attribute='password') | select('string') | select('ne', '')
+        | list | length == authelia_service_users | length
+    fail_msg: >-
+      Each Authelia service user must have a unique login-safe username and a
+      non-empty password supplied by its secret authority.
+    quiet: true
+  no_log: true
+
+- name: Reconcile each declared service user
+  ansible.builtin.include_tasks: service_user.yml
+  loop: "{{ authelia_service_users }}"
+  loop_control:
+    loop_var: authelia_service_user
+    label: "{{ authelia_service_user.username }}"
+  no_log: true

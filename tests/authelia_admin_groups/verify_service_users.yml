@@ -1,0 +1,63 @@
+---
+- name: Verify Authelia service-user reconciliation
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_become: false
+    authelia_users_file: /tmp/authelia_service_users_under_test.yml
+    authelia_users_file_owner: "{{ lookup('env', 'USER') }}"
+    authelia_group: staff
+    authelia_binary_path: /bin/echo
+    authelia_service_users_rotate_passwords: false
+    authelia_service_users:
+      - username: svc-uicheck
+        display_name: UI Check
+        email: svc-uicheck@example.invalid
+        groups: [uicheck]
+        password: test-password-not-a-secret
+  handlers:
+    - name: Restart authelia
+      ansible.builtin.debug:
+        msg: restart notified
+  tasks:
+    - name: Seed an existing human record
+      ansible.builtin.copy:
+        content: |
+          users:
+            operator:
+              displayname: Operator
+              password: preserved-human-password-hash
+              email: operator@example.invalid
+              groups:
+                - admins
+        dest: "{{ authelia_users_file }}"
+        mode: "0640"
+
+    - name: Reconcile the uicheck service user
+      ansible.builtin.include_tasks: ../../roles/authelia/tasks/service_users.yml
+
+    - name: Read the reconciled user database
+      ansible.builtin.set_fact:
+        authelia_service_users_after: "{{ lookup('file', authelia_users_file) | from_yaml }}"
+
+    - name: Assert the uicheck user was added without changing the human user
+      ansible.builtin.assert:
+        that:
+          - authelia_service_users_after.users.operator.password == 'preserved-human-password-hash'
+          - authelia_service_users_after.users.operator.groups == ['admins']
+          - authelia_service_users_after.users['svc-uicheck'].groups == ['uicheck']
+          - authelia_service_users_after.users['svc-uicheck'].email == 'svc-uicheck@example.invalid'
+          - authelia_service_users_after.users['svc-uicheck'].password | length > 0
+        fail_msg: service-user reconciliation changed a human record or omitted the uicheck user.
+
+    - name: Reconcile the same service user a second time
+      ansible.builtin.include_tasks: ../../roles/authelia/tasks/service_users.yml
+
+    - name: Assert the second reconciliation preserved the password hash
+      ansible.builtin.assert:
+        that:
+          - >-
+            (lookup('file', authelia_users_file) | from_yaml).users['svc-uicheck'].password
+            == authelia_service_users_after.users['svc-uicheck'].password
+        fail_msg: routine reconciliation unexpectedly rotated the service-user password.
