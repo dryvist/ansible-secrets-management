@@ -1,0 +1,20 @@
+{{ ansible_managed | comment }}
+# uicheck — the _ui-live.yml reusable workflow's own identity (GitHub
+# Actions OIDC role, see init/09c-github-oidc.yml; no AppRole/secret_id for
+# it). Can read the uicheck UI password and generate its TOTP code, and
+# nothing else: no write on either mount, no access to the underlying TOTP
+# key material.
+path "{{ openbao_kv_mount }}/data/apps/authelia" {
+  capabilities = ["read"]
+}
+
+path "{{ openbao_kv_mount }}/metadata/apps/authelia" {
+  capabilities = ["read"]
+}
+
+# Generate Code is GET /totp/code/:name (Vault/OpenBao TOTP engine API) — a
+# read operation, never update. Nothing else on the totp/ mount is granted:
+# it cannot create, read, or delete the underlying key.
+path "{{ openbao_totp_mount }}/code/svc-uicheck" {
+  capabilities = ["read"]
+}

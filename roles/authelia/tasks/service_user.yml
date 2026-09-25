@@ -1,0 +1,58 @@
+---
+- name: Resolve the current service-user record
+  ansible.builtin.set_fact:
+    authelia_service_user_current: >-
+      {{ authelia_service_user_document.users.get(authelia_service_user.username, {}) }}
+  no_log: true
+
+- name: Hash a new or explicitly rotated service-user password
+  ansible.builtin.command:
+    argv:
+      - "{{ authelia_binary_path }}"
+      - crypto
+      - hash
+      - generate
+      - argon2
+      - --password
+      - "{{ authelia_service_user.password }}"
+  register: authelia_service_user_hash
+  changed_when: false
+  no_log: true
+  when: >-
+    not authelia_service_user_current or authelia_service_users_rotate_passwords | bool
+
+- name: Compose the required service-user record
+  ansible.builtin.set_fact:
+    authelia_service_user_required: >-
+      {{ authelia_service_user_current | combine({
+           'displayname': authelia_service_user.display_name,
+           'email': authelia_service_user.email,
+           'groups': ((authelia_service_user_current.groups | default([], true))
+                      | union(authelia_service_user.groups)),
+           'password': (authelia_service_user_hash.stdout | default('')
+                        | regex_replace('^Digest:\\s*', ''))
+             if (not authelia_service_user_current or authelia_service_users_rotate_passwords | bool)
+             else authelia_service_user_current.password
+         }, recursive=True) }}
+  no_log: true
+
+- name: Update a changed service-user record without replacing other users
+  ansible.builtin.copy:
+    content: >-
+      {{ authelia_service_user_document
+         | combine({'users': {authelia_service_user.username: authelia_service_user_required}}, recursive=True)
+         | to_nice_yaml(indent=2) }}
+    dest: "{{ authelia_users_file }}"
+    owner: "{{ authelia_users_file_owner }}"
+    group: "{{ authelia_group }}"
+    mode: "0640"
+  when: authelia_service_user_required != authelia_service_user_current
+  no_log: true
+  notify: Restart authelia
+
+- name: Retain the reconciled service-user document for the next identity
+  ansible.builtin.set_fact:
+    authelia_service_user_document: >-
+      {{ authelia_service_user_document
+         | combine({'users': {authelia_service_user.username: authelia_service_user_required}}, recursive=True) }}
+  no_log: true

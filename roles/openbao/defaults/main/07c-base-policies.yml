@@ -104,6 +104,8 @@ openbao_base_policies:
     template: github-admin-claude-issuer-policy.hcl.j2
   - name: "{{ openbao_github_runner_policy_name }}"
     template: github-runner-policy.hcl.j2
+  - name: "{{ openbao_uicheck_policy_name }}"
+    template: uicheck-policy.hcl.j2
   - name: "{{ openbao_github_exporter_policy_name }}"
     template: github-exporter-policy.hcl.j2
   - name: "{{ openbao_github_docs_publisher_policy_name }}"
