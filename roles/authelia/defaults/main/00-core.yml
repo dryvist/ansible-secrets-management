@@ -68,6 +68,17 @@ authelia_portal_url: "https://authelia.{{ authelia_cookie_domain }}"
 # token-authenticated. An app that also serves its BROWSER auth endpoints under
 # /api (NextAuth's /api/auth/* being the common case) must narrow it, or the
 # bypass hands out its session/sign-in routes unauthenticated.
+# Display-only kiosks (the server-room wall) cannot complete a login, so the
+# wall host is bypassed for these clients' addresses only. Clients are FQDNs
+# from the private env document (WALL_KIOSK_CLIENTS, comma-separated) and are
+# resolved on the Authelia host at converge time; Authelia rules take CIDRs,
+# so each resolves to a /32. Unset renders no rule at all (fails closed).
+authelia_wall_kiosk_clients: >-
+  {{ (lookup('env', 'WALL_KIOSK_CLIENTS') | default('', true)).split(',')
+     | map('trim') | reject('equalto', '') | list }}
+authelia_wall_kiosk_domains:
+  - "wall.{{ authelia_cookie_domain }}"
+
 authelia_api_bypass_default_resource: "^/api(?:/.*)?$"
 authelia_api_bypass_domains:
   - domain: "zammad.{{ authelia_cookie_domain }}"
