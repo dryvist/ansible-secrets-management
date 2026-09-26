@@ -6,9 +6,9 @@
   vars:
     ansible_become: false
     authelia_users_file: /tmp/authelia_service_users_under_test.yml
-    authelia_users_file_owner: "{{ lookup('env', 'USER') }}"
-    authelia_group: staff
-    authelia_binary_path: /bin/echo
+    authelia_users_file_owner: "{{ lookup('ansible.builtin.pipe', 'id -un') }}"
+    authelia_group: "{{ lookup('ansible.builtin.pipe', 'id -gn') }}"
+    authelia_binary_path: "{{ playbook_dir }}/fake-authelia-hash"
     authelia_service_users_rotate_passwords: false
     authelia_service_users:
       - username: svc-uicheck
@@ -27,7 +27,7 @@
           users:
             operator:
               displayname: Operator
-              password: preserved-human-password-hash
+              password: $argon2id$v=19$m=65536,t=3,p=4$aHVtYW4$aHVtYW4
               email: operator@example.invalid
               groups:
                 - admins
@@ -44,11 +44,11 @@
     - name: Assert the uicheck user was added without changing the human user
       ansible.builtin.assert:
         that:
-          - authelia_service_users_after.users.operator.password == 'preserved-human-password-hash'
+          - authelia_service_users_after.users.operator.password == '$argon2id$v=19$m=65536,t=3,p=4$aHVtYW4$aHVtYW4'
           - authelia_service_users_after.users.operator.groups == ['admins']
           - authelia_service_users_after.users['svc-uicheck'].groups == ['uicheck']
           - authelia_service_users_after.users['svc-uicheck'].email == 'svc-uicheck@example.invalid'
-          - authelia_service_users_after.users['svc-uicheck'].password | length > 0
+          - authelia_service_users_after.users['svc-uicheck'].password is match('^\$argon2')
         fail_msg: service-user reconciliation changed a human record or omitted the uicheck user.
 
     - name: Reconcile the same service user a second time
@@ -61,3 +61,36 @@
             (lookup('file', authelia_users_file) | from_yaml).users['svc-uicheck'].password
             == authelia_service_users_after.users['svc-uicheck'].password
         fail_msg: routine reconciliation unexpectedly rotated the service-user password.
+
+    - name: Seed a service-user record whose password kept the CLI's "Digest:" prefix
+      ansible.builtin.copy:
+        content: |
+          users:
+            operator:
+              displayname: Operator
+              password: $argon2id$v=19$m=65536,t=3,p=4$aHVtYW4$aHVtYW4
+              email: operator@example.invalid
+              groups:
+                - admins
+            svc-uicheck:
+              displayname: UI Check
+              email: svc-uicheck@example.invalid
+              groups:
+                - uicheck
+              password: 'Digest: $argon2id$v=19$m=65536,t=3,p=4$b2xk$b2xk'
+        dest: "{{ authelia_users_file }}"
+        mode: "0640"
+
+    - name: Reconcile the malformed service user
+      ansible.builtin.include_tasks: ../../roles/authelia/tasks/service_users.yml
+
+    - name: Assert the malformed password was re-hashed to a bare digest
+      ansible.builtin.assert:
+        that:
+          - >-
+            (lookup('file', authelia_users_file) | from_yaml).users['svc-uicheck'].password
+            == '$argon2id$v=19$m=65536,t=3,p=4$dGVzdA$dGVzdA'
+          - >-
+            (lookup('file', authelia_users_file) | from_yaml).users.operator.password
+            == '$argon2id$v=19$m=65536,t=3,p=4$aHVtYW4$aHVtYW4'
+        fail_msg: a service-user password without a leading '$' was not repaired.

@@ -5,7 +5,17 @@
       {{ authelia_service_user_document.users.get(authelia_service_user.username, {}) }}
   no_log: true
 
-- name: Hash a new or explicitly rotated service-user password
+# A stored password that is not an encoded digest (it must begin with '$')
+# makes Authelia refuse to start, so it is re-hashed like a new record.
+- name: Decide whether the service-user password needs hashing
+  ansible.builtin.set_fact:
+    authelia_service_user_needs_hash: >-
+      {{ not authelia_service_user_current
+         or authelia_service_users_rotate_passwords | bool
+         or not (authelia_service_user_current.password | default('') | string).startswith('$') }}
+  no_log: true
+
+- name: Hash a new, rotated or malformed service-user password
   ansible.builtin.command:
     argv:
       - "{{ authelia_binary_path }}"
@@ -18,8 +28,7 @@
   register: authelia_service_user_hash
   changed_when: false
   no_log: true
-  when: >-
-    not authelia_service_user_current or authelia_service_users_rotate_passwords | bool
+  when: authelia_service_user_needs_hash | bool
 
 - name: Compose the required service-user record
   ansible.builtin.set_fact:
@@ -30,10 +39,42 @@
            'groups': ((authelia_service_user_current.groups | default([], true))
                       | union(authelia_service_user.groups)),
            'password': (authelia_service_user_hash.stdout | default('')
-                        | regex_replace('^Digest:\\s*', ''))
-             if (not authelia_service_user_current or authelia_service_users_rotate_passwords | bool)
+                        | regex_replace('^Digest:\s*', ''))
+             if authelia_service_user_needs_hash | bool
              else authelia_service_user_current.password
          }, recursive=True) }}
+  no_log: true
+
+# Authelia's own decoder, before anything is written: a digest it cannot
+# parse makes the file provider's startup check fail and the portal
+# crash-loop, taking every forward-auth route down with it.
+- name: Validate the new service-user digest with Authelia's own decoder
+  ansible.builtin.command:
+    argv:
+      - "{{ authelia_binary_path }}"
+      - crypto
+      - hash
+      - validate
+      - --password
+      - "{{ authelia_service_user.password }}"
+      - --
+      - "{{ authelia_service_user_required.password }}"
+  changed_when: false
+  no_log: true
+  when: authelia_service_user_needs_hash | bool
+
+- name: Refuse to write a users database holding a password that is not a digest
+  ansible.builtin.assert:
+    that:
+      - >-
+        (authelia_service_user_document
+         | combine({'users': {authelia_service_user.username: authelia_service_user_required}}, recursive=True)).users
+        | dict2items | map(attribute='value.password') | map('string')
+        | reject('match', '\$') | list | length == 0
+    fail_msg: >-
+      A users.yml record's password does not begin with '$'; Authelia would
+      refuse to start on it, so the file is not written.
+    quiet: true
   no_log: true
 
 - name: Update a changed service-user record without replacing other users
