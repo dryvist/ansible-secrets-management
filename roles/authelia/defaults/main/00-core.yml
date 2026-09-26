@@ -78,6 +78,13 @@ authelia_wall_kiosk_clients: >-
      | map('trim') | reject('equalto', '') | list }}
 authelia_wall_kiosk_domains:
   - "wall.{{ authelia_cookie_domain }}"
+  # Glance ships no auth of its own; its Traefik route keeps sso=true for
+  # every other client. The wall embeds it in an iframe, and Authelia's own
+  # portal/denial response sets X-Frame-Options: DENY, which blanks the
+  # iframe for anyone who reaches the login redirect. The kiosk-scoped bypass
+  # below is the same mechanism as the wall row above: the route itself stays
+  # gated, only these client addresses skip the redirect.
+  - "glance.{{ authelia_cookie_domain }}"
 
 authelia_api_bypass_default_resource: "^/api(?:/.*)?$"
 authelia_api_bypass_domains:

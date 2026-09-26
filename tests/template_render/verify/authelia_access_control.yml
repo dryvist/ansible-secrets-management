@@ -96,18 +96,20 @@
           an Authelia bypass rule is missing a resource scope or does not
           anchor to /api, /v1/ or /opentelemetry/v1/: {{ _authelia_rules }}
 
-    - name: Assert a network-scoped bypass admits single hosts on the wall only
+    - name: Assert a network-scoped bypass admits single kiosk-display hosts only
       ansible.builtin.assert:
         that:
           # The kiosk rule is the one bypass scoped by client address instead
-          # of path. It must name single hosts, and only the wall host: a
-          # wider network or another domain would open real UIs.
+          # of path. It must name single hosts, and only the wall's own
+          # display-only hosts (the wall page itself, plus Glance so its
+          # iframe on the wall does not hit the login redirect): a wider
+          # network or another domain would open real UIs.
           - _net_rules | length == 1
-          - _net_rules[0].domain == ['wall.example.test']
+          - _net_rules[0].domain == ['wall.example.test', 'glance.example.test']
           - _net_rules[0].networks == ['192.0.2.10/32']
           - _net_rules | map(attribute='networks') | flatten
             | reject('match', '^[0-9.]+/32$') | list | length == 0
-        fail_msg: "kiosk bypass is not /32-scoped to the wall host: {{ _net_rules }}"
+        fail_msg: "kiosk bypass is not /32-scoped to the wall/glance hosts: {{ _net_rules }}"
       vars:
         _net_rules: >-
           {{ _authelia_rules | selectattr('policy', 'eq', 'bypass')
