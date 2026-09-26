@@ -72,14 +72,34 @@
 # moment a new name is declared, aborting the play before this pair ever gets
 # a chance to run. Only a token carrying policy-sync passes the capability
 # check below; any other reconcile identity skips.
+#
+# The only identity that ever passes that check is the inert
+# openbao-policy-sync AppRole (defaults/main/07f-workstation-approles.yml),
+# which is bound to the WORKSTATION CIDR class
+# (defaults/main/08b-cidr-and-unlock.yml) -- a token issued to it is usable
+# only from the controller. Running this pair on the node against
+# openbao_write_addr (the node's OWN bind address, per
+# defaults/main/00-install-and-node.yml) therefore always fails the
+# capability check for the one token that could ever pass it: observed live,
+# "Ask..." came back ok but without the update capability, and "Sync..."
+# SKIPPED -- which then starved init/07's controller-delegated calls of the
+# sync they needed. Delegate exactly like every other reconcile-gated
+# read/write in this role from init/03 onward: openbao_cli_host/_addr/_become
+# (resolved in defaults/main/00-install-and-node.yml, same switch the
+# reconcile login itself uses via openbao_reconcile_addr) instead of the
+# node's own address.
 - name: Ask whether this identity may sync the reconcile policy
   ansible.builtin.command:
     cmd: >-
       bao write -format=json sys/capabilities-self
       paths=sys/policies/acl/{{ openbao_reconcile_policy_name }}
   environment:
-    BAO_ADDR: "{{ openbao_write_addr }}"
+    BAO_ADDR: "{{ openbao_cli_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
   register: openbao_policy_sync_caps
   changed_when: false
   failed_when: false
@@ -93,8 +113,12 @@
     cmd: "bao policy write {{ openbao_reconcile_policy_name }} -"
     stdin: "{{ lookup('template', 'openbao-reconcile-policy.hcl.j2') | trim }}"
   environment:
-    BAO_ADDR: "{{ openbao_write_addr }}"
+    BAO_ADDR: "{{ openbao_cli_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
   no_log: true
   changed_when: true
   when:
