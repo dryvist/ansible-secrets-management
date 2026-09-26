@@ -18,6 +18,27 @@ openbao_ai_capability_policies: >-
         '{"name": "write-\1", "template": "kv-capability-policy.hcl.j2", "subtree": "\1", "mode": "write"}')
       | map('from_json') | list)
      + [{"name": "github-mint", "template": "github-mint-policy.hcl.j2"}] }}
+# User-cert-only view of openbao_ssh_roles. Several consumers (molecule
+# verify's items2dict/map(attribute='principal')) read user-cert fields --
+# principal, extensions -- unconditionally; a host-cert entry carries
+# neither and would crash them rather than silently mis-render (hit in CI on
+# PR #2203, molecule/openbao run 36232738114). Filtered once, here, rather
+# than repeated at each call site.
+#
+# Two steps, deliberately: `rejectattr('cert_type', 'equalto', 'host')`
+# directly on openbao_ssh_roles LOOKS equivalent and is NOT -- an item with
+# no cert_type key at all raises AnsibleUndefinedVariable on the attribute
+# fetch itself under this templating engine, before 'equalto' ever runs (the
+# exact crash this derivation exists to avoid). `map(attribute=...,
+# default=...)` and filtering by 'name' (always present on every entry) both
+# tolerate a missing key; only a bare rejectattr/selectattr equality test on
+# an optional key does not.
+openbao_ssh_host_role_names: >-
+  {{ openbao_ssh_roles | map(attribute='cert_type', default='user')
+     | zip(openbao_ssh_roles | map(attribute='name'))
+     | selectattr('0', 'equalto', 'host') | map(attribute='1') | list }}
+openbao_ssh_user_roles: >-
+  {{ openbao_ssh_roles | rejectattr('name', 'in', openbao_ssh_host_role_names) | list }}
 # ssh-sign-<role> capability leaves: one per SSH signing role, granting ONLY
 # the sign endpoint of that role. These are DELIBERATE enumerated grants
 # outside secret/ — the kv-leaf self-escalation proof still holds for the KV

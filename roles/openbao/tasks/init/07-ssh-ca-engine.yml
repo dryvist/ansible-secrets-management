@@ -153,7 +153,8 @@
       X-Vault-Token: "{{ openbao_bootstrap_token }}"
     body_format: json
     body: >-
-      {{ {
+      {{
+         {
            'key_type': 'ca',
            'allow_user_certificates': true,
            'allowed_users': item.0.principal,
@@ -165,7 +166,19 @@
            'algorithm_signer': 'default'
          }
          | combine({'default_critical_options': {'source-address': openbao_ssh_source_address_cidrs}}
-                   if openbao_ssh_source_address_cidrs | length > 0 else {}) }}
+                   if openbao_ssh_source_address_cidrs | length > 0 else {})
+         if (item.0.cert_type | default('user')) == 'user'
+         else {
+           'key_type': 'ca',
+           'allow_host_certificates': true,
+           'allowed_domains': item.0.allowed_domains,
+           'allow_subdomains': item.0.allow_subdomains | default(true),
+           'allow_bare_domains': item.0.allow_bare_domains | default(false),
+           'ttl': item.0.ttl,
+           'max_ttl': item.0.max_ttl,
+           'algorithm_signer': 'default'
+         }
+      }}
     status_code:
       - 200
       - 204

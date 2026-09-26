@@ -7,7 +7,10 @@
 # (ai-elevated signs ONLY automation-ai; readonly signs nothing).
 - name: Assert the SSH signing role table matches the ADR
   vars:
-    ssh_roles_by_name: "{{ openbao_ssh_roles | items2dict(key_name='name', value_name='principal') }}"
+    # openbao_ssh_user_roles: user-cert-only view -- a host-cert entry has no
+    # principal, so items2dict/map(attribute='principal') on the full table
+    # would crash rather than mis-render (Vikunja: molecule/openbao failure).
+    ssh_roles_by_name: "{{ openbao_ssh_user_roles | items2dict(key_name='name', value_name='principal') }}"
   ansible.builtin.assert:
     that:
       - openbao_ssh_mount == 'ssh-client-ca'
@@ -20,9 +23,24 @@
       - (openbao_ssh_roles | selectattr('name', 'equalto', 'automation-ansible') | first).ttl == 7200
       - (openbao_ssh_roles | selectattr('name', 'equalto', 'ci-runner') | first).ttl == 1800
       # No wildcard principals, ever (documented upstream wildcard bug +
-      # per-principal-class design).
-      - openbao_ssh_roles | map(attribute='principal') | select('equalto', '*') | list | length == 0
+      # per-principal-class design). User-cert-only: a host-cert role has no
+      # principal to check.
+      - openbao_ssh_user_roles | map(attribute='principal') | select('equalto', '*') | list | length == 0
     fail_msg: "openbao_ssh_roles drifted from the ssh-certificate-authority ADR table"
+
+- name: Assert the host-cert role is host-only, under the same CA
+  vars:
+    host_role: "{{ openbao_ssh_roles | selectattr('name', 'equalto', 'host-cert') | first }}"
+  ansible.builtin.assert:
+    that:
+      - host_role.cert_type == 'host'
+      - host_role.allow_host_certificates
+      - host_role.allow_subdomains
+      - not host_role.allow_bare_domains
+      - host_role.ttl == host_role.max_ttl
+      - "'principal' not in host_role"
+      - "'extensions' not in host_role"
+    fail_msg: "host-cert drifted from a host-only role, or gained a user-cert field"
 
 - name: Assert per-role extensions (interactive AI only; ansible/ci exec-channel)
   ansible.builtin.assert:
@@ -70,10 +88,11 @@
       - "'secret/' not in sign_grants"
       - "'sys/' not in sign_grants"
       - "'auth/' not in sign_grants"
-      # Positive: the three enumerated sign paths are granted create+update.
+      # Positive: the enumerated sign paths are granted create+update.
       - "'ssh-client-ca/sign/automation-ai' in sign_grants"
       - "'ssh-client-ca/sign/automation-ansible' in sign_grants"
       - "'ssh-client-ca/sign/ci-runner' in sign_grants"
+      - "'ssh-client-ca/sign/host-cert' in sign_grants"
       - "'create\", \"update' in sign_grants"
     fail_msg: >-
       An ssh-sign leaf escaped the enumerated sign-endpoint allowlist —
@@ -84,21 +103,33 @@
     elevated_role: "{{ openbao_approles | selectattr('name', 'equalto', 'ai-elevated') | first }}"
     readonly_role: "{{ openbao_approles | selectattr('name', 'equalto', 'ai-readonly') | first }}"
     converge_role: "{{ openbao_approles | selectattr('name', 'equalto', 'ansible-converge') | first }}"
+    semaphore_role: "{{ openbao_approles | selectattr('name', 'equalto', 'semaphore') | first }}"
     apply_roles: "{{ openbao_approles | selectattr('name', 'match', '^ai-apply-') | list }}"
   ansible.builtin.assert:
     that:
-      # ai-elevated signs ONLY automation-ai — never ansible/ci roles.
+      # ai-elevated signs ONLY automation-ai — never ansible/ci/host roles.
       - "'ssh-sign-automation-ai' in elevated_role.token_policies"
       - "'ssh-sign-automation-ansible' not in elevated_role.token_policies"
       - "'ssh-sign-automation-semaphore' not in elevated_role.token_policies"
       - "'ssh-sign-ci-runner' not in elevated_role.token_policies"
+      - "'ssh-sign-host-cert' not in elevated_role.token_policies"
       # ai-readonly signs nothing.
       - readonly_role.token_policies | select('match', '^ssh-sign-') | list | length == 0
-      # ansible-converge signs ONLY automation-ansible.
+      # ansible-converge and the unattended execution plane sign their own
+      # user-cert role PLUS host-cert (issuance runs unattended in Semaphore)
+      # — never any other role's user-cert.
       - "'ssh-sign-automation-ansible' in converge_role.token_policies"
+      - "'ssh-sign-host-cert' in converge_role.token_policies"
       - >-
         converge_role.token_policies | select('match', '^ssh-sign-')
-        | reject('equalto', 'ssh-sign-automation-ansible') | list | length == 0
+        | reject('in', ['ssh-sign-automation-ansible', 'ssh-sign-host-cert'])
+        | list | length == 0
+      - "'ssh-sign-automation-semaphore' in semaphore_role.token_policies"
+      - "'ssh-sign-host-cert' in semaphore_role.token_policies"
+      - >-
+        semaphore_role.token_policies | select('match', '^ssh-sign-')
+        | reject('in', ['ssh-sign-automation-semaphore', 'ssh-sign-host-cert'])
+        | list | length == 0
       # every ai-apply-<svc> signs ONLY automation-ai.
       - >-
         apply_roles | map(attribute='token_policies')

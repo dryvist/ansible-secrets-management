@@ -42,6 +42,22 @@ openbao_ssh_roles:
     principal: ci
     ttl: 1800
     extensions: {}
+  # HOST certificates for estate guests, signed under the same CA keypair as
+  # the user-cert roles above. cert_type distinguishes the two shapes the
+  # role-reconcile task renders (init/07-ssh-ca-engine.yml) — this entry has
+  # no principal/extensions because those are user-cert-only fields.
+  # allowed_domains is tofu_data.domain (the apex zone guest FQDNs live
+  # under), never a literal. 90d TTL == max_ttl: a host cert is long-lived
+  # infrastructure identity, re-signed by the same periodic reconcile that
+  # touches the user-cert roles, not a per-run mint.
+  - name: host-cert
+    cert_type: host
+    allow_host_certificates: true
+    allowed_domains: "{{ tofu_data.domain | default('', true) }}"
+    allow_subdomains: true
+    allow_bare_domains: false
+    ttl: 7776000
+    max_ttl: 7776000
 # source-address critical option: comma-separated CIDRs certificates are valid
 # FROM (management + compute VLANs). Delivered via env (Doppler, same channel
 # as NETWORK_CIDR_*) because real CIDRs are never committed. Empty = the
