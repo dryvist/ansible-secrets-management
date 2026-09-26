@@ -196,7 +196,7 @@
 # Its own file, for the same reason the human login below has one: a second
 # JWT issuer with its own bounds is a separate concern from Terrakube's.
 - name: Configure the GitHub Actions OIDC auth method and its publisher role
-  ansible.builtin.include_tasks: 09c-github-oidc.yml
+  ansible.builtin.import_tasks: 09c-github-oidc.yml
 
 # --- AppRoles (add-if-missing), one per RBAC group --------------------------
 
@@ -206,4 +206,4 @@
 # registered above, and it re-reads that listing itself where a mount may have
 # been enabled by this same run.
 - name: Configure the human-unlock login and its MFA enforcement
-  ansible.builtin.include_tasks: 09b-human-unlock.yml
+  ansible.builtin.import_tasks: 09b-human-unlock.yml

@@ -280,6 +280,6 @@
   when: openbao_bootstrap_token is defined
 
 - name: Read the stored RBAC policies and write what differs
-  ansible.builtin.include_tasks: 08b-rbac-policy-writes.yml
+  ansible.builtin.import_tasks: 08b-rbac-policy-writes.yml
 
 # --- AppRole auth method (add-if-missing) -----------------------------------

@@ -2,12 +2,53 @@
 # OpenBao install + configure. Native single Go binary on Debian; no Docker.
 # Idempotent and safe to re-run. Bootstrap (init/unseal/AppRole) is delegated
 # to tasks/init.yml, included after the service is up.
-
+#
+# Per-phase tags: `--tags openbao` (the play-level tag site.yml already
+# sets) still runs everything, but each phase below -- and each finer phase
+# inside init.yml -- can also be requested alone (`--tags openbao_rbac`,
+# `--tags openbao_approle`, ...) for a fast, scoped debug run instead of
+# waiting on the full converge. Every include below is a static
+# `import_tasks`, not `include_tasks`: tags on a dynamic include apply only
+# to the include statement itself, never to the tasks it loads at runtime,
+# while `import_tasks` merges the tag onto every task inside the file at
+# parse time -- which is also what lets
+# `ansible-playbook --list-tasks --tags <phase>` show the real task names a
+# phase runs, instead of just the name of the include. Phases 1-4 are
+# tagged `always`: nothing below them works without the binary installed,
+# so every phase-scoped run still needs them.
+#
+# The role's OWN inclusion, from playbooks/site/04a-openbao.yml, stays a
+# DYNAMIC `include_role` on purpose -- NOT the `import_role` this same
+# static-vs-dynamic logic might suggest. Importing statically would parse
+# and flatten every task below into that play before any host is matched:
+# the `always`-tagged ones (install, config render, service start, cluster
+# probe/init) would then fire on ANY unrelated `--tags` run that happens to
+# target an openbao_group host, and a parse error anywhere in this role
+# would abort the whole playbook before that play's own rescue: block ever
+# gets a chance to isolate it (its whole point). `include_role` keeps both
+# properties, at the cost of needing its OWN `tags:` list -- one entry per
+# phase tag used anywhere below -- so --tags can decide whether to enter it
+# at all; once entered, the loaded tasks are filtered individually by their
+# own tags exactly as documented above.
 - name: Phases 1-4 -- prerequisites, system user/group, and the OpenBao package install
-  ansible.builtin.include_tasks: main/install.yml
+  ansible.builtin.import_tasks: main/install.yml
+  tags:
+    - always
 
+# Tagged openbao_plugins AND openbao_engines: staging the AWS/GitHub/
+# OAuthapp plugin binaries is a prerequisite specifically for registering
+# those engines in init/04-06, not for RBAC/AppRole/KV work, so it is not
+# `always` -- but `--tags openbao_engines` alone must still stage the
+# binaries it registers.
 - name: Phase 5 -- stage the AWS/GitHub/OAuthapp secrets-engine plugins
-  ansible.builtin.include_tasks: main/stage_plugins.yml
+  ansible.builtin.import_tasks: main/stage_plugins.yml
+  tags:
+    - openbao_plugins
+    - openbao_engines
 
+# The finer per-phase tags (openbao_bootstrap, openbao_rbac,
+# openbao_approle, openbao_kv_seed, openbao_engines, ...) live inside this
+# file, on its own render/service tasks and on each of ITS includes -- see
+# main/configure_and_bootstrap.yml.
 - name: Phase 6+ -- render config, start the service, bootstrap, and deploy timers
-  ansible.builtin.include_tasks: main/configure_and_bootstrap.yml
+  ansible.builtin.import_tasks: main/configure_and_bootstrap.yml

@@ -49,6 +49,15 @@
     - ansible_virtualization_type | default('') != 'docker'
     - openbao_old_slack_rotate_timer_unit.stat.exists
 
+# Gated on the SAME stat check as the stop/disable tasks above (the old
+# timer/service/script/env file were all deployed together, so the timer
+# unit's presence is the proxy every other task here already uses). Before
+# this gate, this loop of 4 `file: state=absent` calls ran UNCONDITIONALLY
+# on every single converge, forever, on every node that had ever run the
+# old rotator -- 4 remote round trips reporting "already absent" on nodes
+# that were retired converges ago (measured ~12.5s/item, ~50s total). The
+# stop/disable tasks it sits between never paid that tax; this loop should
+# not have either.
 - name: Remove the old Slack-only rotation unit files, script, and env file
   ansible.builtin.file:
     path: "{{ item }}"
@@ -59,6 +68,7 @@
     - /usr/local/bin/openbao-slack-rotate.sh
     - "{{ openbao_config_dir }}/openbao-slack-rotate.env"
   register: openbao_retired_old_slack_rotate_files
+  when: openbao_old_slack_rotate_timer_unit.stat.exists
 
 - name: Reload systemd after removing the old Slack rotator's unit files
   ansible.builtin.systemd:
@@ -66,4 +76,4 @@
   when:
     - ansible_virtualization_type | default('') != 'docker'
     - openbao_old_slack_rotate_timer_unit.stat.exists
-    - openbao_retired_old_slack_rotate_files.results | selectattr('changed') | list | length > 0
+    - (openbao_retired_old_slack_rotate_files.results | default([]) | selectattr('changed') | list | length) > 0

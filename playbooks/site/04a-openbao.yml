@@ -1,0 +1,73 @@
+---
+# Phase 8.4: OpenBao secrets-management engine (machine/IaC/dynamic secrets)
+# 5-voter Raft HA cluster (quorum 3) with on-prem static-key auto-unseal — no
+# cloud. The role installs the native binary, renders the Raft + static-seal
+# config, and (on the bootstrap host only) initializes the cluster, the secret
+# hierarchy, the RBAC policies, and the AppRoles (terraform / ansible /
+# ai-readonly / ai-elevated / snapshot). Peers join + self-unseal automatically.
+# Recovery shares + AppRole creds are written 0600 to the controller for the
+# operator to copy/load and delete (gitignored). Requires OPENBAO_STATIC_
+# SEAL_KEY in the environment (Doppler tier-0).
+#
+# Split out of 04-secrets-and-collab-apps.yml (imported from playbooks/site.yml
+# in the exact same position) to stay inside the per-file token budget once the
+# include below grew its own per-phase tags list -- see roles/openbao/tasks/
+# main.yml for what that list is for.
+# =============================================================================
+
+- name: Configure OpenBao secrets-management engine
+  hosts: openbao_group
+  become: true
+  gather_facts: false
+  tags:
+    - openbao
+    - secrets
+    - secrets-management
+  tasks:
+    - name: Converge openbao (isolated — failure does not abort downstream plays)
+      block:
+        # Dynamic include_role; tags below gate entry -- see main.yml.
+        - name: Include openbao role
+          ansible.builtin.include_role:
+            name: openbao
+          tags:
+            - openbao_approle
+            - openbao_audit
+            - openbao_auth_methods
+            - openbao_bootstrap
+            - openbao_engines
+            - openbao_kv_seed
+            - openbao_plugins
+            - openbao_rbac
+            - openbao_rotate
+            - openbao_rotation_exempt
+            - openbao_secret_age
+            - openbao_snapshot
+            - openbao_ssh_ca
+            - openbao_voter_health
+      rescue:
+        - name: Record isolated failure and continue
+          ansible.builtin.include_tasks: ../tasks/record_isolated_failure.yml
+          vars:
+            _isolated_play_name: openbao
+
+- name: Deploy OpenBao Raft-voter health telemetry (read-only, isolated)
+  hosts: openbao_group
+  become: true
+  gather_facts: false
+  tags:
+    - openbao
+    - openbao_voter_health
+    - secrets
+    - secrets-management
+  tasks:
+    - name: Converge openbao_voter_health (isolated — failure does not abort downstream plays)
+      block:
+        - name: Include openbao_voter_health role
+          ansible.builtin.include_role:
+            name: openbao_voter_health
+      rescue:
+        - name: Record isolated failure and continue
+          ansible.builtin.include_tasks: ../tasks/record_isolated_failure.yml
+          vars:
+            _isolated_play_name: openbao_voter_health

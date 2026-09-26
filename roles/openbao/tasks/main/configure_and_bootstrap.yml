@@ -1,127 +1,138 @@
 ---
-# The listener trusts an ingress X-Forwarded-For header only while
-# openbao_xff_authorized_addrs holds usable addresses: templates/openbao.hcl.j2
-# omits the whole block when the list is empty, and OpenBao then reads the
-# socket peer on every request. Through the ingress that peer is the proxy, and
-# the proxy's address sits inside the broadest bound CIDR, so an AppRole's
-# secret_id_bound_cidrs / token_bound_cidrs admit every client and nothing
-# anywhere turns red. Both list inputs are derived from the inventory, and a
-# leased guest's container_ip is an FQDN rather than an address, so neither is
-# guaranteed to yield something OpenBao can match on. Assert instead of
-# discovering it from an audit log.
-- name: Assert the ingress addresses trusted for X-Forwarded-For are usable
-  ansible.builtin.assert:
-    that:
-      - openbao_xff_authorized_addrs | length > 0
-      - >-
-        openbao_xff_authorized_addrs | map('ansible.utils.ipaddr')
-        | select('equalto', false) | list | length == 0
-    fail_msg: >-
-      The ingress group exists but yielded no usable X-Forwarded-For address
-      ({{ openbao_xff_authorized_addrs }}). The listener would silently fall
-      back to the proxy's own address for every fronted request, and every
-      AppRole CIDR bind would stop discriminating. Check that each ingress
-      host carries an address-valued container_ip.
-  when: groups['traefik_group'] | default([]) | length > 0
+# Phases 6-8 below (render config, seal key, install unit, enable+start,
+# wait-for-API) are wrapped in one block tagged `always`: every later phase
+# -- bootstrap, audit, snapshot, voter-health, rotate, secret-age -- needs a
+# running, unsealed-or-unsealable OpenBao to operate against, so a
+# phase-scoped run (e.g. `--tags openbao_rbac`) must still render config and
+# start the service even though none of those lines carry openbao_rbac
+# themselves.
+- name: Phases 6-8 -- render config, seal key, install the unit, start, and wait for the API
+  tags:
+    - always
+  block:
+    # The listener trusts an ingress X-Forwarded-For header only while
+    # openbao_xff_authorized_addrs holds usable addresses: templates/openbao.hcl.j2
+    # omits the whole block when the list is empty, and OpenBao then reads the
+    # socket peer on every request. Through the ingress that peer is the proxy, and
+    # the proxy's address sits inside the broadest bound CIDR, so an AppRole's
+    # secret_id_bound_cidrs / token_bound_cidrs admit every client and nothing
+    # anywhere turns red. Both list inputs are derived from the inventory, and a
+    # leased guest's container_ip is an FQDN rather than an address, so neither is
+    # guaranteed to yield something OpenBao can match on. Assert instead of
+    # discovering it from an audit log.
+    - name: Assert the ingress addresses trusted for X-Forwarded-For are usable
+      ansible.builtin.assert:
+        that:
+          - openbao_xff_authorized_addrs | length > 0
+          - >-
+            openbao_xff_authorized_addrs | map('ansible.utils.ipaddr')
+            | select('equalto', false) | list | length == 0
+        fail_msg: >-
+          The ingress group exists but yielded no usable X-Forwarded-For address
+          ({{ openbao_xff_authorized_addrs }}). The listener would silently fall
+          back to the proxy's own address for every fronted request, and every
+          AppRole CIDR bind would stop discriminating. Check that each ingress
+          host carries an address-valued container_ip.
+      when: groups['traefik_group'] | default([]) | length > 0
 
-- name: Render OpenBao server config
-  ansible.builtin.template:
-    src: openbao.hcl.j2
-    dest: "{{ openbao_config_file }}"
-    owner: root
-    group: "{{ openbao_group }}"
-    mode: "0640"
-  notify: Restart openbao
+    - name: Render OpenBao server config
+      ansible.builtin.template:
+        src: openbao.hcl.j2
+        dest: "{{ openbao_config_file }}"
+        owner: root
+        group: "{{ openbao_group }}"
+        mode: "0640"
+      notify: Restart openbao
 
-# The seal key normally arrives from the environment. When it is unset, keep
-# the key already rendered on the nodes instead: every node carries the same
-# key, so any node's existing file is authoritative. Never render an empty key.
-- name: Read the existing static-seal EnvironmentFile from every node
-  ansible.builtin.slurp:
-    src: "{{ openbao_env_file }}"
-  register: openbao_existing_seal_env
-  delegate_to: "{{ item }}"
-  loop: "{{ ansible_play_hosts_all }}"
-  run_once: true
-  failed_when: false
-  no_log: true
-  when: openbao_static_seal_key | default('', true) | length == 0
+    # The seal key normally arrives from the environment. When it is unset, keep
+    # the key already rendered on the nodes instead: every node carries the same
+    # key, so any node's existing file is authoritative. Never render an empty key.
+    - name: Read the existing static-seal EnvironmentFile from every node
+      ansible.builtin.slurp:
+        src: "{{ openbao_env_file }}"
+      register: openbao_existing_seal_env
+      delegate_to: "{{ item }}"
+      loop: "{{ ansible_play_hosts_all }}"
+      run_once: true
+      failed_when: false
+      no_log: true
+      when: openbao_static_seal_key | default('', true) | length == 0
 
-- name: Take the seal key from an existing node file when the environment has none
-  ansible.builtin.set_fact:
-    openbao_static_seal_key: >-
-      {{ (openbao_existing_seal_env.results
-          | selectattr('content', 'defined')
-          | map(attribute='content') | map('b64decode')
-          | map('regex_findall', '(?m)^OPENBAO_STATIC_SEAL_KEY=(\S+)$')
-          | flatten | unique | list) | first | default('') }}
-  run_once: true
-  no_log: true
-  when: openbao_static_seal_key | default('', true) | length == 0
+    - name: Take the seal key from an existing node file when the environment has none
+      ansible.builtin.set_fact:
+        openbao_static_seal_key: >-
+          {{ (openbao_existing_seal_env.results
+              | selectattr('content', 'defined')
+              | map(attribute='content') | map('b64decode')
+              | map('regex_findall', '(?m)^OPENBAO_STATIC_SEAL_KEY=(\S+)$')
+              | flatten | unique | list) | first | default('') }}
+      run_once: true
+      no_log: true
+      when: openbao_static_seal_key | default('', true) | length == 0
 
-- name: Refuse to render an empty or malformed static-seal key
-  ansible.builtin.assert:
-    that:
-      - openbao_static_seal_key | default('', true) | length > 0
-      - (openbao_static_seal_key | b64decode(encoding='latin-1') | length) == 32
-    fail_msg: >-
-      No usable static-seal key: OPENBAO_STATIC_SEAL_KEY is unset and no node
-      carries an existing {{ openbao_env_file }} with one, or the key is not a
-      base64 32-byte value. Rendering would seal every node on its next restart.
-    quiet: true
-  no_log: true
+    - name: Refuse to render an empty or malformed static-seal key
+      ansible.builtin.assert:
+        that:
+          - openbao_static_seal_key | default('', true) | length > 0
+          - (openbao_static_seal_key | b64decode(encoding='latin-1') | length) == 32
+        fail_msg: >-
+          No usable static-seal key: OPENBAO_STATIC_SEAL_KEY is unset and no node
+          carries an existing {{ openbao_env_file }} with one, or the key is not a
+          base64 32-byte value. Rendering would seal every node on its next restart.
+        quiet: true
+      no_log: true
 
-- name: Render OpenBao static-seal EnvironmentFile
-  ansible.builtin.template:
-    src: openbao.env.j2
-    dest: "{{ openbao_env_file }}"
-    owner: root
-    group: "{{ openbao_group }}"
-    mode: "0600"
-  no_log: true
-  notify: Restart openbao
+    - name: Render OpenBao static-seal EnvironmentFile
+      ansible.builtin.template:
+        src: openbao.env.j2
+        dest: "{{ openbao_env_file }}"
+        owner: root
+        group: "{{ openbao_group }}"
+        mode: "0600"
+      no_log: true
+      notify: Restart openbao
 
-- name: Install OpenBao systemd unit
-  ansible.builtin.template:
-    src: openbao.service.j2
-    dest: /etc/systemd/system/openbao.service
-    owner: root
-    group: root
-    mode: "0644"
-  notify: Restart openbao
+    - name: Install OpenBao systemd unit
+      ansible.builtin.template:
+        src: openbao.service.j2
+        dest: /etc/systemd/system/openbao.service
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Restart openbao
 
-# --- Phase 7: enable + start -------------------------------------------------
-# Skipped under Docker so the role can be molecule-tested in containers without
-# a functional systemd init; the init/bootstrap phase is likewise gated.
-- name: Enable and start OpenBao
-  ansible.builtin.systemd:
-    name: openbao
-    state: "{{ openbao_service_state }}"
-    enabled: "{{ openbao_service_enabled }}"
-    daemon_reload: true
-  when: ansible_virtualization_type | default('') != 'docker'
+    # --- Phase 7: enable + start -------------------------------------------------
+    # Skipped under Docker so the role can be molecule-tested in containers without
+    # a functional systemd init; the init/bootstrap phase is likewise gated.
+    - name: Enable and start OpenBao
+      ansible.builtin.systemd:
+        name: openbao
+        state: "{{ openbao_service_state }}"
+        enabled: "{{ openbao_service_enabled }}"
+        daemon_reload: true
+      when: ansible_virtualization_type | default('') != 'docker'
 
-# Flush so the restart handler fires before init.yml probes the live socket.
-- name: Apply any pending OpenBao restart before bootstrap
-  ansible.builtin.meta: flush_handlers
+    # Flush so the restart handler fires before init.yml probes the live socket.
+    - name: Apply any pending OpenBao restart before bootstrap
+      ansible.builtin.meta: flush_handlers
 
-# --- Phase 8: wait for the API ----------------------------------------------
-# A sealed-but-up OpenBao still answers /v1/sys/health with 200/429/501/503.
-# With static-key auto-unseal a joined node reaches 200 (initialized+unsealed)
-# or 429 (standby); a fresh node returns 501 (not initialized). Any of those
-# means the listener is accepting connections, which is all we need before
-# init.yml runs (on the bootstrap host only).
-- name: Wait for the OpenBao listener to accept connections
-  ansible.builtin.uri:
-    url: "{{ openbao_api_addr }}/v1/sys/health"
-    method: GET
-    status_code: [200, 429, 472, 473, 501, 503]
-  register: openbao_health
-  until: openbao_health.status is defined
-  retries: 10
-  delay: 3
-  changed_when: false
-  when: ansible_virtualization_type | default('') != 'docker'
+    # --- Phase 8: wait for the API ----------------------------------------------
+    # A sealed-but-up OpenBao still answers /v1/sys/health with 200/429/501/503.
+    # With static-key auto-unseal a joined node reaches 200 (initialized+unsealed)
+    # or 429 (standby); a fresh node returns 501 (not initialized). Any of those
+    # means the listener is accepting connections, which is all we need before
+    # init.yml runs (on the bootstrap host only).
+    - name: Wait for the OpenBao listener to accept connections
+      ansible.builtin.uri:
+        url: "{{ openbao_api_addr }}/v1/sys/health"
+        method: GET
+        status_code: [200, 429, 472, 473, 501, 503]
+      register: openbao_health
+      until: openbao_health.status is defined
+      retries: 10
+      delay: 3
+      changed_when: false
+      when: ansible_virtualization_type | default('') != 'docker'
 
 # --- Phase 9: bootstrap (idempotent, bootstrap host only) -------------------
 # Only the bootstrap host runs init/provisioning. The other Raft peers join the
@@ -150,7 +161,9 @@
 #
 # Only the first fails. Firing on the second would make every targeted --limit
 # run red, and a guard with false positives is a guard someone switches off.
-# run_once keeps it to one message rather than one per host.
+# run_once keeps it to one message rather than one per host. Tagged `always`:
+# this guard has to fire regardless of which phase tag the bootstrap host
+# would otherwise be asked to run.
 - name: FAIL -- the store's provisioning host dropped out of this run, so nothing it owns will happen
   ansible.builtin.fail:
     msg: >-
@@ -162,13 +175,17 @@
       around this by pointing openbao_bootstrap_host at a different member,
       which is what the fresh-init data-loss guard exists to prevent.
   run_once: true
+  tags:
+    - always
   when:
     - ansible_virtualization_type | default('') != 'docker'
     - openbao_bootstrap_host in ansible_play_hosts_all
     - openbao_bootstrap_host not in ansible_play_hosts
 
 - name: Bootstrap OpenBao (init, KV, policies, AppRoles)
-  ansible.builtin.include_tasks: ../init.yml
+  ansible.builtin.import_tasks: ../init.yml
+  tags:
+    - openbao_bootstrap
   when:
     - ansible_virtualization_type | default('') != 'docker'
     - inventory_hostname == openbao_bootstrap_host
@@ -179,7 +196,9 @@
 # openbao_audit AI ingest listener. Skipped under Docker (no systemd/live API),
 # matching the bootstrap/snapshot phases.
 - name: Enable the audit device and ship the audit log
-  ansible.builtin.include_tasks: ../audit.yml
+  ansible.builtin.import_tasks: ../audit.yml
+  tags:
+    - openbao_audit
   when:
     - openbao_audit_enabled | bool
     - ansible_virtualization_type | default('') != 'docker'
@@ -199,7 +218,9 @@
 # a converge that would render a timer with empty credentials fails at
 # render time instead of shipping one that fails every 6h.
 - name: Deploy the automated raft snapshot timer
-  ansible.builtin.include_tasks: ../snapshot.yml
+  ansible.builtin.import_tasks: ../snapshot.yml
+  tags:
+    - openbao_snapshot
   when:
     - openbao_snapshot_enabled | bool
 
@@ -208,7 +229,9 @@
 # leadership change. No AppRole creds are required (unauthenticated sys/health
 # + sys/leader only), so unlike the snapshot timer this has no credential gate.
 - name: Deploy the voter-health telemetry timer
-  ansible.builtin.include_tasks: ../voter_health.yml
+  ansible.builtin.import_tasks: ../voter_health.yml
+  tags:
+    - openbao_voter_health
   when:
     - openbao_voter_health_enabled | bool
     - ansible_virtualization_type | default('') != 'docker'
@@ -219,15 +242,20 @@
 # itself skips any entry that is disabled or whose AppRole creds are not yet
 # present, so a first-bootstrap converge stays green.
 - name: Deploy the credential rotation timers
-  ansible.builtin.include_tasks: ../rotate.yml
+  ansible.builtin.import_tasks: ../rotate.yml
+  tags:
+    - openbao_rotate
   when: openbao_rotators | default({}) | length > 0
 
 # Retirement runs unconditionally alongside the deploy above (not gated on
 # openbao_rotators being populated) — a node that already converged with the
 # pre-table Slack-only rotator needs its old units removed regardless of
-# whether the new table currently has any active rows.
+# whether the new table currently has any active rows. Tagged the same as
+# the deploy above: both are the same "credential rotation timers" feature.
 - name: Retire the pre-table Slack-only rotation timer, if present
-  ansible.builtin.include_tasks: ../retire_slack_rotate.yml
+  ansible.builtin.import_tasks: ../retire_slack_rotate.yml
+  tags:
+    - openbao_rotate
 
 # --- Phase 14: secret-age auditor (all nodes; script leader-gates) ----------
 # Deployed on every openbao node, same shape as the snapshot timer: gated on
@@ -235,7 +263,9 @@
 # converge (creds not yet minted) stays green instead of rendering an
 # empty-cred EnvironmentFile.
 - name: Deploy the secret-age auditor timer
-  ansible.builtin.include_tasks: ../secret_age.yml
+  ansible.builtin.import_tasks: ../secret_age.yml
+  tags:
+    - openbao_secret_age
   when:
     - openbao_secret_age_enabled | bool
     - openbao_secret_age_role_id | length > 0
@@ -246,7 +276,9 @@
 # every converge until something re-renders it. A converge without the creds
 # (the execution plane's environment carries none) must still be able to.
 - name: Ship the secret-age report over rsyslog
-  ansible.builtin.include_tasks: ../secret_age_rsyslog.yml
+  ansible.builtin.import_tasks: ../secret_age_rsyslog.yml
+  tags:
+    - openbao_secret_age
   when: openbao_secret_age_enabled | bool
 
 # --- Phase 15: rsyslog validation, once, after every drop-in writer ---------
@@ -257,10 +289,14 @@
 # rsyslog.conf), and imfile hard-fails validation without one. On failure the
 # play aborts here, so the notified restart never flushes and the running
 # rsyslog keeps its previous config. Same Docker gate as audit.yml: no
-# systemd there, and no drop-in was written.
+# systemd there, and no drop-in was written. Tagged with both phases that can
+# feed it a drop-in: a run scoped to just one of them still validates.
 - name: Validate the full rsyslog configuration
   ansible.builtin.command: rsyslogd -N1
   changed_when: false
+  tags:
+    - openbao_audit
+    - openbao_secret_age
   when:
     - openbao_audit_enabled | bool or openbao_secret_age_enabled | bool
     - ansible_virtualization_type | default('') != 'docker'
@@ -271,6 +307,9 @@
     name: rsyslog
     state: started
     enabled: true
+  tags:
+    - openbao_audit
+    - openbao_secret_age
   when:
     - openbao_audit_enabled | bool or openbao_secret_age_enabled | bool
     - ansible_virtualization_type | default('') != 'docker'
