@@ -1,0 +1,39 @@
+---
+# Narrows openbao_secrets_domains down to openbao_secrets_domains_to_fetch:
+# the domains this run's hosts actually need. Factored into its own file
+# (like classify_reads.yml) so it can be exercised against a fixture
+# openbao_secrets_domains/openbao_secrets_domain_groups/
+# openbao_secrets_active_groups without a live OpenBao -- see
+# tests/openbao_secrets/verify_domain_scoping.yml.
+#
+# Caller-supplied run scoping (both default empty -- see
+# defaults/main/01-domains.yml): a domain is skipped only when the caller
+# both declared its consumer groups AND none of them are active this run. A
+# caller that never sets openbao_secrets_active_groups (every include of
+# this role except playbooks/site/00-load-and-telemetry.yml's pre-fetch
+# play) gets every declared domain, unchanged from before this became
+# configurable -- openbao_secrets_domain_groups[name] is only ever non-empty
+# when the caller opted in.
+
+# set_fact persists as a host fact for the rest of the RUN, not just this
+# role invocation -- a second include of this role later in the same
+# ansible-playbook process (e.g. a different playbook chained after this
+# one) would otherwise accumulate onto this run's leftover list instead of
+# starting fresh (the same reason fetch_domain.yml resets its own
+# per-domain merge accumulator).
+- name: Reset the domain-list accumulator for this role invocation
+  ansible.builtin.set_fact:
+    openbao_secrets_domains_to_fetch: []
+
+- name: Narrow the domain list to what this run's hosts actually need
+  ansible.builtin.set_fact:
+    openbao_secrets_domains_to_fetch: >-
+      {{ openbao_secrets_domains_to_fetch
+         + ([item] if (
+              (openbao_secrets_domain_groups[item.name] | default([])) | length == 0
+              or ((openbao_secrets_domain_groups[item.name] | default([]))
+                  | intersect(openbao_secrets_active_groups) | length > 0)
+            ) else []) }}
+  loop: "{{ openbao_secrets_domains }}"
+  loop_control:
+    label: "{{ item.name }}"

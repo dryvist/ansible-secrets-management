@@ -184,3 +184,14 @@ openbao_secrets_operator_domains:
   - monitoring
   - local-cloud
   - observability
+
+# Optional per-run scoping (see playbooks/site/00-load-and-telemetry.yml,
+# whose pre-fetch play is the only current caller that sets these): a domain
+# is skipped only when BOTH are true -- openbao_secrets_domain_groups names
+# at least one consumer group for it, AND none of those groups appear in
+# openbao_secrets_active_groups. Left at their empty defaults, every domain
+# in openbao_secrets_domains above is fetched, exactly as before this became
+# configurable -- this is the contract every OTHER caller of this role
+# relies on.
+openbao_secrets_domain_groups: {}
+openbao_secrets_active_groups: []

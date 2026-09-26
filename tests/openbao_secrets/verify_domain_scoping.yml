@@ -1,0 +1,104 @@
+---
+# Proves the per-run domain-scoping gate
+# (roles/openbao_secrets/tasks/narrow_domains.yml, wired into
+# playbooks/site/00-load-and-telemetry.yml's pre-fetch play) against the
+# production task file, with a fixture domain/group map -- no live
+# OpenBao, no real inventory needed.
+#
+# Covers, for a fixed fixture map of {apps, local-llm, media, ntfy,
+# monitoring} -> consumer groups (observability, local-cloud intentionally
+# left unmapped, matching the real map's treatment of domains with no
+# traced consumer in this repo):
+#   - a scoped run activating only ONE domain's consumer group fetches
+#     exactly that domain plus the always-fetched unmapped domains, never
+#     the others
+#   - a scoped run with NO active groups at all fetches only the
+#     always-fetched unmapped domains
+#   - an unscoped run (every consumer group active, the --limit all shape)
+#     fetches every domain -- identical to the full set fetched before this
+#     gate existed
+#
+# Run: ansible-playbook -i localhost, -c local tests/openbao_secrets/verify_domain_scoping.yml
+
+- name: Verify the openbao_secrets domain-scoping gate
+  hosts: localhost
+  gather_facts: false
+  vars:
+    _domains:
+      - name: apps
+      - name: local-llm
+      - name: media
+      - name: ntfy
+      - name: monitoring
+      - name: observability
+      - name: local-cloud
+    _domain_groups:
+      apps:
+        - zammad_group
+        - vikunja_group
+      local-llm:
+        - zammad_group
+      media:
+        - homarr_group
+        - media_group
+      ntfy:
+        - ntfy_group
+      monitoring:
+        - ntfy_group
+        - media_group
+        - status_group
+        - docker_vms
+      # observability, local-cloud: no consumer group -- always fetched.
+    _every_referenced_group:
+      - zammad_group
+      - vikunja_group
+      - homarr_group
+      - media_group
+      - ntfy_group
+      - status_group
+      - docker_vms
+  tasks:
+    - name: Exercise every domain-scoping scenario
+      ansible.builtin.include_tasks: exercise_domain_scoping.yml
+      loop:
+        - name: only zammad_group active fetches apps, local-llm, and the unmapped domains
+          domains: "{{ _domains }}"
+          domain_groups: "{{ _domain_groups }}"
+          active_groups: [zammad_group]
+          expected_names: [apps, local-llm, observability, local-cloud]
+
+        - name: only media_group active fetches media, monitoring, and the unmapped domains
+          domains: "{{ _domains }}"
+          domain_groups: "{{ _domain_groups }}"
+          active_groups: [media_group]
+          expected_names: [media, monitoring, observability, local-cloud]
+
+        - name: only ntfy_group active fetches ntfy, monitoring, and the unmapped domains
+          domains: "{{ _domains }}"
+          domain_groups: "{{ _domain_groups }}"
+          active_groups: [ntfy_group]
+          expected_names: [ntfy, monitoring, observability, local-cloud]
+
+        # status_stack (hosts: status_group) reads bao_monitoring_secrets.GATUS_EXTERNAL_TOKEN
+        # via `mandatory()` -- a run limited to status_group must still fetch
+        # the monitoring domain, or that play fails loud on an empty value.
+        - name: only status_group active fetches monitoring, and the unmapped domains
+          domains: "{{ _domains }}"
+          domain_groups: "{{ _domain_groups }}"
+          active_groups: [status_group]
+          expected_names: [monitoring, observability, local-cloud]
+
+        - name: no groups active at all fetches only the unmapped domains
+          domains: "{{ _domains }}"
+          domain_groups: "{{ _domain_groups }}"
+          active_groups: []
+          expected_names: [observability, local-cloud]
+
+        - name: every referenced group active (the --limit all shape) fetches every domain
+          domains: "{{ _domains }}"
+          domain_groups: "{{ _domain_groups }}"
+          active_groups: "{{ _every_referenced_group }}"
+          expected_names: [apps, local-llm, media, ntfy, monitoring, observability, local-cloud]
+      loop_control:
+        loop_var: domain_scoping_fixture
+        label: "{{ domain_scoping_fixture.name }}"
