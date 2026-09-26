@@ -34,7 +34,7 @@
   no_log: true
   when: openbao_do_fresh_init
 
-- name: WARN — transcribe recovery material to paper, then delete the file
+- name: WARN — copy recovery material to paper, then delete the file
   ansible.builtin.debug:
     msg: >-
       ============================================================
@@ -42,7 +42,7 @@
       {{ inventory_hostname }}. Recovery shares + the initial root
       token were written to:
         {{ openbao_recovery_file }}
-      (0600, on this controller, gitignored). TRANSCRIBE the
+      (0600, on this controller, gitignored). COPY the
       recovery shares to PAPER, store them offline split across
       custodians, then SECURELY DELETE this file. With static-key
       auto-unseal the recovery shares are the break-glass path if

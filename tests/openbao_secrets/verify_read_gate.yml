@@ -1,6 +1,6 @@
 ---
 # Proves the four cases of the openbao_secrets KV-read gate against the
-# PRODUCTION tasks, with synthetic registered results — no live OpenBao.
+# PRODUCTION tasks, with mock registered results — no live OpenBao.
 #
 #   optional 404  -> skipped, warned, play continues
 #   optional 403  -> FAILS (a wrong credential is not an absent secret)

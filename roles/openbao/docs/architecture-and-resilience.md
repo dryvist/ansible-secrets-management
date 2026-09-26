@@ -24,7 +24,7 @@
 The durability guarantee holds from this role alone:
 
 - **5 live Raft copies** spread across three Proxmox servers.
-- **Recovery shares** transcribed to paper, split across custodians.
+- **Recovery shares** copied to paper, split across custodians.
 - **The seal key** in Doppler tier-0 (kept OUT of OpenBao so a cold cluster
   can't brick).
 - The data dir (`/opt/openbao/data`) lives on a dataset covered by the host
@@ -126,7 +126,7 @@ changes stay operator-gated — this feature only produces the evidence a human
 uses to decide whether one is warranted.
 
 Each cycle ships one Splunk HEC event per voter (`index=openbao`,
-`sourcetype=openbao:voter:health`) recording:
+`sourcetype=openbao:voter:health`) with these fields:
 
 | Field | Meaning |
 | --- | --- |
@@ -191,7 +191,7 @@ This role brings OpenBao live **before** anything that reads secrets from it.
    Doppler tier-0 as `OPENBAO_STATIC_SEAL_KEY` (+ `OPENBAO_STATIC_SEAL_KEY_ID`).
 2. `tofu-proxmox` — provision the 5 OpenBao LXCs (VMID/IP/firewall).
 3. **this role** — install + init the cluster, mint the AppRoles.
-4. Operator — transcribe recovery shares to paper (+ Bitwarden); publish each
+4. Operator — copy recovery shares to paper (+ Bitwarden); publish each
    AppRole's `role_id`/`secret_id` to Doppler tier-0, consumed as ambient env
    under `doppler run` — except `public`, which needs no secret-zero at all
    (see [Secret hierarchy & RBAC](secrets-and-rbac.md#secret-hierarchy--rbac)).

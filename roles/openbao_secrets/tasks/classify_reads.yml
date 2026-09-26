@@ -1,6 +1,6 @@
 ---
 # The gate over the KV read results, factored out of fetch_domain.yml so the
-# classification can be exercised against synthetic results
+# classification can be exercised against mock results
 # (tests/openbao_secrets/verify_read_gate.yml) without a live OpenBao. Its only
 # caller is fetch_domain.yml, which registers openbao_secrets_domain_reads
 # immediately before including this.

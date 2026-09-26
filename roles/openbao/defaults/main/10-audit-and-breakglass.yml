@@ -53,7 +53,7 @@ openbao_audit_logrotate_frequency: daily
 # --- Break-glass / bootstrap output (controller-side, never committed) -------
 # init.yml writes recovery shares + root token, and each AppRole's creds, to
 # 0600 files UNDER playbook_dir ON THE CONTROLLER, then prints a LOUD warning to
-# transcribe to paper / load into the right tier-0 store and delete. These paths
+# copy to paper / load into the right tier-0 store and delete. These paths
 # are gitignored (.openbao-recovery-*.json / .openbao-approle-*.json).
 openbao_recovery_shares: 5
 openbao_recovery_threshold: 3

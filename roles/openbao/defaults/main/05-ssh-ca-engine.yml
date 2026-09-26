@@ -1,6 +1,6 @@
 ---
 # --- SSH secrets engine (signed client certificates — the SSH CA) -----------
-# Implements the ssh-certificate-authority ADR (docs-starlight): automation
+# Implements the ssh-certificate-authority ADR (internal docs source): automation
 # authenticates to estate hosts with short-TTL SSH certificates signed by an
 # OpenBao CA; humans stay on static authorized_keys (a CA outage must never
 # lock humans out). SSH is a BUILTIN engine — no plugin staging, unlike

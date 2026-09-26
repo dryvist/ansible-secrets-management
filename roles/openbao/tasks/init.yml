@@ -15,7 +15,7 @@
 #
 # Break-glass safety: recovery shares + root token (and every new AppRole's
 # role_id/secret_id) are written ONLY to 0600 files on the Ansible CONTROLLER
-# under playbook_dir, and a LOUD warning tells the operator to transcribe to
+# under playbook_dir, and a LOUD warning tells the operator to copy to
 # paper / load into the right store and delete. These values are NEVER
 # written into the repo or onto a target host, and the `bao` invocations that
 # touch them run with no_log: true.

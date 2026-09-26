@@ -23,7 +23,7 @@ expression fails.
 
 The upstream site where the false "absent" is minted, openbao_secrets' KV read
 gate, is not covered here: it lives in its own task file and is exercised end to
-end against synthetic results by tests/openbao_secrets/verify_read_gate.yml.
+end against mock results by tests/openbao_secrets/verify_read_gate.yml.
 """
 
 from pathlib import Path

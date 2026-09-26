@@ -79,7 +79,7 @@ def probe_paths(declared):
     Loaded from the task file rather than retyped. Retyping is what hid the
     original bug: the replacement was `paths=sys/policies/acl/\\1`, and in
     Python source that literal is ALREADY the unescaped two-character form, so
-    a transcribed check silently performs the unescaping step whose absence was
+    a logged check silently performs the unescaping step whose absence was
     the defect and passes while production fails.
     """
     task = _task("Ask the server which declared policies this identity may actually write")

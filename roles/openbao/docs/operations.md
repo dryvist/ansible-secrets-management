@@ -15,13 +15,13 @@ the seal key is ever lost, so they are treated as paper secrets:
   under `playbook_dir`**. Existing AppRoles' credentials are never re-emitted.
 - Every `bao` invocation that touches this material runs with `no_log: true`.
 - A **loud warning** names exactly which AppRoles were newly created and tells
-  the operator to transcribe recovery shares to paper (+ Bitwarden), publish
+  the operator to copy recovery shares to paper (+ Bitwarden), publish
   each new AppRole's creds to Doppler tier-0 (consumed as ambient env under
   `doppler run`), then **securely delete** the files.
 - Nothing secret is ever written into the repo or onto a target host.
 
 These controller files are gitignored (`.openbao-recovery-*.json` /
-`.openbao-approle-*.json`). After transcription:
+`.openbao-approle-*.json`). After copying:
 
 ```sh
 # Publish secret-zero to Doppler tier-0 (consumed as ambient env via `doppler run`).
