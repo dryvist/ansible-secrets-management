@@ -29,6 +29,14 @@
   delegate_to: localhost
   become: false
 
+# The policy-sync pair (ask capability + rewrite the reconcile policy from
+# the declared set) now runs in init/02-initialize-cluster.yml, immediately
+# after the reconcile login succeeds -- BEFORE init/07 (SSH signing roles)
+# and init/10 (AppRoles) consume a reconcile grant for a newly declared name.
+# Running it here, after those steps, was the chicken-and-egg this repo hit
+# live: a 403 in init/07 against a stale reconcile policy aborted the play
+# before this pair ever got a chance to bring that policy up to date.
+#
 # A reconcile-mode run may manage only what its OWN policy grants. That policy
 # is excluded from the set reconcile can rewrite (it cannot widen its own
 # grants), so the live policy drifts BEHIND the declared set the moment a new
@@ -45,43 +53,6 @@
 # `sys/policies/acl/1` -- a policy that does not exist, so the server answered
 # `deny` and the gate concluded the identity could write nothing. It had never
 # once asked about a real path.
-# policy-sync: bring the reconcile policy itself in step with the declared set
-# before asking what reconcile may write. Only a token carrying policy-sync
-# passes the capability check below; any other reconcile identity skips.
-- name: Ask whether this identity may sync the reconcile policy
-  ansible.builtin.command:
-    cmd: >-
-      bao write -format=json sys/capabilities-self
-      paths=sys/policies/acl/{{ openbao_reconcile_policy_name }}
-  environment:
-    BAO_ADDR: "{{ openbao_write_addr }}"
-    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
-  register: openbao_policy_sync_caps
-  changed_when: false
-  failed_when: false
-  no_log: true
-  when:
-    - openbao_bootstrap_token is defined
-    - openbao_reconcile_mode | default(false)
-
-- name: Sync the reconcile policy from the declared set (policy-sync)
-  ansible.builtin.command:
-    cmd: "bao policy write {{ openbao_reconcile_policy_name }} -"
-    stdin: "{{ lookup('template', 'openbao-reconcile-policy.hcl.j2') | trim }}"
-  environment:
-    BAO_ADDR: "{{ openbao_write_addr }}"
-    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
-  no_log: true
-  changed_when: true
-  when:
-    - openbao_bootstrap_token is defined
-    - openbao_reconcile_mode | default(false)
-    - (openbao_policy_sync_caps.rc | default(1)) == 0
-    - >-
-      'update' in ((openbao_policy_sync_caps.stdout | from_json).get('data', {})
-      | combine(openbao_policy_sync_caps.stdout | from_json))
-      .get('sys/policies/acl/' ~ openbao_reconcile_policy_name, [])
-
 - name: Ask the server which declared policies this identity may actually write
   ansible.builtin.command:
     cmd: >-

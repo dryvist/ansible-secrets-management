@@ -40,10 +40,18 @@ from ansible.template import Templar, trust_as_template
 ROOT = Path(__file__).resolve().parents[1]
 TASKS = ROOT / "roles/openbao/tasks"
 INIT_02 = TASKS / "init/02-initialize-cluster.yml"
+# openbao_write_addr itself is set in 02b (import_tasks'd from 02, split out
+# purely to keep 02 under the repo's per-file token-limit gate) -- searched
+# alongside 02 so this test still finds it wherever it lives.
+INIT_02B = TASKS / "init/02b-policy-sync.yml"
 DEFAULTS_00 = ROOT / "roles/openbao/defaults/main/00-install-and-node.yml"
 
 # Node-local by design: they talk to THIS node before/while a leader exists.
-NODE_LOCAL = {"01-preflight-and-cluster-probe.yml", "02-initialize-cluster.yml"}
+NODE_LOCAL = {
+    "01-preflight-and-cluster-probe.yml",
+    "02-initialize-cluster.yml",
+    "02b-policy-sync.yml",
+}
 
 SELF_ADDR = "http://192.0.2.10:8200"
 LEADER_ADDR = "http://192.0.2.11:8200"
@@ -56,12 +64,13 @@ def _render(expr, variables):
 
 
 def _set_fact_expr(name):
-    tasks = yaml.safe_load(INIT_02.read_text(encoding="utf-8"))
-    for task in tasks:
-        fact = task.get("ansible.builtin.set_fact") or {}
-        if name in fact:
-            return fact[name]
-    raise AssertionError(f"init/02 no longer sets {name}")
+    for path in (INIT_02, INIT_02B):
+        tasks = yaml.safe_load(path.read_text(encoding="utf-8"))
+        for task in tasks:
+            fact = task.get("ansible.builtin.set_fact") or {}
+            if name in fact:
+                return fact[name]
+    raise AssertionError(f"neither init/02 nor init/02b sets {name}")
 
 
 def _write_addr_expr():
@@ -69,8 +78,9 @@ def _write_addr_expr():
         return _set_fact_expr("openbao_write_addr")
     except AssertionError:
         raise AssertionError(
-            "init/02 no longer sets openbao_write_addr -- provisioning writes are "
-            "back on whichever node the bootstrap host happens to be."
+            "init/02 (or its 02b split) no longer sets openbao_write_addr -- "
+            "provisioning writes are back on whichever node the bootstrap "
+            "host happens to be."
         ) from None
 
 
