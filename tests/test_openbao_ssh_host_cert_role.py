@@ -300,7 +300,7 @@ def _render_sign_leaf(ssh_role_name, host_cert_signer_roles):
     }
     templar = Templar(loader=DataLoader())
     templar.available_variables = {
-        "openbao_manageable_policies": [item],
+        "openbao_reachable_policies": [item],
         "openbao_ssh_mount": "ssh-client-ca",
         "openbao_ssh_host_role_names": ["host-cert"],
         "openbao_ssh_host_cert_signer_roles": host_cert_signer_roles,

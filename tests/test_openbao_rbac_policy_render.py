@@ -3,7 +3,7 @@ Jinja variable in ANY policy template that reads `item`, not only the
 Terrakube workspace one.
 
 `_openbao_rendered_policy_pairs` builds its dict via a Jinja `for item in
-openbao_manageable_policies` loop declared inline in a `vars:` expression.
+openbao_reachable_policies` loop declared inline in a `vars:` expression.
 That `item` is local to this expression's own render pass -- it is never
 part of the task's vars, which is the context `lookup('template', ...)`
 hands to the sub-template it renders. Any template referencing `item`
@@ -48,7 +48,7 @@ def render(policies):
     pairs_expr = task["vars"]["_openbao_rendered_policy_pairs"]
     templar = Templar(loader=DataLoader())
     templar.available_variables = {
-        "openbao_manageable_policies": policies,
+        "openbao_reachable_policies": policies,
         "openbao_kv_mount": "secret",
         "ansible_managed": "Ansible managed",
     }

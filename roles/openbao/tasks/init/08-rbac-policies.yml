@@ -157,33 +157,34 @@
       (openbao_policy_caps | default({}) | length)
       < (openbao_manageable_policies | length)
 
-- name: FAIL -- the reconcile identity cannot manage every declared policy
-  vars:
-    _caps: "{{ openbao_policy_caps | default({}) }}"
-    _unwritable: >-
+- name: Resolve which declared policies this identity may actually write
+  ansible.builtin.set_fact:
+    openbao_ungranted_policy_names: >-
       {{ openbao_manageable_policies | map(attribute='name') | reject('in',
          (_caps | dict2items
                 | selectattr('value', 'contains', 'update')
                 | map(attribute='key')
                 | map('regex_replace', '^sys/policies/acl/', '')
                 | list)) | list | sort }}
-  ansible.builtin.fail:
-    msg: >-
-      The openbao-reconcile identity is declared as managing
-      {{ openbao_manageable_policies | length }} policies but the live
-      openbao-reconcile policy grants update on none of these
-      {{ _unwritable | length }}: {{ _unwritable | join(', ') }}.
-      Reconcile CANNOT widen its own grants -- openbao-reconcile is in
-      openbao_reconcile_excluded_policies by design -- so this only clears with
-      one operator-token run (OPENBAO_PROVISIONING_TOKEN), which rewrites the
-      reconcile policy from the current declared set. Refusing to continue:
-      writing only the reachable subset would leave the rest declared but never
-      written, with the converge still reporting success.
+  vars:
+    _caps: "{{ openbao_policy_caps | default({}) }}"
   when:
     - openbao_bootstrap_token is defined
     - openbao_reconcile_mode | default(false)
     - (openbao_policy_capabilities.rc | default(1)) == 0
-    - _unwritable | length > 0
+
+# Everything that is NOT ungranted, so the render/write steps below act on
+# only what this identity may actually write -- one ungranted name (e.g. a
+# newly declared policy the live openbao-reconcile grant hasn't caught up
+# with yet) no longer blocks the content update of every OTHER declared
+# policy. Derived from the same ungranted list above, never a second filter.
+- name: Resolve the RBAC policies this identity may actually write
+  ansible.builtin.set_fact:
+    openbao_reachable_policies: >-
+      {{ openbao_manageable_policies
+         | rejectattr('name', 'in', openbao_ungranted_policy_names | default([]))
+         | list }}
+  when: openbao_bootstrap_token is defined
 
 # Rendered on the CONTROLLER, not the target. The previous shape wrote each
 # policy to the guest with `template`, read it back with `slurp`, and deleted it
@@ -215,7 +216,7 @@
   vars:
     _openbao_rendered_policy_pairs: >-
       {%- set _pairs = [] -%}
-      {%- for item in openbao_manageable_policies -%}
+      {%- for item in openbao_reachable_policies -%}
       {%- set _rendered = lookup('template', item.template, template_vars={'item': item}) | trim -%}
       {%- set _ = _pairs.append({'key': item.name, 'value': _rendered}) -%}
       {%- endfor -%}
@@ -264,9 +265,9 @@
       permission set, workspace list, or similar, often built from an env
       var) resolved empty at render time. Fix the input, or if the policy is
       genuinely meant to grant nothing, remove it from
-      openbao_manageable_policies instead of writing an empty ACL.
+      openbao_reachable_policies instead of writing an empty ACL.
     success_msg: >-
-      All {{ openbao_manageable_policies | length }} scheduled RBAC policies
+      All {{ openbao_reachable_policies | length }} scheduled RBAC policies
       rendered with at least one path stanza.
   vars:
     _openbao_rendered: "{{ openbao_rendered_policy_map | default({}) }}"
@@ -275,11 +276,35 @@
          | selectattr('value', 'search', 'path\s+"')
          | map(attribute='key') | list }}
     _openbao_empty_rendered_policies: >-
-      {{ openbao_manageable_policies | map(attribute='name') | list
+      {{ openbao_reachable_policies | map(attribute='name') | list
          | reject('in', _openbao_non_empty_names) | list | sort }}
   when: openbao_bootstrap_token is defined
 
 - name: Read the stored RBAC policies and write what differs
   ansible.builtin.import_tasks: 08b-rbac-policy-writes.yml
+
+# The capability probe earlier in this file found every declared policy this
+# identity may write; the render/write steps just above acted on exactly that
+# reachable subset. Only now -- after the reachable content update has
+# happened -- does an ungranted name fail the run: writing the reachable
+# subset must never be silently skipped in favor of a hard stop that leaves
+# it, and everything after it, unwritten.
+- name: FAIL -- the reconcile identity cannot manage every declared policy
+  ansible.builtin.fail:
+    msg: >-
+      The openbao-reconcile identity is declared as managing
+      {{ openbao_manageable_policies | length }} policies but the live
+      openbao-reconcile policy grants update on none of these
+      {{ openbao_ungranted_policy_names | length }}:
+      {{ openbao_ungranted_policy_names | join(', ') }}. Every other declared
+      policy was written above. Reconcile CANNOT widen its own grants --
+      openbao-reconcile is in openbao_reconcile_excluded_policies by design --
+      so this only clears with one operator-token run
+      (OPENBAO_PROVISIONING_TOKEN), which rewrites the reconcile policy from
+      the current declared set.
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_reconcile_mode | default(false)
+    - openbao_ungranted_policy_names | default([]) | length > 0
 
 # --- AppRole auth method (add-if-missing) -----------------------------------

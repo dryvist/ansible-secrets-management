@@ -1,11 +1,15 @@
 """Contract for the reconcile-mode capability gate in 08-rbac-policies.yml.
 
 The gate asks the server what the reconcile identity may actually write, then
-refuses the converge if any declared policy is unreachable. It is a HARD fail,
-so a wrong answer blocks every routine converge -- which is exactly what
-happened: it read only the `data` key of the sys/capabilities-self response,
-got an empty dict against a live policy that granted create/read/update on
-every path asked about, and reported "grants update on none of these 56".
+splits the declared set into a REACHABLE subset (written) and an UNGRANTED
+subset (named in a loud failure raised only after the reachable subset has
+already been written). Previously this was one hard fail before any write
+ran: one newly declared policy outside the live grant blocked the content
+update of every OTHER declared policy, including ones the identity has
+always been able to write. It also once read only the `data` key of the
+sys/capabilities-self response, got an empty dict against a live policy that
+granted create/read/update on every path asked about, and reported "grants
+update on none of these 56".
 
 These render the REAL Jinja expressions out of the task file (never a
 reimplementation of them) against each response shape.
@@ -61,16 +65,63 @@ def resolve_caps(stdout):
 
 
 def unwritable(caps, declared):
-    task = _task("FAIL -- the reconcile identity cannot manage every declared policy")
+    """Render the task file's OWN `openbao_ungranted_policy_names` expression."""
+    task = _task("Resolve which declared policies this identity may actually write")
     templar = Templar(loader=DataLoader())
     templar.available_variables = {
         "openbao_policy_caps": caps,
         "openbao_manageable_policies": [{"name": n} for n in declared],
         # the task's own sibling vars, as Ansible would resolve them
         **{k: trust_as_template(v) if isinstance(v, str) else v
-           for k, v in task["vars"].items()},
+           for k, v in task.get("vars", {}).items()},
     }
-    return templar.template(trust_as_template(task["vars"]["_unwritable"]))
+    return templar.template(
+        trust_as_template(task["ansible.builtin.set_fact"]["openbao_ungranted_policy_names"])
+    )
+
+
+def reachable(declared, ungranted):
+    """Render the task file's OWN `openbao_reachable_policies` expression."""
+    task = _task("Resolve the RBAC policies this identity may actually write")
+    templar = Templar(loader=DataLoader())
+    templar.available_variables = {
+        "openbao_manageable_policies": [{"name": n} for n in declared],
+        "openbao_ungranted_policy_names": ungranted,
+    }
+    rendered = templar.template(
+        trust_as_template(task["ansible.builtin.set_fact"]["openbao_reachable_policies"])
+    )
+    return [p["name"] for p in rendered]
+
+
+FINAL_FAIL_TASK = "FAIL -- the reconcile identity cannot manage every declared policy"
+
+
+def final_fail_fires(ungranted, reconcile_mode=True, bootstrap_token="s.test"):
+    """Render the task file's OWN `when` for the post-write ungranted-name fail."""
+    task = _task(FINAL_FAIL_TASK)
+    templar = Templar(loader=DataLoader())
+    templar.available_variables = {
+        "openbao_ungranted_policy_names": ungranted,
+        "openbao_reconcile_mode": reconcile_mode,
+        "openbao_bootstrap_token": bootstrap_token,
+    }
+    return all(
+        templar.template(trust_as_template("{{ " + cond + " }}"))
+        for cond in task["when"]
+    )
+
+
+def final_fail_msg(declared, ungranted):
+    task = _task(FINAL_FAIL_TASK)
+    templar = Templar(loader=DataLoader())
+    templar.available_variables = {
+        "openbao_manageable_policies": [{"name": n} for n in declared],
+        "openbao_ungranted_policy_names": ungranted,
+    }
+    return templar.template(
+        trust_as_template(task["ansible.builtin.fail"]["msg"])
+    )
 
 
 def probe_paths(declared):
@@ -173,6 +224,43 @@ class UnwritableVerdict(unittest.TestCase):
         partial = {"sys/policies/acl/hermes": ["read"]}
         caps = resolve_caps(json.dumps(dict(ENVELOPE, **partial)))
         self.assertEqual(unwritable(caps, ["hermes"]), ["hermes"])
+
+
+class ReachableWritesSurviveAnUngrantedName(unittest.TestCase):
+    """One newly declared, ungranted policy (e.g. "uicheck") must not block
+    the content update of every OTHER declared policy (e.g. "apps"). Renders
+    the REAL `openbao_reachable_policies` and final-fail `when`/`msg` from
+    the task file -- never a reimplementation.
+    """
+
+    def test_a_reachable_policies_written_when_one_name_is_ungranted(self):
+        # (a) apps stays reachable even though uicheck is ungranted.
+        caps = resolve_caps(json.dumps(dict(ENVELOPE, **PATHS)))  # hermes/apps/media only
+        ungranted = unwritable(caps, NAMES + ["uicheck"])
+        self.assertEqual(ungranted, ["uicheck"])
+        self.assertEqual(sorted(reachable(NAMES + ["uicheck"], ungranted)), sorted(NAMES))
+
+    def test_b_the_run_still_fails_and_names_the_ungranted_policy(self):
+        # (b) writing the reachable subset never suppresses the loud failure.
+        ungranted = ["uicheck"]
+        self.assertTrue(final_fail_fires(ungranted))
+        msg = final_fail_msg(NAMES + ["uicheck"], ungranted)
+        self.assertIn("uicheck", msg)
+        self.assertIn("Every other declared policy was written above", msg)
+
+    def test_c_with_everything_granted_nothing_changes(self):
+        # (c) no ungranted names -> reachable is the full declared set, the
+        # final fail's `when` does not fire, nothing is refused.
+        caps = resolve_caps(json.dumps(dict(ENVELOPE, **PATHS)))
+        ungranted = unwritable(caps, NAMES)
+        self.assertEqual(ungranted, [])
+        self.assertEqual(sorted(reachable(NAMES, ungranted)), sorted(NAMES))
+        self.assertFalse(final_fail_fires(ungranted))
+
+    def test_the_final_fail_never_fires_outside_reconcile_mode(self):
+        # A provisioning-token run has no exclusions and no ungranted names
+        # by construction; guard against the `when` firing on a stray input.
+        self.assertFalse(final_fail_fires(["uicheck"], reconcile_mode=False))
 
 
 class ProbeAsksAboutRealPaths(unittest.TestCase):
