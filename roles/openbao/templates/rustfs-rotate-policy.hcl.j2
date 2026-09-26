@@ -1,0 +1,27 @@
+{{ ansible_managed | comment }}
+# OpenBao policy for the rustfs-rotate AppRole — INERT (no standing
+# secret_id; see the AppRole row in defaults/main/07e-rotation-approles.yml),
+# same human-gated shape as ai-rotate/apps-rotate: a human wraps a
+# single-use secret_id, `rotate-key.yml` unwraps it, and the resulting token
+# lives exactly one rotation run. Scoped to secret/rustfs/* — the per-bucket
+# RustFS object-storage ro/rw key pairs (roles/object_storage), one KV
+# secret per bucket per role at secret/rustfs/<bucket>/<ro|rw> (the org's
+# secret-path convention). read/update: a rotator reads the current entry
+# before its CAS write and reads it back afterward, so read is load-bearing,
+# not incidental. No `create` — rotation never creates a path, it only
+# replaces a field (AWS_SECRET_ACCESS_KEY) on one the object_storage role's
+# generate-if-absent step already created.
+#
+# Metadata `patch` is constrained to `custom_metadata` only, same reasoning
+# as apps-rotate: unconstrained metadata PATCH also accepts max_versions/
+# cas_required/delete_version_after, any of which combined with `update` on
+# data/ can destroy version history with no `delete` capability ever granted.
+
+path "{{ openbao_kv_mount }}/data/rustfs/*" {
+  capabilities = ["read", "update"]
+}
+
+path "{{ openbao_kv_mount }}/metadata/rustfs/*" {
+  capabilities       = ["read", "patch"]
+  allowed_parameters = { "custom_metadata" = [] }
+}

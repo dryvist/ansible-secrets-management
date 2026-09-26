@@ -8,34 +8,28 @@
 # `aws`), both enabled by default. A GitHub token grant is ALWAYS the existing
 # `github-mint` capability policy attached via token_policies — never a new
 # template, never a secret/github/* path. AWS is always aws/sts/<role>.
-openbao_base_policies:
-  - name: terrakube-iac-platform
-    template: terrakube-workspace-policy.hcl.j2
-    workspace: "{{ openbao_terrakube_workspaces[0] }}"
-  - name: terrakube-tofu-github
-    template: terrakube-workspace-policy.hcl.j2
-    workspace: "{{ openbao_terrakube_workspaces[1] }}"
-  - name: terrakube-tofu-unifi
-    template: terrakube-workspace-policy.hcl.j2
-    workspace: "{{ openbao_terrakube_workspaces[2] }}"
-  - name: terrakube-tofu-aws-production
-    template: terrakube-workspace-policy.hcl.j2
-    workspace: "{{ openbao_terrakube_workspaces[3] }}"
-  - name: terrakube-tofu-runs-on
-    template: terrakube-workspace-policy.hcl.j2
-    workspace: "{{ openbao_terrakube_workspaces[4] }}"
-  - name: terrakube-tofu-proxmox
-    template: terrakube-workspace-policy.hcl.j2
-    workspace: "{{ openbao_terrakube_workspaces[5] }}"
-  - name: terrakube-tofu-proxmox-aws-infra
-    template: terrakube-workspace-policy.hcl.j2
-    workspace: "{{ openbao_terrakube_workspaces[6] }}"
-  - name: terrakube-tofu-proxmox-servarr-config
-    template: terrakube-workspace-policy.hcl.j2
-    workspace: "{{ openbao_terrakube_workspaces[7] }}"
-  - name: terrakube-iac-platform-semaphore
-    template: terrakube-workspace-policy.hcl.j2
-    workspace: "{{ openbao_terrakube_workspaces[8] }}"
+# Terrakube workspace policies: name = "terrakube-<workspace.name>", one row
+# per openbao_terrakube_workspaces entry, same order. This used to be nine
+# hand-written rows each referencing openbao_terrakube_workspaces[N] by
+# position -- nothing structural kept a row's name in step with the index it
+# pointed at, so inserting a workspace anywhere but the end (or a copy-paste
+# index typo) would silently grant that workspace's KV paths to the WRONG job
+# identity, passing review and converging clean. (This exact invariant is
+# also asserted defensively in tasks/init/08-rbac-policies.yml; deriving here
+# makes the drift structurally impossible instead of only detected after the
+# fact.) Every one of the nine names below is unchanged by this derivation --
+# proven in tests/test_terrakube_base_policies_derivation.py.
+openbao_terrakube_base_policies: >-
+  {%- set _entries = [] -%}
+  {%- for ws in openbao_terrakube_workspaces -%}
+  {%- set _ = _entries.append({'name': 'terrakube-' ~ ws.name,
+      'template': 'terrakube-workspace-policy.hcl.j2', 'workspace': ws}) -%}
+  {%- endfor -%}
+  {{ _entries }}
+
+openbao_base_policies: "{{ openbao_terrakube_base_policies + openbao_base_policies_static }}"
+
+openbao_base_policies_static:
   - name: "{{ openbao_terraform_apply_policy_name }}"
     template: terraform-apply-policy.hcl.j2
   - name: "{{ openbao_flow_lock_policy_name }}"
@@ -158,6 +152,8 @@ openbao_base_policies:
     template: ai-rotate-policy.hcl.j2
   - name: "{{ openbao_apps_rotate_policy_name }}"
     template: apps-rotate-policy.hcl.j2
+  - name: "{{ openbao_rustfs_rotate_policy_name }}"
+    template: rustfs-rotate-policy.hcl.j2
   - name: "{{ openbao_approle_secret_id_rotate_policy_name }}"
     template: approle-secret-id-rotate-policy.hcl.j2
 # Full policy set = the static base above + the base read-/write-/github-mint

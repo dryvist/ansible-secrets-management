@@ -41,6 +41,16 @@ openbao_rotation_approles:
     manage_secret_id: false
     secret_id_ttl: "{{ openbao_ai_elevated_secret_id_ttl }}"
     secret_id_num_uses: 1
+  # rustfs-rotate: same human-gated shape as ai-rotate/apps-rotate, scoped to
+  # secret/rustfs/* — the per-bucket RustFS object-storage ro/rw key pairs
+  # (roles/object_storage). Rotates one bucket's role (AWS_SECRET_ACCESS_KEY)
+  # at a time via playbooks/rotate-key.yml -e rotate_domain=rustfs
+  # -e rotate_path=rustfs/<bucket>/<ro|rw> -e rotate_field=AWS_SECRET_ACCESS_KEY.
+  - name: "{{ openbao_rustfs_rotate_approle_name }}"
+    policy: "{{ openbao_rustfs_rotate_policy_name }}"
+    manage_secret_id: false
+    secret_id_ttl: "{{ openbao_ai_elevated_secret_id_ttl }}"
+    secret_id_num_uses: 1
   # approle-secret-id-rotate: HUMAN-GATED identity for
   # playbooks/openbao-rotate-approles.yml (openbao_secrets domain AppRole
   # secret_id rotation). Same shape as ai-rotate/apps-rotate -- no standing
