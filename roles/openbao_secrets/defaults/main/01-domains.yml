@@ -96,7 +96,7 @@ openbao_secrets_domains:
       # does not invalidate them, it makes them permanently unreadable. All
       # fields are app-namespaced for the flat merge. The API keys of the
       # services Homarr integrates WITH are not here: they stay in the media
-      # domain, owned by ansible-servarr.
+      # domain, owned by the media-stack automation repo.
       - apps/homarr
       # Authelia: the OIDC client secrets it shares with its relying parties
       # (authelia_oidc_{homarr,langfuse}_client_secret). The secret's home is
@@ -121,6 +121,13 @@ openbao_secrets_domains:
       # path exists only once the generation converge has seeded it, so a
       # first-run 404 must not fail the whole apps prefetch.
       - path: apps/cribl-stream
+        optional: true
+      # unpoller's read-only UniFi controller account password
+      # (unpoller_controller_password, generated at source by
+      # openbao_generated_app_secrets.unpoller). Consumed by
+      # inventory/group_vars/cribl_stream_group.yml. optional: true — the
+      # path exists only once the generation converge has seeded it.
+      - path: apps/unpoller
         optional: true
       # ARC pilot's dedicated GitHub App id/installation_id/private_key
       # (github_runner_arc_*, PROMOTED at source by
