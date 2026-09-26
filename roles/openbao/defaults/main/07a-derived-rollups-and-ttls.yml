@@ -39,17 +39,32 @@ openbao_ssh_host_role_names: >-
      | selectattr('0', 'equalto', 'host') | map(attribute='1') | list }}
 openbao_ssh_user_roles: >-
   {{ openbao_ssh_roles | rejectattr('name', 'in', openbao_ssh_host_role_names) | list }}
-# ssh-sign-<role> capability leaves: one per SSH signing role, granting ONLY
-# the sign endpoint of that role. These are DELIBERATE enumerated grants
-# outside secret/ — the kv-leaf self-escalation proof still holds for the KV
-# rollups (read-all / read-write-all stay pure KV); an ssh-sign leaf adds
-# exactly one non-KV path (<mount>/sign/<role>) and nothing else, asserted
-# fail-closed in init.yml before rendering.
+# ssh-sign-<role> capability leaves: one per USER-cert SSH signing role,
+# granting ONLY the sign endpoint of that role. These are DELIBERATE
+# enumerated grants outside secret/ — the kv-leaf self-escalation proof still
+# holds for the KV rollups (read-all / read-write-all stay pure KV); an
+# ssh-sign leaf adds exactly one non-KV path (<mount>/sign/<role>) and nothing
+# else, asserted fail-closed in init.yml before rendering.
+#
+# Host-cert roles (openbao_ssh_host_role_names) get NO leaf of their own here
+# — openbao_ssh_user_roles already excludes them. A standalone
+# ssh-sign-host-cert policy would be a brand-new policy NAME, which only a
+# privileged provisioning run may write; instead the template below folds an
+# update-only host-cert grant directly into the existing signer roles named
+# in openbao_ssh_host_cert_signer_roles, whose CONTENT the reconcile identity
+# may already rewrite.
 openbao_ssh_sign_policies: >-
-  {{ openbao_ssh_roles | map(attribute='name') | map('regex_replace', '^(.+)$',
+  {{ openbao_ssh_user_roles | map(attribute='name') | map('regex_replace', '^(.+)$',
        '{"name": "ssh-sign-\1", "template": "ssh-sign-policy.hcl.j2", "ssh_role": "\1"}')
      | map('from_json') | list
      if openbao_ssh_engine_enabled else [] }}
+# The two unattended user-cert roles whose sign policy also carries an
+# update-only grant on every host-cert role's sign endpoint (issuance runs
+# unattended in Semaphore). One list, read by ssh-sign-policy.hcl.j2 — never a
+# literal 'ssh-sign-host-cert' name or a duplicated per-role grant.
+openbao_ssh_host_cert_signer_roles:
+  - automation-ansible
+  - automation-semaphore
 # Exact provider-key leaves. The provider list is the sole inventory; names,
 # render rows, and AppRole attachments derive from it.
 openbao_ai_api_key_policy_names: >-

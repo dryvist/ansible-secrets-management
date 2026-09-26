@@ -92,11 +92,37 @@
       - "'ssh-client-ca/sign/automation-ai' in sign_grants"
       - "'ssh-client-ca/sign/automation-ansible' in sign_grants"
       - "'ssh-client-ca/sign/ci-runner' in sign_grants"
+      # host-cert has no policy of its own; the update-only grant is folded
+      # into the two unattended user-cert leaves below (still present in the
+      # combined render, just not as a standalone leaf).
       - "'ssh-client-ca/sign/host-cert' in sign_grants"
       - "'create\", \"update' in sign_grants"
     fail_msg: >-
       An ssh-sign leaf escaped the enumerated sign-endpoint allowlist —
       it could reconfigure the CA or cross into KV/control-plane paths.
+
+- name: Assert host-cert has no policy of its own and its grant is folded into the automation signers
+  vars:
+    leaf_by_name: >-
+      {{ dict(bao_ssh_sign_policy_reads.results
+              | map(attribute='item')
+              | map(attribute='name')
+              | zip(bao_ssh_sign_policy_reads.results
+                    | map(attribute='content') | map('b64decode'))) }}
+  ansible.builtin.assert:
+    that:
+      - "'ssh-sign-host-cert' not in (openbao_ssh_sign_policies | map(attribute='name') | list)"
+      - "'ssh-client-ca/sign/host-cert' in leaf_by_name['ssh-sign-automation-ansible']"
+      - "'ssh-client-ca/sign/host-cert' in leaf_by_name['ssh-sign-automation-semaphore']"
+      # ai's own leaf never picks up the host-cert grant — only the two
+      # roles listed in openbao_ssh_host_cert_signer_roles do.
+      - "'ssh-client-ca/sign/host-cert' not in leaf_by_name['ssh-sign-automation-ai']"
+      - "'ssh-client-ca/sign/host-cert' not in leaf_by_name['ssh-sign-ci-runner']"
+    fail_msg: >-
+      host-cert must never get a standalone ssh-sign-host-cert policy (a new
+      policy name needs a privileged provisioning run); its grant must be
+      folded into ssh-sign-automation-ansible and ssh-sign-automation-semaphore
+      only.
 
 - name: Assert actor attachments follow the SSH signing security decisions
   vars:
@@ -115,20 +141,22 @@
       - "'ssh-sign-host-cert' not in elevated_role.token_policies"
       # ai-readonly signs nothing.
       - readonly_role.token_policies | select('match', '^ssh-sign-') | list | length == 0
-      # ansible-converge and the unattended execution plane sign their own
-      # user-cert role PLUS host-cert (issuance runs unattended in Semaphore)
-      # — never any other role's user-cert.
+      # ansible-converge and the unattended execution plane sign only their
+      # own user-cert role — never any other role's user-cert, and never a
+      # standalone ssh-sign-host-cert (that grant is folded into
+      # ssh-sign-automation-ansible / -semaphore's own CONTENT instead; see
+      # the leaf_by_name assertion above).
       - "'ssh-sign-automation-ansible' in converge_role.token_policies"
-      - "'ssh-sign-host-cert' in converge_role.token_policies"
+      - "'ssh-sign-host-cert' not in converge_role.token_policies"
       - >-
         converge_role.token_policies | select('match', '^ssh-sign-')
-        | reject('in', ['ssh-sign-automation-ansible', 'ssh-sign-host-cert'])
+        | reject('equalto', 'ssh-sign-automation-ansible')
         | list | length == 0
       - "'ssh-sign-automation-semaphore' in semaphore_role.token_policies"
-      - "'ssh-sign-host-cert' in semaphore_role.token_policies"
+      - "'ssh-sign-host-cert' not in semaphore_role.token_policies"
       - >-
         semaphore_role.token_policies | select('match', '^ssh-sign-')
-        | reject('in', ['ssh-sign-automation-semaphore', 'ssh-sign-host-cert'])
+        | reject('equalto', 'ssh-sign-automation-semaphore')
         | list | length == 0
       # every ai-apply-<svc> signs ONLY automation-ai.
       - >-

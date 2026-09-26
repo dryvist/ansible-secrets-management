@@ -19,7 +19,7 @@ openbao_base_approles_core:
   - name: "{{ openbao_ansible_converge_approle_name }}"
     token_policies: >-
       {{ [openbao_ansible_converge_policy_name, openbao_config_write_policy_name]
-         + (['ssh-sign-automation-ansible', 'ssh-sign-host-cert'] if openbao_ssh_engine_enabled else []) }}
+         + (['ssh-sign-automation-ansible'] if openbao_ssh_engine_enabled else []) }}
   # The unattended execution plane. Attaches ansible-converge (the shared
   # consumer inventory) plus its own delta, and signs SSH certificates under
   # ssh-sign-automation-semaphore rather than ...-ansible, so the principal on
@@ -46,7 +46,7 @@ openbao_base_approles_core:
     token_policies: >-
       {{ [openbao_ansible_converge_policy_name, openbao_semaphore_policy_name,
           openbao_reconcile_policy_name]
-         + (['ssh-sign-automation-semaphore', 'ssh-sign-host-cert'] if openbao_ssh_engine_enabled else []) }}
+         + (['ssh-sign-automation-semaphore'] if openbao_ssh_engine_enabled else []) }}
   # These six are the converge-domain prefetch identities (same
   # openbao_secrets_domains loop noted at their machine_or_workstation CIDR
   # entries in 08b). The 24h default secret_id_ttl once meant each pair went
