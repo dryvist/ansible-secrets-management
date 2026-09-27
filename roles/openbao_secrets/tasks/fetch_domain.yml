@@ -146,7 +146,7 @@
           failed_when: false
 
         # Classify the read results. Factored into its own file so the gate can be
-        # exercised against synthetic results without a live OpenBao.
+        # exercised against mock results without a live OpenBao.
         - name: Classify the KV read results for {{ openbao_domain.name }}
           ansible.builtin.include_tasks: classify_reads.yml
 

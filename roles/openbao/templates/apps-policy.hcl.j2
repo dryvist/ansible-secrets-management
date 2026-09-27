@@ -14,3 +14,16 @@ path "{{ openbao_kv_mount }}/metadata/apps/{{ app }}" {
   capabilities = ["read", "list"]
 }
 {% endfor %}
+# Exact-path exception (UniFi controller connection): the openbao_secrets
+# "apps" domain also fetches secret/infrastructure/unifi (unpoller,
+# unifi_metrics) — see roles/openbao_secrets/defaults/main/01-domains.yml.
+# Read-only, single path, deliberately NOT an infrastructure/* wildcard: the
+# apps AppRole must never gain read on the rest of the infrastructure/*
+# subtree just to reach this one controller URL.
+path "{{ openbao_kv_mount }}/data/infrastructure/unifi" {
+  capabilities = ["read"]
+}
+
+path "{{ openbao_kv_mount }}/metadata/infrastructure/unifi" {
+  capabilities = ["read"]
+}

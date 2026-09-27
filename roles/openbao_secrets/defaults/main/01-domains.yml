@@ -96,7 +96,7 @@ openbao_secrets_domains:
       # does not invalidate them, it makes them permanently unreadable. All
       # fields are app-namespaced for the flat merge. The API keys of the
       # services Homarr integrates WITH are not here: they stay in the media
-      # domain, owned by ansible-servarr.
+      # domain, owned by the media-stack automation repo.
       - apps/homarr
       # Authelia: the OIDC client secrets it shares with its relying parties
       # (authelia_oidc_{homarr,langfuse}_client_secret). The secret's home is
@@ -122,6 +122,13 @@ openbao_secrets_domains:
       # first-run 404 must not fail the whole apps prefetch.
       - path: apps/cribl-stream
         optional: true
+      # unpoller's read-only UniFi controller account password
+      # (unpoller_controller_password, generated at source by
+      # openbao_generated_app_secrets.unpoller). Consumed by
+      # inventory/group_vars/cribl_stream_group.yml. optional: true — the
+      # path exists only once the generation converge has seeded it.
+      - path: apps/unpoller
+        optional: true
       # ARC pilot's dedicated GitHub App id/installation_id/private_key
       # (github_runner_arc_*, PROMOTED at source by
       # roles/openbao openbao_promoted_app_secrets.github-runner-arc).
@@ -131,6 +138,18 @@ openbao_secrets_domains:
       # loud on the empty values rather than the KV prefetch failing here.
       - path: apps/github-runner-arc
         optional: true
+      # UniFi controller connection (issue: unpoller/unifi_metrics silently
+      # rendered an empty controller URL under Semaphore, which never exports
+      # UNIFI_API into the run's environment). secret/infrastructure/unifi is
+      # the single source of truth the network IaC repo's Terraform provider
+      # also reads; its fields are
+      # UPPERCASE (UNIFI_API, UNIFI_USERNAME, UNIFI_PASSWORD, ...), unlike the
+      # app-namespaced lowercase fields elsewhere in this flat "apps" merge —
+      # no collision either way. The apps AppRole's policy carries the read
+      # grant for this exact path (roles/openbao templates/apps-policy.hcl.j2),
+      # so this reuses the domain already fetched for cribl_stream_group
+      # rather than minting a dedicated AppRole for one controller URL.
+      - infrastructure/unifi
   - name: ntfy
     paths:
       # Slack incoming-webhook URLs keyed by topic, for the ntfy alert hub's
@@ -177,3 +196,14 @@ openbao_secrets_operator_domains:
   - monitoring
   - local-cloud
   - observability
+
+# Optional per-run scoping (see playbooks/site/00-load-and-telemetry.yml,
+# whose pre-fetch play is the only current caller that sets these): a domain
+# is skipped only when BOTH are true -- openbao_secrets_domain_groups names
+# at least one consumer group for it, AND none of those groups appear in
+# openbao_secrets_active_groups. Left at their empty defaults, every domain
+# in openbao_secrets_domains above is fetched, exactly as before this became
+# configurable -- this is the contract every OTHER caller of this role
+# relies on.
+openbao_secrets_domain_groups: {}
+openbao_secrets_active_groups: []

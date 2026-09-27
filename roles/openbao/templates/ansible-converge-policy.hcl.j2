@@ -211,3 +211,23 @@ path "{{ openbao_kv_mount }}/metadata/apps/{{ app }}" {
 }
 
 {% endfor %}
+# --- RustFS per-bucket IAM credentials (generate-if-absent) -------------------
+# roles/object_storage generates one ro and one rw key pair per bucket in
+# object_storage_default_buckets, at secret/rustfs/<bucket>/<ro|rw>
+# (the org's secret-path convention — AWS_ACCESS_KEY_ID +
+# AWS_SECRET_ACCESS_KEY fields), then reads them back to create the matching
+# RustFS IAM user + bucket-scoped policy. Wildcard, unlike the enumerated
+# apps/* grants above: the whole secret/rustfs/* subtree holds ONLY these
+# generated key pairs (nothing else is filed under the rustfs service name),
+# so a wildcard here is already scoped to exactly one purpose. Enumerating
+# per bucket instead would need object_storage_default_buckets in scope when
+# THIS policy renders (on the OpenBao bootstrap host, which never includes
+# the object_storage role) — a cross-role variable dependency this avoids
+# entirely. No `delete`: generation never removes a bucket's keys.
+path "{{ openbao_kv_mount }}/data/rustfs/*" {
+  capabilities = ["create", "update", "read"]
+}
+
+path "{{ openbao_kv_mount }}/metadata/rustfs/*" {
+  capabilities = ["read", "list"]
+}

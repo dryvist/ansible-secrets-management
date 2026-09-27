@@ -118,9 +118,26 @@
   vars:
     ansible_become: false
   block:
+    - name: Narrow the domain list to what this run's hosts actually need
+      ansible.builtin.include_tasks: narrow_domains.yml
+
+    # No secret values -- domain names, group counts only. Lets a converge
+    # log confirm the scoping gate narrowed to what this run's --limit
+    # actually needed, without printing anything from the KV subtrees
+    # themselves.
+    - name: Report which domains this run's scoping fetched vs skipped
+      ansible.builtin.debug:
+        msg: >-
+          OpenBao secrets scoping: {{ openbao_secrets_active_groups | default([]) | length }}
+          consumer group(s) intersected this run's play hosts. Domains
+          fetched: {{ openbao_secrets_domains_to_fetch | map(attribute='name') | list }}.
+          Domains skipped by scoping:
+          {{ (openbao_secrets_domains | map(attribute='name') | list)
+             | difference(openbao_secrets_domains_to_fetch | map(attribute='name') | list) }}.
+
     - name: Fetch each configured domain's secrets from OpenBao
       ansible.builtin.include_tasks: fetch_domain.yml
-      loop: "{{ openbao_secrets_domains }}"
+      loop: "{{ openbao_secrets_domains_to_fetch }}"
       loop_control:
         loop_var: openbao_domain
         label: "{{ openbao_domain.name }}"

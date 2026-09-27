@@ -78,7 +78,7 @@
 # nowhere -- split into its own file to stay under the per-file token budget;
 # see 10d-approle-undeclared-live.yml for the full reasoning.
 - name: Assert every live AppRole is either declared or a named exception
-  ansible.builtin.include_tasks: 10d-approle-undeclared-live.yml
+  ansible.builtin.import_tasks: 10d-approle-undeclared-live.yml
   when: openbao_bootstrap_token is defined
 
 # Runs on the controller (openbao_cli_host, resolved in init/02): measured on
@@ -216,7 +216,7 @@
       != ((item.0.token_policies | default([item.0.policy])) | sort)
 
 - name: Reconcile TTL and token bounds on existing AppRoles
-  ansible.builtin.include_tasks: 10c-approle-ttl-bounds.yml
+  ansible.builtin.import_tasks: 10c-approle-ttl-bounds.yml
 
 # Issuing the credentials for whatever was just created is the other half of
 # this job and lives in its own file: everything above DECLARES roles (create,
@@ -228,4 +228,4 @@
 # ordering is unchanged; the facts it consumes (openbao_approle_checks,
 # openbao_manageable_approles) are set above and cross the include intact.
 - name: Issue credentials for the AppRoles created this run
-  ansible.builtin.include_tasks: 10b-approle-secret-ids.yml
+  ansible.builtin.import_tasks: 10b-approle-secret-ids.yml

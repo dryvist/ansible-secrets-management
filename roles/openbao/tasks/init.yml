@@ -15,16 +15,26 @@
 #
 # Break-glass safety: recovery shares + root token (and every new AppRole's
 # role_id/secret_id) are written ONLY to 0600 files on the Ansible CONTROLLER
-# under playbook_dir, and a LOUD warning tells the operator to transcribe to
+# under playbook_dir, and a LOUD warning tells the operator to copy to
 # paper / load into the right store and delete. These values are NEVER
 # written into the repo or onto a target host, and the `bao` invocations that
 # touch them run with no_log: true.
 
+# Tagged `always`: every phase below reads openbao_bootstrap_token /
+# openbao_cli_host / openbao_cli_addr, all resolved here. A scoped run
+# (e.g. `--tags openbao_rbac`) that skipped this phase would leave
+# openbao_bootstrap_token undefined, and every downstream task's own
+# `when: openbao_bootstrap_token is defined` guard would then silently skip
+# the very phase that was asked for.
 - name: Refuse stale break-glass material and probe peers for a live cluster (data-loss guard)
-  ansible.builtin.include_tasks: init/01-preflight-and-cluster-probe.yml
+  ansible.builtin.import_tasks: init/01-preflight-and-cluster-probe.yml
+  tags:
+    - always
 
 - name: Initialize the cluster and resolve the provisioning token
-  ansible.builtin.include_tasks: init/02-initialize-cluster.yml
+  ansible.builtin.import_tasks: init/02-initialize-cluster.yml
+  tags:
+    - always
 
 # Plugin registration is deliberately OUTSIDE the openbao-reconcile grant: its
 # policy carries no sys/plugins/catalog path at all, because registering a
@@ -45,28 +55,42 @@
 # skipping its own KV-mount and app-secret work, instead of this include
 # skipping blind.
 - name: Enable the KV mounts and seed per-app service secrets
-  ansible.builtin.include_tasks: init/03-kv-mounts-and-seed-secrets.yml
+  ansible.builtin.import_tasks: init/03-kv-mounts-and-seed-secrets.yml
+  tags:
+    - openbao_kv_seed
 
 - name: Register and configure the AWS secrets engine
-  ansible.builtin.include_tasks: init/04-aws-engine.yml
+  ansible.builtin.import_tasks: init/04-aws-engine.yml
+  tags:
+    - openbao_engines
   when: not (openbao_reconcile_mode | default(false))
 
 - name: Register and configure the GitHub secrets engine
-  ansible.builtin.include_tasks: init/05-github-engine.yml
+  ansible.builtin.import_tasks: init/05-github-engine.yml
+  tags:
+    - openbao_engines
   when: not (openbao_reconcile_mode | default(false))
 
 - name: Register and configure the OAuthapp secrets engine
-  ansible.builtin.include_tasks: init/06-oauth-engine.yml
+  ansible.builtin.import_tasks: init/06-oauth-engine.yml
+  tags:
+    - openbao_engines
   when: not (openbao_reconcile_mode | default(false))
 
 - name: Configure the SSH CA and its signing roles
-  ansible.builtin.include_tasks: init/07-ssh-ca-engine.yml
+  ansible.builtin.import_tasks: init/07-ssh-ca-engine.yml
+  tags:
+    - openbao_ssh_ca
 
 - name: Render and reconcile the RBAC policies
-  ansible.builtin.include_tasks: init/08-rbac-policies.yml
+  ansible.builtin.import_tasks: init/08-rbac-policies.yml
+  tags:
+    - openbao_rbac
 
 - name: Enable AppRole/JWT auth and reconcile Terrakube workspace JWT roles
-  ansible.builtin.include_tasks: init/09-auth-methods-and-terrakube-jwt.yml
+  ansible.builtin.import_tasks: init/09-auth-methods-and-terrakube-jwt.yml
+  tags:
+    - openbao_auth_methods
   # templates/openbao-reconcile-policy.hcl.j2 grants sys/auth read/list, but
   # the deployed reconcile policy can be stale against it the same way 03's
   # sys/mounts grant was (05d-reconcile-exclusions.yml excludes the reconcile
@@ -77,7 +101,9 @@
   when: not (openbao_reconcile_mode | default(false))
 
 - name: Create the AppRoles and write their break-glass material
-  ansible.builtin.include_tasks: init/10-approles.yml
+  ansible.builtin.import_tasks: init/10-approles.yml
+  tags:
+    - openbao_approle
 
 # --- Rotation-exempt tagging (idempotent, write-if-changed) ------------------
 # Stamp custom_metadata.rotation=exempt on every operator-declared
@@ -89,9 +115,21 @@
 # runs after promotion/generation (init/03) so a path declared exempt in the
 # same converge that creates it is tagged immediately rather than waiting for
 # a second converge.
+# Stays `include_tasks` (dynamic): it needs `loop:` on the include itself,
+# which `import_tasks` (a parse-time, not runtime, construct) cannot take.
+# Tags on a dynamic include reach the tasks it loads only via `apply:`, not
+# via a plain `tags:` on the include statement -- `apply: {tags: [...]}` is
+# the mechanism, and it re-tags the templated content at the moment this
+# include actually runs, once per loop iteration.
 - name: Tag operator-declared rotation-exempt paths (write-if-changed)
-  ansible.builtin.include_tasks: tag_rotation_exempt.yml
+  ansible.builtin.include_tasks:
+    file: tag_rotation_exempt.yml
+    apply:
+      tags:
+        - openbao_rotation_exempt
   loop: "{{ openbao_rotation_exempt }}"
   loop_control:
     loop_var: openbao_rotation_exempt_entry
+  tags:
+    - openbao_rotation_exempt
   when: openbao_bootstrap_token is defined

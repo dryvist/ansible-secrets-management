@@ -9,7 +9,7 @@
 # THE NAMES ONLY, DELIBERATELY. Each of these carries a policy of the same name
 # that this repository also does not declare. Attaching an existing policy by
 # name binds the identity without touching what that policy grants: the
-# reconciler writes token_policies and nothing else. Transcribing four policy
+# reconciler writes token_policies and nothing else. Copying four policy
 # documents from the live store into a converge that then WRITES them back is a
 # different and much riskier change — one wrong path and the converge replaces
 # a working grant with a broken one. Declaring the identity is what closes the
@@ -18,7 +18,7 @@
 #
 # So after this, the audit stops reporting them and the store still owns their
 # policy content. That is the honest state, and it is better than either
-# leaving them undeclared or pretending a transcription is management.
+# leaving them undeclared or pretending a copy is management.
 openbao_terraform_approle_name: terraform
 openbao_terraform_live_policy_name: terraform
 openbao_vikunja_approle_name: vikunja

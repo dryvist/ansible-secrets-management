@@ -33,7 +33,7 @@
   become: "{{ openbao_cli_become }}"
   vars:
     ansible_become: "{{ openbao_cli_become }}"
-  loop: "{{ openbao_manageable_policies }}"
+  loop: "{{ openbao_reachable_policies }}"
   loop_control:
     label: "{{ item.name }}"
   register: openbao_existing_policy_reads
@@ -90,7 +90,7 @@
   environment:
     BAO_ADDR: "{{ openbao_write_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
-  loop: "{{ openbao_manageable_policies }}"
+  loop: "{{ openbao_reachable_policies }}"
   loop_control:
     label: "{{ item.name }}"
   no_log: true

@@ -239,15 +239,21 @@ apparatus; the block is enable + write-once CA + add-if-missing roles.
   reconcile can compare them against the API without normalizing.
   `ttl == max_ttl`; a sign request may shorten a cert's life, never extend it.
   Principals are always explicit — never `*`.
-- One `ssh-sign-<role>` policy leaf per role grants exactly that role's
-  `sign/` endpoint. Attachment follows the security decisions:
-  `ssh-sign-automation-ai` → `ai-elevated` (standing, a documented tradeoff:
-  friction-free agent SSH bounded by 1h certs, non-root principals,
-  default-deny host opt-in, audit) + every `ai-apply-*`;
-  `ssh-sign-automation-ansible` → `ansible-converge` only;
-  `ssh-sign-automation-semaphore` → `semaphore` only, so a certificate's
-  principal identifies which caller ran a converge;
-  `ssh-sign-ci-runner` → unattached until a CI identity exists.
+- `host-cert` (`cert_type: host`) signs HOST certs under the same CA instead:
+  `allow_host_certificates`, `allowed_domains` (the apex zone guest FQDNs
+  live under), `allow_subdomains`, no bare domains, 90d `ttl`/`max_ttl`, no
+  principal/extensions. `openbao_ssh_user_roles` is the derived,
+  user-cert-only view for consumers that read `principal`/`extensions`
+  unconditionally.
+- One `ssh-sign-<role>` policy leaf per **user-cert** role
+  (`openbao_ssh_user_roles`; host-cert gets no leaf of its own) grants
+  exactly that role's `sign/` endpoint: `automation-ai` → `ai-elevated` +
+  every `ai-apply-*`; `automation-ansible` → `ansible-converge` only;
+  `automation-semaphore` → `semaphore` only; `ci-runner` unattached. Host
+  certs get no `ssh-sign-host-cert` policy (a new name needs a privileged
+  provisioning run) — `openbao_ssh_host_cert_signer_roles`
+  (`automation-{ansible,semaphore}`) instead folds an update-only grant on
+  every host-cert `sign/` endpoint into those two leaves' own content.
 - `OPENBAO_SSH_SOURCE_CIDRS` (Doppler) adds a `source-address` critical
   option restricting where certs are valid from; unset ⇒ loud warning and
   the guest-firewall default-deny layer is the compensating control.

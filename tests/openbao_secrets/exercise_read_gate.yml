@@ -1,6 +1,6 @@
 ---
 # Runs the PRODUCTION gate (roles/openbao_secrets/tasks/classify_reads.yml)
-# against one synthetic read-result fixture and asserts whether it aborted.
+# against one mock read-result fixture and asserts whether it aborted.
 # Included once per fixture by verify_read_gate.yml.
 
 - name: Load the fixture results | {{ read_gate_fixture.name }}

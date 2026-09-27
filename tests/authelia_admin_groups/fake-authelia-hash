@@ -1,0 +1,7 @@
+#!/bin/sh
+# Stands in for the authelia binary's `crypto hash generate|validate` with the real output shape.
+case "$3" in
+  generate) echo 'Digest: $argon2id$v=19$m=65536,t=3,p=4$dGVzdA$dGVzdA' ;;
+  validate) eval "digest=\${$#}"; case "$digest" in '$'*) echo 'The password matches the digest.' ;; *) echo 'Error: invalid format' >&2; exit 1 ;; esac ;;
+  *) exit 2 ;;
+esac

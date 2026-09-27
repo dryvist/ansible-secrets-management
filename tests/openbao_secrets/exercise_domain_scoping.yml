@@ -1,0 +1,25 @@
+---
+# Runs the PRODUCTION domain-scoping gate
+# (roles/openbao_secrets/tasks/narrow_domains.yml) against one fixture
+# scenario and asserts the exact set of domains it decided to fetch.
+# Included once per scenario by verify_domain_scoping.yml.
+
+- name: Execute the production narrowing gate | {{ domain_scoping_fixture.name }}
+  vars:
+    openbao_secrets_domains: "{{ domain_scoping_fixture.domains }}"
+    openbao_secrets_domain_groups: "{{ domain_scoping_fixture.domain_groups }}"
+    openbao_secrets_active_groups: "{{ domain_scoping_fixture.active_groups }}"
+  ansible.builtin.include_tasks: ../../roles/openbao_secrets/tasks/narrow_domains.yml
+
+- name: Assert the fetched domain set matches exactly | {{ domain_scoping_fixture.name }}
+  ansible.builtin.assert:
+    that:
+      - >-
+        (openbao_secrets_domains_to_fetch | map(attribute='name') | sort | list)
+        == (domain_scoping_fixture.expected_names | sort | list)
+    fail_msg: >-
+      {{ domain_scoping_fixture.name }}: expected domains
+      {{ domain_scoping_fixture.expected_names | sort | list }} but the gate
+      chose {{ openbao_secrets_domains_to_fetch | map(attribute='name') | sort | list }}.
+    success_msg: "{{ domain_scoping_fixture.name }}: fetched set as expected"
+    quiet: true
