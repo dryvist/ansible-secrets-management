@@ -136,7 +136,11 @@ openbao_allow_fresh_init: false
 # without any cloud KMS. The key is injected at runtime from Doppler tier-0
 # (NOT hardcoded, NOT committed) and lands in the 0600 EnvironmentFile.
 # Generate once:  openssl rand -base64 32
-openbao_seal_key_id: "{{ lookup('env', 'OPENBAO_STATIC_SEAL_KEY_ID') | default('static-1', true) }}"
+# The key id names which key encrypted the stored root key. Unset here means
+# "keep the id already rendered on the nodes" (configure_and_bootstrap.yml);
+# a fresh cluster with no existing config starts at static-1.
+openbao_seal_key_id: "{{ lookup('env', 'OPENBAO_STATIC_SEAL_KEY_ID') | default('', true) }}"
+openbao_seal_key_id_fresh: static-1
 openbao_static_seal_key: "{{ lookup('env', 'OPENBAO_STATIC_SEAL_KEY') }}"
 # Rotation (n-1 → n): set the previous key + id during a seal-rewrap, then clear.
 openbao_seal_previous_key_id: "{{ lookup('env', 'OPENBAO_STATIC_SEAL_PREVIOUS_KEY_ID') | default('', true) }}"

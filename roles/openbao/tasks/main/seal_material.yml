@@ -1,0 +1,96 @@
+---
+# Seal material, imported by configure_and_bootstrap.yml ahead of the
+# EnvironmentFile render: resolve the seal key id, render the server config,
+# resolve the seal key. Each value comes from the environment or, when it
+# carries none, from the files already on the nodes. Never render a guessed
+# id or an empty key.
+# The seal key id names which key wrapped the stored root key. When the
+# environment does not supply one, keep the id already rendered on the
+# nodes: rendering any other id makes every node fail to unseal on its
+# next restart ("unknown key id"), the same outage an empty key causes.
+- name: Read the existing server config from every node for the seal key id
+  ansible.builtin.slurp:
+    src: "{{ openbao_config_file }}"
+  register: openbao_existing_server_config
+  delegate_to: "{{ item }}"
+  loop: "{{ ansible_play_hosts_all }}"
+  run_once: true
+  failed_when: false
+  when: openbao_seal_key_id | default('', true) | length == 0
+
+- name: Take the seal key id from an existing node config when the environment has none
+  ansible.builtin.set_fact:
+    openbao_seal_key_id: >-
+      {{ (openbao_existing_server_config.results
+          | selectattr('content', 'defined')
+          | map(attribute='content') | map('b64decode')
+          | map('regex_findall', '(?m)^\s*current_key_id\s*=\s*"([^"]+)"')
+          | flatten | unique | list) | first | default('') }}
+  run_once: true
+  when: openbao_seal_key_id | default('', true) | length == 0
+
+- name: Start a fresh cluster at the initial seal key id
+  ansible.builtin.set_fact:
+    openbao_seal_key_id: "{{ openbao_seal_key_id_fresh }}"
+  run_once: true
+  when:
+    - openbao_seal_key_id | default('', true) | length == 0
+    - openbao_allow_fresh_init | bool
+
+- name: Refuse to render a server config without a seal key id
+  ansible.builtin.assert:
+    that:
+      - openbao_seal_key_id | default('', true) | length > 0
+    fail_msg: >-
+      No seal key id: OPENBAO_STATIC_SEAL_KEY_ID is unset and no node carries
+      an existing {{ openbao_config_file }} with a current_key_id. Rendering
+      a guessed id would seal every node on its next restart. Set the
+      variable, or pass openbao_allow_fresh_init=true for a new cluster.
+    quiet: true
+
+- name: Render OpenBao server config
+  ansible.builtin.template:
+    src: openbao.hcl.j2
+    dest: "{{ openbao_config_file }}"
+    owner: root
+    group: "{{ openbao_group }}"
+    mode: "0640"
+  notify: Restart openbao
+
+# The seal key normally arrives from the environment. When it is unset, keep
+# the key already rendered on the nodes instead: every node carries the same
+# key, so any node's existing file is authoritative. Never render an empty key.
+- name: Read the existing static-seal EnvironmentFile from every node
+  ansible.builtin.slurp:
+    src: "{{ openbao_env_file }}"
+  register: openbao_existing_seal_env
+  delegate_to: "{{ item }}"
+  loop: "{{ ansible_play_hosts_all }}"
+  run_once: true
+  failed_when: false
+  no_log: true
+  when: openbao_static_seal_key | default('', true) | length == 0
+
+- name: Take the seal key from an existing node file when the environment has none
+  ansible.builtin.set_fact:
+    openbao_static_seal_key: >-
+      {{ (openbao_existing_seal_env.results
+          | selectattr('content', 'defined')
+          | map(attribute='content') | map('b64decode')
+          | map('regex_findall', '(?m)^OPENBAO_STATIC_SEAL_KEY=(\S+)$')
+          | flatten | unique | list) | first | default('') }}
+  run_once: true
+  no_log: true
+  when: openbao_static_seal_key | default('', true) | length == 0
+
+- name: Refuse to render an empty or malformed static-seal key
+  ansible.builtin.assert:
+    that:
+      - openbao_static_seal_key | default('', true) | length > 0
+      - (openbao_static_seal_key | b64decode(encoding='latin-1') | length) == 32
+    fail_msg: >-
+      No usable static-seal key: OPENBAO_STATIC_SEAL_KEY is unset and no node
+      carries an existing {{ openbao_env_file }} with one, or the key is not a
+      base64 32-byte value. Rendering would seal every node on its next restart.
+    quiet: true
+  no_log: true
