@@ -51,6 +51,29 @@ path "auth/*" {
   capabilities = ["create", "read", "update", "delete", "list"]
 }
 
+# --- Login MFA on the human unlock (init/09b-human-unlock.yml) -----------------
+# The TOTP method, its enforcement on the userpass mount, and the one-time
+# enrolment of the operator's entity (admin-generate / admin-destroy). The
+# unattended converge identities hold none of this; break-glass does.
+path "identity/mfa/method/totp" {
+  capabilities = ["create", "update", "list"]
+}
+path "identity/mfa/method/totp/*" {
+  capabilities = ["create", "read", "update", "list"]
+}
+path "identity/mfa/login-enforcement/*" {
+  capabilities = ["create", "read", "update", "list"]
+}
+path "identity/lookup/entity" {
+  capabilities = ["update"]
+}
+path "identity/entity" {
+  capabilities = ["create", "update"]
+}
+path "identity/entity-alias" {
+  capabilities = ["create", "update"]
+}
+
 # --- Mount table: enable, tune, and remove engines (init/03..07) --------------
 # sudo is required by OpenBao to mutate the mount table itself.
 path "sys/mounts/*" {
