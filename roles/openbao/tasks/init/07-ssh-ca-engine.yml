@@ -145,14 +145,20 @@
 # Explicit principals only — never allowed_users="*" (documented upstream
 # wildcard bug, and a wildcard would defeat the per-principal-class design).
 # ttl == max_ttl: a sign request may shorten a cert's life, never extend it.
+# Runs on openbao_cli_host, like the existence check above; `bao write <path> -`
+# sends the JSON body from stdin.
 - name: Reconcile the SSH signing roles
-  ansible.builtin.uri:
-    url: "{{ openbao_api_addr }}/v1/{{ openbao_ssh_mount }}/roles/{{ item.0.name }}"
-    method: POST
-    headers:
-      X-Vault-Token: "{{ openbao_bootstrap_token }}"
-    body_format: json
-    body: >-
+  ansible.builtin.command:
+    cmd: "bao write {{ openbao_ssh_mount }}/roles/{{ item.0.name }} -"
+    stdin: "{{ ssh_role_body | to_json }}"
+  environment:
+    BAO_ADDR: "{{ openbao_cli_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
+    ssh_role_body: >-
       {{
          {
            'key_type': 'ca',
@@ -179,9 +185,6 @@
            'algorithm_signer': 'default'
          }
       }}
-    status_code:
-      - 200
-      - 204
   loop: >-
     {{ openbao_ssh_roles
        | zip(openbao_ssh_role_checks.results | default([])) | list }}
