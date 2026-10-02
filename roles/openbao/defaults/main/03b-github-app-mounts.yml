@@ -52,3 +52,15 @@ openbao_github_app_mounts:
     app_id: "{{ lookup('env', 'OPENBAO_GITHUB_AGENTS_APP_ID') | default('', true) }}"
     private_key: "{{ lookup('env', 'OPENBAO_GITHUB_AGENTS_APP_PRIVATE_KEY') | default('', true) }}"
     permission_sets: "{{ openbao_github_agents_permission_sets }}"
+
+# Accounts any App may be installed on. Set in the private inventory; the
+# exposure check fails closed while it is empty.
+openbao_github_app_install_allowlist: []
+
+# Every App whose key is present in this run: the admin App plus each mount's.
+openbao_github_app_exposure_targets: >-
+  {{ ([{'app_id': openbao_github_app_id, 'private_key': openbao_github_app_private_key}]
+      + (openbao_github_app_mounts | map('dict2items')
+         | map('selectattr', 'key', 'in', ['app_id', 'private_key'])
+         | map('items2dict') | list))
+     | selectattr('app_id', 'truthy') | selectattr('private_key', 'truthy') | list }}
