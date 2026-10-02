@@ -1,0 +1,86 @@
+---
+# Declares custom_metadata (owner, reader, docs, rotation) on the
+# disclosure-denylist KV-v2 entry -- metadata only; the term list itself is
+# never written or read here, and the lead seeds it out of band. Mirrors
+# tag_rotation_exempt.yml's idempotent read-then-patch shape and its
+# capabilities-self safety check: this runs under whichever identity
+# openbao_bootstrap_token resolves to for THIS run -- sometimes the fully
+# privileged admin token, sometimes the reconcile identity -- and a denied
+# patch under the lesser one must warn, not fail the converge.
+- name: Read the disclosure-denylist entry's current custom_metadata
+  ansible.builtin.command:
+    cmd: >-
+      bao kv metadata get -format=json -mount={{ openbao_disclosure_denylist_mount }}
+      {{ openbao_disclosure_denylist_path }}
+  environment:
+    BAO_ADDR: "{{ openbao_write_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  register: openbao_disclosure_denylist_current
+  # A DENIED read is not an ABSENT path -- see the openbao_absent_stderr_marker
+  # doc (01-kv-hierarchy-and-rbac.yml). Absence is fine -- nothing to declare
+  # yet, `patch` creates the entry's metadata even before any data version
+  # exists -- but a denial says nothing about stored metadata and must not be
+  # read as "not yet declared".
+  failed_when:
+    - openbao_disclosure_denylist_current.rc != 0
+    - openbao_absent_stderr_marker not in (openbao_disclosure_denylist_current.stderr | default(''))
+  changed_when: false
+  no_log: true
+
+- name: Ask whether this identity may patch the entry's metadata
+  ansible.builtin.command:
+    cmd: >-
+      bao write -format=json sys/capabilities-self
+      paths={{ openbao_disclosure_denylist_mount }}/metadata/{{ openbao_disclosure_denylist_path }}
+  environment:
+    BAO_ADDR: "{{ openbao_write_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  register: openbao_disclosure_denylist_capabilities
+  changed_when: false
+  no_log: true
+
+- name: Resolve whether the metadata can be patched by this identity
+  ansible.builtin.set_fact:
+    openbao_disclosure_denylist_patchable: >-
+      {{ (_caps | intersect(['patch', 'create', 'root'])) | length > 0 }}
+  vars:
+    _path: "{{ openbao_disclosure_denylist_mount }}/metadata/{{ openbao_disclosure_denylist_path }}"
+    _body: "{{ openbao_disclosure_denylist_capabilities.stdout | from_json }}"
+    _caps: "{{ (_body.get('data', {}) | combine(_body)).get(_path, []) }}"
+
+# Loud, not fatal: the next break-glass converge (OPENBAO_PROVISIONING_TOKEN)
+# both refreshes the reconcile policy and applies the declaration.
+- name: Report a metadata declaration this identity is not allowed to write
+  ansible.builtin.debug:
+    msg: >-
+      {{ openbao_disclosure_denylist_mount }}/{{ openbao_disclosure_denylist_path }}:
+      custom_metadata not declared -- this identity lacks patch/create on the
+      entry's metadata; the next break-glass converge reconciles the grant
+      and the declaration.
+  # The failed_when above already guarantees rc==0 or a genuine absence by
+  # the time this task runs -- nothing else to gate on here.
+  when: not (openbao_disclosure_denylist_patchable | bool)
+
+- name: Declare the disclosure-denylist entry's custom_metadata (write-if-changed)
+  ansible.builtin.command:
+    # argv, not cmd: several values (reader, rotation) contain spaces and
+    # parentheses, and a shell-parsed cmd string would shlex-split them into
+    # extra positional args instead of one -custom-metadata=key=value token.
+    argv: >-
+      {{ ['bao', 'kv', 'metadata', 'patch', '-mount=' ~ openbao_disclosure_denylist_mount]
+         + (openbao_disclosure_denylist_metadata | dict2items
+            | map(attribute='key') | zip(openbao_disclosure_denylist_metadata.values())
+            | map('join', '=') | map('regex_replace', '^', '-custom-metadata=') | list)
+         + [openbao_disclosure_denylist_path] }}
+  environment:
+    BAO_ADDR: "{{ openbao_write_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  no_log: true
+  changed_when: true
+  vars:
+    _current_metadata: >-
+      {{ ((openbao_disclosure_denylist_current.stdout | from_json).data.custom_metadata
+          | default({}, true)) if openbao_disclosure_denylist_current.rc == 0 else {} }}
+  when:
+    - openbao_disclosure_denylist_patchable | bool
+    - (_current_metadata | combine(openbao_disclosure_denylist_metadata)) != _current_metadata

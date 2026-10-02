@@ -146,6 +146,8 @@ openbao_base_policies_static:
     template: slack-admin-policy.hcl.j2
   - name: "{{ openbao_slack_ops_policy_name }}"
     template: slack-ops-policy.hcl.j2
+  - name: "{{ openbao_disclosure_denylist_policy_name }}"
+    template: disclosure-denylist-read-policy.hcl.j2
   - name: "{{ openbao_splunk_mcp_rotate_policy_name }}"
     template: splunk-mcp-rotate-policy.hcl.j2
   - name: "{{ openbao_secret_age_audit_policy_name }}"

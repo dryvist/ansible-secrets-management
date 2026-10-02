@@ -144,3 +144,14 @@
   tags:
     - openbao_rotation_exempt
   when: openbao_bootstrap_token is defined
+
+# --- Disclosure-denylist metadata declaration (idempotent, write-if-changed) -
+# Declares owner/reader/docs/rotation custom_metadata on the disclosure-
+# denylist KV-v2 entry (05c-terrakube-and-remaining-domain-names.yml) --
+# metadata only, never the term list itself. Runs LAST for the same reason as
+# the rotation-exempt tagging above: a metadata patch this identity is not
+# yet granted must not fail the run before the policies it depends on are
+# reconciled.
+- name: Declare the disclosure-denylist entry's custom_metadata (write-if-changed)
+  ansible.builtin.include_tasks: declare_disclosure_denylist_metadata.yml
+  when: openbao_bootstrap_token is defined

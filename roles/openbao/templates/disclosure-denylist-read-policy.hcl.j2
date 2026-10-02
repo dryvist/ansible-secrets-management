@@ -1,0 +1,17 @@
+{{ ansible_managed | comment }}
+# OpenBao policy scoped to read the disclosure-denylist KV-v2 entry
+# (secrets-external/platform/disclosure-denylist) -- the org-wide GitHub
+# disclosure-gate deny terms, source of truth for the GitHub org secret
+# DISCLOSURE_DENYLIST (org dryvist, visibility: all). Not attached to any
+# AppRole today -- the admin tier already reads this path through
+# ai-admin-policy.hcl.j2's per-mount grant. This narrow leaf exists so a
+# future GitHub-sync identity scopes to exactly this one entry instead of
+# inheriting break-glass.
+
+path "secrets-external/data/platform/disclosure-denylist" {
+  capabilities = ["read"]
+}
+
+path "secrets-external/metadata/platform/disclosure-denylist" {
+  capabilities = ["read", "list"]
+}

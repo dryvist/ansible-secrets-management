@@ -105,6 +105,29 @@ openbao_media_approle_name: media
 # not secret/apps like every other ntfy_docker consumer.
 openbao_ntfy_policy_name: ntfy
 openbao_ntfy_approle_name: ntfy
+# disclosure-denylist — org-wide GitHub disclosure-gate deny terms, one fixed
+# string per line. GitHub-consumed (dryvist/.github's reusable
+# _disclosure-gate.yml reads it as the org secret DISCLOSURE_DENYLIST, org
+# dryvist, visibility: all), so it lives in secrets-external like
+# slack-webhooks above, not secret/apps. No Ansible converge fetches this
+# path — it has no openbao_secrets_domains entry — so declare_disclosure_
+# denylist_metadata.yml (init.yml) only stamps custom_metadata here; the term
+# list itself is seeded out of band, never through this converge.
+openbao_disclosure_denylist_mount: secrets-external
+openbao_disclosure_denylist_path: platform/disclosure-denylist
+openbao_disclosure_denylist_field: terms
+openbao_disclosure_denylist_metadata:
+  owner: dryvist/.github
+  reader: "GitHub org secret DISCLOSURE_DENYLIST (org dryvist, visibility: all)"
+  docs: "dryvist/.github _disclosure-gate.yml"
+  rotation: "manual -- edit the term list directly; no scheduled rotation"
+# Narrow read-only leaf (disclosure-denylist-read-policy.hcl.j2), registered
+# in openbao_base_policies (07c) but deliberately unattached to any AppRole:
+# reads today go through the admin tier's existing per-mount grant
+# (ai-admin-policy.hcl.j2 loops openbao_kv_mounts, which already covers every
+# secrets-external path). This leaf exists so a future GitHub-sync identity
+# scopes to exactly this one entry instead of inheriting break-glass.
+openbao_disclosure_denylist_policy_name: disclosure-denylist-read
 # apps — read-side AppRole for the shared-Postgres application tier
 # (openbao_secrets domain "apps": Nautobot, Zammad). apps-seed above is the
 # WRITER; this is the enumerated read-only consumer the converge logs in with
