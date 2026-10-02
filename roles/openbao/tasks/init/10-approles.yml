@@ -142,8 +142,11 @@
 #   3. the global default
 # `vars:` is evaluated per loop item, so `item` is in scope here and the command
 # stays readable instead of carrying three nested defaults inline.
+# Runs on openbao_cli_host, like the existence check above; every write in
+# this file and its includes does the same.
 - name: Create the missing AppRoles bound to their policy
   vars:
+    ansible_become: "{{ openbao_cli_become }}"
     approle_cidr_class: "{{ openbao_approle_cidr_class_map[item.0.name] }}"
     # An explicitly declared but EMPTY secret_id_bound_cidrs (ai-runner, whose
     # value is env-delivered) falls back to its class rather than to unbound.
@@ -173,8 +176,10 @@
           ' token_bound_cidrs=' ~ approle_bound_cidrs)
          if (approle_bound_cidrs | length > 0) else '' }}
   environment:
-    BAO_ADDR: "{{ openbao_write_addr }}"
+    BAO_ADDR: "{{ openbao_cli_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
   loop: "{{ openbao_manageable_approles | zip(openbao_approle_checks.results | default([])) | list }}"
   loop_control:
     label: "{{ item.0.name }}"
@@ -201,8 +206,12 @@
       bao write auth/approle/role/{{ item.0.name }}/policies
       token_policies={{ (item.0.token_policies | default([item.0.policy])) | join(',') }}
   environment:
-    BAO_ADDR: "{{ openbao_write_addr }}"
+    BAO_ADDR: "{{ openbao_cli_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
   loop: "{{ openbao_manageable_approles | zip(openbao_approle_checks.results | default([])) | list }}"
   loop_control:
     label: "{{ item.0.name }}"
