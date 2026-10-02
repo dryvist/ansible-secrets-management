@@ -34,7 +34,8 @@ policy.
 role declares the TOTP method (`identity/mfa/method/totp`) and the enforcement
 (`identity/mfa/login-enforcement/<name>`, scoped to the userpass mount
 accessor), but a converge that could enrol the second factor would be holding
-it, which would make it not a second factor. Enrol once, as a human:
+it, which would make it not a second factor. Enrol once, with an `ai-admin`
+token (the only tier holding the `identity/mfa` paths):
 
 ```bash
 bao write identity/mfa/method/totp/admin-generate \
