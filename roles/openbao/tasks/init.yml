@@ -83,13 +83,16 @@
     - openbao_github_engine_enabled | bool
 
 # Runs on the controller: it already holds the App keys, and the store host
-# has no Python cryptography for the JWT signature.
+# has no Python cryptography for the JWT signature. ansible_become is a
+# connection variable, so it is set as a var (the become keyword loses to the
+# inventory's ansible_become on a delegated task).
 - name: Check each GitHub App with a key in this run for exposure
   ansible.builtin.include_tasks:
     file: init/05c-github-app-exposure.yml
     apply:
       delegate_to: localhost
-      become: false
+      vars:
+        ansible_become: false
   loop: "{{ openbao_github_app_exposure_targets }}"
   loop_control:
     loop_var: ga
