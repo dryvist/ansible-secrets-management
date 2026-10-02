@@ -97,7 +97,7 @@
 
     - name: The unattended admin identity is redeemed from the workstation
       vars:
-        cls: "{{ openbao_approle_cidr_class_map['github-admin-claude'] }}"
+        cls: "{{ openbao_approle_cidr_class_map['github-admin-unattended'] }}"
       ansible.builtin.assert:
         that:
           - cls == 'workstation'
