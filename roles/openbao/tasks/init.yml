@@ -101,6 +101,12 @@
   tags:
     - openbao_ssh_ca
 
+# openbao_pki_etcd_engines is empty by default (05g-etcd-pki-engine.yml) — a
+# no-op on every existing converge until a Patroni-mode cluster cutover adds
+# an entry.
+- name: Configure etcd PKI engines for Patroni HA clusters
+  ansible.builtin.include_tasks: init/07b-etcd-pki-engine.yml
+
 - name: Render and reconcile the RBAC policies
   ansible.builtin.import_tasks: init/08-rbac-policies.yml
   tags:
