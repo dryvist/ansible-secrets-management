@@ -10,6 +10,16 @@ openbao_terrakube_jwt_token_ttl: 90m
 # does not carry an `organization` key, so this is sourced directly here;
 # override in group_vars/host_vars for a different environment.
 openbao_terrakube_organization: dryvist
+# Environment-specific workspace names, read from the runtime environment
+# (secret store) rather than committed. Each is both the Terrakube workspace
+# name and, for the AWS one, its STS role name. Unset = the converge fails on
+# first use instead of rendering a blank policy name.
+openbao_terrakube_network_workspace: >-
+  {{ lookup('env', 'OPENBAO_TERRAKUBE_NETWORK_WORKSPACE')
+     | default(undef('OPENBAO_TERRAKUBE_NETWORK_WORKSPACE is empty'), true) }}
+openbao_terrakube_aws_workspace: >-
+  {{ lookup('env', 'OPENBAO_TERRAKUBE_AWS_WORKSPACE')
+     | default(undef('OPENBAO_TERRAKUBE_AWS_WORKSPACE is empty'), true) }}
 openbao_terrakube_workspaces:
   - name: iac-platform
     # apps/authelia: the deploy script needs the plaintext semaphore /
@@ -32,14 +42,14 @@ openbao_terrakube_workspaces:
     # touches; that is a follow-up, and it is a change to
     # openbao_github_permission_sets rather than to this entry.
     github_mint: [dryvist-full-automation]
-  - name: tofu-unifi
+  - name: "{{ openbao_terrakube_network_workspace }}"
     # platform/object-storage: that workspace reads the published inventory and
     # the desired-state object out of the store to derive its DNS records and
     # every subnet it configures, so it needs the same store credential
     # tofu-proxmox holds. Its plans failed at the ephemeral read without it.
     kv_read: [infrastructure/unifi, platform/object-storage]
-  - name: tofu-aws-production
-    api_update: [aws/sts/tofu-aws-production]
+  - name: "{{ openbao_terrakube_aws_workspace }}"
+    api_update: ["aws/sts/{{ openbao_terrakube_aws_workspace }}"]
   - name: tofu-runs-on
     api_update: [aws/sts/tofu-runs-on]
   - name: tofu-proxmox

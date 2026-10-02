@@ -45,7 +45,8 @@ def test_provider_inventory_is_complete_and_single_sourced():
     )
     assert "OPENBAO_AI_API_KEY_MOUNT" in defaults_source
     assert "OPENBAO_AI_API_KEY_PATH_PREFIX" in defaults_source
-    assert defaults_source.count("default(undef(") == 2
+    # 2 provider-key vars + 2 environment-specific Terrakube workspace names.
+    assert defaults_source.count("default(undef(") == 4
 
 
 def test_provider_policy_is_external_exact_and_read_only():

@@ -293,7 +293,7 @@
       - admin_role.token_policies is not defined
     fail_msg: "ai-admin must attach the standalone ai-admin policy, not composed base leaves."
 
-- name: Assert all nine exact-claim Terrakube JWT roles are declared
+- name: Assert every committed exact-claim Terrakube JWT role is declared
   ansible.builtin.assert:
     that:
       - >-
