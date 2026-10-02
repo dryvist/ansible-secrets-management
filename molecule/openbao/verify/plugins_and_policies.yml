@@ -88,8 +88,8 @@
 - name: Assert ai-orchestrator can mint only named GitHub permission sets
   ansible.builtin.assert:
     that:
-      - "'github/token/dryvist-full-automation' in (bao_ai_orchestrator_policy.content | b64decode)"
-      - "'github/token/personal-full-automation' in (bao_ai_orchestrator_policy.content | b64decode)"
+      - "'github-admin/token/dryvist-full-automation' in (bao_ai_orchestrator_policy.content | b64decode)"
+      - "'github-admin/token/personal-full-automation' in (bao_ai_orchestrator_policy.content | b64decode)"
       - "'github/token/*' not in (bao_ai_orchestrator_policy.content | b64decode)"
     fail_msg: "ai-orchestrator policy does not preserve the named GitHub token boundary"
 

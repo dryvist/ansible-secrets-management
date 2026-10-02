@@ -50,7 +50,7 @@ path "{{ path }}" {
 # NOT also get a stored token: minting is the alternative to holding one, so a
 # `github_mint` entry should arrive in the same change that removes the
 # workspace's kv_read of a static GitHub credential, never alongside it.
-path "{{ openbao_github_mount }}/token/{{ permission_set }}" {
+path "{{ (openbao_github_permission_sets | selectattr('name', 'equalto', permission_set) | map(attribute='mount') | first) | default(openbao_github_mount) }}/token/{{ permission_set }}" {
   capabilities = ["create", "update"]
 }
 {% endfor %}

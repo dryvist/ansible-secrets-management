@@ -71,6 +71,17 @@
     - openbao_engines
   when: not (openbao_reconcile_mode | default(false))
 
+- name: Configure the per-App GitHub mounts
+  ansible.builtin.include_tasks: init/05b-github-app-mount.yml
+  loop: "{{ openbao_github_app_mounts }}"
+  loop_control:
+    loop_var: gm
+    label: "{{ gm.mount }}"
+  when:
+    - not (openbao_reconcile_mode | default(false))
+    - openbao_bootstrap_token is defined
+    - openbao_github_engine_enabled | bool
+
 - name: Register and configure the OAuthapp secrets engine
   ansible.builtin.import_tasks: init/06-oauth-engine.yml
   tags:

@@ -87,6 +87,9 @@
         - github-read-policy.hcl
         - github-repo-create-policy.hcl
         - github-org-admin-policy.hcl
+        - github-write-policy.hcl
+        - github-agents-policy.hcl
+        - ai-public-policy.hcl
 
     - name: Read the policies rendered with a publisher repository
       ansible.builtin.slurp:
@@ -101,6 +104,9 @@
         _read_paths: "{{ _paths[2] }}"
         _repo_create_paths: "{{ _paths[3] }}"
         _org_admin_paths: "{{ _paths[4] }}"
+        _write_paths: "{{ _paths[5] }}"
+        _agents_paths: "{{ _paths[6] }}"
+        _ai_public_paths: "{{ _paths[7] }}"
       vars:
         _paths: >-
           {{ _tier_raw.results | map(attribute='content') | map('b64decode')
@@ -157,3 +163,41 @@
           github-org-admin grants {{ _org_admin_paths }}, or another tier
           grants organization_administration:write. It must be exactly the
           dryvist-org-admin set and appear nowhere else.
+
+    - name: Assert everyday writes use the everyday mount and never the admin mount
+      ansible.builtin.assert:
+        that:
+          - (openbao_github_everyday_mount ~ '/token') in _write_paths
+          - _write_paths | select('match', '^' ~ openbao_github_mount ~ '/') | list == []
+          - _mint_paths | select('match', '^' ~ openbao_github_mount ~ '/token/read-') | list == []
+          - _read_paths | select('match', '^' ~ openbao_github_mount ~ '/') | list == []
+        fail_msg: >-
+          An everyday read or write policy reaches the admin mount
+          ({{ openbao_github_mount }}). Everyday tokens must come only from
+          {{ openbao_github_everyday_mount }}.
+
+    - name: Assert the agents identity mints only the named agents set
+      ansible.builtin.assert:
+        that:
+          - _agents_paths == [openbao_github_agents_mount ~ '/token/' ~ openbao_github_agents_set_name]
+          - _ai_public_paths | select('match', '^github') | list == []
+          - _mint_paths | select('match', '^' ~ openbao_github_agents_mount ~ '/') | list == []
+        fail_msg: >-
+          github-agents must hold exactly
+          {{ openbao_github_agents_mount }}/token/{{ openbao_github_agents_set_name }}
+          (no raw token path, no other GitHub mount); ai-public and every other
+          tier must reach no GitHub mount through it.
+
+    - name: Assert no set on the per-App mounts carries administration
+      ansible.builtin.assert:
+        that:
+          - item.permissions is mapping
+          - "'administration' not in item.permissions"
+          - "'organization_administration' not in item.permissions"
+        fail_msg: "{{ item.mount }}/permissionset/{{ item.name }} carries administration."
+        quiet: true
+      loop: >-
+        {{ openbao_github_permission_sets
+           | rejectattr('mount', 'equalto', openbao_github_mount) | list }}
+      loop_control:
+        label: "{{ item.mount }}/{{ item.name }}"

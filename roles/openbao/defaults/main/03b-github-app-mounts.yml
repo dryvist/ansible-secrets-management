@@ -1,0 +1,54 @@
+---
+# Per-App GitHub engine mounts on the same plugin as the admin mount. Each
+# App's own grant is the hard ceiling for every token its mount mints, and
+# every set below states its permission map explicitly (05b asserts none holds
+# administration). App IDs and private keys arrive via environment;
+# installation IDs come from the env document (openbao_platform_env). A
+# supplied private key is a deliberate (re)configuration.
+#
+#   github         everyday read/write
+#   github-agents  write to public repositories only
+openbao_github_everyday_mount: github
+openbao_github_everyday_dryvist_installation_id: >-
+  {{ openbao_platform_env['OPENBAO_GITHUB_DRYVIST_INSTALLATION_ID'] | default('', true) }}
+openbao_github_everyday_personal_installation_id: >-
+  {{ openbao_platform_env['OPENBAO_GITHUB_PERSONAL_INSTALLATION_ID'] | default('', true) }}
+openbao_github_read_permission_sets:
+  - name: read-dryvist-all
+    tier: read
+    installation_id: "{{ openbao_github_everyday_dryvist_installation_id }}"
+    permissions: "{{ openbao_github_read_permissions }}"
+  - name: read-personal-all
+    tier: read
+    installation_id: "{{ openbao_github_everyday_personal_installation_id }}"
+    permissions: "{{ openbao_github_read_permissions }}"
+
+openbao_github_agents_mount: github-agents
+openbao_github_agents_set_name: agents-write
+openbao_github_agents_policy_name: github-agents
+openbao_github_agents_approle_name: github-agents
+openbao_github_agents_permissions:
+  contents: write
+  issues: write
+  pull_requests: write
+  merge_queues: write
+  metadata: read
+# `public_repos_of`: the set's repository list is the named organization's
+# public repositories, read from the GitHub API at converge time.
+openbao_github_agents_permission_sets:
+  - name: "{{ openbao_github_agents_set_name }}"
+    tier: agents
+    installation_id: >-
+      {{ openbao_platform_env['OPENBAO_GITHUB_AGENTS_DRYVIST_INSTALLATION_ID'] | default('', true) }}
+    permissions: "{{ openbao_github_agents_permissions }}"
+    public_repos_of: dryvist
+
+openbao_github_app_mounts:
+  - mount: "{{ openbao_github_everyday_mount }}"
+    app_id: "{{ lookup('env', 'OPENBAO_GITHUB_EVERYDAY_APP_ID') | default('', true) }}"
+    private_key: "{{ lookup('env', 'OPENBAO_GITHUB_EVERYDAY_APP_PRIVATE_KEY') | default('', true) }}"
+    permission_sets: "{{ openbao_github_read_permission_sets }}"
+  - mount: "{{ openbao_github_agents_mount }}"
+    app_id: "{{ lookup('env', 'OPENBAO_GITHUB_AGENTS_APP_ID') | default('', true) }}"
+    private_key: "{{ lookup('env', 'OPENBAO_GITHUB_AGENTS_APP_PRIVATE_KEY') | default('', true) }}"
+    permission_sets: "{{ openbao_github_agents_permission_sets }}"

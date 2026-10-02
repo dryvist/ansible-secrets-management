@@ -98,9 +98,12 @@ path "{{ mount.path | default(mount) }}/*" {
 # Break-glass covers repairing an engine's configuration (a rotated App key, a
 # re-pointed IAM role), which is why these are the full capability set and not
 # the consumer-tier read the ordinary identities hold.
-path "{{ openbao_github_mount | default('github') }}/*" {
+{% for _github_mount in [openbao_github_mount | default('github')]
+     + (openbao_github_app_mounts | default([]) | map(attribute='mount') | list) %}
+path "{{ _github_mount }}/*" {
   capabilities = ["create", "read", "update", "delete", "list"]
 }
+{% endfor %}
 path "{{ openbao_aws_mount | default('aws') }}/*" {
   capabilities = ["create", "read", "update", "delete", "list"]
 }

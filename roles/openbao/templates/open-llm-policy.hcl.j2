@@ -44,7 +44,7 @@ path "{{ openbao_kv_mount }}/metadata/ai/public/*" {
 # drops out of openbao_github_permission_sets entirely) — same as
 # github-docs-publisher-policy.hcl.j2.
 {% for permission_set in openbao_github_permission_sets | selectattr('name', 'equalto', openbao_github_open_llm_set_name) %}
-path "{{ openbao_github_mount }}/token/{{ permission_set.name }}" {
+path "{{ permission_set.mount }}/token/{{ permission_set.name }}" {
   capabilities = ["create", "read", "update"]
 }
 {% endfor %}

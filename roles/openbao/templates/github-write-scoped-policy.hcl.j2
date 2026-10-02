@@ -23,13 +23,13 @@
 #     repository_ids are denied by construction.
 #   * denied_parameters bans `permissions`, keeping map-valued matching out of
 #     the trust path.
-path "{{ openbao_github_mount }}/token" {
+path "{{ openbao_github_everyday_mount }}/token" {
   capabilities = ["create", "update"]
   required_parameters = ["installation_id", "repositories"]
   allowed_parameters = {
     "installation_id" = [
-      "{{ openbao_github_dryvist_installation_id }}",
-      "{{ openbao_github_personal_installation_id }}"
+      "{{ openbao_github_everyday_dryvist_installation_id }}",
+      "{{ openbao_github_everyday_personal_installation_id }}"
     ]
     "repositories" = [
 {% for repo in item.repos %}

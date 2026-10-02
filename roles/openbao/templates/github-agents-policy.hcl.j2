@@ -1,0 +1,9 @@
+{{ ansible_managed | comment }}
+# github-agents — GitHub write through the one named
+# set on the {{ openbao_github_agents_mount }} mount, whose stored map carries no
+# administration and whose stored repository list is the organization's public
+# repositories. The raw {{ openbao_github_agents_mount }}/token path and every
+# other GitHub mount are not granted.
+path "{{ openbao_github_agents_mount }}/token/{{ openbao_github_agents_set_name }}" {
+  capabilities = ["create", "update"]
+}

@@ -4,7 +4,9 @@
 # configuration, permission sets, policy grant, and leases. The App private key
 # is required only for first configuration/rotation and is never stored in KV.
 openbao_github_engine_enabled: true
-openbao_github_mount: github
+# The infra/admin App's mount. Everyday read and write tokens come from the
+# `github` mount (03b-github-app-mounts.yml), backed by a different App.
+openbao_github_mount: github-admin
 openbao_github_plugin_name: vault-plugin-secrets-github
 openbao_github_plugin_version: "2.3.2"
 openbao_github_plugin_catalog_version: "v{{ openbao_github_plugin_version }}"
@@ -27,9 +29,9 @@ openbao_github_app_id: "{{ lookup('env', 'OPENBAO_GITHUB_APP_ID') | default('', 
 openbao_github_app_private_key: >-
   {{ lookup('env', 'OPENBAO_GITHUB_APP_PRIVATE_KEY') | default('', true) }}
 openbao_github_dryvist_installation_id: >-
-  {{ lookup('env', 'OPENBAO_GITHUB_DRYVIST_INSTALLATION_ID') | default('', true) }}
+  {{ openbao_platform_env['OPENBAO_GITHUB_ADMIN_DRYVIST_INSTALLATION_ID'] | default('', true) }}
 openbao_github_personal_installation_id: >-
-  {{ lookup('env', 'OPENBAO_GITHUB_PERSONAL_INSTALLATION_ID') | default('', true) }}
+  {{ openbao_platform_env['OPENBAO_GITHUB_ADMIN_PERSONAL_INSTALLATION_ID'] | default('', true) }}
 # Read-tier permission map: what a group-scoped read token may do. Applied to
 # ALL repos of the installation (no repositories list on the read sets — the
 # blast radius of a leaked read token is "can read", not "can change").
@@ -149,14 +151,6 @@ openbao_github_base_permission_sets:
     tier: org-admin
     installation_id: "{{ openbao_github_dryvist_installation_id }}"
     permissions: "{{ openbao_github_org_admin_permissions }}"
-  - name: read-dryvist-all
-    tier: read
-    installation_id: "{{ openbao_github_dryvist_installation_id }}"
-    permissions: "{{ openbao_github_read_permissions }}"
-  - name: read-personal-all
-    tier: read
-    installation_id: "{{ openbao_github_personal_installation_id }}"
-    permissions: "{{ openbao_github_read_permissions }}"
   - name: runner-register-dryvist
     tier: runner
     installation_id: "{{ openbao_github_dryvist_installation_id }}"
@@ -167,7 +161,17 @@ openbao_github_base_permission_sets:
     permissions: "{{ openbao_github_exporter_permissions }}"
 # Full set list = the static base above + the publish tier, which exists only
 # when its repository list is configured.
-openbao_github_permission_sets: >-
+# Sets on the admin mount only; 05-github-engine.yml reconciles exactly these.
+openbao_github_admin_permission_sets: >-
   {{ openbao_github_base_permission_sets
      + openbao_github_docs_publisher_permission_sets
      + openbao_github_open_llm_permission_sets }}
+# Every set on every GitHub mount, each tagged with its mount, for the policy
+# templates.
+openbao_github_permission_sets: >-
+  {{ (openbao_github_admin_permission_sets
+      | map('combine', {'mount': openbao_github_mount}) | list)
+     + (openbao_github_read_permission_sets
+        | map('combine', {'mount': openbao_github_everyday_mount}) | list)
+     + (openbao_github_agents_permission_sets
+        | map('combine', {'mount': openbao_github_agents_mount}) | list) }}

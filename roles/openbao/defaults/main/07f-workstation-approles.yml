@@ -39,9 +39,9 @@ openbao_workstation_approles:
   # sets: dryvist-repo-create (administration:write) and dryvist-org-admin
   # (organization_administration:write). INERT, so neither the converge nor
   # approle-issuer ever mints its secret_id. The only standing path to one is
-  # the issuer policy on the identity below; each secret_id it mints is
+  # the issuer policy on the admin-issuer identity; each secret_id it mints is
   # single-use and lives 15m, so nothing long-lived exists. Token lives 10m.
-  - name: "{{ openbao_github_admin_claude_approle_name }}"
+  - name: "{{ openbao_github_admin_unattended_approle_name }}"
     token_policies:
       - "{{ openbao_github_repo_create_policy_name }}"
       - "{{ openbao_github_org_admin_policy_name }}"
@@ -50,12 +50,21 @@ openbao_workstation_approles:
     manage_secret_id: false
     secret_id_ttl: 15m
     secret_id_num_uses: 1
-  # The issuer identity: its only grant is minting secret_ids for the role
-  # above and rotating its own. INERT and non-expiring: issued once, never
-  # re-minted by the converge or approle-issuer; bounded by the workstation
-  # class and its issuer policy.
-  - name: "{{ openbao_claude_identity_approle_name }}"
-    policy: "{{ openbao_github_admin_claude_issuer_policy_name }}"
+  # github-agents: GitHub write through the agents mount's public-only set.
+  # Workstation-held; its one-set policy is the bound.
+  - name: "{{ openbao_github_agents_approle_name }}"
+    policy: "{{ openbao_github_agents_policy_name }}"
+    token_ttl: 30m
+    secret_id_ttl: "0s"
+    secret_id_num_uses: 0
+  # admin-issuer: mints secret_ids for the role above, rotates its own, and
+  # carries the everyday write policies (github-write and every write realm).
+  # INERT and non-expiring: issued once, never re-minted by the converge or
+  # approle-issuer; bounded by the workstation class and its policies.
+  - name: "{{ openbao_admin_issuer_approle_name }}"
+    token_policies: >-
+      {{ [openbao_github_admin_issuer_policy_name, openbao_github_write_policy_name]
+         + (openbao_github_write_scope_policies | map(attribute='name') | list) }}
     token_ttl: 10m
     token_max_ttl: 10m
     manage_secret_id: false
