@@ -17,10 +17,10 @@
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
   register: openbao_disclosure_denylist_current
   # A DENIED read is not an ABSENT path -- see the openbao_absent_stderr_marker
-  # doc (01-kv-hierarchy-and-rbac.yml). Absence is fine -- nothing to declare
-  # yet, `patch` creates the entry's metadata even before any data version
-  # exists -- but a denial says nothing about stored metadata and must not be
-  # read as "not yet declared".
+  # doc (01-kv-hierarchy-and-rbac.yml). Absence is fine -- the declaration
+  # below creates the entry's metadata with `put` before any data version
+  # exists (`patch` needs an existing entry) -- but a denial says nothing
+  # about stored metadata and must not be read as "not yet declared".
   failed_when:
     - openbao_disclosure_denylist_current.rc != 0
     - openbao_absent_stderr_marker not in (openbao_disclosure_denylist_current.stderr | default(''))
@@ -66,8 +66,12 @@
     # argv, not cmd: several values (reader, rotation) contain spaces and
     # parentheses, and a shell-parsed cmd string would shlex-split them into
     # extra positional args instead of one -custom-metadata=key=value token.
+    # `put` when the entry is absent: `patch` returns 404 on a path with no
+    # metadata yet.
     argv: >-
-      {{ ['bao', 'kv', 'metadata', 'patch', '-mount=' ~ openbao_disclosure_denylist_mount]
+      {{ ['bao', 'kv', 'metadata',
+          'patch' if openbao_disclosure_denylist_current.rc == 0 else 'put',
+          '-mount=' ~ openbao_disclosure_denylist_mount]
          + (openbao_disclosure_denylist_metadata | dict2items
             | map(attribute='key') | zip(openbao_disclosure_denylist_metadata.values())
             | map('join', '=') | map('regex_replace', '^', '-custom-metadata=') | list)
