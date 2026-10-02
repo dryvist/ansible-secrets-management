@@ -223,7 +223,9 @@
         body_format: json
         body:
           secret_id: "{{ rotate_old_secret_id }}"
-        status_code: 200
+        # 204: the previous secret_id no longer exists (it expired), so there
+        # is nothing left to destroy.
+        status_code: [200, 204]
       register: rotate_old_secret_id_lookup
       changed_when: false
       no_log: true
@@ -244,7 +246,9 @@
           {{ (rotate_old_secret_id_lookup.json.data.expiration_time | default('', true))
              is match('^(0001-01-01T00:00:00Z?)?$') }}
       no_log: false
-      when: rotate_old_secret_id | length > 0
+      when:
+        - rotate_old_secret_id | length > 0
+        - rotate_old_secret_id_lookup.status == 200
 
     - name: Destroy the previous secret_id for {{ rotate_domain_name }}
       ansible.builtin.uri:
@@ -260,6 +264,7 @@
       no_log: true
       when:
         - rotate_old_secret_id | length > 0
+        - rotate_old_secret_id_lookup.status == 200
         - rotate_old_secret_id_never_expires | bool
 
     - name: Report this domain rotated
@@ -268,7 +273,8 @@
         _finite_msg: "previous secret_id left to expire at {{ _expires_at }} (finite TTL, may still be in use)"
         _never_expiring_msg: "previous secret_id destroyed (it never expired)"
         _old_status: >-
-          {{ (rotate_old_secret_id | length == 0)
+          {{ (rotate_old_secret_id | length == 0
+              or rotate_old_secret_id_lookup.status | default(200) == 204)
              | ternary('none found to destroy',
                  (rotate_old_secret_id_never_expires | default(false) | bool)
                  | ternary(_never_expiring_msg, _finite_msg)) }}
