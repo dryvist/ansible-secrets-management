@@ -132,6 +132,9 @@
                  is search('^' ~ openbao_secrets_absent_msg_marker))
           no_log: false
 
+        # Check-and-set against the version read above (0 = the path must not
+        # exist yet): a writer that lands between the read and this write makes
+        # the write fail instead of dropping that writer's fields.
         - name: Merge the new fields over the existing secret and write it back
           community.hashi_vault.vault_write:
             url: "{{ _addr }}"
@@ -139,6 +142,8 @@
             token: "{{ openbao_secrets_publish_login.login.auth.client_token }}"
             path: "{{ openbao_secrets_kv_mount }}/data/{{ _path }}"
             data:
+              options:
+                cas: "{{ openbao_secrets_publish_existing.metadata.version | default(0) | int }}"
               data: >-
                 {{ (openbao_secrets_publish_existing.secret | default({}, true))
                    | combine(openbao_secrets_publish_effective) }}
