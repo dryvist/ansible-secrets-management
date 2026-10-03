@@ -1,0 +1,79 @@
+---
+# Decides what a domain's AppRole login result means, from the registered
+# result alone (exercised against mock results by
+# tests/openbao_secrets/verify_login_gate.yml):
+#
+#   login succeeded                      -> openbao_secrets_domain_login_ok true
+#   login failed, every path optional    -> recorded as an isolated failure,
+#                                           warned, and paged to the hub;
+#                                           the domain resolves nothing
+#   login failed, any path required      -> the run fails
+#
+# The login task itself never fails (failed_when: false) so that a failed
+# login in an all-optional domain is a decision here rather than a task
+# failure, which run_once would otherwise propagate to every host in the
+# batch.
+
+- name: Decide whether the AppRole login succeeded for {{ openbao_domain.name }}
+  ansible.builtin.set_fact:
+    openbao_secrets_domain_login_ok: >-
+      {{ not (openbao_secrets_domain_login.failed | default(false) | bool)
+         and (openbao_secrets_domain_login.login.auth.client_token | default('', true) | length > 0) }}
+    openbao_secrets_domain_login_error: >-
+      {{ openbao_secrets_domain_login.msg | default('AppRole login failed', true) }}
+  no_log: false
+
+- name: Fail on a login failure for a domain with a required path -- {{ openbao_domain.name }}
+  ansible.builtin.fail:
+    msg: >-
+      {{ openbao_domain.name }} AppRole login failed:
+      {{ openbao_secrets_domain_login_error }}. This domain has at least one
+      path that is not declared optional, so the failure cannot be isolated.
+  when:
+    - not (openbao_secrets_domain_login_ok | bool)
+    - not (openbao_secrets_domain_all_optional | bool)
+
+- name: Record the isolated login failure for {{ openbao_domain.name }}
+  ansible.builtin.set_fact:
+    openbao_secrets_isolated_failures: >-
+      {{ (hostvars['localhost'].openbao_secrets_isolated_failures | default([]))
+         + [openbao_domain.name ~ ': AppRole login failed: ' ~ openbao_secrets_domain_login_error] }}
+  delegate_to: localhost
+  delegate_facts: true
+  no_log: false
+  when: not (openbao_secrets_domain_login_ok | bool)
+
+- name: Warn that the login failed and optional paths are skipped -- {{ openbao_domain.name }}
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: {{ openbao_domain.name }} AppRole login failed; optional paths
+      skipped ({{ openbao_secrets_domain_login_error }}). Its consumers resolve
+      nothing from OpenBao on this run.
+  when: not (openbao_secrets_domain_login_ok | bool)
+
+- name: Page the alert hub about the failed login -- {{ openbao_domain.name }}
+  ansible.builtin.uri:
+    url: "{{ openbao_secrets_alert_ntfy_url }}"
+    method: POST
+    body: "{{ openbao_domain.name }} AppRole login failed; optional paths skipped"
+    headers:
+      Title: "openbao_secrets: {{ openbao_domain.name }} login failed"
+      Priority: high
+      Tags: warning
+    status_code: [200]
+  register: openbao_secrets_login_page
+  failed_when: false
+  no_log: false
+  when:
+    - not (openbao_secrets_domain_login_ok | bool)
+    - openbao_secrets_alert_ntfy_url | length > 0
+
+- name: Warn that the hub page was not delivered -- {{ openbao_domain.name }}
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: could not publish the {{ openbao_domain.name }} login failure to
+      the alert hub (HTTP {{ openbao_secrets_login_page.status | default('none') }}).
+  when:
+    - not (openbao_secrets_domain_login_ok | bool)
+    - openbao_secrets_alert_ntfy_url | length > 0
+    - openbao_secrets_login_page.status | default(0) != 200
