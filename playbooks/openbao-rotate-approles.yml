@@ -254,11 +254,9 @@
       loop_control:
         loop_var: rotate_domain_name
 
-    - name: Load the scheduled identity's own AppRole name (scheduled mode)
-      ansible.builtin.include_vars:
-        file: "{{ playbook_dir }}/../roles/openbao/defaults/main/05b-domain-policy-approle-names.yml"
-      when: rotate_scheduled_mode | bool
-
+    # openbao_approle_secret_id_rotate_scheduled_approle_name comes from the
+    # "Load the AppRole name lists" directory load above.
+    # tests/openbao_rotate/verify_scheduled_self_rotate_vars.yml guards it.
     # Same tasks file, targeted at approle-secret-id-rotate-scheduled itself,
     # run last so every domain is already rotated first. Its own previous
     # secret_id is left to expire, same as any other finite-TTL previous
