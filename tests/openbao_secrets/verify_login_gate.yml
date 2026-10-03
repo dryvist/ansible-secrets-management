@@ -1,0 +1,54 @@
+---
+# Proves the openbao_secrets AppRole login gate against the PRODUCTION task
+# file, with mock registered login results -- no live OpenBao, no hub (the
+# page URL is empty, so only the warning path runs).
+#
+#   login ok                              -> no failure, nothing isolated
+#   login failed, every path optional     -> no failure, one isolated record
+#   login failed, a required path exists  -> FAILS
+#   login "ok" without a client token     -> treated as failed (all-optional
+#                                            here, so isolated, not silent)
+#
+# Run: ansible-playbook -i localhost, -c local tests/openbao_secrets/verify_login_gate.yml
+
+- name: Verify the openbao_secrets login gate
+  hosts: localhost
+  gather_facts: false
+  vars:
+    openbao_secrets_alert_ntfy_url: ""
+    openbao_domain:
+      name: harness
+    _denied:
+      failed: true
+      msg: "permission denied, on post https://bao.example.invalid/v1/auth/approle/login"
+  tasks:
+    - name: Exercise every login-gate case
+      ansible.builtin.include_tasks: exercise_login_gate.yml
+      loop:
+        - name: successful login passes
+          login: {failed: false, login: {auth: {client_token: fixture-token}}}
+          all_optional: false
+          expect_failure: false
+          expect_login_ok: true
+          expect_isolated: 0
+        - name: failed login in an all-optional domain is isolated
+          login: "{{ _denied }}"
+          all_optional: true
+          expect_failure: false
+          expect_login_ok: false
+          expect_isolated: 1
+        - name: failed login in a domain with a required path fails
+          login: "{{ _denied }}"
+          all_optional: false
+          expect_failure: true
+          expect_login_ok: false
+          expect_isolated: 0
+        - name: login without a client token is not a success
+          login: {failed: false, login: {auth: {}}}
+          all_optional: true
+          expect_failure: false
+          expect_login_ok: false
+          expect_isolated: 1
+      loop_control:
+        loop_var: login_gate_fixture
+        label: "{{ login_gate_fixture.name }}"

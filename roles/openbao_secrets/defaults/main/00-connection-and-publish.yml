@@ -101,3 +101,10 @@ openbao_secrets_publish_secret_id: >-
 # credential on Linux (never a shared/broad credential). Add a domain here as
 # new consumer roles are wired to read bao-first; each needs a matching
 # AppRole + policy in roles/openbao's `openbao_approles`/`openbao_policies`.
+
+# Alert-hub topic URL a failed AppRole login in an all-optional domain is paged
+# to (tasks/login_gate.yml). Empty when ingress_domain is unset, which skips
+# the page but not the warning.
+openbao_secrets_alert_ntfy_url: >-
+  {{ ('https://ntfy.' ~ ingress_domain ~ '/keystone')
+     if (ingress_domain | default('', true)) else '' }}

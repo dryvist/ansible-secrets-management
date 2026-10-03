@@ -1,0 +1,35 @@
+---
+# Runs the PRODUCTION login gate (roles/openbao_secrets/tasks/login_gate.yml)
+# against one mock login result and asserts its verdict. Included once per
+# fixture by verify_login_gate.yml.
+
+- name: Load the fixture | {{ login_gate_fixture.name }}
+  ansible.builtin.set_fact:
+    openbao_secrets_domain_login: "{{ login_gate_fixture.login }}"
+    openbao_secrets_domain_all_optional: "{{ login_gate_fixture.all_optional }}"
+    openbao_secrets_isolated_failures: []
+    login_gate_failed: false
+
+- name: Execute the production gate | {{ login_gate_fixture.name }}
+  block:
+    - name: Include the production login gate | {{ login_gate_fixture.name }}
+      ansible.builtin.include_tasks: ../../roles/openbao_secrets/tasks/login_gate.yml
+  rescue:
+    - name: Record that the gate aborted | {{ login_gate_fixture.name }}
+      ansible.builtin.set_fact:
+        login_gate_failed: true
+
+- name: Assert the gate reached the expected verdict | {{ login_gate_fixture.name }}
+  ansible.builtin.assert:
+    that:
+      - (login_gate_failed | bool) == (login_gate_fixture.expect_failure | bool)
+      - (openbao_secrets_domain_login_ok | bool) == (login_gate_fixture.expect_login_ok | bool)
+      - >-
+        (hostvars['localhost'].openbao_secrets_isolated_failures | default([]) | length)
+        == (login_gate_fixture.expect_isolated | int)
+    fail_msg: >-
+      {{ login_gate_fixture.name }}: failed={{ login_gate_failed }},
+      login_ok={{ openbao_secrets_domain_login_ok }},
+      isolated={{ hostvars['localhost'].openbao_secrets_isolated_failures | default([]) }}.
+    success_msg: "{{ login_gate_fixture.name }}: verdict as expected"
+    quiet: true
