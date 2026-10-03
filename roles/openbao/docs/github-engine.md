@@ -35,8 +35,9 @@ Token access is tiered; the tier IS the privilege boundary:
 - **write (`github-write`)** — the raw `github/token` endpoint, pinned to
   exactly ONE allowlisted repository per request: the policy requires
   `installation_id` + `repositories`, allowlists their values
-  (`openbao_github_write_repo_allowlist`, value globs honored), and denies
-  `permissions`, `org_name`, and `repository_ids` outright. Standing ambient
+  (`openbao_github_write_repo_allowlist`, value globs honored), accepts any
+  `permissions` map (GitHub only narrows a token below the App grant), and
+  denies `org_name` and `repository_ids` outright. Standing ambient
   AppRole, plus the claim-before-work write lease under
   `secret/locks/github-write/` (KV-v2 CAS acquire, `delete_version_after`
   deadman).
