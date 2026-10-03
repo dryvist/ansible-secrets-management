@@ -1,0 +1,175 @@
+---
+# The github-hermes mount: four sets split by repository visibility, two
+# policies that each reach one visibility only, and the converge checks
+# (roles/openbao/tasks/init/05b-github-app-set-checks.yml) run against fixture
+# GitHub API responses.
+- name: Render and verify the github-hermes mount, sets and policies
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    ansible_become: false
+    _fixture_dir: "{{ render_tmp }}"
+    _template_dir: "../../../roles/openbao/templates"
+    _checks: ../../../roles/openbao/tasks/init/05b-github-app-set-checks.yml
+    ansible_managed: "test fixture"
+    _review: {pull_requests: write, issues: write, contents: read, checks: read, metadata: read}
+    _author: {contents: write, pull_requests: write, metadata: read}
+    _public_fixture:
+      - {name: pub-a}
+      - {name: pub-b}
+    _private_fixture:
+      total_count: 3
+      repositories:
+        - {name: priv-a, private: true, owner: {login: dryvist}}
+        - {name: pub-a, private: false, owner: {login: dryvist}}
+        - {name: other-priv, private: true, owner: {login: elsewhere}}
+
+  tasks:
+    - name: Load the openbao role defaults
+      ansible.builtin.include_vars:
+        dir: ../../../roles/openbao/defaults/main
+
+    - name: Pin the unconfigured case
+      ansible.builtin.set_fact:
+        openbao_github_hermes_installation_id: ""
+
+    - name: Assert no installation ID yields no sets and no mount
+      ansible.builtin.assert:
+        that:
+          - openbao_github_hermes_permission_sets == []
+          - openbao_github_hermes_mount not in (openbao_github_app_mounts | map(attribute='mount'))
+
+    - name: Pin the configured case
+      ansible.builtin.set_fact:
+        openbao_github_hermes_installation_id: "1"
+        openbao_github_hermes_author_public_repos: [pub-a]
+        openbao_github_hermes_author_private_repos: [priv-a]
+        openbao_aws_hermes_webhook_consumer_role_arn: fixture-arn
+
+    - name: Assert the four sets carry exactly their maps and scopes
+      ansible.builtin.assert:
+        that:
+          - openbao_github_hermes_mount in (openbao_github_app_mounts | map(attribute='mount'))
+          - >-
+            (openbao_github_hermes_permission_sets | items2dict(key_name='name', value_name='permissions'))
+            == {'hermes-review-public': _review, 'hermes-review-private': _review,
+                'hermes-author-public': _author, 'hermes-author-private': _author}
+          - (openbao_github_hermes_permission_sets | selectattr('public_repos_of', 'defined')
+             | map(attribute='name') | list) == ['hermes-review-public']
+          - (openbao_github_hermes_permission_sets | selectattr('private_repos_of', 'defined')
+             | map(attribute='name') | list) == ['hermes-review-private']
+
+    - name: Render the policies
+      ansible.builtin.template:
+        src: "{{ _template_dir }}/{{ item }}.j2"
+        dest: "{{ _fixture_dir }}/hermes-{{ item }}"
+        mode: "0644"
+      loop: &policies
+        - hermes-public-policy.hcl
+        - hermes-private-policy.hcl
+        - github-mint-policy.hcl
+        - github-read-policy.hcl
+        - github-write-policy.hcl
+        - github-agents-policy.hcl
+        - github-docs-publisher-policy.hcl
+        - ai-public-policy.hcl
+        - ai-orchestrator-policy.hcl
+        - hermes-policy.hcl
+
+    - name: Read the rendered policies
+      ansible.builtin.slurp:
+        src: "{{ _fixture_dir }}/hermes-{{ item }}"
+      register: _raw
+      loop: *policies
+
+    - name: Assert each hermes policy mints its own visibility only, and no other policy reaches the mount
+      vars:
+        _paths: >-
+          {{ _raw.results | map(attribute='content') | map('b64decode')
+             | map('regex_findall', '(?m)^path "([^"]+)"') | list }}
+        _m: "{{ openbao_github_hermes_mount }}"
+      ansible.builtin.assert:
+        that:
+          - _paths[0] == [_m ~ '/token/hermes-review-public', _m ~ '/token/hermes-author-public']
+          - >-
+            _paths[1] == [_m ~ '/token/hermes-review-private', _m ~ '/token/hermes-author-private',
+                          openbao_kv_mount ~ '/data/' ~ openbao_hermes_webhook_kv_path,
+                          openbao_aws_mount ~ '/sts/' ~ openbao_aws_hermes_webhook_consumer_role_name]
+          - (_paths[0] + _paths[2:] | flatten) | select('search', 'hermes-webhook') | list == []
+          - _paths[2:] | flatten | select('match', '^' ~ _m ~ '/') | list == []
+
+    - name: Run the converge checks against fixture responses
+      ansible.builtin.include_tasks: "{{ _checks }}"
+      vars:
+        gm:
+          mount: "{{ openbao_github_hermes_mount }}"
+          permission_sets: "{{ openbao_github_hermes_permission_sets }}"
+        openbao_github_app_mount_public_repos:
+          results: [{item: {name: hermes-review-public}, json: "{{ _public_fixture }}"}]
+        openbao_github_app_mount_private_repos:
+          results: [{item: {item: {name: hermes-review-private}}, json: "{{ _private_fixture }}"}]
+
+    - name: Assert the resolved repository lists follow visibility
+      ansible.builtin.assert:
+        that:
+          - >-
+            (openbao_github_app_mount_sets | items2dict(key_name='name', value_name='repositories'))
+            == {'hermes-review-public': ['pub-a', 'pub-b'], 'hermes-review-private': ['priv-a'],
+                'hermes-author-public': ['pub-a'], 'hermes-author-private': ['priv-a']}
+
+    - name: "Refuse a private repository on the public allowlist"
+      vars:
+        _bad_sets: >-
+          {{ (openbao_github_hermes_permission_sets | selectattr('name', 'equalto', 'hermes-review-public') | list)
+             + (openbao_github_hermes_permission_sets | selectattr('name', 'equalto', 'hermes-author-public')
+                | map('combine', {'repositories': ['priv-a']}) | list) }}
+      block:
+        - name: Reset the resolved set list
+          ansible.builtin.set_fact:
+            openbao_github_app_mount_sets: []
+            _refused: false
+        - name: "Run the converge checks with a private repository on the public allowlist"
+          ansible.builtin.include_tasks: "{{ _checks }}"
+          vars:
+            gm:
+              mount: "{{ openbao_github_hermes_mount }}"
+              permission_sets: "{{ _bad_sets }}"
+            openbao_github_app_mount_public_repos:
+              results: [{item: {name: hermes-review-public}, json: "{{ _public_fixture }}"}]
+      rescue:
+        - name: Record the refusal
+          ansible.builtin.set_fact:
+            _refused: true
+      always:
+        - name: "Assert the converge checks refused a private repository on the public allowlist"
+          ansible.builtin.assert:
+            that: _refused | bool
+
+    - name: "Refuse an administration grant"
+      vars:
+        _bad_sets: >-
+          {{ openbao_github_hermes_permission_sets | selectattr('name', 'equalto', 'hermes-review-public')
+             | map('combine', {'permissions': _review | combine({'administration': 'read'})}) | list }}
+      block:
+        - name: Reset the resolved set list
+          ansible.builtin.set_fact:
+            openbao_github_app_mount_sets: []
+            _refused: false
+        - name: "Run the converge checks with an administration grant"
+          ansible.builtin.include_tasks: "{{ _checks }}"
+          vars:
+            gm:
+              mount: "{{ openbao_github_hermes_mount }}"
+              permission_sets: "{{ _bad_sets }}"
+            openbao_github_app_mount_public_repos:
+              results: [{item: {name: hermes-review-public}, json: "{{ _public_fixture }}"}]
+      rescue:
+        - name: Record the refusal
+          ansible.builtin.set_fact:
+            _refused: true
+      always:
+        - name: "Assert the converge checks refused an administration grant"
+          ansible.builtin.assert:
+            that: _refused | bool

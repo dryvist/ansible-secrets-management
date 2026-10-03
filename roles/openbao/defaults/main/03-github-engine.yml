@@ -141,7 +141,7 @@ openbao_github_base_permission_sets:
   # `POST /orgs/dryvist/repos` and nothing else (no contents, no pull_requests,
   # so this token cannot push). No `repositories` key: administration at the
   # org level cannot be scoped to a repo that does not exist yet. Dryvist only
-  # — a personal-account counterpart is not shipped, see docs/secrets-engines.md
+  # — a personal-account counterpart is not shipped, see docs/github-engine.md
   # for why a personal one buys nothing.
   - name: dryvist-repo-create
     tier: repo-create

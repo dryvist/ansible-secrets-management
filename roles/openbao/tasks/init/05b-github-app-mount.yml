@@ -97,33 +97,59 @@
     label: "{{ item.name }}"
   register: openbao_github_app_mount_public_repos
 
-# ponytail: one page of 100; add pagination when the org passes 100 public repos.
-- name: "Resolve the set repository lists on mount {{ gm.mount }}"
-  ansible.builtin.set_fact:
-    openbao_github_app_mount_sets: >-
-      {{ openbao_github_app_mount_sets | default([])
-         + [item | combine({'repositories': (openbao_github_app_mount_public_repos.results
-               | selectattr('item.name', 'equalto', item.name) | first).json
-               | map(attribute='name') | sort | list}
-             if item.public_repos_of is defined else {})] }}
-  loop: "{{ gm.permission_sets }}"
+# `private_repos_of`: the set's repository list is the named organization's
+# private repositories the mount's own App installation can see, read with a
+# metadata-only token minted from this mount and revoked straight after.
+- name: "Mint a metadata-only token for sets that are private-only on mount {{ gm.mount }}"
+  ansible.builtin.uri:
+    url: "{{ openbao_api_addr }}/v1/{{ gm.mount }}/token"
+    method: POST
+    headers:
+      X-Vault-Token: "{{ openbao_bootstrap_token }}"
+    body_format: json
+    body:
+      installation_id: "{{ item.installation_id | int }}"
+      permissions:
+        metadata: read
+  loop: "{{ gm.permission_sets | selectattr('private_repos_of', 'defined') | list }}"
   loop_control:
     label: "{{ item.name }}"
+  register: openbao_github_app_mount_private_tokens
+  no_log: true
 
-- name: "Refuse a public-only set with an empty or full-page repository list on mount {{ gm.mount }}"
-  ansible.builtin.assert:
-    that:
-      - item.repositories | length > 0
-      - item.repositories | length < 100
-    fail_msg: >-
-      {{ gm.mount }}/permissionset/{{ item.name }} resolved
-      {{ item.repositories | length }} public repositories. An empty list would
-      store an unbounded set; 100 means the page is full and the list is
-      truncated.
-    quiet: true
-  loop: "{{ openbao_github_app_mount_sets | selectattr('public_repos_of', 'defined') | list }}"
+- name: "Read the installation repositories for sets that are private-only on mount {{ gm.mount }}"
+  ansible.builtin.uri:
+    url: https://api.github.com/installation/repositories?per_page=100
+    headers:
+      Accept: application/vnd.github+json
+      Authorization: "Bearer {{ item.json.data.token }}"
+    return_content: true
+  loop: "{{ openbao_github_app_mount_private_tokens.results }}"
   loop_control:
-    label: "{{ item.name }}"
+    label: "{{ item.item.name }}"
+  register: openbao_github_app_mount_private_repos
+  no_log: true
+
+- name: "Revoke the metadata-only tokens on mount {{ gm.mount }}"
+  ansible.builtin.uri:
+    url: "{{ openbao_api_addr }}/v1/sys/leases/revoke"
+    method: PUT
+    headers:
+      X-Vault-Token: "{{ openbao_bootstrap_token }}"
+    body_format: json
+    body:
+      lease_id: "{{ item.json.lease_id }}"
+    status_code:
+      - 200
+      - 204
+  loop: "{{ openbao_github_app_mount_private_tokens.results }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+  no_log: true
+  when: item.json.lease_id | default('', true) | length > 0
+
+- name: "Check the set maps and resolve the repository lists on mount {{ gm.mount }}"
+  ansible.builtin.include_tasks: 05b-github-app-set-checks.yml
 
 - name: "Read the permission sets on mount {{ gm.mount }}"
   ansible.builtin.command:

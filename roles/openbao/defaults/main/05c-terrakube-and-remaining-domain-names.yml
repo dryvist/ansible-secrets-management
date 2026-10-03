@@ -50,6 +50,8 @@ openbao_terrakube_workspaces:
     kv_read: [infrastructure/unifi, platform/object-storage]
   - name: "{{ openbao_terrakube_aws_workspace }}"
     api_update: ["aws/sts/{{ openbao_terrakube_aws_workspace }}"]
+    # The webhook endpoint leaf (02-aws-and-plugins.yml).
+    kv_write: ["{{ openbao_hermes_webhook_kv_path }}"]
   - name: tofu-runs-on
     api_update: [aws/sts/tofu-runs-on]
   - name: tofu-proxmox
@@ -195,28 +197,6 @@ openbao_ai_api_key_providers:
   # router's local-llm domain. The leaf may be unseeded; the policy grants the
   # read either way so an absent key surfaces as 404, never 403.
   - opencode
-openbao_hermes_policy_name: hermes
-openbao_hermes_approle_name: hermes
-# Router virtual keys for the Hermes operating profiles. Shared reader for
-# now (one AppRole, four leaves); a per-profile split is a later follow-up.
-# One secret/apps/<name> leaf each, read only — see
-# openbao_generated_app_secrets.
-openbao_hermes_router_key_apps:
-  - hermes-default
-  - hermes-splunk-admin
-  - hermes-homelab-admin
-  - hermes-github-maint
-openbao_hermes_write_policy_name: hermes-write
-openbao_hermes_write_approle_name: hermes-write
-# llm-router-write: single-purpose writer for the llm-router Redis credential
-# (secret/ai/llm-router, field LLM_ROUTER_REDIS_PASSWORD) — same shape as
-# hermes-write, so the missing-credential seed never needs a superuser token.
-openbao_llm_router_write_policy_name: llm-router-write
-openbao_llm_router_write_approle_name: llm-router-write
-# ai-donna: a second Hermes agent's dedicated, least-privilege reader — its own
-# isolated credential domain (secret/ai/donna), sharing nothing with hermes.
-openbao_ai_donna_policy_name: ai-donna
-openbao_ai_donna_approle_name: ai-donna
 # config-read: THE DEFAULT identity on the non-secret `config` mount — read +
 # list across every path in it, and nothing anywhere else. Everything that only
 # consumes config uses this. Nothing in the mount is a secret, so per-path

@@ -49,7 +49,9 @@ including rolling expansion and seal-key rotation, are in
   policies, and AppRole-per-domain model.
 - [Break-glass access](docs/break-glass-access.md) — the human-unlock login
   flow and TOTP enrolment order.
-- [Secrets engines](docs/secrets-engines.md) — AWS, GitHub, OAuthapp, the
+- [GitHub secrets engine](docs/github-engine.md) — App mounts, permission
+  sets and token tiers.
+- [Secrets engines](docs/secrets-engines.md) — AWS, OAuthapp, the
   table-driven credential rotation timers (Slack, Splunk MCP), and SSH
   client-certificate signing.
 - [Operations](docs/operations.md) — break-glass handling, idempotency,
