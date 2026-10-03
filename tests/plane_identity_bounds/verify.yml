@@ -119,6 +119,27 @@
         fail_msg: >-
           The write realm requires a 30-use, 24-hour secret_id and a 30-minute token.
 
+    - name: The untrusted-tier dispatcher keeps finite secret_id bounds
+      vars:
+        dispatchers: >-
+          {{ openbao_approles
+             | selectattr('name', 'equalto', openbao_open_llm_approle_name) | list }}
+      ansible.builtin.assert:
+        that:
+          - dispatchers | length > 0
+          - >-
+            dispatchers | map(attribute='secret_id_num_uses',
+                              default=openbao_approle_secret_id_num_uses_overrides.get(
+                                openbao_open_llm_approle_name, openbao_approle_secret_id_num_uses))
+            | map('int') | unique | list == [30]
+          - >-
+            dispatchers | map(attribute='secret_id_ttl',
+                              default=openbao_approle_secret_id_ttl_overrides.get(
+                                openbao_open_llm_approle_name, openbao_approle_secret_id_ttl))
+            | map('community.general.to_seconds') | map('int') | unique | list == [86400]
+        fail_msg: >-
+          The open-llm dispatcher requires a 30-use, 24-hour secret_id.
+
     # The general guard. Any future non-expiring secret_id must earn it the same
     # way, or this fails on the day it is added rather than the day it leaks.
     # Both spellings are checked: the override map AND an inline declaration on
