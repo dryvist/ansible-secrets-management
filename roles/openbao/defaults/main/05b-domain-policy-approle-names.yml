@@ -150,9 +150,16 @@ openbao_approle_issuer_approle_name: approle-issuer
 # secret_id of its own). It mints the human-gated tiers approle-issuer cannot,
 # and is what replaces the retired standing `admin` credential.
 openbao_human_unlock_policy_name: human-unlock
+# Keep the general write identity on its repository allowlist until the App
+# installation is isolated from repositories owned by narrower realms.
+openbao_github_write_installation_scope: false
+openbao_github_write_repo_allowlist: >-
+  {{ (lookup('env', 'OPENBAO_GITHUB_WRITE_REPOS') | default('', true)).split(',')
+     | map('trim') | reject('equalto', '') | list }}
+
 # Additional write realms, each an independent policy + AppRole with its own
-# repository allowlist. These restrict the realm identity only. The general
-# write identity can reach every repository in its App installation, including
+# repository allowlist. When installation scope is enabled, the general write
+# identity can reach every repository in its App installation, including
 # repositories also listed in a realm. Separate App installations provide
 # repository isolation from the general identity.
 #

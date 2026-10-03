@@ -33,19 +33,20 @@ Token access is tiered; the tier IS the privilege boundary:
   including one with a private submodule, without holding a stored token. Read
   only: a checkout can never write a repository.
 - **write (`github-write`)** — the raw `github/token` endpoint, limited to
-  the configured App installations. The policy requires
-  `installation_id` + `repositories`, pins the installation IDs, accepts any
-  repository selector and
-  `permissions` map (GitHub only narrows a token below the App grant), and
-  denies `org_name` and `repository_ids` outright. Standing ambient
+  the configured App installations and repository allowlist by default. The
+  policy requires `installation_id` + `repositories` and pins the installation
+  IDs. Setting `openbao_github_write_installation_scope` to `true` lets the
+  installation select repositories and accepts any repository selector;
+  `permissions` remains a narrowing map because GitHub only narrows a token
+  below the App grant. The policy denies `org_name` and `repository_ids`
+  outright. Standing ambient
   AppRole, plus the claim-before-work write lease under
   `secret/locks/github-write/` (KV-v2 CAS acquire, `delete_version_after`
   deadman).
-  GitHub's installation repository selection is the scope authority. The
-  helper requests one repository, but the policy also permits multiple
-  repositories and full-installation selectors. Realm policies restrict their
-  own identities only; repositories shared with the general App installation
-  remain available to the general write identity.
+  When installation scope is enabled, GitHub's installation repository
+  selection is the scope authority; the helper requests one repository, but
+  the policy also permits multiple repositories and full-installation
+  selectors. Realm policies restrict their own identities only.
 - **publish (`docs-publisher`)** — `github-admin/token/docs-publisher`: one
   repository, `contents: write` + `pull_requests: write`, all three stored in
   the set. The repository list comes from the iac secret store; with none
