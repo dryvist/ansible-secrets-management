@@ -193,6 +193,9 @@ openbao_credential_publish_apps:
   # into that consumer's bucket under this same converge identity. homarr's
   # token lands in apps/homarr, covered by the entry above.
   - pve-exporter
+  # The untrusted-tier Qdrant JWT (QDRANT_UNTRUSTED_JWT), minted by
+  # ansible-proxmox-ai's qdrant_docker role and merged into this bucket.
+  - open-llm
 
 openbao_policies: >-
   {{ openbao_base_policies
