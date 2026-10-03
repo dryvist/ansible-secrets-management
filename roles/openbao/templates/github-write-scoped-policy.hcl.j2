@@ -21,8 +21,8 @@
 #     glob would let "<allowed>,<not-allowed>" ride through the plugin's comma
 #     split. Listing any key denies every unlisted one, so org_name and
 #     repository_ids are denied by construction.
-#   * denied_parameters bans `permissions`, keeping map-valued matching out of
-#     the trust path.
+#   * `permissions` is allowed with any value: GitHub only narrows a token
+#     below the App's grant, so a map can reduce a token and never widen it.
 path "{{ openbao_github_everyday_mount }}/token" {
   capabilities = ["create", "update"]
   required_parameters = ["installation_id", "repositories"]
@@ -36,8 +36,6 @@ path "{{ openbao_github_everyday_mount }}/token" {
       "{{ repo }}"{{ "," if not loop.last }}
 {% endfor %}
     ]
-  }
-  denied_parameters = {
     "permissions" = []
   }
 }
