@@ -14,8 +14,12 @@ openbao_secrets_domains:
   - name: local-cloud
     paths:
       # As above: the policy grants `platform/object-storage/*` only, so the
-      # bare key is a 403 even though it exists.
-      - platform/object-storage/main
+      # bare key is a 403 even though it exists. optional: true -- no role or
+      # playbook in this repo reads bao_local_cloud_secrets, so a failed fetch
+      # is reported as an isolated domain failure and the other domains still
+      # resolve.
+      - path: platform/object-storage/main
+        optional: true
       # platform/compute is not declared: the path holds no keys at all.
   - name: monitoring
     paths:
