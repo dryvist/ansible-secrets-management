@@ -187,16 +187,15 @@ openbao_base_approles_core:
     policy: "{{ openbao_ai_orchestrator_policy_name }}"
     token_ttl: 30m  # demoted: broad-write identity gets a short token TTL
   # open-llm: the untrusted-tier dispatcher. Machine class, bound to the
-  # dispatcher host's /32; non-expiring secret_id like hermes-public/-private
-  # (nothing re-mints it), so the /32 is its compensating control. 15m token,
-  # renewed up to a 60m job budget through the default policy's renew-self.
+  # dispatcher host's /32. Its secret_id keeps the global finite bounds
+  # (24h, 30 uses); tests/plane_identity_bounds/verify.yml fails on 0/0.
+  # 15m token, renewed up to a 60m job budget through the default policy's
+  # renew-self.
   - name: "{{ openbao_open_llm_approle_name }}"
     policy: "{{ openbao_open_llm_policy_name }}"
     secret_id_bound_cidrs: "{{ openbao_open_llm_secret_id_cidr }}"
     token_ttl: 15m
     token_max_ttl: 60m
-    secret_id_ttl: "0s"
-    secret_id_num_uses: 0
   # ai-readonly / ai-elevated ACTOR roles: standing (ambient) READ tiers. Their
   # token_policies ATTACH composed rollups — no standalone ai-* policy object.
   # ai-readonly = read-all (every read-<svc>); ai-elevated = read-all + the

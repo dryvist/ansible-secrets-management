@@ -1,4 +1,4 @@
-"""The open-llm secret_id never expires, so its bind must be one host.
+"""The open-llm secret_id bind must be one host.
 
 Renders the REAL assert expression out of init/10-approles.yml, never a
 reimplementation: a single /32 passes; any wider range, a list, or a bare
