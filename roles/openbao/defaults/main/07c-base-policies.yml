@@ -188,6 +188,11 @@ openbao_credential_publish_apps:
   # stored integration credentials, it makes them permanently undecryptable.
   - homarr
   - homarr-v2
+  # Not published by a role in this repo: ansible-proxmox's pve_api_tokens
+  # mints each consumer's read-only PVE API token on the cluster and writes it
+  # into that consumer's bucket under this same converge identity. homarr's
+  # token lands in apps/homarr, covered by the entry above.
+  - pve-exporter
 
 openbao_policies: >-
   {{ openbao_base_policies

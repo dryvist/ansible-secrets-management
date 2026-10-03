@@ -114,12 +114,12 @@ openbao_secrets_domains:
       # bao_apps_secrets and Authelia's mandatory() default fails the converge.
       - apps/authelia
       # prometheus-pve-exporter's read-only PVE API token (pve_exporter_token_id,
-      # pve_exporter_token_secret — PROMOTED at source by
-      # openbao_promoted_app_secrets.pve-exporter). Consumed by
-      # roles/prometheus_pve_exporter; absent skips deploying the exporter
-      # rather than rendering a container with no credential. optional: true
-      # -- the path exists only once an operator has promoted the token, so a
-      # 404 must not fail the whole apps prefetch.
+      # pve_exporter_token_secret — minted and published by ansible-proxmox's
+      # pve_api_tokens). Consumed by roles/prometheus_pve_exporter; absent
+      # skips deploying the exporter rather than rendering a container with no
+      # credential. optional: true -- the path exists only once that converge
+      # has published the token, so a 404 must not fail the whole apps
+      # prefetch.
       - path: apps/pve-exporter
         optional: true
       # Cribl Stream management API (:9000) admin password
