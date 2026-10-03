@@ -134,3 +134,42 @@
           {{ unbound_names | length }} identities declare the unbound class
           ({{ unbound_names | join(', ') }}). Each one needs a written reason
           next to it; unbound is the documented opt-out, not the fallback.
+
+    # include_vars outranks task vars, so the fixture bind is a fact.
+    - name: Supply a documentation-range dispatcher bind for open-llm
+      ansible.builtin.set_fact:
+        openbao_open_llm_secret_id_cidr: "192.0.2.10/32"
+
+    - name: The open-llm role is machine class, bound to one /32, with a renewable 15m/60m token
+      vars:
+        role: "{{ openbao_approles | selectattr('name', 'equalto', 'open-llm') | first }}"
+        # Renewal rides the default policy's renew-self; no role write may drop it.
+        role_writes: >-
+          {{ lookup('file', playbook_dir ~ '/../../roles/openbao/tasks/init/10-approles.yml')
+             ~ lookup('file', playbook_dir ~ '/../../roles/openbao/tasks/init/10c-approle-ttl-bounds.yml') }}
+      ansible.builtin.assert:
+        that:
+          - openbao_approle_cidr_class_map['open-llm'] == 'machine'
+          - role.secret_id_bound_cidrs == '192.0.2.10/32'
+          - role.token_ttl == '15m'
+          - role.token_max_ttl == '60m'
+          - (role.token_policies | default([role.policy])) == ['open-llm']
+          - role.token_no_default_policy is not defined
+          - role_writes is not search('no_default_policy')
+        fail_msg: >-
+          open-llm declares class '{{ openbao_approle_cidr_class_map['open-llm'] }}',
+          bind '{{ role.secret_id_bound_cidrs | default('') }}', token
+          {{ role.token_ttl | default('') }}/{{ role.token_max_ttl | default('') }}.
+          It must be the machine class bound to the dispatcher's /32, 15m
+          renewable to 60m, keep the default policy, and carry only its own policy.
+
+    - name: Retired identities are declared nowhere and slated for deletion
+      ansible.builtin.assert:
+        that:
+          - openbao_retired_approles | sort == ['github-agents', 'open-llm-workstation']
+          - openbao_approles | map(attribute='name') | select('in', openbao_retired_approles) | list == []
+          - openbao_approle_cidr_class_overrides | list | select('in', openbao_retired_approles) | list == []
+          - openbao_base_policies_static | map(attribute='name') | select('in', openbao_retired_policies) | list == []
+        fail_msg: >-
+          A retired AppRole or policy is still declared, so the converge would
+          recreate what it deletes.
