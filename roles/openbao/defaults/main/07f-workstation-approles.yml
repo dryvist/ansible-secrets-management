@@ -3,6 +3,12 @@
 # 07b: that file is at the per-file size budget CI enforces, and the remedy for
 # that budget is always splitting the source.
 openbao_workstation_approles:
+  - name: proxman
+    policy: proxman
+    token_ttl: 15m
+    token_max_ttl: 30m
+    secret_id_ttl: "0s"
+    secret_id_num_uses: 0
   # openbao-node-converge: the converge identity for the OpenBao-node play
   # (`--tags openbao` on `openbao_group`) — the single converge still run from
   # a workstation, because its inputs are the seal key and the provisioning

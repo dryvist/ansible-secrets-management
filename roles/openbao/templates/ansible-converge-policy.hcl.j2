@@ -1,4 +1,8 @@
 {{ ansible_managed | comment }}
+path "{{ openbao_kv_mount }}/data/{{ openbao_proxman_secret_path }}" {
+  capabilities = ["create", "read", "update"]
+}
+
 # OpenBao policy for the ansible-converge AppRole — config-management pulls
 # (was "ansible"). ENUMERATED exact paths only: there is deliberately NO
 # platform/* or apps/* wildcard, and no access to the infra kernel

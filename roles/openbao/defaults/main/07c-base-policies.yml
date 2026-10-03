@@ -192,4 +192,5 @@ openbao_policies: >-
   {{ openbao_base_policies
      + openbao_ai_capability_policies + openbao_ssh_sign_policies
      + openbao_ai_api_key_policies
-     + openbao_github_write_scope_policies }}
+     + openbao_github_write_scope_policies
+     + [{'name': 'proxman', 'template': 'proxman-policy.hcl.j2'}] }}
