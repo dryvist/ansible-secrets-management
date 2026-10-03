@@ -84,7 +84,7 @@ openbao_github_docs_publisher_permissions:
   pull_requests: write
 # The repository name is supplied by the iac secret store, NOT inline: this
 # repository is public and the installation covers private repositories, the
-# same reasoning as OPENBAO_GITHUB_WRITE_REPOS. Unset yields no set at all
+# repository selection remains explicit. Unset yields no set at all
 # rather than a set with an empty repository list — an omitted `repositories`
 # on a permission set means the WHOLE installation, so an unconfigured
 # publisher must not exist rather than exist unbounded. Explicit literals

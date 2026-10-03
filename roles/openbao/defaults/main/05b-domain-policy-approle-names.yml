@@ -120,7 +120,7 @@ openbao_github_oidc_audience: https://github.com/dryvist
 #
 # The repository is the workflow's own SOURCE repository, which is private, so
 # it comes from the secret store rather than inline — this repository is
-# public, the same reasoning as OPENBAO_GITHUB_WRITE_REPOS. Unset yields no
+# public. Unset yields no
 # role at all rather than a role bound to an empty repository claim. The
 # destination the minted token writes to is a separate, public repository and
 # is named in the permission set.
@@ -150,22 +150,15 @@ openbao_approle_issuer_approle_name: approle-issuer
 # secret_id of its own). It mints the human-gated tiers approle-issuer cannot,
 # and is what replaces the retired standing `admin` credential.
 openbao_human_unlock_policy_name: human-unlock
-openbao_github_write_repo_allowlist: >-
-  {{ (lookup('env', 'OPENBAO_GITHUB_WRITE_REPOS') | default('', true)).split(',')
-     | map('trim') | reject('equalto', '') | list }}
-
 # Additional write realms, each an independent policy + AppRole with its own
-# repository allowlist. The default allowlist above is one shared blast radius:
-# any holder of the github-write secret_id may mint for any repository on it.
-# When a group of repositories warrants a narrower boundary than "everything
-# this organisation automates", it gets its own realm here and comes OFF the
-# shared list — a realm that merely ADDS a second path to the same repositories
-# widens access instead of narrowing it.
+# repository allowlist. These restrict the realm identity only. The general
+# write identity can reach every repository in its App installation, including
+# repositories also listed in a realm. Separate App installations provide
+# repository isolation from the general identity.
 #
 # Supplied as a JSON object in the iac secret store, NOT inline: this
 # repository is public, and both the realm names and the repository names can
-# disclose who or what a realm is for. Same reasoning as
-# OPENBAO_GITHUB_WRITE_REPOS above. An unset variable yields {}, which creates
+# disclose who or what a realm is for. An unset variable yields {}, which creates
 # no extra policies or AppRoles and leaves this role byte-identical to its
 # behaviour before realms existed — the mechanism is inert until data arrives.
 #
@@ -178,9 +171,8 @@ openbao_github_write_repo_allowlist: >-
 # non-alphanumerics replaced by underscores — the shape nix-darwin's
 # `openbao-github-creds` already uses to find any AppRole's secret-zero.
 #
-# The EXPLICIT-LITERALS-ONLY rule above applies identically to every realm: the
-# rendered policy pins `repositories` the same way, so a glob here would carry
-# the same comma-smuggling defect.
+# Realm repository names are exact literals; globs could accept comma-separated
+# requests naming repositories outside the realm.
 openbao_github_write_scopes: >-
   {{ (lookup('env', 'OPENBAO_GITHUB_WRITE_SCOPES') | default('{}', true)) | from_json }}
 
