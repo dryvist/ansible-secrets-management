@@ -72,7 +72,7 @@
     quiet: true
   when: openbao_bootstrap_token is defined
 
-# open-llm's secret_id never expires; its bind is the dispatcher host alone.
+# open-llm's bind is the dispatcher host alone.
 - name: Assert the open-llm bind, when supplied, is one address as a /32
   ansible.builtin.assert:
     that:
