@@ -187,6 +187,7 @@ openbao_credential_publish_apps:
   # the case the comment above describes: losing it does not invalidate the
   # stored integration credentials, it makes them permanently undecryptable.
   - homarr
+  - homarr-v2
 
 openbao_policies: >-
   {{ openbao_base_policies

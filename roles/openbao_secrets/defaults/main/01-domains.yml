@@ -102,6 +102,10 @@ openbao_secrets_domains:
       # services Homarr integrates WITH are not here: they stay in the media
       # domain, owned by the media-stack automation repo.
       - apps/homarr
+      # The second Homarr guest's own credentials (homarr_v2_* fields).
+      # optional: the role publishes them on that guest's first converge.
+      - path: apps/homarr-v2
+        optional: true
       # Authelia: the OIDC client secrets it shares with its relying parties
       # (authelia_oidc_{homarr,langfuse}_client_secret). The secret's home is
       # Authelia — it hashes the plaintext into its own config while Homarr and
