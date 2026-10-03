@@ -18,6 +18,15 @@
 # budget -- Ansible's defaults/main/ directory auto-loads every file here, so
 # the split is not a behavior change.
 openbao_approle_undeclared_exceptions: []
+# Retired identities: the converge deletes each one that is still live
+# (init/10d-approle-undeclared-live.yml) before the assert above runs. A name
+# may leave this list once no store holds it.
+openbao_retired_approles:
+  - open-llm-workstation
+  - github-agents
+# Retired policies, deleted the same way (init/08b-rbac-policy-writes.yml).
+openbao_retired_policies:
+  - github-agents
 # Example shape (do not add speculatively):
 #   - name: some-vendor-managed-role
 #     reason: provisioned by <tool>, out of this repo's control

@@ -56,13 +56,6 @@ openbao_workstation_approles:
     manage_secret_id: false
     secret_id_ttl: 15m
     secret_id_num_uses: 1
-  # github-agents: GitHub write through the agents mount's public-only set.
-  # Workstation-held; its one-set policy is the bound.
-  - name: "{{ openbao_github_agents_approle_name }}"
-    policy: "{{ openbao_github_agents_policy_name }}"
-    token_ttl: 30m
-    secret_id_ttl: "0s"
-    secret_id_num_uses: 0
   # hermes-public / hermes-private: the Hermes agent's GitHub tokens through
   # the hermes mount, one identity per repository visibility. Machine class
   # (default); short token, no renewal needed.

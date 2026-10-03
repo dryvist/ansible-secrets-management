@@ -248,11 +248,14 @@ openbao_ai_public_approle_name: ai-public
 openbao_ai_public_router_key_apps: [opencode, raycast, codex, cursor]
 openbao_ai_orchestrator_policy_name: ai-orchestrator
 openbao_ai_orchestrator_approle_name: ai-orchestrator
-# open-llm — the successor-harness automation identity (macOS `open-llm`
-# user). Read-only: secret/open-llm/* (its own domain, operator-seeded) +
-# the shared ai-public leaf. See open-llm-policy.hcl.j2.
+# open-llm — the untrusted-tier dispatcher identity: reads its own bucket and
+# mints GitHub tokens from the agents mount only. See open-llm-policy.hcl.j2.
 openbao_open_llm_policy_name: open-llm
 openbao_open_llm_approle_name: open-llm
+# The dispatcher host's single address as a /32 (init/10-approles.yml asserts
+# the shape). Empty falls back to the machine class.
+openbao_open_llm_secret_id_cidr: >-
+  {{ lookup('env', 'OPENBAO_AI_SANDBOX_SECRET_ID_CIDR') | default('', true) }}
 # ai-readonly / ai-elevated are now ACTOR ROLES that ATTACH base capability
 # policies (below) — they no longer own a standalone `ai-*` policy object. Only
 # the AppRole names survive as vars; their token_policies are composed rollups.

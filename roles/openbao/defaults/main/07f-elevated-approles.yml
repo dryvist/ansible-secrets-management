@@ -120,13 +120,6 @@ openbao_base_approles_elevated:
          + (['ssh-sign-automation-ansible'] if openbao_ssh_engine_enabled else []) }}
     secret_id_ttl: "0s"
     secret_id_num_uses: 0
-  # open-llm-workstation: the lower-trust harness account on the operator
-  # workstation — its own domain plus the shared ai-public reads.
-  - name: open-llm-workstation
-    token_policies: >-
-      {{ [openbao_open_llm_policy_name, openbao_ai_public_policy_name] }}
-    secret_id_ttl: "0s"
-    secret_id_num_uses: 0
   # ai-runner: standing, ambient READ identity like local-llm / hermes. The
   # openbao_secrets prefetch play in ansible-proxmox-ai logs in each converge
   # with AI_RUNNER_VAULT_ROLE_ID / _SECRET_ID and reads the dispatch-queue +

@@ -64,6 +64,26 @@
          if (openbao_approle_live_list.rc | default(1)) == 0 else [] }}
   when: openbao_bootstrap_token is defined
 
+# Retired names (07c-approle-undeclared-exceptions.yml) are deleted, not
+# excepted. Only an identity holding delete on auth/approle/role/* can do this;
+# any other fails here, naming nothing secret, before the assert below.
+- name: Delete retired AppRoles that still exist live
+  ansible.builtin.command:
+    cmd: "bao delete auth/approle/role/{{ item }}"
+  environment:
+    BAO_ADDR: "{{ openbao_write_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  loop: "{{ openbao_retired_approles | select('in', openbao_approle_live_names | default([])) | list }}"
+  no_log: true
+  changed_when: true
+  when: openbao_bootstrap_token is defined
+
+- name: Drop the deleted AppRoles from the live set
+  ansible.builtin.set_fact:
+    openbao_approle_live_names: >-
+      {{ openbao_approle_live_names | difference(openbao_retired_approles) }}
+  when: openbao_bootstrap_token is defined
+
 - name: Assert every live AppRole is either declared or a named exception
   vars:
     _declared: "{{ openbao_approles | map(attribute='name') | list }}"

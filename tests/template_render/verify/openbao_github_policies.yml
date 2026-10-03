@@ -72,9 +72,10 @@
           configured. An unbounded set would carry write over the whole
           installation.
 
-    - name: Pin the publisher repository list to the configured case
+    - name: Pin the publisher repository list and agents installation to the configured case
       ansible.builtin.set_fact:
         openbao_github_docs_publisher_repos: [fixture-repo]
+        openbao_github_agents_installation_id: "4242"
 
     - name: Render the tier policies with a publisher repository configured
       ansible.builtin.template:
@@ -88,7 +89,7 @@
         - github-repo-create-policy.hcl
         - github-org-admin-policy.hcl
         - github-write-policy.hcl
-        - github-agents-policy.hcl
+        - open-llm-policy.hcl
         - ai-public-policy.hcl
 
     - name: Read the policies rendered with a publisher repository
@@ -105,7 +106,8 @@
         _repo_create_paths: "{{ _paths[3] }}"
         _org_admin_paths: "{{ _paths[4] }}"
         _write_paths: "{{ _paths[5] }}"
-        _agents_paths: "{{ _paths[6] }}"
+        _open_llm_paths: "{{ _paths[6] }}"
+        _open_llm_text: "{{ _tier_raw.results[6].content | b64decode }}"
         _ai_public_paths: "{{ _paths[7] }}"
       vars:
         _paths: >-
@@ -176,17 +178,85 @@
           ({{ openbao_github_mount }}). Everyday tokens must come only from
           {{ openbao_github_everyday_mount }}.
 
-    - name: Assert the agents identity mints only the named agents set
+    - name: Assert open-llm holds exactly its bucket read and the pinned agents mint
+      vars:
+        _token_stanza: >-
+          {{ _open_llm_text | regex_search('(?ms)path "' ~ openbao_github_agents_mount ~ '/token" [{].*?^[}]') }}
       ansible.builtin.assert:
         that:
-          - _agents_paths == [openbao_github_agents_mount ~ '/token/' ~ openbao_github_agents_set_name]
-          - _ai_public_paths | select('match', '^github') | list == []
-          - _mint_paths | select('match', '^' ~ openbao_github_agents_mount ~ '/') | list == []
+          - >-
+            _open_llm_paths == [openbao_kv_mount ~ '/data/apps/open-llm',
+                                openbao_kv_mount ~ '/metadata/apps/open-llm',
+                                openbao_github_agents_mount ~ '/token']
+          - >-
+            'required_parameters = ["installation_id", "repositories"]' in _token_stanza
+          - >-
+            '"installation_id" = ["4242"]' in _token_stanza
+          - _token_stanza | regex_findall('(?m)^ +"([a-z_]+)" =') == ['installation_id', 'repositories', 'permissions']
+          - _token_stanza is not search('org_name|repository_ids')
+          - >-
+            _open_llm_paths | select('match', '^(github|github-admin|' ~ openbao_github_hermes_mount ~ ')/')
+            | list == []
+          - >-
+            _open_llm_text | regex_findall('capabilities = (.*)')
+            | select('search', 'list|delete|sudo') | list == []
         fail_msg: >-
-          github-agents must hold exactly
-          {{ openbao_github_agents_mount }}/token/{{ openbao_github_agents_set_name }}
-          (no raw token path, no other GitHub mount); ai-public and every other
-          tier must reach no GitHub mount through it.
+          open-llm grants {{ _open_llm_paths }}. It must read exactly
+          secret/apps/open-llm and mint only from
+          {{ openbao_github_agents_mount }}/token, pinned to one installation,
+          with org_name and repository_ids refused.
+
+    - name: Assert no other tier reaches the agents mount
+      ansible.builtin.assert:
+        that:
+          - >-
+            (_publisher_paths + _mint_paths + _read_paths + _repo_create_paths
+             + _org_admin_paths + _write_paths + _ai_public_paths)
+            | select('match', '^' ~ openbao_github_agents_mount ~ '/') | list == []
+          - _ai_public_paths | select('match', '^github') | list == []
+        fail_msg: Only open-llm may mint from {{ openbao_github_agents_mount }}.
+
+    - name: Pin the agents installation to the unconfigured case
+      ansible.builtin.set_fact:
+        openbao_github_agents_installation_id: ""
+
+    - name: Render the open-llm policy with no agents installation configured
+      ansible.builtin.template:
+        src: "{{ _template_dir }}/open-llm-policy.hcl.j2"
+        dest: "{{ _fixture_dir }}/unset-open-llm-policy.hcl"
+        mode: "0644"
+
+    - name: Read the open-llm policy rendered without an installation
+      ansible.builtin.slurp:
+        src: "{{ _fixture_dir }}/unset-open-llm-policy.hcl"
+      register: _open_llm_unset_raw
+
+    - name: Assert an unconfigured installation leaves open-llm only its bucket read
+      ansible.builtin.assert:
+        that:
+          - >-
+            (_open_llm_unset_raw.content | b64decode) | regex_findall('(?m)^path "([^"]+)"')
+            == [openbao_kv_mount ~ '/data/apps/open-llm', openbao_kv_mount ~ '/metadata/apps/open-llm']
+        fail_msg: With no installation ID the open-llm policy must render no mint grant.
+
+    # The agents mount is declared with no sets, so the converge's set checks
+    # must resolve to nothing; its undeclared-set cleanup then removes any
+    # stored set.
+    - name: Run the set checks for the agents mount
+      ansible.builtin.include_tasks: ../../../roles/openbao/tasks/init/05b-github-app-set-checks.yml
+      vars:
+        gm: "{{ openbao_github_app_mounts | selectattr('mount', 'equalto', openbao_github_agents_mount) | first }}"
+        openbao_github_app_mount_public_repos: {results: []}
+        openbao_github_app_mount_private_repos: {results: []}
+
+    - name: Assert the agents mount declares and resolves no permission set
+      ansible.builtin.assert:
+        that:
+          - >-
+            (openbao_github_app_mounts | selectattr('mount', 'equalto', openbao_github_agents_mount)
+             | first).permission_sets == []
+          - openbao_github_app_mount_sets == []
+        fail_msg: The agents mount must carry no permission set; its App installation is the scope.
 
     - name: Assert no set on the per-App mounts carries administration
       ansible.builtin.assert:
