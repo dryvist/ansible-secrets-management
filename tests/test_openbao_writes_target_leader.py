@@ -206,6 +206,17 @@ MEASURED_READ_LOOPS = {
 
 
 class DelegatedBaoCallsAreConsistent(unittest.TestCase):
+    def test_generated_seed_write_uses_the_same_cli_as_its_read(self):
+        tasks = yaml.safe_load(
+            (TASKS / "seed_generated_app_secret.yml").read_text(encoding="utf-8")
+        )
+        read = next(t for t in tasks if t.get("register") == "openbao_seed_current")
+        write = next(t for t in tasks if "argv" in t.get("ansible.builtin.command", {}))
+        for key in ("delegate_to", "become"):
+            self.assertEqual(write.get(key), read[key], key)
+        self.assertEqual(write["environment"], read["environment"])
+        self.assertEqual(write.get("vars", {}).get("ansible_become"), read["vars"]["ansible_become"])
+
     def _delegated_tasks(self):
         for path in sorted(TASKS.rglob("*.yml")):
             for task in _walk_tasks(yaml.safe_load(path.read_text(encoding="utf-8"))):
