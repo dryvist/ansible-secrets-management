@@ -1,17 +1,11 @@
 {{ ansible_managed | comment }}
-# {{ item.name }} — a WRITE realm. Identical in construction to github-write,
-# differing only in which repositories it pins: this one is limited to the
-# realm's own allowlist rather than the organisation-wide one.
+# {{ item.name }} — a WRITE realm limited to its own repository allowlist.
 #
-# The point is the boundary, not the addition. A realm exists so that a holder
-# of ITS secret_id cannot mint for anything outside the realm, AND so that the
-# organisation-wide github-write identity cannot mint for anything inside it.
-# The second half only holds if the realm's repositories are REMOVED from
-# OPENBAO_GITHUB_WRITE_REPOS. Leaving them on both lists creates a second door
-# to the same room and narrows nothing.
+# A realm identity cannot mint outside its allowlist. The general write
+# identity can reach these repositories when its App installation includes
+# them. Separate App installations provide isolation from that identity.
 #
-# Every constraint below is inherited deliberately from github-write-policy;
-# read that template for the reasoning behind each, which applies unchanged:
+# Realm constraints:
 #
 #   * required_parameters makes an unconstrained (full-installation) request
 #     impossible.

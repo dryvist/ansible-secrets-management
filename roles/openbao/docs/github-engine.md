@@ -32,15 +32,20 @@ Token access is tiered; the tier IS the privilege boundary:
   unattended Ansible execution plane can check out the repositories it runs,
   including one with a private submodule, without holding a stored token. Read
   only: a checkout can never write a repository.
-- **write (`github-write`)** — the raw `github/token` endpoint, pinned to
-  exactly ONE allowlisted repository per request: the policy requires
-  `installation_id` + `repositories`, allowlists their values
-  (`openbao_github_write_repo_allowlist`, value globs honored), accepts any
+- **write (`github-write`)** — the raw `github/token` endpoint, limited to
+  the configured App installations. The policy requires
+  `installation_id` + `repositories`, pins the installation IDs, accepts any
+  repository selector and
   `permissions` map (GitHub only narrows a token below the App grant), and
   denies `org_name` and `repository_ids` outright. Standing ambient
   AppRole, plus the claim-before-work write lease under
   `secret/locks/github-write/` (KV-v2 CAS acquire, `delete_version_after`
   deadman).
+  GitHub's installation repository selection is the scope authority. The
+  helper requests one repository, but the policy also permits multiple
+  repositories and full-installation selectors. Realm policies restrict their
+  own identities only; repositories shared with the general App installation
+  remain available to the general write identity.
 - **publish (`docs-publisher`)** — `github-admin/token/docs-publisher`: one
   repository, `contents: write` + `pull_requests: write`, all three stored in
   the set. The repository list comes from the iac secret store; with none
@@ -69,9 +74,8 @@ Token access is tiered; the tier IS the privilege boundary:
   mint a token with no reachable endpoint.
 
   Sequence to create a repository and then push to it: mint
-  `github-admin/token/dryvist-repo-create`, `POST /orgs/dryvist/repos`, add the new
-  repository's name to `OPENBAO_GITHUB_WRITE_REPOS`, land a converge so
-  `github-write`'s policy allowlists it, then `github/token` (raw, `github-write`)
+  `github-admin/token/dryvist-repo-create`, `POST /orgs/dryvist/repos`, select the
+  repository in the everyday App installation, then `github/token` (raw, `github-write`)
   mints the token that actually pushes. The repo-create token is never reused
   to push — its stored permission map has no `contents` grant to do so.
 - **hermes (`hermes-public`, `hermes-private`)** — four sets on
