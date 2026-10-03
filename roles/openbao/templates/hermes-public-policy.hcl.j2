@@ -1,0 +1,10 @@
+{{ ansible_managed | comment }}
+# hermes-public — mints only the public-repository sets on the
+# {{ openbao_github_hermes_mount }} mount; each set's map and repository list
+# are stored server-side. The raw {{ openbao_github_hermes_mount }}/token path,
+# the other visibility's sets and every other GitHub mount are not granted.
+{% for permission_set in openbao_github_hermes_permission_sets | selectattr('tier', 'equalto', 'hermes-public') %}
+path "{{ openbao_github_hermes_mount }}/token/{{ permission_set.name }}" {
+  capabilities = ["create", "update"]
+}
+{% endfor %}

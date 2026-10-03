@@ -1,0 +1,22 @@
+{{ ansible_managed | comment }}
+# hermes-private — mints only the private-repository sets on the
+# {{ openbao_github_hermes_mount }} mount; each set's map and repository list
+# are stored server-side. The raw {{ openbao_github_hermes_mount }}/token path,
+# the other visibility's sets and every other GitHub mount are not granted.
+# Also reads the webhook endpoint leaf and mints the webhook consumer's STS
+# credentials (when its role ARN is configured).
+{% for permission_set in openbao_github_hermes_permission_sets | selectattr('tier', 'equalto', 'hermes-private') %}
+path "{{ openbao_github_hermes_mount }}/token/{{ permission_set.name }}" {
+  capabilities = ["create", "update"]
+}
+{% endfor %}
+
+path "{{ openbao_kv_mount }}/data/{{ openbao_hermes_webhook_kv_path }}" {
+  capabilities = ["read"]
+}
+{% if openbao_aws_hermes_webhook_consumer_role_arn | length > 0 %}
+
+path "{{ openbao_aws_mount }}/sts/{{ openbao_aws_hermes_webhook_consumer_role_name }}" {
+  capabilities = ["read", "update"]
+}
+{% endif %}

@@ -22,13 +22,18 @@ platforms:
 
 provisioner:
   name: ansible
+  # Placeholder values for the environment-specific Terrakube workspace names
+  # the role reads from the runtime environment.
+  env:
+    OPENBAO_TERRAKUBE_NETWORK_WORKSPACE: example-network
+    OPENBAO_TERRAKUBE_AWS_WORKSPACE: example-aws
   inventory:
     # container_ip is a HOSTVAR in production (load_tofu.yml sets it per host);
     # the role reads it via hostvars to build the Raft peer list, so it must be
     # a hostvar here too (a play var would not be visible through hostvars).
     host_vars:
       openbao-test${CI_INSTANCE_SUFFIX}:
-        container_ip: "192.0.2.210"
+        container_ip: "192.168.20.210"
   config_options:
     defaults:
       interpreter_python: auto_silent

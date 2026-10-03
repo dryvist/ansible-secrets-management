@@ -9,10 +9,12 @@
 # Same zip/loop and the same complete field set as "Create the missing
 # AppRoles". A partial `bao write auth/approle/role/<name>` resets omitted
 # fields to defaults. Break-glass roles are not in openbao_manageable_approles
-# during reconcile and are not retuned here BY DESIGN.
+# during reconcile and are not retuned here BY DESIGN. Runs on
+# openbao_cli_host, like the existence check whose results it compares against.
 
 - name: Reconcile AppRole TTL and token bounds on existing AppRoles
   vars:
+    ansible_become: "{{ openbao_cli_become }}"
     approle_cidr_class: "{{ openbao_approle_cidr_class_map[item.0.name] }}"
     approle_bound_cidrs: >-
       {{ item.0.secret_id_bound_cidrs | default('', true)
@@ -60,8 +62,10 @@
           ' token_bound_cidrs=' ~ approle_bound_cidrs)
          if (approle_bound_cidrs | length > 0) else '' }}
   environment:
-    BAO_ADDR: "{{ openbao_write_addr }}"
+    BAO_ADDR: "{{ openbao_cli_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
   loop: "{{ openbao_manageable_approles | zip(openbao_approle_checks.results | default([])) | list }}"
   loop_control:
     label: "{{ item.0.name }}"

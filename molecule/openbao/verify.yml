@@ -18,8 +18,6 @@
     openbao_terrakube_workspace_names:
       - iac-platform
       - tofu-github
-      - tofu-unifi
-      - tofu-aws-production
       - tofu-runs-on
       - tofu-proxmox
       - tofu-proxmox-aws-infra

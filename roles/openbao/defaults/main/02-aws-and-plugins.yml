@@ -33,6 +33,16 @@ openbao_aws_iac_admin_role_arn: "{{ lookup('env', 'OPENBAO_AWS_IAC_ADMIN_ROLE_AR
 openbao_aws_iac_admin_default_sts_ttl: 1h
 # 1h, not 2h like tf-proxmox: this role's AWS MaxSessionDuration is 3600s.
 openbao_aws_iac_admin_max_sts_ttl: 1h
+# Third assumed_role broker: the webhook queue consumer, minted only by the
+# hermes-private AppRole. Same env-var indirection; unset renders no role and
+# no policy grant.
+openbao_aws_hermes_webhook_consumer_role_name: hermes-webhook-consumer
+openbao_aws_hermes_webhook_consumer_role_arn: >-
+  {{ lookup('env', 'OPENBAO_AWS_HERMES_WEBHOOK_CONSUMER_ROLE_ARN') | default('', true) }}
+openbao_aws_hermes_webhook_consumer_sts_ttl: 15m
+# Webhook endpoint leaf (keys function_url, hmac_secret): written by the AWS
+# Terrakube workspace, read by the hermes-private AppRole.
+openbao_hermes_webhook_kv_path: apps/hermes-webhook
 # The base-user key OpenBao uses to call sts:AssumeRole. Minted via an
 # independent admin path (never the key being rotated out), seeded from Doppler
 # tier-0. Written to aws/config/root ONLY on first configuration — a routine

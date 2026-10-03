@@ -1,0 +1,82 @@
+---
+# Assert the hermes set maps verbatim, resolve each set's repository list from
+# the reads in 05b-github-app-mount.yml (openbao_github_app_mount_public_repos /
+# _private_repos) and refuse an unbounded, truncated or visibility-crossing
+# list. Separate file so the
+# template-render tests run the same tasks against fixture responses.
+- name: "Assert the hermes sets hold exactly their declared maps on mount {{ gm.mount }}"
+  ansible.builtin.assert:
+    that:
+      - item.permissions == openbao_github_hermes_set_permissions[item.name]
+      - >-
+        item.permissions.keys()
+        | select('in', ['administration', 'workflows', 'actions', 'secrets']) | list == []
+      - item.permissions.keys() | select('match', '^organization_') | list == []
+      - >-
+        item.public_repos_of is defined or item.private_repos_of is defined
+        or (item.repositories | default([]) | length > 0)
+    fail_msg: >-
+      {{ gm.mount }}/permissionset/{{ item.name }} must carry exactly
+      {{ openbao_github_hermes_set_permissions[item.name] | default({}) }}
+      and a bounded repository list.
+    quiet: true
+  loop: "{{ gm.permission_sets }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: gm.mount == openbao_github_hermes_mount
+
+# ponytail: one page of 100; add pagination when a list passes 100 repos.
+- name: "Resolve the set repository lists on mount {{ gm.mount }}"
+  ansible.builtin.set_fact:
+    openbao_github_app_mount_sets: >-
+      {{ openbao_github_app_mount_sets | default([])
+         + [item | combine(
+             {'repositories': (openbao_github_app_mount_public_repos.results
+               | selectattr('item.name', 'equalto', item.name) | first).json
+               | map(attribute='name') | sort | list}
+             if item.public_repos_of is defined else
+             {'repositories': (openbao_github_app_mount_private_repos.results
+               | selectattr('item.item.name', 'equalto', item.name) | first).json.repositories
+               | selectattr('private') | selectattr('owner.login', 'equalto', item.private_repos_of)
+               | map(attribute='name') | sort | list,
+              'repository_page_count': (openbao_github_app_mount_private_repos.results
+               | selectattr('item.item.name', 'equalto', item.name) | first).json.total_count}
+             if item.private_repos_of is defined else {})] }}
+  loop: "{{ gm.permission_sets }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: "Refuse a visibility-resolved set with an empty or full-page repository list on mount {{ gm.mount }}"
+  ansible.builtin.assert:
+    that:
+      - item.repositories | length > 0
+      - item.repositories | length < 100
+      - item.repository_page_count | default(0) | int < 100
+    fail_msg: >-
+      {{ gm.mount }}/permissionset/{{ item.name }} resolved
+      {{ item.repositories | length }} repositories. An empty list would
+      store an unbounded set; 100 means the page is full and the list is
+      truncated.
+    quiet: true
+  loop: >-
+    {{ openbao_github_app_mount_sets | selectattr('public_repos_of', 'defined') | list
+       + openbao_github_app_mount_sets | selectattr('private_repos_of', 'defined') | list }}
+  loop_control:
+    label: "{{ item.name }}"
+
+# `repositories_within`: every allowlisted repository must be in the named
+# set's resolved list, so an allowlist cannot cross a visibility boundary.
+- name: "Refuse an allowlist entry outside its visibility on mount {{ gm.mount }}"
+  ansible.builtin.assert:
+    that:
+      - >-
+        item.repositories | difference((openbao_github_app_mount_sets
+          | selectattr('name', 'equalto', item.repositories_within) | first).repositories)
+        | list == []
+    fail_msg: >-
+      {{ gm.mount }}/permissionset/{{ item.name }} lists repositories outside
+      {{ item.repositories_within }}.
+    quiet: true
+  loop: "{{ openbao_github_app_mount_sets | selectattr('repositories_within', 'defined') | list }}"
+  loop_control:
+    label: "{{ item.name }}"

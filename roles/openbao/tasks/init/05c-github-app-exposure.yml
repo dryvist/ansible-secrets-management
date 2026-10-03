@@ -1,0 +1,87 @@
+---
+# Exposure check for one GitHub App whose key is in this run (loop var `ga`):
+# signs an App JWT, then fails the run when the App has a webhook URL or is
+# installed on an account outside openbao_github_app_install_allowlist.
+- name: "Stage the JWT signing input for App {{ ga.app_id }}"
+  ansible.builtin.tempfile:
+    state: file
+  register: openbao_github_app_jwt_input
+  changed_when: false
+
+- name: "Build the JWT signing input for App {{ ga.app_id }}"
+  vars:
+    _now: "{{ now().timestamp() | int }}"
+    _header: '{"alg":"RS256","typ":"JWT"}'
+    _claims: "{{ {'iat': _now | int - 60, 'exp': _now | int + 540, 'iss': ga.app_id | string} | to_json }}"
+    _header_b64: "{{ _header | b64encode | replace('+', '-') | replace('/', '_') | replace('=', '') }}"
+    _claims_b64: "{{ _claims | b64encode | replace('+', '-') | replace('/', '_') | replace('=', '') }}"
+  ansible.builtin.set_fact:
+    openbao_github_app_jwt_signing_input: "{{ _header_b64 }}.{{ _claims_b64 }}"
+
+- name: "Sign an App JWT for App {{ ga.app_id }}"
+  block:
+    - name: "Write the signing input for App {{ ga.app_id }}"
+      ansible.builtin.copy:
+        content: "{{ openbao_github_app_jwt_signing_input }}"
+        dest: "{{ openbao_github_app_jwt_input.path }}"
+        mode: "0600"
+      changed_when: false
+
+    - name: "Sign the input for App {{ ga.app_id }}"
+      community.crypto.openssl_signature:
+        path: "{{ openbao_github_app_jwt_input.path }}"
+        privatekey_content: "{{ ga.private_key }}"
+      register: openbao_github_app_jwt_sig
+      no_log: true
+
+    - name: "Assemble the App JWT for App {{ ga.app_id }}"
+      ansible.builtin.set_fact:
+        openbao_github_app_jwt: >-
+          {{ openbao_github_app_jwt_signing_input }}.{{ openbao_github_app_jwt_sig.signature
+             | replace('+', '-') | replace('/', '_') | replace('=', '') }}
+      no_log: true
+  always:
+    - name: "Remove the signing input for App {{ ga.app_id }}"
+      ansible.builtin.file:
+        path: "{{ openbao_github_app_jwt_input.path }}"
+        state: absent
+      changed_when: false
+
+- name: "Read the webhook configuration of App {{ ga.app_id }}"
+  ansible.builtin.uri:
+    url: https://api.github.com/app/hook/config
+    headers:
+      Authorization: "Bearer {{ openbao_github_app_jwt }}"
+      Accept: application/vnd.github+json
+    return_content: true
+    # 404 means the App has no webhook configured at all.
+    status_code: [200, 404]
+  register: openbao_github_app_hook
+  no_log: true
+
+- name: "Read the installations of App {{ ga.app_id }}"
+  ansible.builtin.uri:
+    url: https://api.github.com/app/installations?per_page=100
+    headers:
+      Authorization: "Bearer {{ openbao_github_app_jwt }}"
+      Accept: application/vnd.github+json
+    return_content: true
+  register: openbao_github_app_installs
+  no_log: true
+
+- name: "FAIL -- webhook or unapproved installation on App {{ ga.app_id }}"
+  vars:
+    _accounts: "{{ openbao_github_app_installs.json | map(attribute='account.login') | list }}"
+    _unapproved: "{{ _accounts | difference(openbao_github_app_install_allowlist) }}"
+  ansible.builtin.assert:
+    that:
+      - openbao_github_app_install_allowlist | length > 0
+      - openbao_github_app_hook.status == 404
+        or (openbao_github_app_hook.json.url | default('', true)) | length == 0
+      - _unapproved | length == 0
+    fail_msg: >-
+      App {{ ga.app_id }}: webhook url set={{ openbao_github_app_hook.status == 200
+      and (openbao_github_app_hook.json.url | default('', true)) | length > 0 }}; installations on unapproved
+      accounts={{ _unapproved }}. An App must have no webhook, and may be
+      installed only on accounts in openbao_github_app_install_allowlist.
+    quiet: true

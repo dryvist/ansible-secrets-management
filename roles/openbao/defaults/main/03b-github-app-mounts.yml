@@ -1,0 +1,139 @@
+---
+# Per-App GitHub engine mounts on the same plugin as the admin mount. Each
+# App's own grant is the hard ceiling for every token its mount mints, and
+# every set below states its permission map explicitly (05b asserts none holds
+# administration). App IDs and private keys arrive via environment;
+# installation IDs come from the env document (openbao_platform_env). A
+# supplied private key is a deliberate (re)configuration.
+#
+#   github         everyday read/write
+#   github-agents  write to public repositories only
+#   github-hermes  review and allowlisted authoring, split by repository visibility
+openbao_github_everyday_mount: github
+openbao_github_everyday_dryvist_installation_id: >-
+  {{ openbao_platform_env['OPENBAO_GITHUB_DRYVIST_INSTALLATION_ID'] | default('', true) }}
+openbao_github_everyday_personal_installation_id: >-
+  {{ openbao_platform_env['OPENBAO_GITHUB_PERSONAL_INSTALLATION_ID'] | default('', true) }}
+openbao_github_read_permission_sets:
+  - name: read-dryvist-all
+    tier: read
+    installation_id: "{{ openbao_github_everyday_dryvist_installation_id }}"
+    permissions: "{{ openbao_github_read_permissions }}"
+  - name: read-personal-all
+    tier: read
+    installation_id: "{{ openbao_github_everyday_personal_installation_id }}"
+    permissions: "{{ openbao_github_read_permissions }}"
+
+openbao_github_agents_mount: github-agents
+openbao_github_agents_set_name: agents-write
+openbao_github_agents_policy_name: github-agents
+openbao_github_agents_approle_name: github-agents
+openbao_github_agents_permissions:
+  contents: write
+  issues: write
+  pull_requests: write
+  merge_queues: write
+  metadata: read
+# `public_repos_of`: the set's repository list is the named organization's
+# public repositories, read from the GitHub API at converge time.
+openbao_github_agents_permission_sets:
+  - name: "{{ openbao_github_agents_set_name }}"
+    tier: agents
+    installation_id: >-
+      {{ openbao_platform_env['OPENBAO_GITHUB_AGENTS_DRYVIST_INSTALLATION_ID'] | default('', true) }}
+    permissions: "{{ openbao_github_agents_permissions }}"
+    public_repos_of: dryvist
+
+openbao_github_hermes_mount: github-hermes
+# Two identities split by repository visibility: neither can mint a token that
+# reaches the other visibility's repositories.
+openbao_github_hermes_public_policy_name: hermes-public
+openbao_github_hermes_public_approle_name: hermes-public
+openbao_github_hermes_private_policy_name: hermes-private
+openbao_github_hermes_private_approle_name: hermes-private
+openbao_github_hermes_installation_id: >-
+  {{ openbao_platform_env['OPENBAO_GITHUB_HERMES_DRYVIST_INSTALLATION_ID'] | default('', true) }}
+# Each set's map is asserted verbatim in 05b-github-app-mount.yml; a set
+# holding anything else fails the converge. Review grants no contents write:
+# a review token can comment, review and label but cannot change code.
+openbao_github_hermes_review_permissions:
+  pull_requests: write
+  issues: write
+  contents: read
+  checks: read
+  metadata: read
+openbao_github_hermes_author_permissions:
+  contents: write
+  pull_requests: write
+  metadata: read
+openbao_github_hermes_set_permissions:
+  hermes-review-public: "{{ openbao_github_hermes_review_permissions }}"
+  hermes-review-private: "{{ openbao_github_hermes_review_permissions }}"
+  hermes-author-public: "{{ openbao_github_hermes_author_permissions }}"
+  hermes-author-private: "{{ openbao_github_hermes_author_permissions }}"
+# Author allowlists: comma-separated literal repository names from the env
+# document, never a glob. An unset list yields no author set: an omitted
+# `repositories` list means the whole installation. `repositories_within`
+# fails the converge when an entry is not in the named review set's resolved
+# list, so a public author entry must be public and a private one private.
+openbao_github_hermes_author_public_repos: >-
+  {{ (openbao_platform_env['OPENBAO_GITHUB_HERMES_AUTHOR_PUBLIC_REPOS'] | default('', true)).split(',')
+     | map('trim') | reject('equalto', '') | list }}
+openbao_github_hermes_author_private_repos: >-
+  {{ (openbao_platform_env['OPENBAO_GITHUB_HERMES_AUTHOR_PRIVATE_REPOS'] | default('', true)).split(',')
+     | map('trim') | reject('equalto', '') | list }}
+# No installation ID configured yields no sets and no mount.
+openbao_github_hermes_permission_sets: >-
+  {{ ([{'name': 'hermes-review-public', 'tier': 'hermes-public',
+        'installation_id': openbao_github_hermes_installation_id,
+        'permissions': openbao_github_hermes_review_permissions,
+        'public_repos_of': 'dryvist'},
+       {'name': 'hermes-review-private', 'tier': 'hermes-private',
+        'installation_id': openbao_github_hermes_installation_id,
+        'permissions': openbao_github_hermes_review_permissions,
+        'private_repos_of': 'dryvist'}]
+      + ([{'name': 'hermes-author-public', 'tier': 'hermes-public',
+           'installation_id': openbao_github_hermes_installation_id,
+           'repositories': openbao_github_hermes_author_public_repos,
+           'repositories_within': 'hermes-review-public',
+           'permissions': openbao_github_hermes_author_permissions}]
+         if openbao_github_hermes_author_public_repos | length > 0 else [])
+      + ([{'name': 'hermes-author-private', 'tier': 'hermes-private',
+           'installation_id': openbao_github_hermes_installation_id,
+           'repositories': openbao_github_hermes_author_private_repos,
+           'repositories_within': 'hermes-review-private',
+           'permissions': openbao_github_hermes_author_permissions}]
+         if openbao_github_hermes_author_private_repos | length > 0 else []))
+     if openbao_github_hermes_installation_id | length > 0 else [] }}
+
+openbao_github_app_mounts_base:
+  - mount: "{{ openbao_github_everyday_mount }}"
+    app_id: "{{ lookup('env', 'OPENBAO_GITHUB_EVERYDAY_APP_ID') | default('', true) }}"
+    private_key: "{{ lookup('env', 'OPENBAO_GITHUB_EVERYDAY_APP_PRIVATE_KEY') | default('', true) }}"
+    permission_sets: "{{ openbao_github_read_permission_sets }}"
+  - mount: "{{ openbao_github_agents_mount }}"
+    app_id: "{{ lookup('env', 'OPENBAO_GITHUB_AGENTS_APP_ID') | default('', true) }}"
+    private_key: "{{ lookup('env', 'OPENBAO_GITHUB_AGENTS_APP_PRIVATE_KEY') | default('', true) }}"
+    permission_sets: "{{ openbao_github_agents_permission_sets }}"
+openbao_github_app_mounts: >-
+  {{ openbao_github_app_mounts_base
+     + ([{'mount': openbao_github_hermes_mount,
+          'app_id': lookup('env', 'OPENBAO_GITHUB_HERMES_APP_ID') | default('', true),
+          'private_key': lookup('env', 'OPENBAO_GITHUB_HERMES_APP_PRIVATE_KEY') | default('', true),
+          'permission_sets': openbao_github_hermes_permission_sets}]
+        if openbao_github_hermes_permission_sets | length > 0 else []) }}
+
+# Accounts any App may be installed on: a comma-separated list in the env
+# document (openbao_platform_env). The exposure check fails closed while it is
+# empty.
+openbao_github_app_install_allowlist: >-
+  {{ (openbao_platform_env['OPENBAO_GITHUB_APP_INSTALL_ALLOWLIST'] | default('', true)).split(',')
+     | map('trim') | select | list }}
+
+# Every App whose key is present in this run: the admin App plus each mount's.
+openbao_github_app_exposure_targets: >-
+  {{ ([{'app_id': openbao_github_app_id, 'private_key': openbao_github_app_private_key}]
+      + (openbao_github_app_mounts | map('dict2items')
+         | map('selectattr', 'key', 'in', ['app_id', 'private_key'])
+         | map('items2dict') | list))
+     | selectattr('app_id', 'truthy') | selectattr('private_key', 'truthy') | list }}

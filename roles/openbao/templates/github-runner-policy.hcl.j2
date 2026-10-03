@@ -22,7 +22,7 @@
 # engine issues a GET. Omitting it is what makes an agent-rendered token 403
 # while a hand-run POST succeeds.
 {% for permission_set in openbao_github_permission_sets | selectattr('tier', 'equalto', 'runner') %}
-path "{{ openbao_github_mount }}/token/{{ permission_set.name }}" {
+path "{{ permission_set.mount }}/token/{{ permission_set.name }}" {
   capabilities = ["read", "create", "update"]
 }
 

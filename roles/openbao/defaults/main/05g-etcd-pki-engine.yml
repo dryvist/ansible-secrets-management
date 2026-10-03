@@ -1,0 +1,38 @@
+---
+# --- PKI secrets engine(s) for etcd peer/client TLS (Patroni HA mode) -------
+# Builtin engine — no plugin staging, same as the SSH CA above (05-ssh-ca-
+# engine.yml).
+#
+# One CA per cluster scope, mirroring the one-bucket-per-workload convention
+# secret/apps/<app> already follows for KV: a scope's etcd members trust only
+# that scope's own CA, never a CA shared with another cluster. The CA keypair
+# is generated INSIDE OpenBao on first configuration and never exported — the
+# same write-once shape as the SSH CA's config/ca (ssh-ca-engine.yml).
+#
+# openbao_pki_etcd_engines is COMPUTED, never hand-typed: init/07b-etcd-pki-
+# engine.yml's first task derives one entry per inventory/group_vars/all.yml's
+# postgres_ha_patroni_scopes, so this list and roles/postgres's own
+# postgres_ha_scope can never name two different clusters. scope/role/mount
+# there use the exact same postgres_ha_pki_role_suffix formula roles/postgres
+# computes postgres_ha_pki_mount/postgres_ha_pki_role from — one variable, not
+# a second copy of the naming scheme. allowed_domain reads tofu_data.domain,
+# the same source roles/postgres's postgres_ha_fqdn_suffix uses. Empty when
+# postgres_ha_patroni_scopes is empty — no cluster runs patroni mode yet, so
+# every task below loops zero times and this file is a no-op on every
+# existing converge.
+openbao_pki_etcd_engines: []
+
+# 180d — comfortably above the postgres role's own 14-day reissue window
+# (postgres_ha_etcd_cert_renew_before_days). Bounds the PKI ROLE's ceiling in
+# OpenBao (set once, at role-create time); the CLIENT-requested certificate
+# lifetime is a separate, shorter value roles/postgres owns on its own side
+# (postgres_ha_etcd_cert_ttl) — not the same knob, so not single-sourced with
+# it. Never a literal Renovate tracks: it bounds a CA policy, not a package
+# version.
+openbao_pki_etcd_engines_max_ttl: 4320h0m0s
+
+# init/07b-etcd-pki-engine.yml also reconciles a second, client-auth-only role
+# on this same mount for Patroni's own etcd identity (never the etcd member's
+# own server+peer role): "{{ role }}-patroni", allowed_domain
+# "patroni-{{ allowed_domain }}" -- both DERIVED from the computed entry
+# above, not a second field to fill in anywhere.

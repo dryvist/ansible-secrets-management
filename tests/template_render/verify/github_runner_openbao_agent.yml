@@ -19,7 +19,7 @@
     github_runner_approle_dir: /etc/github-runner/approle
     github_runner_agent_config: /etc/github-runner/openbao-agent.hcl
     github_runner_token_env_file: /etc/github-runner/access-token.env
-    github_runner_token_path: github/token/runner-register-dryvist
+    github_runner_token_path: github-admin/token/runner-register-dryvist
     github_runner_openbao_role_id: "role-id-not-a-real-credential"
     github_runner_openbao_secret_id: "secret-id-not-a-real-credential"
     github_runner_kv_mount: secret
@@ -84,7 +84,7 @@
     - name: Assert the token is minted from the runner-scoped permission set
       ansible.builtin.assert:
         that:
-          - _hcl | select('search', 'github/token/runner-register-dryvist') | length > 0
+          - _hcl | select('search', 'github-admin/token/runner-register-dryvist') | length > 0
           - _hcl | select('search', 'ACCESS_TOKEN=') | length > 0
           - _hcl | select('search', 'destination') | length > 0
         fail_msg: >-

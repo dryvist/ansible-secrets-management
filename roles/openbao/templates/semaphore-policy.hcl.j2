@@ -70,6 +70,6 @@ path "{{ openbao_kv_mount }}/data/platform/ansible/env" {
 # write by its holder: an unattended run can read repository contents and can
 # never change them. The same reasoning is why the CI fleet's grant names only
 # its runner-registration set (github-runner-policy.hcl.j2).
-path "{{ openbao_github_mount }}/token/read-dryvist-all" {
+path "{{ openbao_github_everyday_mount }}/token/read-dryvist-all" {
   capabilities = ["create", "update"]
 }

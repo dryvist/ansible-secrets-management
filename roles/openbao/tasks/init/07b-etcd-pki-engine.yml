@@ -1,0 +1,222 @@
+---
+# PKI engine(s) for etcd peer/client TLS (Patroni HA mode). Same shape as
+# init/07-ssh-ca-engine.yml immediately before this file: the ENGINE (mount +
+# CA key) is bootstrap-only work — the reconcile identity's policy grants
+# <mount>/roles/<name> but nothing on sys/mounts or <mount>/root/generate, so
+# each of these tasks is gated on openbao_bootstrap_token being defined the
+# same way the SSH CA's are. postgres_ha_patroni_scopes is empty by default,
+# so the derivation below yields [] and every task past it loops zero times —
+# this file is a no-op on every existing converge.
+#
+# openbao_pki_etcd_engines is COMPUTED here, never hand-typed (see
+# 05g-etcd-pki-engine.yml's header): one entry per
+# inventory/group_vars/all.yml's postgres_ha_patroni_scopes, so this list and
+# roles/postgres's own postgres_ha_scope can never name two different
+# clusters. role is derived from scope via postgres_ha_pki_role_suffix (also
+# in group_vars/all.yml) and mount FROM role -- the exact same two-step
+# formula roles/postgres's postgres_ha_pki_role/postgres_ha_pki_mount use, so
+# a naming-scheme change is one edit, not two kept in sync by hand.
+# allowed_domain reads tofu_data.domain, the same source roles/postgres's
+# postgres_ha_fqdn_suffix uses (propagated to every inventory host, this one
+# included, by inventory/load_tofu/propagate_facts.yml).
+- name: Derive this cluster's etcd PKI engine entry from its scope
+  vars:
+    _openbao_etcd_pki_role: "{{ item }}{{ postgres_ha_pki_role_suffix }}"
+  ansible.builtin.set_fact:
+    openbao_pki_etcd_engines: >-
+      {{ (openbao_pki_etcd_engines | default([])) + [{
+        'scope': item,
+        'role': _openbao_etcd_pki_role,
+        'mount': 'pki-' ~ _openbao_etcd_pki_role,
+        'allowed_domain': item ~ '-*.' ~ (tofu_data.domain | default('', true)),
+        'max_ttl': openbao_pki_etcd_engines_max_ttl
+      }] }}
+  loop: "{{ postgres_ha_patroni_scopes }}"
+  loop_control:
+    label: "{{ item }}"
+
+- name: Enable each configured etcd PKI mount
+  ansible.builtin.command:
+    cmd: "bao secrets enable -path={{ item.mount }} pki"
+  environment:
+    BAO_ADDR: "{{ openbao_write_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  loop: "{{ openbao_pki_etcd_engines }}"
+  loop_control:
+    label: "{{ item.mount }}"
+  no_log: true
+  changed_when: true
+  when:
+    - not (openbao_reconcile_mode | default(false))
+    - openbao_bootstrap_token is defined
+    - (item.mount ~ '/') not in (openbao_mounts_raw.stdout | from_json).keys()
+
+# Write-once: the CA keypair is generated INSIDE OpenBao on first
+# configuration and never exported; a routine converge with a CA already
+# configured leaves it untouched.
+#
+# Delegated to the controller (openbao_cli_host, resolved in init/02), same as
+# the "Check which etcd PKI roles already exist" loop below: this is a
+# per-item read loop, unlike the SSH CA engine's single (unlooped) CA check,
+# so it falls under tests/test_openbao_writes_target_leader.py's
+# every-read-loop-is-delegated contract and must carry the full
+# openbao_cli_* triple, not openbao_write_addr target-side.
+- name: Check whether each etcd PKI CA is already configured
+  ansible.builtin.command:
+    cmd: "bao read -format=json {{ item.mount }}/cert/ca"
+  environment:
+    BAO_ADDR: "{{ openbao_cli_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
+  loop: "{{ openbao_pki_etcd_engines }}"
+  loop_control:
+    label: "{{ item.mount }}"
+  register: openbao_pki_etcd_ca_check
+  no_log: true
+  changed_when: false
+  failed_when: false
+  when:
+    - not (openbao_reconcile_mode | default(false))
+    - openbao_bootstrap_token is defined
+
+- name: Generate each etcd PKI root CA (first configuration only, never exported)
+  ansible.builtin.uri:
+    url: "{{ openbao_api_addr }}/v1/{{ item.0.mount }}/root/generate/internal"
+    method: POST
+    headers:
+      X-Vault-Token: "{{ openbao_bootstrap_token }}"
+    body_format: json
+    body:
+      common_name: "{{ item.0.scope }} etcd CA"
+      ttl: "{{ item.0.max_ttl }}"
+    status_code:
+      - 200
+      - 204
+  loop: >-
+    {{ openbao_pki_etcd_engines
+       | zip(openbao_pki_etcd_ca_check.results | default([])) | list }}
+  loop_control:
+    label: "{{ item.0.mount }}"
+  no_log: true
+  changed_when: true
+  when:
+    - not (openbao_reconcile_mode | default(false))
+    - openbao_bootstrap_token is defined
+    - (item.1.rc | default(1)) != 0
+
+# Runs on the controller (openbao_cli_host, resolved in init/02): one module
+# execution per declared mount. Same CLI, same rc/stderr shape as the SSH
+# signing-role check, so the add-if-missing gate below reads unchanged.
+- name: Check which etcd PKI roles already exist
+  ansible.builtin.command:
+    cmd: "bao read -format=json {{ item.mount }}/roles/{{ item.role }}"
+  environment:
+    BAO_ADDR: "{{ openbao_cli_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
+  loop: "{{ openbao_pki_etcd_engines }}"
+  loop_control:
+    label: "{{ item.mount }}/{{ item.role }}"
+  register: openbao_pki_etcd_role_checks
+  no_log: true
+  changed_when: false
+  failed_when: false
+  when:
+    - openbao_bootstrap_token is defined
+
+# server_flag + client_flag: the issued certificate serves BOTH etcd peer and
+# client TLS on the same node (postgres role's patroni_etcd_tls.yml reuses one
+# cert for both). allow_glob_domains lets allowed_domain carry a glob
+# (postgres-ai-*.<domain>) scoped to exactly this cluster's members, never a
+# blanket wildcard for the whole estate domain.
+- name: Reconcile each etcd PKI role
+  ansible.builtin.uri:
+    url: "{{ openbao_api_addr }}/v1/{{ item.0.mount }}/roles/{{ item.0.role }}"
+    method: POST
+    headers:
+      X-Vault-Token: "{{ openbao_bootstrap_token }}"
+    body_format: json
+    body:
+      allowed_domains: "{{ item.0.allowed_domain }}"
+      allow_glob_domains: true
+      allow_subdomains: false
+      server_flag: true
+      client_flag: true
+      max_ttl: "{{ item.0.max_ttl }}"
+    status_code:
+      - 200
+      - 204
+  loop: >-
+    {{ openbao_pki_etcd_engines
+       | zip(openbao_pki_etcd_role_checks.results | default([])) | list }}
+  loop_control:
+    label: "{{ item.0.mount }}/{{ item.0.role }}"
+  no_log: true
+  changed_when: >-
+    (item.1.rc | default(1)) != 0
+    or (item.1.stdout | from_json).data.max_ttl != item.0.max_ttl
+  when:
+    - openbao_bootstrap_token is defined
+
+# Patroni's own client-auth-only identity (roles/postgres's
+# patroni_client_tls.yml): server_flag: false means this role can never
+# issue a cert any etcd/TLS server would accept as ITS OWN identity, so
+# Patroni (or anything else holding one of these certs) can authenticate to
+# etcd as a client but can never impersonate a member. Same mount as the
+# server+peer role above; the role name and allowed_domain are DERIVED
+# ('-patroni' / 'patroni-' prefixes) rather than a second required field on
+# openbao_pki_etcd_engines, so every existing entry gets this for free.
+- name: Check which etcd PKI Patroni-client roles already exist
+  ansible.builtin.command:
+    cmd: "bao read -format=json {{ item.mount }}/roles/{{ item.role }}-patroni"
+  environment:
+    BAO_ADDR: "{{ openbao_cli_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
+  loop: "{{ openbao_pki_etcd_engines }}"
+  loop_control:
+    label: "{{ item.mount }}/{{ item.role }}-patroni"
+  register: openbao_pki_etcd_patroni_role_checks
+  no_log: true
+  changed_when: false
+  failed_when: false
+  when:
+    - openbao_bootstrap_token is defined
+
+- name: Reconcile each etcd PKI Patroni-client role
+  ansible.builtin.uri:
+    url: "{{ openbao_api_addr }}/v1/{{ item.0.mount }}/roles/{{ item.0.role }}-patroni"
+    method: POST
+    headers:
+      X-Vault-Token: "{{ openbao_bootstrap_token }}"
+    body_format: json
+    body:
+      allowed_domains: "patroni-{{ item.0.allowed_domain }}"
+      allow_glob_domains: true
+      allow_subdomains: false
+      server_flag: false
+      client_flag: true
+      max_ttl: "{{ item.0.max_ttl }}"
+    status_code:
+      - 200
+      - 204
+  loop: >-
+    {{ openbao_pki_etcd_engines
+       | zip(openbao_pki_etcd_patroni_role_checks.results | default([])) | list }}
+  loop_control:
+    label: "{{ item.0.mount }}/{{ item.0.role }}-patroni"
+  no_log: true
+  changed_when: >-
+    (item.1.rc | default(1)) != 0
+    or (item.1.stdout | from_json).data.max_ttl != item.0.max_ttl
+  when:
+    - openbao_bootstrap_token is defined

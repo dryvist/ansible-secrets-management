@@ -38,14 +38,14 @@ def _task():
 
 
 def _render_body(role_entry, source_cidrs=""):
-    """Render the task's own `body` expression for one openbao_ssh_roles entry.
+    """Render the task's own `ssh_role_body` expression for one openbao_ssh_roles entry.
 
     `item` is the (role_entry, check_result) tuple the real `loop: ... | zip(...)`
-    produces; the check result is never read by `body`, so an empty dict
+    produces; the check result is never read by the body, so an empty dict
     stands in for it.
     """
     task = _task()
-    body_expr = task["ansible.builtin.uri"]["body"]
+    body_expr = task["vars"]["ssh_role_body"]
     templar = Templar(loader=DataLoader())
     templar.available_variables = {
         "item": (role_entry, {}),

@@ -15,7 +15,7 @@
 # what an unconfigured publisher repository list produces — the policy then
 # grants nothing at all rather than granting something unbounded.
 {% for permission_set in openbao_github_permission_sets | selectattr('tier', 'equalto', 'publish') %}
-path "{{ openbao_github_mount }}/token/{{ permission_set.name }}" {
+path "{{ permission_set.mount }}/token/{{ permission_set.name }}" {
   capabilities = ["create", "read", "update"]
 }
 

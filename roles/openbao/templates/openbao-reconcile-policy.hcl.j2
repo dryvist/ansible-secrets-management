@@ -114,6 +114,9 @@ path "{{ mount.path | default(mount) }}/metadata/*" {
 {% endfor %}
 # Permission sets are named objects on the GitHub engine, not the raw token
 # endpoint — minting a token is a consumer's job, never the reconciler's.
-path "{{ openbao_github_mount }}/permissionset/*" {
+{% for _github_mount in [openbao_github_mount]
+     + (openbao_github_app_mounts | default([]) | map(attribute='mount') | list) %}
+path "{{ _github_mount }}/permissionset/*" {
   capabilities = ["create", "read", "update", "list"]
 }
+{% endfor %}

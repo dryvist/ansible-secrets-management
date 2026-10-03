@@ -155,8 +155,8 @@ openbao_secrets_domains:
       # Slack incoming-webhook URLs keyed by topic, for the ntfy alert hub's
       # Slack fan-out (ntfy_docker role). Internet-reachable Slack
       # infrastructure, so it lives in secrets-external, not secret/apps.
-      # optional: true — not yet seeded; the ntfy Slack fan-out no-ops (no
-      # routes deployed) until an operator populates this path.
+      # optional: true so the prefetch never fails on it; the ntfy_docker
+      # role itself fails the converge while a webhook it needs is unseeded.
       - mount: secrets-external
         path: platform/slack-webhooks
         optional: true

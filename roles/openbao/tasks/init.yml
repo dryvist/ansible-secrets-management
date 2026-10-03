@@ -71,6 +71,34 @@
     - openbao_engines
   when: not (openbao_reconcile_mode | default(false))
 
+- name: Configure the per-App GitHub mounts
+  ansible.builtin.include_tasks: init/05b-github-app-mount.yml
+  loop: "{{ openbao_github_app_mounts }}"
+  loop_control:
+    loop_var: gm
+    label: "{{ gm.mount }}"
+  when:
+    - not (openbao_reconcile_mode | default(false))
+    - openbao_bootstrap_token is defined
+    - openbao_github_engine_enabled | bool
+
+# Runs on the controller: it already holds the App keys, and the store host
+# has no Python cryptography for the JWT signature. ansible_become is a
+# connection variable, so it is set as a var (the become keyword loses to the
+# inventory's ansible_become on a delegated task).
+- name: Check each GitHub App with a key in this run for exposure
+  ansible.builtin.include_tasks:
+    file: init/05c-github-app-exposure.yml
+    apply:
+      delegate_to: localhost
+      vars:
+        ansible_become: false
+  loop: "{{ openbao_github_app_exposure_targets }}"
+  loop_control:
+    loop_var: ga
+    label: "{{ ga.app_id }}"
+  when: not (openbao_reconcile_mode | default(false))
+
 - name: Register and configure the OAuthapp secrets engine
   ansible.builtin.import_tasks: init/06-oauth-engine.yml
   tags:
@@ -81,6 +109,12 @@
   ansible.builtin.import_tasks: init/07-ssh-ca-engine.yml
   tags:
     - openbao_ssh_ca
+
+# openbao_pki_etcd_engines is empty by default (05g-etcd-pki-engine.yml) — a
+# no-op on every existing converge until a Patroni-mode cluster cutover adds
+# an entry.
+- name: Configure etcd PKI engines for Patroni HA clusters
+  ansible.builtin.include_tasks: init/07b-etcd-pki-engine.yml
 
 - name: Render and reconcile the RBAC policies
   ansible.builtin.import_tasks: init/08-rbac-policies.yml
@@ -132,4 +166,15 @@
     loop_var: openbao_rotation_exempt_entry
   tags:
     - openbao_rotation_exempt
+  when: openbao_bootstrap_token is defined
+
+# --- Disclosure-denylist metadata declaration (idempotent, write-if-changed) -
+# Declares owner/reader/docs/rotation custom_metadata on the disclosure-
+# denylist KV-v2 entry (05c-terrakube-and-remaining-domain-names.yml) --
+# metadata only, never the term list itself. Runs LAST for the same reason as
+# the rotation-exempt tagging above: a metadata patch this identity is not
+# yet granted must not fail the run before the policies it depends on are
+# reconciled.
+- name: Declare the disclosure-denylist entry's custom_metadata (write-if-changed)
+  ansible.builtin.include_tasks: declare_disclosure_denylist_metadata.yml
   when: openbao_bootstrap_token is defined

@@ -1,6 +1,6 @@
 {{ ansible_managed | comment }}
 # github-write — per-repository WRITE minting, parameter-pinned. This is the
-# ONE policy allowed to touch the raw {{ openbao_github_mount }}/token endpoint,
+# ONE policy allowed to touch the raw {{ openbao_github_everyday_mount }}/token endpoint,
 # and the parameter pinning is the entire privilege boundary:
 #
 #   * required_parameters forces every request to name an installation AND a
@@ -26,7 +26,7 @@
 # session-coordination): the wrapper CAS-acquires
 # secret/locks/github-write/<installation_id>/<repo> before minting, so two
 # agents cannot hold the same repo. KV-v2 delete_version_after is the deadman.
-path "{{ openbao_github_mount }}/token" {
+path "{{ openbao_github_everyday_mount }}/token" {
   # "create" is required, not belt-and-suspenders: the plugin's token paths
   # have no existence check, so POST routes as CreateOperation — an
   # update-only grant returns "permission denied" on every mint (verified
@@ -39,8 +39,8 @@ path "{{ openbao_github_mount }}/token" {
     # unquoted policy value, so listing numbers is dead weight that reads as
     # a live grant.
     "installation_id" = [
-      "{{ openbao_github_dryvist_installation_id }}",
-      "{{ openbao_github_personal_installation_id }}"
+      "{{ openbao_github_everyday_dryvist_installation_id }}",
+      "{{ openbao_github_everyday_personal_installation_id }}"
     ]
     "repositories" = [
 {% for repo in openbao_github_write_repo_allowlist %}
