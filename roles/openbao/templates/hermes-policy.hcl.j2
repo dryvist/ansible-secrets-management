@@ -1,8 +1,8 @@
 {{ ansible_managed | comment }}
 # OpenBao policy for the `hermes` AppRole — the Hermes AI agent's dedicated,
-# least-privilege reader. Read-only on its own secret, the shared Splunk MCP
-# connection, and its profiles' router virtual keys; nothing else in the ai
-# subtree or any other domain.
+# least-privilege reader. Read-only on its own secret, the shared Splunk and
+# Zammad MCP connections, and its profiles' router virtual keys; nothing else
+# in the ai subtree or any other domain.
 path "{{ openbao_kv_mount }}/data/ai/hermes" {
   capabilities = ["read"]
 }
@@ -15,6 +15,20 @@ path "{{ openbao_kv_mount }}/data/ai/mcp/splunk" {
 }
 path "{{ openbao_kv_mount }}/metadata/ai/mcp/splunk" {
   capabilities = ["read", "list"]
+}
+
+path "{{ openbao_kv_mount }}/data/ai/mcp/zammad" {
+  capabilities = ["read"]
+}
+path "{{ openbao_kv_mount }}/metadata/ai/mcp/zammad" {
+  capabilities = ["read", "list"]
+}
+
+path "secrets-external/data/ai/saas/context7" {
+  capabilities = ["read"]
+}
+path "secrets-external/metadata/ai/saas/context7" {
+  capabilities = ["read"]
 }
 
 # Router virtual keys for the Hermes operating profiles
