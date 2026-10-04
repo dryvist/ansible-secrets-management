@@ -1,0 +1,48 @@
+---
+# Replays every include_vars task in playbooks/openbao-rotate-approles.yml
+# that runs in scheduled mode (no `when`, or a `when` on
+# rotate_scheduled_mode), then asserts the scheduled identity's own AppRole
+# name resolves. The self-rotation step templates that name, so a run that
+# cannot resolve it fails after every domain has rotated.
+#
+# Usage: ansible-playbook tests/openbao_rotate/verify_scheduled_self_rotate_vars.yml -c local
+
+- name: Verify the scheduled rotation run loads its own AppRole name
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    _rotate_playbook_dir: "{{ playbook_dir }}/../../playbooks"
+    _rotate_tasks: >-
+      {{ (lookup('ansible.builtin.file', _rotate_playbook_dir ~ '/openbao-rotate-approles.yml')
+          | from_yaml)[0].tasks }}
+
+  tasks:
+    - name: Load each scheduled-mode var source the playbook loads
+      ansible.builtin.include_vars:
+        dir: "{{ _path if _src.dir is defined else omit }}"
+        file: "{{ _path if _src.file is defined else omit }}"
+      vars:
+        _src: "{{ item['ansible.builtin.include_vars'] }}"
+        _path: "{{ (_src.dir | default(_src.file)) | replace('{{ playbook_dir }}', _rotate_playbook_dir) }}"
+      # A source path built from a run-time variable (not playbook_dir) cannot
+      # name the AppRole list files, so it is skipped.
+      # selectattr cannot select on a dotted module key, so filter here.
+      when:
+        - "'ansible.builtin.include_vars' in item"
+        - item.when is not defined or 'rotate_scheduled_mode' in (item.when | string)
+        - (_src.dir | default(_src.file)) is search('playbook_dir')
+      loop: "{{ _rotate_tasks }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: Assert the self-rotation target name resolves
+      ansible.builtin.assert:
+        that:
+          - openbao_approle_secret_id_rotate_scheduled_approle_name is defined
+          - openbao_approle_secret_id_rotate_scheduled_approle_name | length > 0
+        fail_msg: >-
+          playbooks/openbao-rotate-approles.yml does not load
+          openbao_approle_secret_id_rotate_scheduled_approle_name in
+          scheduled mode; the self-rotation step fails on it.

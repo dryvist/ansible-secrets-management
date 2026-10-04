@@ -261,7 +261,7 @@
 
     - name: Load the scheduled identity's own AppRole name (scheduled mode)
       ansible.builtin.include_vars:
-        file: "{{ playbook_dir }}/../roles/openbao/defaults/main/05b-domain-policy-approle-names.yml"
+        file: "{{ playbook_dir }}/../roles/openbao/defaults/main/05g-rotator-approle-names.yml"
       when: rotate_scheduled_mode | bool
 
     # Same tasks file, targeted at approle-secret-id-rotate-scheduled itself,
