@@ -13,3 +13,13 @@ path "{{ openbao_kv_mount }}/metadata/platform/{{ sub }}/*" {
 }
 
 {% endfor %}
+# OpenRouter usage/management key for the Cribl Stream OpenRouter REST
+# collectors (third-party SaaS, so secrets-external). Exact path only; the
+# router's per-model keys at ai/saas/openrouter stay out of this policy.
+path "secrets-external/data/ai/saas/openrouter-usage" {
+  capabilities = ["read"]
+}
+
+path "secrets-external/metadata/ai/saas/openrouter-usage" {
+  capabilities = ["read"]
+}
