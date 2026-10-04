@@ -269,7 +269,7 @@ class CriblEdgeReaderContract(unittest.TestCase):
                 )
                 self.assertEqual(_seconds(ttl_defaults["openbao_rotated_domain_secret_id_ttl"]), 129600)
                 self.assertEqual(cidr_defaults["openbao_approle_cidr_class_overrides"][role_name], "workstation")
-                self.assertIn(role_name, rotated_roles)
+                self.assertNotIn(role_name, rotated_roles)
 
     def test_bounds_contract_rejects_unbounded_or_broader_values(self):
         def valid(secret_id_ttl: str, uses: int, cidr_class: str) -> bool:
