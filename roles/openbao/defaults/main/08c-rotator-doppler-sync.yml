@@ -1,6 +1,6 @@
 ---
 # playbooks/openbao-rotate-approles.yml also republishes the workstation
-# domains' rotated pairs into Doppler (the seven below), so a workstation
+# domains' rotated pairs into Doppler (the eight below), so a workstation
 # never sees a stale role_id/secret_id after a rotation run. `ntfy` is
 # deliberately excluded: it has no workstation consumer, only plane-side
 # ones already reading secret/platform/ansible/env directly. `local-llm` is
@@ -36,3 +36,4 @@ openbao_rotate_doppler_sync_domains:
   - monitoring
   - local-cloud
   - observability
+  - "{{ openbao_reconcile_approle_name }}"

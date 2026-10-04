@@ -157,10 +157,8 @@ openbao_local_llm_policy_name: local-llm
 openbao_local_llm_approle_name: local-llm
 openbao_local_llm_workstation_policy_name: local-llm-workstation
 openbao_local_llm_workstation_approle_name: local-llm-workstation
-# Host identities whose secret-zero is delivered to guests through the env
-# document (secret/platform/ansible/env) rather than the converge operator's
-# environment. openbao-rotate-approles.yml writes them only on an explicit
-# `-e bootstrap_seed_only=true` run; scheduled rotation skips them.
+# Host secret-zero identities delivered through the env document. Seed mode
+# writes these; scheduled rotation follows the domain catalog below.
 openbao_host_secret_zero_approle_names:
   - "{{ openbao_slack_admin_approle_name }}"
   - "{{ openbao_slack_ops_approle_name }}"
@@ -183,7 +181,11 @@ openbao_secrets_domain_approle_names: >-
       openbao_local_llm_workstation_approle_name]
      + [openbao_agent_ssh_sign_approle_name,
       openbao_hermes_approle_name,
-      openbao_open_llm_approle_name] }}
+      openbao_open_llm_approle_name]
+     + [openbao_reconcile_approle_name] }}
+# Roles using lookup proof despite the runner's source class allowing login.
+openbao_approle_rotation_lookup_proof_names:
+  - "{{ openbao_reconcile_approle_name }}"
 # Provider-level API credentials live on exact leaves under a separately
 # supplied external KV location. Public configuration carries no path literal.
 openbao_ai_api_key_mount: >-

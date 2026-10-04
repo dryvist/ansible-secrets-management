@@ -17,6 +17,11 @@
     _rotate_tasks: >-
       {{ (lookup('ansible.builtin.file', _rotate_playbook_dir ~ '/openbao-rotate-approles.yml')
           | from_yaml)[0].tasks }}
+    _rotate_task_names: "{{ _rotate_tasks | map(attribute='name') | list }}"
+    _login_source_task: >-
+      {{ _rotate_tasks
+         | selectattr('name', 'equalto', 'Resolve the role_id/secret_id to authenticate with this run')
+         | first }}
 
   tasks:
     - name: Load each scheduled-mode var source the playbook loads
@@ -46,3 +51,23 @@
           playbooks/openbao-rotate-approles.yml does not load
           openbao_approle_secret_id_rotate_scheduled_approle_name in
           scheduled mode; the self-rotation step fails on it.
+
+    - name: Assert the scheduled identity logs in before domains and rotates itself last
+      ansible.builtin.assert:
+        that:
+          - >-
+            _login_source_task['ansible.builtin.set_fact']['rotate_login_role_id']
+            is search('rotate_scheduled_role_id')
+          - >-
+            _login_source_task['ansible.builtin.set_fact']['rotate_login_secret_id']
+            is search('rotate_scheduled_secret_id')
+          - >-
+            _rotate_task_names.index("Authenticate as approle-secret-id-rotate")
+            < _rotate_task_names.index("Rotate each domain's AppRole secret_id in turn")
+          - >-
+            _rotate_task_names.index("Rotate each domain's AppRole secret_id in turn")
+            < _rotate_task_names.index("Rotate the scheduled identity's own secret_id (scheduled mode)")
+        fail_msg: >-
+          The scheduled run must authenticate with its dedicated identity before the
+          domain loop and rotate that identity only after all domains complete.
+        quiet: true
