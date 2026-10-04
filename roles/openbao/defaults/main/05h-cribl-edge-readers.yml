@@ -1,0 +1,13 @@
+---
+openbao_cribl_edge_mac_a_app: cribl-edge-macbook
+openbao_cribl_edge_mac_b_app: cribl-edge-mac-studio
+openbao_cribl_edge_mac_a_policy_name: cribl-edge-mac-a
+openbao_cribl_edge_mac_a_approle_name: cribl-edge-mac-a
+openbao_cribl_edge_mac_b_policy_name: cribl-edge-mac-b
+openbao_cribl_edge_mac_b_approle_name: cribl-edge-mac-b
+openbao_apps_read_excluded_generated_apps:
+  - "{{ openbao_cribl_edge_mac_a_app }}"
+  - "{{ openbao_cribl_edge_mac_b_app }}"
+openbao_cribl_edge_mac_approle_names:
+  - "{{ openbao_cribl_edge_mac_a_approle_name }}"
+  - "{{ openbao_cribl_edge_mac_b_approle_name }}"

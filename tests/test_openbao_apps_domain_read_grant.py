@@ -22,6 +22,7 @@ DEFAULTS = ROOT / "roles" / "openbao" / "defaults" / "main"
 NAMES_FILE = DEFAULTS / "05c-terrakube-and-remaining-domain-names.yml"
 GENERATED_FILE = DEFAULTS / "01c-app-secrets-generated.yml"
 PROMOTED_FILE = DEFAULTS / "01b-app-secrets.yml"
+CRIBL_EDGE_FILE = DEFAULTS / "05h-cribl-edge-readers.yml"
 DOMAINS_FILE = ROOT / "roles" / "openbao_secrets" / "defaults" / "main" / "01-domains.yml"
 POLICY_TEMPLATE = ROOT / "roles" / "openbao" / "templates" / "apps-policy.hcl.j2"
 
@@ -31,12 +32,21 @@ def _yaml(path: Path) -> dict:
 
 
 def _read_apps(names: dict) -> set[str]:
+    cribl_edge = _yaml(CRIBL_EDGE_FILE)
     templar = Templar(loader=DataLoader())
     templar.available_variables = {
         "openbao_generated_app_secrets": _yaml(GENERATED_FILE)["openbao_generated_app_secrets"],
         "openbao_promoted_app_secrets": _yaml(PROMOTED_FILE)["openbao_promoted_app_secrets"],
         "openbao_apps_read_published_apps": names.get("openbao_apps_read_published_apps", []),
+        "openbao_cribl_edge_mac_a_app": cribl_edge["openbao_cribl_edge_mac_a_app"],
+        "openbao_cribl_edge_mac_b_app": cribl_edge["openbao_cribl_edge_mac_b_app"],
     }
+    templar.available_variables["openbao_apps_read_excluded_generated_apps"] = (
+        [
+            templar.template(trust_as_template(app))
+            for app in cribl_edge["openbao_apps_read_excluded_generated_apps"]
+        ]
+    )
     return set(templar.template(trust_as_template(names["openbao_apps_read_apps"])))
 
 

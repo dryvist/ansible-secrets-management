@@ -6,6 +6,30 @@
 # template-render tests run the same tasks against fixture responses.
 # Defined even for a mount that declares no sets, which the tasks below and
 # the reconcile in 05b-github-app-mount.yml then loop over as empty.
+- name: "Keep the Hermes private author scope exact on mount {{ gm.mount }}"
+  ansible.builtin.assert:
+    that:
+      - >-
+        openbao_github_hermes_author_private_repos_full_names
+        == ([openbao_github_oidc_docs_repository]
+            if openbao_github_oidc_docs_repository | default('', true) | length > 0 else [])
+      - >-
+        openbao_github_hermes_author_private_repos
+        == (openbao_github_hermes_author_private_repos_full_names
+            | map('regex_replace', '^[^/]+/', '') | list)
+      - >-
+        openbao_github_oidc_docs_repository | default('', true) | length == 0
+        or openbao_github_oidc_docs_repository is match('^[^/]+/[^/]+$')
+      - >-
+        openbao_github_oidc_docs_repository | default('', true) | length > 0
+        or (openbao_github_hermes_permission_sets
+            | selectattr('name', 'equalto', 'hermes-author-private') | list == [])
+    fail_msg: "The private author repository list does not match its declared scope."
+    quiet: true
+  when:
+    - gm.mount == openbao_github_hermes_mount
+    - openbao_github_hermes_installation_id | length > 0
+
 - name: "Start the resolved set list for mount {{ gm.mount }}"
   ansible.builtin.set_fact:
     openbao_github_app_mount_sets: []
@@ -16,7 +40,8 @@
       - item.permissions == openbao_github_hermes_set_permissions[item.name]
       - >-
         item.permissions.keys()
-        | select('in', ['administration', 'workflows', 'actions', 'secrets']) | list == []
+        | select('in', ['administration', 'workflows', 'secrets']) | list == []
+      - item.permissions.get('actions', 'read') == 'read'
       - item.permissions.keys() | select('match', '^organization_') | list == []
       - >-
         item.public_repos_of is defined or item.private_repos_of is defined

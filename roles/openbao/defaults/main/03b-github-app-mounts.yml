@@ -56,19 +56,22 @@ openbao_github_hermes_author_permissions:
 openbao_github_hermes_set_permissions:
   hermes-review-public: "{{ openbao_github_hermes_review_permissions }}"
   hermes-review-private: "{{ openbao_github_hermes_review_permissions }}"
+  hermes-read-public: "{{ openbao_github_read_permissions }}"
   hermes-author-public: "{{ openbao_github_hermes_author_permissions }}"
   hermes-author-private: "{{ openbao_github_hermes_author_permissions }}"
-# Author allowlists: comma-separated literal repository names from the env
-# document, never a glob. An unset list yields no author set: an omitted
-# `repositories` list means the whole installation. `repositories_within`
-# fails the converge when an entry is not in the named review set's resolved
-# list, so a public author entry must be public and a private one private.
+# Author allowlists contain repository names, never globs. An unset list
+# yields no author set: an omitted `repositories` list means the whole
+# installation. `repositories_within` keeps author sets inside their review
+# set's resolved list.
 openbao_github_hermes_author_public_repos: >-
   {{ (openbao_platform_env['OPENBAO_GITHUB_HERMES_AUTHOR_PUBLIC_REPOS'] | default('', true)).split(',')
      | map('trim') | reject('equalto', '') | list }}
+openbao_github_hermes_author_private_repos_full_names: >-
+  {{ [openbao_github_oidc_docs_repository]
+     if openbao_github_oidc_docs_repository | default('', true) | length > 0 else [] }}
 openbao_github_hermes_author_private_repos: >-
-  {{ (openbao_platform_env['OPENBAO_GITHUB_HERMES_AUTHOR_PRIVATE_REPOS'] | default('', true)).split(',')
-     | map('trim') | reject('equalto', '') | list }}
+  {{ openbao_github_hermes_author_private_repos_full_names
+     | map('regex_replace', '^[^/]+/', '') | list }}
 # No installation ID configured yields no sets and no mount.
 openbao_github_hermes_permission_sets: >-
   {{ ([{'name': 'hermes-review-public', 'tier': 'hermes-public',
@@ -78,7 +81,11 @@ openbao_github_hermes_permission_sets: >-
        {'name': 'hermes-review-private', 'tier': 'hermes-private',
         'installation_id': openbao_github_hermes_installation_id,
         'permissions': openbao_github_hermes_review_permissions,
-        'private_repos_of': 'dryvist'}]
+        'private_repos_of': 'dryvist'},
+       {'name': 'hermes-read-public', 'tier': 'hermes-private',
+        'installation_id': openbao_github_hermes_installation_id,
+        'permissions': openbao_github_read_permissions,
+        'public_repos_of': 'dryvist'}]
       + ([{'name': 'hermes-author-public', 'tier': 'hermes-public',
            'installation_id': openbao_github_hermes_installation_id,
            'repositories': openbao_github_hermes_author_public_repos,

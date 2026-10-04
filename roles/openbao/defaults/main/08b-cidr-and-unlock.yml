@@ -19,6 +19,10 @@ openbao_workstation_cidrs: >-
   {{ lookup('env', 'OPENBAO_WORKSTATION_CIDRS') | default('', true) }}
 openbao_ci_cidrs: >-
   {{ lookup('env', 'OPENBAO_CI_CIDRS') | default('', true) }}
+openbao_hermes_private_agent_secret_id_cidr: >-
+  {{ openbao_platform_env.get('OPENBAO_HERMES_PRIVATE_AGENT_SECRET_ID_CIDR', '')
+     | default(lookup('env', 'OPENBAO_HERMES_PRIVATE_AGENT_SECRET_ID_CIDR'), true)
+     | default('', true) }}
 # Escape hatch for a first bootstrap, where no CIDR is known yet. Setting it
 # true downgrades the assert to the loud warning that preceded it.
 openbao_approle_allow_unbound_cidrs: >-
@@ -133,6 +137,8 @@ openbao_approle_cidr_class_overrides:
   ntfy: machine_or_workstation
   local-llm: machine_or_workstation
   local-llm-workstation: workstation
+  cribl-edge-mac-a: workstation
+  cribl-edge-mac-b: workstation
   agent-ssh-sign: machine_or_workstation
   # The daily session-archive launchd agent runs on the workstation.
   ai-sessions-backup: workstation

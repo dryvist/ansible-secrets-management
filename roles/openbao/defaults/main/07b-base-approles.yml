@@ -231,7 +231,9 @@ openbao_base_approles_core:
          + (['ssh-sign-automation-ai'] if openbao_ssh_engine_enabled else []) }}
 # openbao_base_approles_elevated (iac-platform-deploy through slack-ops) lives
 # in 07f-elevated-approles.yml — split for the CI token-limits gate.
-openbao_base_approles: "{{ openbao_base_approles_core + openbao_base_approles_elevated }}"
+openbao_base_approles: >-
+  {{ openbao_base_approles_core + openbao_base_approles_elevated
+     + openbao_hermes_private_agent_approles }}
 # Full AppRole set = the static base above + the per-service ai-apply-<svc> actor
 # roles generated from openbao_ai_domains. init.yml loops this combined list.
 openbao_approles: >-

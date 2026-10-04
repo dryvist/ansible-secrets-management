@@ -150,7 +150,9 @@ openbao_apps_read_published_apps:
 openbao_apps_read_apps: >-
   {{ ((openbao_generated_app_secrets.keys() | list)
       + (openbao_promoted_app_secrets.keys() | list)
-      + openbao_apps_read_published_apps) | unique | sort }}
+      + openbao_apps_read_published_apps)
+     | reject('in', openbao_apps_read_excluded_generated_apps)
+     | unique | sort }}
 openbao_local_llm_policy_name: local-llm
 openbao_local_llm_approle_name: local-llm
 openbao_local_llm_workstation_policy_name: local-llm-workstation
@@ -170,22 +172,21 @@ openbao_host_secret_zero_approle_names:
   - iac-platform-deploy
 # Every scheduled-rotation AppRole, by name; approle-secret-id-rotate-policy.hcl.j2
 # scopes its secret-id mint/destroy grants to this one list.
-openbao_secrets_domain_approle_names:
-  - "{{ openbao_observability_approle_name }}"
-  - "{{ openbao_local_cloud_approle_name }}"
-  - "{{ openbao_monitoring_approle_name }}"
-  - "{{ openbao_media_approle_name }}"
-  - "{{ openbao_ntfy_approle_name }}"
-  - "{{ openbao_apps_approle_name }}"
-  - "{{ openbao_local_llm_approle_name }}"
-  # Workstation-class; their pairs are republished to Doppler.
-  - "{{ openbao_local_llm_workstation_approle_name }}"
-  - "{{ openbao_agent_ssh_sign_approle_name }}"
-  # Consumed by ansible-proxmox-ai's openbao_secrets copy only; its pair rides
-  # the same env document and the same scheduled rotation.
-  - "{{ openbao_hermes_approle_name }}"
-  # Proven by lookup: its /32 refuses a login from the rotation host.
-  - "{{ openbao_open_llm_approle_name }}"
+openbao_secrets_domain_approle_names: >-
+  {{ [openbao_observability_approle_name,
+      openbao_local_cloud_approle_name,
+      openbao_monitoring_approle_name,
+      openbao_media_approle_name,
+      openbao_ntfy_approle_name,
+      openbao_apps_approle_name,
+      openbao_local_llm_approle_name,
+      openbao_local_llm_workstation_approle_name]
+     + openbao_cribl_edge_mac_approle_names
+     + [openbao_agent_ssh_sign_approle_name,
+      openbao_hermes_approle_name,
+      openbao_open_llm_approle_name]
+     + ([openbao_hermes_private_agent_approle_name]
+        if openbao_hermes_private_agent_secret_id_cidr | length > 0 else []) }}
 # Provider-level API credentials live on exact leaves under a separately
 # supplied external KV location. Public configuration carries no path literal.
 openbao_ai_api_key_mount: >-

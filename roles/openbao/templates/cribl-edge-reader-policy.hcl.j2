@@ -1,0 +1,5 @@
+{{ ansible_managed | comment }}
+# Each reader is scoped to the one generated app entry in its policy row.
+path "{{ openbao_kv_mount }}/data/apps/{{ item.bucket }}" {
+  capabilities = ["read"]
+}

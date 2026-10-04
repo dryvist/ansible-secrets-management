@@ -1,0 +1,156 @@
+---
+- name: Verify the private Hermes AppRole, policy and key contract
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    ansible_become: false
+    _fixture_dir: "{{ render_tmp }}"
+    _template_dir: "../../../roles/openbao/templates"
+    ansible_managed: "test fixture"
+    _expected_reader_paths:
+      - secret/data/ai/hermes-private
+      - secret/metadata/ai/hermes-private
+      - secret/data/ai/mcp/splunk
+      - secret/metadata/ai/mcp/splunk
+
+  tasks:
+    - name: Load the openbao role defaults
+      ansible.builtin.include_vars:
+        dir: ../../../roles/openbao/defaults/main
+
+    - name: Supply the declared env-document values
+      ansible.builtin.set_fact:
+        openbao_platform_env:
+          OPENBAO_HERMES_PRIVATE_AGENT_SECRET_ID_CIDR: fixture-cidr
+        openbao_github_oidc_docs_repository: example-org/example-docs
+        openbao_github_hermes_installation_id: fixture-installation
+        openbao_github_hermes_author_public_repos: [public-fixture]
+        openbao_aws_hermes_webhook_consumer_role_arn: ""
+
+    - name: Render the private agent and GitHub policies
+      ansible.builtin.template:
+        src: "{{ _template_dir }}/{{ item }}.j2"
+        dest: "{{ _fixture_dir }}/{{ item }}"
+        mode: "0644"
+      loop: &policies
+        - hermes-private-agent-policy.hcl
+        - hermes-private-policy.hcl
+        - hermes-public-policy.hcl
+
+    - name: Read the rendered policies
+      ansible.builtin.slurp:
+        src: "{{ _fixture_dir }}/{{ item }}"
+      register: _raw
+      loop: *policies
+
+    - name: Assert the private reader policy grants exactly the two data leaves
+      vars:
+        _policy: "{{ _raw.results[0].content | b64decode }}"
+        _paths: "{{ _policy | regex_findall('(?m)^path \"([^\"]+)\"') }}"
+        _capabilities: "{{ _policy | regex_findall('(?m)^  capabilities = \\[(.*)\\]') }}"
+      ansible.builtin.assert:
+        that:
+          - _paths == _expected_reader_paths
+          - _capabilities == ['"read"', '"read", "list"', '"read"', '"read", "list"']
+          - _paths | select('search', '\\*') | list == []
+        fail_msg: >-
+          The private reader policy grants {{ _paths }} with {{ _capabilities }}.
+        quiet: true
+
+    - name: Assert the author set is exactly the declared private repository
+      ansible.builtin.assert:
+        that:
+          - openbao_github_hermes_author_private_repos_full_names == [openbao_github_oidc_docs_repository]
+          - >-
+            (openbao_github_hermes_permission_sets
+             | selectattr('name', 'equalto', 'hermes-author-private') | first).repositories
+            == [openbao_github_oidc_docs_repository | regex_replace('^[^/]+/', '')]
+        quiet: true
+
+    - name: Assert the private and public GitHub policies expose only their tiers
+      vars:
+        _mount: "{{ openbao_github_hermes_mount }}"
+        _private_paths: >-
+          {{ _raw.results[1].content | b64decode
+             | regex_findall('(?m)^path \"([^\"]+)\"') }}
+        _public_paths: >-
+          {{ _raw.results[2].content | b64decode
+             | regex_findall('(?m)^path \"([^\"]+)\"') }}
+        _private_tokens: >-
+          {{ _private_paths | select('match', '^' ~ _mount ~ '/token/') | list | sort }}
+        _public_tokens: >-
+          {{ _public_paths | select('match', '^' ~ _mount ~ '/token/') | list | sort }}
+      ansible.builtin.assert:
+        that:
+          - _private_tokens == [_mount ~ '/token/hermes-author-private',
+                                _mount ~ '/token/hermes-read-public',
+                                _mount ~ '/token/hermes-review-private'] | sort
+          - _public_tokens == [_mount ~ '/token/hermes-author-public',
+                               _mount ~ '/token/hermes-review-public'] | sort
+          - _mount ~ '/token' not in (_private_paths + _public_paths)
+        fail_msg: >-
+          The GitHub policies expose private {{ _private_tokens }} and public
+          {{ _public_tokens }} token paths.
+        quiet: true
+
+    - name: Assert the private agent has the live Hermes finite bounds
+      vars:
+        _agent: >-
+          {{ openbao_approles | selectattr('name', 'equalto', openbao_hermes_private_agent_approle_name) | first }}
+        _hermes: >-
+          {{ openbao_approles | selectattr('name', 'equalto', openbao_hermes_approle_name) | first }}
+        _hermes_secret_id_ttl: >-
+          {{ openbao_approle_secret_id_ttl_overrides.get(openbao_hermes_approle_name,
+             openbao_approle_secret_id_ttl) }}
+        _agent_secret_id_ttl: >-
+          {{ _agent.secret_id_ttl | default(openbao_approle_secret_id_ttl_overrides.get(
+             openbao_hermes_private_agent_approle_name, openbao_approle_secret_id_ttl)) }}
+        _hermes_secret_id_num_uses: >-
+          {{ _hermes.secret_id_num_uses | default(openbao_approle_secret_id_num_uses_overrides.get(
+             openbao_hermes_approle_name, openbao_approle_secret_id_num_uses)) }}
+        _hermes_token_ttl: "{{ _hermes.token_ttl | default(openbao_approle_token_ttl) }}"
+        _hermes_token_max_ttl: "{{ _hermes.token_max_ttl | default(openbao_approle_token_max_ttl) }}"
+      ansible.builtin.assert:
+        that:
+          - _agent_secret_id_ttl | community.general.to_seconds | int > 0
+          - _agent.secret_id_num_uses | int > 0
+          - _agent.token_ttl | community.general.to_seconds | int > 0
+          - _agent.token_max_ttl | community.general.to_seconds | int > 0
+          - >-
+            (_agent_secret_id_ttl | community.general.to_seconds | int)
+            == (_hermes_secret_id_ttl | community.general.to_seconds | int)
+          - _agent.secret_id_num_uses | int == _hermes_secret_id_num_uses | int
+          - >-
+            (_agent.token_ttl | community.general.to_seconds | int)
+            == (_hermes_token_ttl | community.general.to_seconds | int)
+          - >-
+            (_agent.token_max_ttl | community.general.to_seconds | int)
+            == (_hermes_token_max_ttl | community.general.to_seconds | int)
+          - _agent.secret_id_bound_cidrs == 'fixture-cidr'
+          - _agent.manage_secret_id == false
+          - openbao_hermes_private_agent_approle_name in openbao_secrets_domain_approle_names
+          - openbao_approle_env_prefix_overrides[openbao_hermes_private_agent_approle_name] == 'hermes-private'
+          - openbao_hermes_private_agent_approle_name not in openbao_rotate_doppler_sync_domains
+        quiet: true
+
+    - name: Assert the generated private key leaf stays outside the public Hermes policy
+      ansible.builtin.assert:
+        that:
+          - openbao_generated_app_secrets['hermes-private'] == ['hermes_private_llm_router_key']
+          - '"hermes-private" not in openbao_hermes_router_key_apps'
+        quiet: true
+
+    - name: Clear the CIDR input for the dormant-role case
+      ansible.builtin.set_fact:
+        openbao_hermes_private_agent_secret_id_cidr: ""
+
+    - name: Assert an empty CIDR keeps the role and rotation dormant
+      ansible.builtin.assert:
+        that:
+          - openbao_hermes_private_agent_approles == []
+          - openbao_hermes_private_agent_approle_name not in (openbao_approles | map(attribute='name') | list)
+          - openbao_hermes_private_agent_approle_name not in openbao_secrets_domain_approle_names
+        fail_msg: "The private agent role was exposed without its source CIDR."
+        quiet: true
