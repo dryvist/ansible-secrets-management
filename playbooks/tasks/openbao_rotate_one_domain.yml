@@ -12,9 +12,11 @@
 - name: Compute env-var name prefixes for {{ rotate_domain_name }}
   ansible.builtin.set_fact:
     rotate_new_prefix: >-
-      OPENBAO_APPROLE_{{ rotate_domain_name | upper | regex_replace('[^A-Z0-9]', '_') }}
+      OPENBAO_APPROLE_{{ openbao_approle_env_prefix_overrides.get(rotate_domain_name, rotate_domain_name)
+        | upper | regex_replace('[^A-Z0-9]', '_') }}
     rotate_legacy_prefix: >-
-      {{ rotate_domain_name | upper | regex_replace('[^A-Z0-9]', '_') }}_VAULT
+      {{ openbao_approle_env_prefix_overrides.get(rotate_domain_name, rotate_domain_name)
+         | upper | regex_replace('[^A-Z0-9]', '_') }}_VAULT
   no_log: false
 
 - name: Decide how the new pair is proven for {{ rotate_domain_name }}
