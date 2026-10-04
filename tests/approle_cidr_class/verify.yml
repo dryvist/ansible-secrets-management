@@ -166,7 +166,9 @@
     - name: Retired identities are declared nowhere and slated for deletion
       ansible.builtin.assert:
         that:
-          - openbao_retired_approles | sort == ['github-agents', 'open-llm-workstation']
+          - >-
+            openbao_retired_approles | sort
+            == ['claude-identity', 'github-admin-claude', 'github-agents', 'open-llm-workstation']
           - openbao_approles | map(attribute='name') | select('in', openbao_retired_approles) | list == []
           - openbao_approle_cidr_class_overrides | list | select('in', openbao_retired_approles) | list == []
           - openbao_base_policies_static | map(attribute='name') | select('in', openbao_retired_policies) | list == []
