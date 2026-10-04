@@ -78,6 +78,9 @@
       {{ lookup('env', 'OPENBAO_APPROLE_APPROLE_SECRET_ID_ROTATE_SCHEDULED_ROLE_ID') | default('', true) }}
     rotate_scheduled_secret_id: >-
       {{ lookup('env', 'OPENBAO_APPROLE_APPROLE_SECRET_ID_ROTATE_SCHEDULED_SECRET_ID') | default('', true) }}
+    # Pre-issued mode: an operator-issued token carrying only the
+    # approle-secret-id-rotate policy; no AppRole login is made.
+    rotate_preissued_token: "{{ lookup('env', 'OPENBAO_ROTATE_TOKEN') | default('', true) }}"
     rotate_kv_mount: secret
     rotate_env_path: platform/ansible/env
     # Comma-separated domain names, or unset/empty for every name in
@@ -95,19 +98,22 @@
         rotate_human_mode: "{{ rotate_wrapping_token | length > 0 }}"
         rotate_scheduled_mode: >-
           {{ (rotate_scheduled_role_id | length > 0) and (rotate_scheduled_secret_id | length > 0) }}
+        rotate_preissued_mode: "{{ rotate_preissued_token | length > 0 }}"
 
     - name: Refuse to run without an endpoint and exactly one auth mode
       ansible.builtin.assert:
         that:
           - rotate_bao_addr | length > 0
-          - (rotate_human_mode | bool) or (rotate_scheduled_mode | bool)
-          - not ((rotate_human_mode | bool) and (rotate_scheduled_mode | bool))
+          - >-
+            ([rotate_human_mode, rotate_scheduled_mode, rotate_preissued_mode]
+             | map('bool') | select | list | length) == 1
         fail_msg: >-
           Needs BAO_ADDR and exactly ONE of: -e ROTATE_WRAPPING_TOKEN=<a
           human-issued, single-use wrap of the approle-secret-id-rotate
           AppRole's secret_id> (human mode), or ambient
           OPENBAO_APPROLE_APPROLE_SECRET_ID_ROTATE_SCHEDULED_ROLE_ID /
-          _SECRET_ID (scheduled mode). Refusing rather than rotating
+          _SECRET_ID (scheduled mode), or OPENBAO_ROTATE_TOKEN (pre-issued
+          mode). Refusing rather than rotating
           anything unintended, or guessing which identity to authenticate
           as when both are present.
         quiet: true
@@ -213,6 +219,7 @@
         rotate_login_secret_id: >-
           {{ (rotate_unwrap.json.data.secret_id if (rotate_human_mode | bool) else rotate_scheduled_secret_id) }}
       no_log: true
+      when: not (rotate_preissued_mode | bool)
 
     - name: Authenticate as approle-secret-id-rotate
       ansible.builtin.uri:
@@ -226,6 +233,39 @@
       register: rotate_login
       changed_when: false
       no_log: true
+      when: not (rotate_preissued_mode | bool)
+
+    - name: Look up the pre-issued rotator token
+      ansible.builtin.uri:
+        url: "{{ rotate_bao_addr }}/v1/auth/token/lookup-self"
+        headers:
+          X-Vault-Token: "{{ rotate_preissued_token }}"
+        status_code: 200
+      register: rotate_preissued_lookup
+      changed_when: false
+      no_log: true
+      when: rotate_preissued_mode | bool
+
+    - name: Refuse a pre-issued token that carries any other policy
+      ansible.builtin.assert:
+        that:
+          - >-
+            (rotate_preissued_lookup.json.data.policies | reject('equalto', 'default') | list)
+            == [openbao_approle_secret_id_rotate_policy_name]
+        fail_msg: >-
+          OPENBAO_ROTATE_TOKEN must carry only the
+          {{ openbao_approle_secret_id_rotate_policy_name }} policy.
+        quiet: true
+      when: rotate_preissued_mode | bool
+
+    - name: Use the pre-issued rotator token
+      ansible.builtin.set_fact:
+        rotate_login:
+          json:
+            auth:
+              client_token: "{{ rotate_preissued_token }}"
+      no_log: true
+      when: rotate_preissued_mode | bool
 
     # One read, reused by every domain's Doppler-republish task below --
     # never ambient env, never stored in Doppler itself (see
