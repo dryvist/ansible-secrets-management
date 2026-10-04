@@ -63,6 +63,12 @@ openbao_base_policies_static:
     template: ntfy-policy.hcl.j2
   - name: "{{ openbao_apps_policy_name }}"
     template: apps-policy.hcl.j2
+  - name: "{{ openbao_cribl_edge_mac_a_policy_name }}"
+    template: cribl-edge-reader-policy.hcl.j2
+    bucket: cribl-edge-macbook
+  - name: "{{ openbao_cribl_edge_mac_b_policy_name }}"
+    template: cribl-edge-reader-policy.hcl.j2
+    bucket: cribl-edge-mac-studio
   - name: "{{ openbao_local_llm_policy_name }}"
     template: local-llm-policy.hcl.j2
   - name: "{{ openbao_local_llm_workstation_policy_name }}"

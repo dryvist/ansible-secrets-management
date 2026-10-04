@@ -150,7 +150,9 @@ openbao_apps_read_published_apps:
 openbao_apps_read_apps: >-
   {{ ((openbao_generated_app_secrets.keys() | list)
       + (openbao_promoted_app_secrets.keys() | list)
-      + openbao_apps_read_published_apps) | unique | sort }}
+      + openbao_apps_read_published_apps)
+     | reject('in', openbao_apps_read_excluded_generated_apps)
+     | unique | sort }}
 openbao_local_llm_policy_name: local-llm
 openbao_local_llm_approle_name: local-llm
 openbao_local_llm_workstation_policy_name: local-llm-workstation
@@ -178,8 +180,9 @@ openbao_secrets_domain_approle_names: >-
       openbao_ntfy_approle_name,
       openbao_apps_approle_name,
       openbao_local_llm_approle_name,
-      openbao_local_llm_workstation_approle_name,
-      openbao_agent_ssh_sign_approle_name,
+      openbao_local_llm_workstation_approle_name]
+     + openbao_cribl_edge_mac_approle_names
+     + [openbao_agent_ssh_sign_approle_name,
       openbao_hermes_approle_name,
       openbao_open_llm_approle_name]
      + ([openbao_hermes_private_agent_approle_name]

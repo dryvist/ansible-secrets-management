@@ -137,6 +137,8 @@ openbao_approle_cidr_class_overrides:
   ntfy: machine_or_workstation
   local-llm: machine_or_workstation
   local-llm-workstation: workstation
+  cribl-edge-mac-a: workstation
+  cribl-edge-mac-b: workstation
   agent-ssh-sign: machine_or_workstation
   # The daily session-archive launchd agent runs on the workstation.
   ai-sessions-backup: workstation

@@ -1,7 +1,7 @@
 ---
-# Workstation-run converge identities. Separate file rather than more rows in
-# 07b: that file is at the per-file size budget CI enforces, and the remedy for
-# that budget is always splitting the source.
+# Workstation-class AppRoles. Separate file rather than more rows in 07b: that
+# file is at the per-file size budget CI enforces, and the remedy for that
+# budget is always splitting the source.
 openbao_workstation_approles:
   - name: proxman
     policy: proxman
@@ -93,3 +93,10 @@ openbao_workstation_approles:
     manage_secret_id: false
     secret_id_ttl: "{{ openbao_approle_human_secret_id_ttl }}"
     secret_id_num_uses: 1
+  # Dedicated Cribl Edge readers, with one app entry per identity.
+  - name: "{{ openbao_cribl_edge_mac_a_approle_name }}"
+    policy: "{{ openbao_cribl_edge_mac_a_policy_name }}"
+    secret_id_num_uses: 100
+  - name: "{{ openbao_cribl_edge_mac_b_approle_name }}"
+    policy: "{{ openbao_cribl_edge_mac_b_policy_name }}"
+    secret_id_num_uses: 100
