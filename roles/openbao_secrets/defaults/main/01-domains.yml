@@ -45,6 +45,9 @@ openbao_secrets_domains:
       - apps/media/qbittorrent
   - name: apps
     paths:
+      # The dispatcher uses the write-only ntfy ai-jobs publisher token
+      # created by the ntfy role (#2334) when OpenBao AppRole login is refused.
+      - apps/open-llm
       # Nautobot IPAM/DCIM (issue #138). The apps/nautobot KV path carries the
       # fields db_password, secret_key, superuser_password (the #138 secret
       # contract WS-C seeds), merged flat into bao_apps_secrets. Future apps
