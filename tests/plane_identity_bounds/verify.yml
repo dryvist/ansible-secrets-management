@@ -141,6 +141,18 @@
         - "{{ openbao_open_llm_approle_name }}"
         - proxman
 
+    - name: The dispatcher pair is rotated on schedule and never republished to Doppler
+      ansible.builtin.assert:
+        that:
+          - openbao_open_llm_approle_name in openbao_secrets_domain_approle_names
+          - >-
+            (openbao_approle_secret_id_ttl_overrides[openbao_open_llm_approle_name]
+             | community.general.to_seconds | int) == 86400
+          - openbao_open_llm_approle_name not in openbao_rotate_doppler_sync_domains
+        fail_msg: >-
+          open-llm needs scheduled rotation with a 24h secret_id and must stay
+          out of openbao_rotate_doppler_sync_domains.
+
     # Workstation reads of the router credentials have their own identity, so
     # workstation logins cannot spend the plane's local-llm secret_id.
     - name: The workstation local-llm reader is finite and the plane pair stays off Doppler
