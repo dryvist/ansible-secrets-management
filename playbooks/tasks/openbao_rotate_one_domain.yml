@@ -1,10 +1,10 @@
 ---
 # One domain's secret_id rotation, invoked once per name in
 # rotate_domain_names by openbao-rotate-approles.yml. Order is load-bearing:
-# mint -> write -> prove -> destroy old. Nothing is destroyed until the
-# replacement is proven to authenticate.
+# mint -> prove -> write -> destroy old. Nothing is published or destroyed
+# until the replacement is proven live.
 #
-# `no_log: true` covers every task that carries a secret_id or a token in
+# `no_log: true` covers every task that carries a role_id, secret_id or token in
 # its args or response; `no_log: false` is set explicitly on the handful of
 # tasks whose message is domain names and HTTP status only, so failures stay
 # loud instead of vanishing into a blanket no_log.
@@ -15,11 +15,10 @@
       OPENBAO_APPROLE_{{ rotate_domain_name | upper | regex_replace('[^A-Z0-9]', '_') }}
     rotate_legacy_prefix: >-
       {{ rotate_domain_name | upper | regex_replace('[^A-Z0-9]', '_') }}_VAULT
-    # Declared class (08b-cidr-and-unlock.yml), same cascade the role applies.
-    rotate_domain_workstation_bound: >-
-      {{ (openbao_approle_cidr_class_overrides[rotate_domain_name]
-          | default(openbao_approle_default_cidr_class)) == 'workstation' }}
   no_log: false
+
+- name: Decide how the new pair is proven for {{ rotate_domain_name }}
+  ansible.builtin.include_tasks: openbao_rotate_proof_mode.yml
 
 - name: Resolve the AppRole's declared secret_id TTL for {{ rotate_domain_name }}
   # The repo declares the role (roles/openbao's init/10-approles.yml writes
@@ -79,7 +78,7 @@
         status_code: 200
       register: rotate_role_id_read
       changed_when: false
-      no_log: false
+      no_log: true
 
     - name: Mint a fresh secret_id for {{ rotate_domain_name }}
       ansible.builtin.uri:
@@ -134,21 +133,6 @@
              | items2dict }}
       no_log: true
 
-    - name: Write the rotated env document, siblings preserved
-      ansible.builtin.uri:
-        url: "{{ rotate_bao_addr }}/v1/{{ rotate_kv_mount }}/data/{{ rotate_env_path }}"
-        method: POST
-        headers:
-          X-Vault-Token: "{{ rotate_login.json.auth.client_token }}"
-        body_format: json
-        body:
-          options:
-            cas: "{{ rotate_env_current.json.data.metadata.version | int }}"
-          data: "{{ rotate_env_new_data }}"
-        status_code: 200
-      changed_when: true
-      no_log: true
-
     - name: Prove the new pair authenticates for {{ rotate_domain_name }}
       ansible.builtin.uri:
         url: "{{ rotate_bao_addr }}/v1/auth/approle/login"
@@ -160,12 +144,13 @@
         status_code: 200
       changed_when: false
       no_log: true
-      when: not (rotate_domain_workstation_bound | bool)
+      when: not (rotate_proof_by_lookup | bool)
 
-    # A workstation-bound pair cannot log in from this host by design, so the
-    # proof is that the new secret_id is live on its role -- the one thing a
-    # login would add is the source-address check this host must fail.
-    - name: Prove the new secret_id is live for workstation-bound {{ rotate_domain_name }}
+    # A workstation-bound or CIDR-declared pair cannot log in from this host by
+    # design, so the proof is that the new secret_id is live on its role -- the
+    # one thing a login would add is the source-address check this host must
+    # fail. A lookup also spends none of the secret_id's uses.
+    - name: Prove the new secret_id is live for address-bound {{ rotate_domain_name }}
       ansible.builtin.uri:
         url: "{{ rotate_bao_addr }}/v1/auth/approle/role/{{ rotate_domain_name }}/secret-id/lookup"
         method: POST
@@ -181,7 +166,22 @@
         rotate_new_secret_id_lookup.status != 200
         or (rotate_new_secret_id_lookup.json.data | default(none)) is none
       no_log: true
-      when: rotate_domain_workstation_bound | bool
+      when: rotate_proof_by_lookup | bool
+
+    - name: Write the rotated env document, siblings preserved
+      ansible.builtin.uri:
+        url: "{{ rotate_bao_addr }}/v1/{{ rotate_kv_mount }}/data/{{ rotate_env_path }}"
+        method: POST
+        headers:
+          X-Vault-Token: "{{ rotate_login.json.auth.client_token }}"
+        body_format: json
+        body:
+          options:
+            cas: "{{ rotate_env_current.json.data.metadata.version | int }}"
+          data: "{{ rotate_env_new_data }}"
+        status_code: 200
+      changed_when: true
+      no_log: true
 
     # Only reached once the new pair has proven it authenticates -- never
     # publish an unproven credential. Only the workstation-consumed domains

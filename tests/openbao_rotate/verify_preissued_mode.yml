@@ -1,0 +1,64 @@
+---
+# Contract for the pre-issued rotator token mode of
+# playbooks/openbao-rotate-approles.yml: with OPENBAO_ROTATE_TOKEN set the play
+# makes no AppRole login, refuses a token carrying any policy other than the
+# rotator's, and refuses to combine modes.
+#
+# Usage: ansible-playbook tests/openbao_rotate/verify_preissued_mode.yml -c local
+
+- name: Verify the pre-issued rotator token mode
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  become: false
+
+  vars:
+    ansible_become: false
+    _play: "{{ playbook_dir }}/../../playbooks/openbao-rotate-approles.yml"
+    _tasks: "{{ (lookup('ansible.builtin.file', _play) | from_yaml)[0].tasks }}"
+    _by_name: "{{ dict(_tasks | map(attribute='name') | zip(_tasks)) }}"
+
+  tasks:
+    - name: The AppRole login and its credential resolution skip in pre-issued mode
+      vars:
+        _skip: "not (rotate_preissued_mode | bool)"
+        _login: "{{ _by_name['Authenticate as approle-secret-id-rotate'] }}"
+        _resolve: "{{ _by_name['Resolve the role_id/secret_id to authenticate with this run'] }}"
+      ansible.builtin.assert:
+        that:
+          - _skip in (_login.when | string)
+          - _skip in (_resolve.when | string)
+        fail_msg: A pre-issued rotator token must replace the AppRole login, not run beside it.
+
+    - name: The pre-issued token is policy-checked before it is used
+      vars:
+        _names: "{{ _tasks | map(attribute='name') | list }}"
+        _refuse: Refuse a pre-issued token that carries any other policy
+        _use: Use the pre-issued rotator token
+        _refuse_that: "{{ _by_name[_refuse]['ansible.builtin.assert'].that | string }}"
+      ansible.builtin.assert:
+        that:
+          - _names.index(_refuse) < _names.index(_use)
+          - _names.index(_use) < _names.index('Read the Doppler sync token')
+          - "'openbao_approle_secret_id_rotate_policy_name' in _refuse_that"
+        fail_msg: The pre-issued token must be checked for the rotator policy alone before any read or write.
+
+    - name: Run the play with two auth modes at once
+      ansible.builtin.command:
+        argv: [ansible-playbook, "{{ _play }}", -c, local, -i, "localhost,"]
+      environment:
+        BAO_ADDR: http://127.0.0.1:9
+        OPENBAO_ROTATE_TOKEN: placeholder-token
+        ROTATE_WRAPPING_TOKEN: placeholder-wrap
+        OPENBAO_APPROLE_APPROLE_SECRET_ID_ROTATE_SCHEDULED_ROLE_ID: ""
+        OPENBAO_APPROLE_APPROLE_SECRET_ID_ROTATE_SCHEDULED_SECRET_ID: ""
+      register: _two_modes
+      changed_when: false
+      failed_when: false
+
+    - name: Two modes are refused before any request
+      ansible.builtin.assert:
+        that:
+          - _two_modes.rc != 0
+          - "'exactly ONE' in _two_modes.stdout"
+        fail_msg: Combining the pre-issued token with another auth mode must be refused.

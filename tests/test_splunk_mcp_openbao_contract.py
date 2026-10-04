@@ -58,7 +58,24 @@ def test_unrelated_domain_identity_cannot_read_shared_splunk_secret():
     policy = _read("roles/openbao/templates/observability-policy.hcl.j2")
 
     assert "ai/mcp/splunk" not in policy
-    assert "/data/ai/" not in policy
+    assert "{{ openbao_kv_mount }}/data/ai/" not in policy
+
+
+def test_observability_reads_only_the_openrouter_usage_key():
+    policy = _read("roles/openbao/templates/observability-policy.hcl.j2")
+    external = [
+        line for line in policy.splitlines()
+        if line.startswith('path "secrets-external/')
+    ]
+
+    assert external == [
+        'path "secrets-external/data/ai/saas/openrouter-usage" {',
+        'path "secrets-external/metadata/ai/saas/openrouter-usage" {',
+    ]
+    for grant in external:
+        block = policy.split(grant, 1)[1].split("}", 1)[0]
+        assert block.strip() == 'capabilities = ["read"]'
+    assert "*" not in "".join(external)
 
 
 def test_hermes_writer_is_scoped_to_only_the_hermes_secret():

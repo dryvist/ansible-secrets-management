@@ -137,14 +137,24 @@ openbao_disclosure_denylist_policy_name: disclosure-denylist-read
 openbao_apps_policy_name: apps
 openbao_apps_approle_name: apps
 # Apps the read-side `apps` policy grants read on = the union of both seeding
-# maps, so an app that is only promoted (never generated) still gets its read
-# grant. Derived rather than listed: a hand-maintained list silently missed the
-# promoted apps, and the failure mode is a consumer resolving an empty secret.
+# maps plus openbao_apps_read_published_apps, so an app that is only promoted
+# (never generated) still gets its read grant. Derived rather than listed: a
+# hand-maintained list silently missed the promoted apps, and the failure mode
+# is a consumer resolving an empty secret.
+# openbao_apps_read_published_apps: buckets the `apps` domain reads that no
+# seeding map here fills, because another repository's converge publishes them
+# (pve-exporter: ansible-proxmox's pve_api_tokens). A read the policy denies
+# fails the whole domain fetch, even for a path declared optional.
+openbao_apps_read_published_apps:
+  - pve-exporter
 openbao_apps_read_apps: >-
   {{ ((openbao_generated_app_secrets.keys() | list)
-      + (openbao_promoted_app_secrets.keys() | list)) | unique | sort }}
+      + (openbao_promoted_app_secrets.keys() | list)
+      + openbao_apps_read_published_apps) | unique | sort }}
 openbao_local_llm_policy_name: local-llm
 openbao_local_llm_approle_name: local-llm
+openbao_local_llm_workstation_policy_name: local-llm-workstation
+openbao_local_llm_workstation_approle_name: local-llm-workstation
 # Host identities whose secret-zero is delivered to guests through the env
 # document (secret/platform/ansible/env) rather than the converge operator's
 # environment. openbao-rotate-approles.yml writes them only on an explicit
@@ -158,11 +168,8 @@ openbao_host_secret_zero_approle_names:
   - "{{ openbao_reconcile_approle_name }}"
   - "{{ openbao_flow_lock_approle_name }}"
   - iac-platform-deploy
-# Every openbao_secrets domain AppRole, by name -- these ARE the domain
-# names (each pair declared 1:1 above), so this is the one place approle-
-# secret-id-rotate-policy.hcl.j2 scopes its secret-id
-# mint/destroy grants to, instead of a second hand-typed list that could
-# drift from the pairs above.
+# Every scheduled-rotation AppRole, by name; approle-secret-id-rotate-policy.hcl.j2
+# scopes its secret-id mint/destroy grants to this one list.
 openbao_secrets_domain_approle_names:
   - "{{ openbao_observability_approle_name }}"
   - "{{ openbao_local_cloud_approle_name }}"
@@ -171,6 +178,14 @@ openbao_secrets_domain_approle_names:
   - "{{ openbao_ntfy_approle_name }}"
   - "{{ openbao_apps_approle_name }}"
   - "{{ openbao_local_llm_approle_name }}"
+  # Workstation-class; their pairs are republished to Doppler.
+  - "{{ openbao_local_llm_workstation_approle_name }}"
+  - "{{ openbao_agent_ssh_sign_approle_name }}"
+  # Consumed by ansible-proxmox-ai's openbao_secrets copy only; its pair rides
+  # the same env document and the same scheduled rotation.
+  - "{{ openbao_hermes_approle_name }}"
+  # Proven by lookup: its /32 refuses a login from the rotation host.
+  - "{{ openbao_open_llm_approle_name }}"
 # Provider-level API credentials live on exact leaves under a separately
 # supplied external KV location. Public configuration carries no path literal.
 openbao_ai_api_key_mount: >-
@@ -237,11 +252,14 @@ openbao_ai_public_approle_name: ai-public
 openbao_ai_public_router_key_apps: [opencode, raycast, codex, cursor]
 openbao_ai_orchestrator_policy_name: ai-orchestrator
 openbao_ai_orchestrator_approle_name: ai-orchestrator
-# open-llm — the successor-harness automation identity (macOS `open-llm`
-# user). Read-only: secret/open-llm/* (its own domain, operator-seeded) +
-# the shared ai-public leaf. See open-llm-policy.hcl.j2.
+# open-llm — the untrusted-tier dispatcher identity: reads its own bucket and
+# mints GitHub tokens from the agents mount only. See open-llm-policy.hcl.j2.
 openbao_open_llm_policy_name: open-llm
 openbao_open_llm_approle_name: open-llm
+# The dispatcher host's single address as a /32 (init/10-approles.yml asserts
+# the shape). Empty falls back to the machine class.
+openbao_open_llm_secret_id_cidr: >-
+  {{ lookup('env', 'OPENBAO_AI_SANDBOX_SECRET_ID_CIDR') | default('', true) }}
 # ai-readonly / ai-elevated are now ACTOR ROLES that ATTACH base capability
 # policies (below) — they no longer own a standalone `ai-*` policy object. Only
 # the AppRole names survive as vars; their token_policies are composed rollups.

@@ -1,0 +1,65 @@
+---
+- name: Seed the external Context7 key without replacing a stored value
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
+  environment:
+    BAO_ADDR: "{{ openbao_cli_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  no_log: true
+  block:
+    - name: Read the current external Context7 fields
+      ansible.builtin.command:
+        cmd: bao kv get -format=json secrets-external/ai/saas/context7
+      register: openbao_context7_current
+      changed_when: false
+      check_mode: false
+      failed_when:
+        - openbao_context7_current.rc != 0
+        - openbao_absent_stderr_marker not in (openbao_context7_current.stderr | default(''))
+
+    - name: Capture the current Context7 fields and version
+      ansible.builtin.set_fact:
+        openbao_context7_data: >-
+          {{ (openbao_context7_current.stdout | from_json).data.data
+             if openbao_context7_current.rc == 0 else {} }}
+        openbao_context7_version: >-
+          {{ (openbao_context7_current.stdout | from_json).data.metadata.version
+             if openbao_context7_current.rc == 0 else 0 }}
+
+    - name: Copy only the missing Context7 field from its existing bundle
+      when: openbao_context7_data.CONTEXT7_API_KEY | default('', true) | trim | length == 0
+      block:
+        - name: Read the existing provider bundle
+          ansible.builtin.command:
+            cmd: "bao kv get -format=json {{ openbao_kv_mount }}/ai/llm"
+          register: openbao_context7_source
+          changed_when: false
+          check_mode: false
+
+        - name: Require a nonempty existing Context7 key
+          ansible.builtin.assert:
+            that:
+              - >-
+                (openbao_context7_source.stdout | from_json).data.data.CONTEXT7_API_KEY
+                | default('', true) | trim | length > 0
+            quiet: true
+
+        - name: Create the missing Context7 field with a merge-preserving CAS write
+          ansible.builtin.uri:
+            url: "{{ openbao_write_addr }}/v1/secrets-external/data/ai/saas/context7"
+            method: POST
+            headers:
+              X-Vault-Token: "{{ openbao_bootstrap_token }}"
+            body_format: json
+            body:
+              options:
+                cas: "{{ openbao_context7_version | int }}"
+              data: "{{ openbao_context7_merged }}"
+            status_code: [200, 204]
+          vars:
+            openbao_context7_merged: >-
+              {{ openbao_context7_data | combine({'CONTEXT7_API_KEY':
+                   (openbao_context7_source.stdout | from_json).data.data.CONTEXT7_API_KEY}) }}
+          changed_when: true

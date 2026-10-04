@@ -107,3 +107,22 @@
       (openbao_existing_policy_map | default({})).get(item.name, '')
       !=
       (openbao_rendered_policy_map | default({})).get(item.name, '')
+
+# Retired policies (07c-approle-undeclared-exceptions.yml) that are still
+# stored. Needs delete on sys/policies/acl/*; any other identity fails here.
+- name: Delete retired RBAC policies that still exist
+  ansible.builtin.command:
+    cmd: "bao policy delete {{ item }}"
+  environment:
+    BAO_ADDR: "{{ openbao_cli_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
+  loop: >-
+    {{ openbao_retired_policies
+       | select('in', openbao_policies_raw.stdout | default('[]', true) | from_json) | list }}
+  no_log: true
+  changed_when: true
+  when: openbao_bootstrap_token is defined

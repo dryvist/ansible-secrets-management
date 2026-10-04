@@ -90,6 +90,20 @@ openbao_base_approles_core:
   - name: "{{ openbao_local_llm_approle_name }}"
     token_policies: >-
       {{ [openbao_local_llm_policy_name] + openbao_ai_api_key_policy_names }}
+  # local-llm-workstation: workstation reads of secret/ai/llm. Separate from
+  # local-llm so workstation logins cannot exhaust the plane's secret_id.
+  # 36h ttl (rotated-domain margin); 100 uses per secret_id, replaced every 12h.
+  - name: "{{ openbao_local_llm_workstation_approle_name }}"
+    policy: "{{ openbao_local_llm_workstation_policy_name }}"
+    secret_id_num_uses: 100
+  # agent-ssh-sign: workstation signing of non-root ai-agent SSH certificates
+  # (automation-ai, 2h). No read policy. Token lives at most as long as one
+  # certificate. 36h ttl (rotated-domain margin); 100 uses per secret_id.
+  - name: "{{ openbao_agent_ssh_sign_approle_name }}"
+    token_policies: [ssh-sign-automation-ai]
+    token_ttl: 30m
+    token_max_ttl: 2h
+    secret_id_num_uses: 100
   - name: "{{ openbao_hermes_approle_name }}"
     policy: "{{ openbao_hermes_policy_name }}"
   - name: "{{ openbao_hermes_write_approle_name }}"
@@ -186,13 +200,16 @@ openbao_base_approles_core:
   - name: "{{ openbao_ai_orchestrator_approle_name }}"
     policy: "{{ openbao_ai_orchestrator_policy_name }}"
     token_ttl: 30m  # demoted: broad-write identity gets a short token TTL
-  # open-llm: standing (ambient) read-only identity for the successor
-  # harness, minted like any other base AppRole (24h secret_id, default
-  # num_uses) — it holds no write power, so it needs no shorter TTL or
-  # human-unlock gate the way ai-orchestrator/openbao-node-converge do.
+  # open-llm: the untrusted-tier dispatcher. Machine class, bound to the
+  # dispatcher host's /32. Its secret_id keeps the global finite bounds
+  # (24h, 30 uses); tests/plane_identity_bounds/verify.yml fails on 0/0.
+  # 15m token, renewed up to a 60m job budget through the default policy's
+  # renew-self.
   - name: "{{ openbao_open_llm_approle_name }}"
     policy: "{{ openbao_open_llm_policy_name }}"
-    token_ttl: 30m
+    secret_id_bound_cidrs: "{{ openbao_open_llm_secret_id_cidr }}"
+    token_ttl: 15m
+    token_max_ttl: 60m
   # ai-readonly / ai-elevated ACTOR roles: standing (ambient) READ tiers. Their
   # token_policies ATTACH composed rollups — no standalone ai-* policy object.
   # ai-readonly = read-all (every read-<svc>); ai-elevated = read-all + the

@@ -1,0 +1,71 @@
+---
+# The `hermes` policy grants exactly the paths ansible-proxmox-ai's `hermes`
+# domain reads (ai/hermes, ai/mcp/splunk, ai/mcp/zammad) plus the four
+# operating-profile router keys, data + metadata each, and nothing else. The
+# hermes AppRole is in the scheduled rotation set with a TTL that outlasts a
+# missed run.
+- name: Verify the hermes policy path set and its rotation
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    ansible_become: false
+    _fixture_dir: "{{ render_tmp }}"
+    _template_dir: "../../../roles/openbao/templates"
+    ansible_managed: "test fixture"
+
+  tasks:
+    - name: Load the openbao role defaults
+      ansible.builtin.include_vars:
+        dir: ../../../roles/openbao/defaults/main
+
+    - name: Render the hermes policy
+      ansible.builtin.template:
+        src: "{{ _template_dir }}/hermes-policy.hcl.j2"
+        dest: "{{ _fixture_dir }}/hermes-exact-policy.hcl"
+        mode: "0644"
+
+    - name: Read the rendered policy
+      ansible.builtin.slurp:
+        src: "{{ _fixture_dir }}/hermes-exact-policy.hcl"
+      register: _hermes_policy_raw
+
+    - name: Assert the hermes policy grants exactly the expected paths
+      vars:
+        _granted: >-
+          {{ (_hermes_policy_raw.content | b64decode)
+             | regex_findall('(?m)^path "([^"]+)"') | sort }}
+        _leaves: >-
+          {{ ['ai/hermes', 'ai/mcp/splunk', 'ai/mcp/zammad']
+             + openbao_hermes_router_key_apps | map('regex_replace', '^', 'apps/') | list }}
+        _expected: >-
+          {{ (_leaves | map('regex_replace', '^', openbao_kv_mount ~ '/data/') | list
+              + _leaves | map('regex_replace', '^', openbao_kv_mount ~ '/metadata/') | list
+              + ['secrets-external/data/ai/saas/context7',
+                 'secrets-external/metadata/ai/saas/context7'])
+             | sort }}
+      ansible.builtin.assert:
+        that:
+          - _granted == _expected
+          - _granted | select('search', '\*') | list == []
+          - _granted | select('search', '/ai/llm') | list == []
+        fail_msg: >-
+          hermes grants {{ _granted }}; expected exactly {{ _expected }}.
+        quiet: true
+
+    - name: Assert hermes is rotated on the same schedule as the other domain AppRoles
+      ansible.builtin.assert:
+        that:
+          - openbao_hermes_approle_name in openbao_secrets_domain_approle_names
+          - >-
+            openbao_secrets_domain_approle_names
+            | reject('in', openbao_approle_secret_id_ttl_overrides) | list == []
+          - >-
+            openbao_approle_secret_id_ttl_overrides[openbao_hermes_approle_name]
+            == openbao_rotated_domain_secret_id_ttl
+        fail_msg: >-
+          Every name in openbao_secrets_domain_approle_names (hermes included)
+          needs an openbao_approle_secret_id_ttl_overrides entry equal to
+          openbao_rotated_domain_secret_id_ttl.
+        quiet: true

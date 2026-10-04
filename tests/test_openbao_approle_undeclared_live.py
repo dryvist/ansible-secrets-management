@@ -57,7 +57,8 @@ def live_names(rc, keys=None):
     expr = _task(LIVE_NAMES_TASK)["ansible.builtin.set_fact"][
         "openbao_approle_live_names"
     ]
-    stdout = json.dumps({"data": {"keys": keys or []}})
+    # `bao list -format=json` prints a bare array, not the API envelope.
+    stdout = json.dumps(keys or [])
     return _render(expr, {"openbao_approle_live_list": {"rc": rc, "stdout": stdout}})
 
 
@@ -88,6 +89,21 @@ def missing(declared, live):
 class TestLiveNames(unittest.TestCase):
     def test_successful_list_returns_the_keys(self):
         self.assertEqual(live_names(0, ["apps", "orphan"]), ["apps", "orphan"])
+
+    def test_bare_array_stdout_is_parsed_not_dropped(self):
+        # Regression: reading .data.keys off the bare array resolved to [],
+        # so the retirement loop and the assert both saw an empty live set.
+        names = live_names(0, ["ansible", "apps", "orphan"])
+        self.assertEqual(names, ["ansible", "apps", "orphan"])
+        self.assertEqual(undeclared(names, ["apps"], ["ansible"]), ["orphan"])
+
+    def test_empty_stdout_on_success_resolves_to_empty(self):
+        expr = _task(LIVE_NAMES_TASK)["ansible.builtin.set_fact"][
+            "openbao_approle_live_names"
+        ]
+        self.assertEqual(
+            _render(expr, {"openbao_approle_live_list": {"rc": 0, "stdout": ""}}), []
+        )
 
     def test_nonzero_rc_resolves_to_empty_not_unknown(self):
         # An empty mount on a fresh cluster reads this way too -- the FAIL

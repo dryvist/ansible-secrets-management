@@ -18,6 +18,9 @@
     authelia_oidc_jwks_key: x
     authelia_oidc_hermes_client_id: x
     authelia_oidc_hermes_redirect_uri: "https://x.example.test/cb"
+    # Supplied by inventory/group_vars/all.yml at run time; the kiosk bypass
+    # domains derive from it.
+    wall_kiosk_route_names: [wall, glance]
     # One digest per confidential client, keyed by name. The role builds this
     # at converge time from the persisted digest files; the template looks a
     # name up, so a stand-in per client is all the render needs.
@@ -101,8 +104,8 @@
         that:
           # The kiosk rule is the one bypass scoped by client address instead
           # of path. It must name single hosts, and only the wall's own
-          # display-only hosts (the wall page itself, plus Glance so its
-          # iframe on the wall does not hit the login redirect): a wider
+          # display-only hosts (the wall page itself, plus each page it
+          # rotates, so their iframes do not hit the login redirect): a wider
           # network or another domain would open real UIs.
           - _net_rules | length == 1
           - _net_rules[0].domain == ['wall.example.test', 'glance.example.test']

@@ -136,6 +136,56 @@ class SeedGeneratedAppSecret(unittest.TestCase):
         self.assertTrue(self._fails(_cli(1, "connection refused")))
 
 
+class SeedContext7Key(unittest.TestCase):
+    REL = "roles/openbao/tasks/seed_context7_key.yml"
+
+    def test_read_distinguishes_absence_from_denial_and_connection_failure(self):
+        task = _find(self.REL, "Read the current external Context7 fields")
+        for result, fails in [
+            (_cli(0, ""), False),
+            (_cli(2, CLI_ABSENT), False),
+            (_cli(2, CLI_DENIED), True),
+            (_cli(1, "connection refused"), True),
+        ]:
+            with self.subTest(result=result):
+                self.assertEqual(
+                    _all(task["failed_when"], {
+                        "openbao_context7_current": result,
+                        "openbao_absent_stderr_marker": BAO_ABSENT,
+                    }), fails,
+                )
+
+    def test_only_missing_or_empty_keys_are_seeded(self):
+        task = _find(self.REL, "Copy only the missing Context7 field from its existing bundle")
+        for data, seeds in [({}, True), ({"CONTEXT7_API_KEY": ""}, True),
+                            ({"CONTEXT7_API_KEY": " "}, True),
+                            ({"CONTEXT7_API_KEY": "existing"}, False)]:
+            with self.subTest(data=data):
+                self.assertEqual(_all(task["when"], {"openbao_context7_data": data}), seeds)
+
+    def test_write_preserves_siblings_uses_cas_and_excludes_the_router_key(self):
+        import json
+
+        task = _find(self.REL, "Create the missing Context7 field with a merge-preserving CAS write")
+        variables = {
+            "openbao_context7_data": {"sibling": "preserved"},
+            "openbao_context7_version": 4,
+            "openbao_context7_source": {"stdout": json.dumps({"data": {"data": {
+                "CONTEXT7_API_KEY": "context7-only",
+                "LLM_ROUTER_MASTER_KEY": "must-not-copy",
+            }}})},
+        }
+        variables["openbao_context7_merged"] = _render(
+            task["vars"]["openbao_context7_merged"], variables, wrap=False,
+        )
+        uri = task["ansible.builtin.uri"]
+        self.assertTrue(uri["url"].endswith("/v1/secrets-external/data/ai/saas/context7"))
+        self.assertEqual(uri["method"], "POST")
+        self.assertEqual(int(_render(uri["body"]["options"]["cas"], variables, wrap=False)), 4)
+        self.assertEqual(variables["openbao_context7_merged"],
+                         {"sibling": "preserved", "CONTEXT7_API_KEY": "context7-only"})
+
+
 class PromoteAppSecret(unittest.TestCase):
     """A denied read must not wipe the siblings the merge promises to keep."""
 

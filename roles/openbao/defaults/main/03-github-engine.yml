@@ -84,7 +84,7 @@ openbao_github_docs_publisher_permissions:
   pull_requests: write
 # The repository name is supplied by the iac secret store, NOT inline: this
 # repository is public and the installation covers private repositories, the
-# same reasoning as OPENBAO_GITHUB_WRITE_REPOS. Unset yields no set at all
+# repository selection remains explicit. Unset yields no set at all
 # rather than a set with an empty repository list — an omitted `repositories`
 # on a permission set means the WHOLE installation, so an unconfigured
 # publisher must not exist rather than exist unbounded. Explicit literals
@@ -101,27 +101,6 @@ openbao_github_docs_publisher_permission_sets: >-
        'repositories': openbao_github_docs_publisher_repos,
        'permissions': openbao_github_docs_publisher_permissions}]
      if openbao_github_docs_publisher_repos | length > 0 else [] }}
-# open-llm write tier: same shape as docs-publisher — the ONE set that
-# both writes and is repository-scoped, scope stored server-side so the
-# holder (the open-llm AppRole) cannot widen it. Lets open-llm push a
-# branch and open a PR (step 4 smoke test) on an explicit allowlist of
-# PUBLIC dryvist repos only — no contents/pull_requests grant exists
-# anywhere else on the open-llm policy. Unset env -> no set, same as
-# docs-publisher: an unconfigured allowlist must not exist unbounded.
-openbao_github_open_llm_set_name: open-llm-write
-openbao_github_open_llm_permissions:
-  contents: write
-  pull_requests: write
-openbao_github_open_llm_repos: >-
-  {{ (lookup('env', 'OPENBAO_GITHUB_OPEN_LLM_REPOS') | default('', true)).split(',')
-     | map('trim') | reject('equalto', '') | list }}
-openbao_github_open_llm_permission_sets: >-
-  {{ [{'name': openbao_github_open_llm_set_name,
-       'tier': 'publish',
-       'installation_id': openbao_github_dryvist_installation_id,
-       'repositories': openbao_github_open_llm_repos,
-       'permissions': openbao_github_open_llm_permissions}]
-     if openbao_github_open_llm_repos | length > 0 else [] }}
 # tier drives which identities may mint a set (see the github-*-policy
 # templates): `read` sets are ambient; `admin` sets (installation-wide, full
 # App ceiling) are minted only through the inert, human-gated github-admin
@@ -164,14 +143,11 @@ openbao_github_base_permission_sets:
 # Sets on the admin mount only; 05-github-engine.yml reconciles exactly these.
 openbao_github_admin_permission_sets: >-
   {{ openbao_github_base_permission_sets
-     + openbao_github_docs_publisher_permission_sets
-     + openbao_github_open_llm_permission_sets }}
+     + openbao_github_docs_publisher_permission_sets }}
 # Every set on every GitHub mount, each tagged with its mount, for the policy
 # templates.
 openbao_github_permission_sets: >-
   {{ (openbao_github_admin_permission_sets
       | map('combine', {'mount': openbao_github_mount}) | list)
      + (openbao_github_read_permission_sets
-        | map('combine', {'mount': openbao_github_everyday_mount}) | list)
-     + (openbao_github_agents_permission_sets
-        | map('combine', {'mount': openbao_github_agents_mount}) | list) }}
+        | map('combine', {'mount': openbao_github_everyday_mount}) | list) }}

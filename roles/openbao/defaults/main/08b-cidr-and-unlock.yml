@@ -59,7 +59,6 @@ openbao_approle_cidr_class_overrides:
   github-admin-unattended: workstation
   admin-issuer: workstation
   openbao-policy-sync: workstation
-  github-agents: workstation
   # The write realm is redeemed from the same place as github-write — the
   # operator's git/gh — so it takes the same class. It carried no override and
   # declared as `machine`, which refuses the workstation on source address
@@ -72,16 +71,12 @@ openbao_approle_cidr_class_overrides:
   # lower-trust harnesses on the workstation. The union is a superset of the
   # machine default, so no existing holder loses access.
   ai-public: machine_or_workstation
-  # open-llm runs as a macOS local user on the operator's own machine —
-  # same class as ai-public, the other desktop-CLI identity it shares a
-  # read leaf with.
-  open-llm: machine_or_workstation
   # The Vikunja MCP server launches from the operator's own machine.
   vikunja-mcp: workstation
   # The operator workstation identity (07f).
   operator-workstation: workstation
+  proxman: workstation
   agent-workstation: workstation
-  open-llm-workstation: workstation
   # Backs the interactive `aikey <harness>` function, which runs on the
   # workstation.
   ai-readonly: machine_or_workstation
@@ -137,6 +132,8 @@ openbao_approle_cidr_class_overrides:
   apps: machine_or_workstation
   ntfy: machine_or_workstation
   local-llm: machine_or_workstation
+  local-llm-workstation: workstation
+  agent-ssh-sign: machine_or_workstation
   # The daily session-archive launchd agent runs on the workstation.
   ai-sessions-backup: workstation
   # Human-gated, operator-driven (rotate-key.yml, W1c): the wrap+unlock and

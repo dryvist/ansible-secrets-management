@@ -4,6 +4,12 @@
 # _private_repos) and refuse an unbounded, truncated or visibility-crossing
 # list. Separate file so the
 # template-render tests run the same tasks against fixture responses.
+# Defined even for a mount that declares no sets, which the tasks below and
+# the reconcile in 05b-github-app-mount.yml then loop over as empty.
+- name: "Start the resolved set list for mount {{ gm.mount }}"
+  ansible.builtin.set_fact:
+    openbao_github_app_mount_sets: []
+
 - name: "Assert the hermes sets hold exactly their declared maps on mount {{ gm.mount }}"
   ansible.builtin.assert:
     that:

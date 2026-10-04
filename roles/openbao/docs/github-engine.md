@@ -14,8 +14,8 @@ configuration, so each App's own grant caps every token its mount mints:
 | Mount | App | Permission sets |
 | --- | --- | --- |
 | `github` | everyday | read sets and the raw `github/token` write endpoint |
-| `github-admin` | admin | admin, repo-create, docs-publisher, runner, exporter, open-llm |
-| `github-agents` | agents | `agents-write`, limited to the organization's public repositories |
+| `github-admin` | admin | admin, repo-create, docs-publisher, runner, exporter |
+| `github-agents` | agents | none: `open-llm` mints from the raw `github-agents/token`, pinned to the App's installation |
 | `github-hermes` | hermes | `hermes-{review,author}-{public,private}`, split by repository visibility |
 
 A key is required only for first configuration or an explicit rotation; routine
@@ -32,14 +32,21 @@ Token access is tiered; the tier IS the privilege boundary:
   unattended Ansible execution plane can check out the repositories it runs,
   including one with a private submodule, without holding a stored token. Read
   only: a checkout can never write a repository.
-- **write (`github-write`)** — the raw `github/token` endpoint, pinned to
-  exactly ONE allowlisted repository per request: the policy requires
-  `installation_id` + `repositories`, allowlists their values
-  (`openbao_github_write_repo_allowlist`, value globs honored), and denies
-  `permissions`, `org_name`, and `repository_ids` outright. Standing ambient
+- **write (`github-write`)** — the raw `github/token` endpoint, limited to
+  the configured App installations and repository allowlist by default. The
+  policy requires `installation_id` + `repositories` and pins the installation
+  IDs. Setting `openbao_github_write_installation_scope` to `true` lets the
+  installation select repositories and accepts any repository selector;
+  `permissions` remains a narrowing map because GitHub only narrows a token
+  below the App grant. The policy denies `org_name` and `repository_ids`
+  outright. Standing ambient
   AppRole, plus the claim-before-work write lease under
   `secret/locks/github-write/` (KV-v2 CAS acquire, `delete_version_after`
   deadman).
+  When installation scope is enabled, GitHub's installation repository
+  selection is the scope authority; the helper requests one repository, but
+  the policy also permits multiple repositories and full-installation
+  selectors. Realm policies restrict their own identities only.
 - **publish (`docs-publisher`)** — `github-admin/token/docs-publisher`: one
   repository, `contents: write` + `pull_requests: write`, all three stored in
   the set. The repository list comes from the iac secret store; with none
@@ -68,11 +75,17 @@ Token access is tiered; the tier IS the privilege boundary:
   mint a token with no reachable endpoint.
 
   Sequence to create a repository and then push to it: mint
-  `github-admin/token/dryvist-repo-create`, `POST /orgs/dryvist/repos`, add the new
-  repository's name to `OPENBAO_GITHUB_WRITE_REPOS`, land a converge so
-  `github-write`'s policy allowlists it, then `github/token` (raw, `github-write`)
+  `github-admin/token/dryvist-repo-create`, `POST /orgs/dryvist/repos`, select the
+  repository in the everyday App installation, then `github/token` (raw, `github-write`)
   mints the token that actually pushes. The repo-create token is never reused
   to push — its stored permission map has no `contents` grant to do so.
+- **untrusted (`open-llm`)** — the raw `github-agents/token` endpoint with
+  `installation_id` pinned to the agents App's one installation and
+  `repositories` required; `org_name` and `repository_ids` are denied. The
+  installation's repository list is the scope and the App's grant the
+  ceiling, so a request naming any other repository fails at GitHub. The
+  policy reaches no other GitHub mount and reads only `secret/apps/open-llm`.
+  Machine-class AppRole bound to one /32; 15m token, renewable to 60m.
 - **hermes (`hermes-public`, `hermes-private`)** — four sets on
   `github-hermes`. `hermes-review-*`: `pull_requests`/`issues` write,
   `contents`/`checks`/`metadata` read, over the organization's public (or

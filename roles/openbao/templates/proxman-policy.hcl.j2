@@ -1,0 +1,7 @@
+{{ ansible_managed | comment }}
+path "{{ openbao_kv_mount }}/data/{{ openbao_proxman_secret_path }}" {
+  capabilities = ["read"]
+}
+path "{{ openbao_config_mount }}/data/{{ openbao_proxman_config_path }}" {
+  capabilities = ["read"]
+}

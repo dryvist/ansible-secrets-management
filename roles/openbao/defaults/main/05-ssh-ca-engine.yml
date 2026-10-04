@@ -10,6 +10,8 @@
 # AuthorizedPrincipalsFile) is distributed by ansible-proxmox's ssh_ca_trust
 # role against a PINNED CA fingerprint recorded at mint time.
 openbao_ssh_engine_enabled: true
+# Workstation AppRole that signs automation-ai certificates only.
+openbao_agent_ssh_sign_approle_name: agent-ssh-sign
 openbao_ssh_mount: ssh-client-ca
 # CA key type per the ADR. If the deployed OpenBao rejects key_type on
 # config/ca, the converge fails loudly — override to '' to generate the

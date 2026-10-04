@@ -1,9 +1,11 @@
 ---
 # playbooks/openbao-rotate-approles.yml also republishes the workstation
-# domains' rotated pairs into Doppler (the six below), so a workstation
+# domains' rotated pairs into Doppler (the seven below), so a workstation
 # never sees a stale role_id/secret_id after a rotation run. `ntfy` is
 # deliberately excluded: it has no workstation consumer, only plane-side
-# ones already reading secret/platform/ansible/env directly.
+# ones already reading secret/platform/ansible/env directly. `local-llm` is
+# excluded too: workstations use `local-llm-workstation`, so the plane's pair
+# stays plane-only.
 #
 # openbao_rotate_doppler_project/_config are NEVER a literal project/config
 # name here (that identity belongs in the runtime secret store, not a public
@@ -28,7 +30,8 @@ openbao_rotate_doppler_config: >-
 openbao_rotate_doppler_token_kv_path: platform/rotator/doppler-sync-token
 openbao_rotate_doppler_sync_domains:
   - apps
-  - local-llm
+  - local-llm-workstation
+  - agent-ssh-sign
   - media
   - monitoring
   - local-cloud

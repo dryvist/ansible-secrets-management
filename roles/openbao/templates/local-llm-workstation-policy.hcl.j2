@@ -1,0 +1,8 @@
+{{ ansible_managed | comment }}
+# OpenBao policy for the local-llm-workstation AppRole: workstation reads of
+# the router credentials. Read-only on the one exact leaf; the serving stack's
+# broader ai/* grant stays on local-llm.
+
+path "{{ openbao_kv_mount }}/data/ai/llm" {
+  capabilities = ["read"]
+}

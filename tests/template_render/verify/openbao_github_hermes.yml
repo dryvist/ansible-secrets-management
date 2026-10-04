@@ -72,7 +72,7 @@
         - github-mint-policy.hcl
         - github-read-policy.hcl
         - github-write-policy.hcl
-        - github-agents-policy.hcl
+        - open-llm-policy.hcl
         - github-docs-publisher-policy.hcl
         - ai-public-policy.hcl
         - ai-orchestrator-policy.hcl

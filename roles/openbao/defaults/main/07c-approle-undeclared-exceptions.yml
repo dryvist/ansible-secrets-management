@@ -17,7 +17,30 @@
 # 07b-base-approles.yml) purely to stay under this repo's per-file token
 # budget -- Ansible's defaults/main/ directory auto-loads every file here, so
 # the split is not a behavior change.
-openbao_approle_undeclared_exceptions: []
+#
+# Exceptions whose names must stay out of this public repository come from
+# the iac secret store as a JSON list of {"name": ..., "reason": ...} objects,
+# the same way write realm names do. Unset yields no extra entries.
+openbao_approle_undeclared_exceptions_inline:
+  - name: ansible
+    reason: >-
+      Retiring once its callers move off. Still signs SSH certificates for
+      workstation runs.
+openbao_approle_undeclared_exceptions: >-
+  {{ openbao_approle_undeclared_exceptions_inline
+     + (lookup('env', 'OPENBAO_APPROLE_UNDECLARED_EXCEPTIONS') | default('[]', true) | from_json) }}
+# Retired identities: the converge deletes each one that is still live
+# (init/10d-approle-undeclared-live.yml) before the assert above runs. A name
+# may leave this list once no store holds it.
+openbao_retired_approles:
+  - open-llm-workstation
+  - github-agents
+  - github-admin-claude
+  - claude-identity
+# Retired policies, deleted the same way (init/08b-rbac-policy-writes.yml).
+openbao_retired_policies:
+  - github-agents
+  - github-admin-claude-issuer
 # Example shape (do not add speculatively):
 #   - name: some-vendor-managed-role
 #     reason: provisioned by <tool>, out of this repo's control

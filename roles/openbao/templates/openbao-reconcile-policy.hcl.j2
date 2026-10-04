@@ -45,6 +45,12 @@ path "sys/policies/acl/{{ policy_name }}" {
   capabilities = ["create", "read", "update"]
 }
 {% endfor %}
+# Retired names carry deletion only, without arbitrary policy administration.
+{% for policy_name in openbao_retired_policies | default([]) | reject('in', breakglass) %}
+path "sys/policies/acl/{{ policy_name }}" {
+  capabilities = ["read", "delete"]
+}
+{% endfor %}
 # Listing is read-only and makes drift visible without granting a write.
 path "sys/policies/acl" {
   capabilities = ["list"]
@@ -63,6 +69,11 @@ path "auth/approle/role/{{ approle_name }}/role-id" {
 }
 path "auth/approle/role/{{ approle_name }}/policies" {
   capabilities = ["create", "update"]
+}
+{% endfor %}
+{% for approle_name in openbao_retired_approles | default([]) | reject('in', breakglass) %}
+path "auth/approle/role/{{ approle_name }}" {
+  capabilities = ["read", "delete"]
 }
 {% endfor %}
 # Listing names only (no role definitions, no credentials) is how the converge
@@ -85,6 +96,10 @@ path "{{ openbao_ssh_mount }}/roles/{{ ssh_role.name }}" {
   capabilities = ["create", "read", "update"]
 }
 {% endfor %}
+# The agents mount's retired set is removed by the declared-set reconcile.
+path "github-agents/permissionset/agents-write" {
+  capabilities = ["read", "delete"]
+}
 
 # --- Mounts, by name -----------------------------------------------------
 # Read-only on the mount table: the converge needs to see what exists to be

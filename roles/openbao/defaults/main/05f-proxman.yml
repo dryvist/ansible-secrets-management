@@ -1,0 +1,4 @@
+---
+# Shared exact paths for provisioning and workstation consumption.
+openbao_proxman_secret_path: proxmox/main/proxman
+openbao_proxman_config_path: proxman/main

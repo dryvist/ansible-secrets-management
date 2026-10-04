@@ -65,6 +65,8 @@ openbao_base_policies_static:
     template: apps-policy.hcl.j2
   - name: "{{ openbao_local_llm_policy_name }}"
     template: local-llm-policy.hcl.j2
+  - name: "{{ openbao_local_llm_workstation_policy_name }}"
+    template: local-llm-workstation-policy.hcl.j2
   - name: "{{ openbao_hermes_policy_name }}"
     template: hermes-policy.hcl.j2
   - name: "{{ openbao_hermes_write_policy_name }}"
@@ -104,8 +106,6 @@ openbao_base_policies_static:
     template: github-exporter-policy.hcl.j2
   - name: "{{ openbao_github_docs_publisher_policy_name }}"
     template: github-docs-publisher-policy.hcl.j2
-  - name: "{{ openbao_github_agents_policy_name }}"
-    template: github-agents-policy.hcl.j2
   - name: "{{ openbao_github_hermes_public_policy_name }}"
     template: hermes-public-policy.hcl.j2
   - name: "{{ openbao_github_hermes_private_policy_name }}"
@@ -187,9 +187,19 @@ openbao_credential_publish_apps:
   # the case the comment above describes: losing it does not invalidate the
   # stored integration credentials, it makes them permanently undecryptable.
   - homarr
+  - homarr-v2
+  # Not published by a role in this repo: ansible-proxmox's pve_api_tokens
+  # mints each consumer's read-only PVE API token on the cluster and writes it
+  # into that consumer's bucket under this same converge identity. homarr's
+  # token lands in apps/homarr, covered by the entry above.
+  - pve-exporter
+  # The untrusted-tier Qdrant JWT (QDRANT_UNTRUSTED_JWT), minted by
+  # ansible-proxmox-ai's qdrant_docker role and merged into this bucket.
+  - open-llm
 
 openbao_policies: >-
   {{ openbao_base_policies
      + openbao_ai_capability_policies + openbao_ssh_sign_policies
      + openbao_ai_api_key_policies
-     + openbao_github_write_scope_policies }}
+     + openbao_github_write_scope_policies
+     + [{'name': 'proxman', 'template': 'proxman-policy.hcl.j2'}] }}

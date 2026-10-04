@@ -1,0 +1,66 @@
+---
+# Includes playbooks/tasks/openbao_rotate_proof_mode.yml for each case and
+# asserts how openbao_rotate_one_domain.yml proves the new pair: a role whose
+# source address the rotation host cannot satisfy is proven by lookup, never
+# by a login. Also asserts the env-document write follows the proof.
+#
+# Usage: ansible-playbook tests/openbao_rotate/verify_proof_mode.yml -c local
+
+- name: Verify rotation proves address-bound pairs by lookup
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    _tasks_dir: "{{ playbook_dir }}/../../playbooks/tasks"
+    _block: >-
+      {{ (lookup('ansible.builtin.file', _tasks_dir ~ '/openbao_rotate_one_domain.yml')
+          | from_yaml | selectattr('block', 'defined') | first).block }}
+    _names: "{{ _block | map(attribute='name') | list }}"
+    _login: "{{ _block | selectattr('name', 'search', '^Prove the new pair authenticates') | first }}"
+    _lookup: "{{ _block | selectattr('name', 'search', '^Prove the new secret_id is live') | first }}"
+
+  tasks:
+    - name: Load the openbao role defaults
+      ansible.builtin.include_vars:
+        dir: "{{ playbook_dir }}/../../roles/openbao/defaults/main"
+
+    - name: Decide the proof for open-llm
+      ansible.builtin.include_tasks: "{{ _tasks_dir }}/openbao_rotate_proof_mode.yml"
+      vars:
+        rotate_domain_name: "{{ openbao_open_llm_approle_name }}"
+
+    - name: Assert open-llm is proven by lookup
+      ansible.builtin.assert:
+        that:
+          - rotate_proof_by_lookup | bool
+        fail_msg: open-llm's /32 refuses a login from the rotation host; its proof must be a lookup.
+
+    - name: Decide the proof for a machine-class domain
+      ansible.builtin.include_tasks: "{{ _tasks_dir }}/openbao_rotate_proof_mode.yml"
+      vars:
+        rotate_domain_name: "{{ openbao_apps_approle_name }}"
+
+    - name: Assert a machine-class domain still proves by login
+      ansible.builtin.assert:
+        that:
+          - not (rotate_proof_by_lookup | bool)
+        fail_msg: apps has no address binding the rotation host fails; it must prove by login.
+
+    - name: Assert the login and lookup proofs key off the same decision
+      ansible.builtin.assert:
+        that:
+          - _login.when == 'not (rotate_proof_by_lookup | bool)'
+          - _lookup.when == 'rotate_proof_by_lookup | bool'
+        fail_msg: >-
+          openbao_rotate_one_domain.yml's proof tasks no longer gate on
+          rotate_proof_by_lookup, so open-llm would fall back to a login.
+
+    - name: Assert the env document is written only after the proof
+      vars:
+        _write: "{{ _names | select('search', '^Write the rotated env document') | first }}"
+      ansible.builtin.assert:
+        that:
+          - _names.index(_write) > _names.index(_login.name)
+          - _names.index(_write) > _names.index(_lookup.name)
+        fail_msg: The rotated pair is published before it is proven.
