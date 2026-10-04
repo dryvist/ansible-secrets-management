@@ -10,6 +10,7 @@
     rotate_proof_by_lookup: >-
       {{ (openbao_approle_cidr_class_overrides[rotate_domain_name]
           | default(openbao_approle_default_cidr_class)) == 'workstation'
+         or rotate_domain_name in openbao_approle_rotation_lookup_proof_names
          or rotate_domain_name in (openbao_base_approles
                                    | selectattr('secret_id_bound_cidrs', 'defined')
                                    | map(attribute='name')) }}

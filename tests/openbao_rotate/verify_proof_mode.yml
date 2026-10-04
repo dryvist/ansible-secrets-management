@@ -47,6 +47,17 @@
           - not (rotate_proof_by_lookup | bool)
         fail_msg: apps has no address binding the rotation host fails; it must prove by login.
 
+    - name: Decide the proof for reconcile
+      ansible.builtin.include_tasks: "{{ _tasks_dir }}/openbao_rotate_proof_mode.yml"
+      vars:
+        rotate_domain_name: "{{ openbao_reconcile_approle_name }}"
+
+    - name: Assert reconcile is proven by lookup without a login
+      ansible.builtin.assert:
+        that:
+          - rotate_proof_by_lookup | bool
+        fail_msg: Reconcile must use the non-consuming lookup proof.
+
     - name: Assert the login and lookup proofs key off the same decision
       ansible.builtin.assert:
         that:

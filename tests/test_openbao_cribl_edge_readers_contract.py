@@ -227,6 +227,7 @@ class CriblEdgeReaderContract(unittest.TestCase):
         )["openbao_secrets_domain_approle_names"]
         rotation_values = {}
         for defaults_file in (
+            "05b-domain-policy-approle-names.yml",
             "05c-terrakube-and-remaining-domain-names.yml",
             "05c-ai-agent-names.yml",
             "05-ssh-ca-engine.yml",
