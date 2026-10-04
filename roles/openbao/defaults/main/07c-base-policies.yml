@@ -65,6 +65,8 @@ openbao_base_policies_static:
     template: apps-policy.hcl.j2
   - name: "{{ openbao_local_llm_policy_name }}"
     template: local-llm-policy.hcl.j2
+  - name: "{{ openbao_local_llm_workstation_policy_name }}"
+    template: local-llm-workstation-policy.hcl.j2
   - name: "{{ openbao_hermes_policy_name }}"
     template: hermes-policy.hcl.j2
   - name: "{{ openbao_hermes_write_policy_name }}"

@@ -128,6 +128,7 @@ openbao_approle_secret_id_ttl_overrides:
   ntfy: "{{ openbao_rotated_domain_secret_id_ttl }}"
   apps: "{{ openbao_rotated_domain_secret_id_ttl }}"
   local-llm: "{{ openbao_rotated_domain_secret_id_ttl }}"
+  local-llm-workstation: "{{ openbao_rotated_domain_secret_id_ttl }}"
   hermes: "{{ openbao_rotated_domain_secret_id_ttl }}"
   approle-secret-id-rotate-scheduled: "{{ openbao_rotated_domain_secret_id_ttl }}"
 # num_uses 0 (unlimited redemptions) is permitted ONLY with a reason on the line.

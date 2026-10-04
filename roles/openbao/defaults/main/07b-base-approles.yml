@@ -90,6 +90,12 @@ openbao_base_approles_core:
   - name: "{{ openbao_local_llm_approle_name }}"
     token_policies: >-
       {{ [openbao_local_llm_policy_name] + openbao_ai_api_key_policy_names }}
+  # local-llm-workstation: workstation reads of secret/ai/llm. Separate from
+  # local-llm so workstation logins cannot exhaust the plane's secret_id.
+  # 36h ttl (rotated-domain margin); 100 uses per secret_id, replaced every 12h.
+  - name: "{{ openbao_local_llm_workstation_approle_name }}"
+    policy: "{{ openbao_local_llm_workstation_policy_name }}"
+    secret_id_num_uses: 100
   - name: "{{ openbao_hermes_approle_name }}"
     policy: "{{ openbao_hermes_policy_name }}"
   - name: "{{ openbao_hermes_write_approle_name }}"

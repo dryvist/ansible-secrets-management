@@ -26,6 +26,7 @@
 #   media            — read-only, secret/apps/media
 #   local-llm        — LLM serving stack; read-only, secret/ai/* MINUS the
 #                      ai/saas/* carve-out (paid-SaaS provider keys)
+#   local-llm-workstation — workstation reads; read-only, exact secret/ai/llm
 #   ai-saas-<provider> — exact read leaf for one paid-SaaS provider entry at
 #                      secret/ai/saas/<provider>. Each entry supplies one
 #                      provider-level API key to LiteLLM. The local-llm role

@@ -153,6 +153,8 @@ openbao_apps_read_apps: >-
       + openbao_apps_read_published_apps) | unique | sort }}
 openbao_local_llm_policy_name: local-llm
 openbao_local_llm_approle_name: local-llm
+openbao_local_llm_workstation_policy_name: local-llm-workstation
+openbao_local_llm_workstation_approle_name: local-llm-workstation
 # Host identities whose secret-zero is delivered to guests through the env
 # document (secret/platform/ansible/env) rather than the converge operator's
 # environment. openbao-rotate-approles.yml writes them only on an explicit
@@ -179,6 +181,8 @@ openbao_secrets_domain_approle_names:
   - "{{ openbao_ntfy_approle_name }}"
   - "{{ openbao_apps_approle_name }}"
   - "{{ openbao_local_llm_approle_name }}"
+  # Workstation-class reader; its pair is the one republished to Doppler.
+  - "{{ openbao_local_llm_workstation_approle_name }}"
   # Consumed by ansible-proxmox-ai's openbao_secrets copy only; its pair rides
   # the same env document and the same scheduled rotation.
   - "{{ openbao_hermes_approle_name }}"
