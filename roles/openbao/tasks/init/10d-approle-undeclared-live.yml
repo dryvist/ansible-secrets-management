@@ -56,11 +56,12 @@
 # A non-zero rc that is NOT a 403 (an empty mount on a brand-new cluster reads
 # this way too) legitimately means zero live identities, so it resolves to []
 # rather than being treated as denial -- only the FAIL above owns "unknown".
+# `bao list -format=json` prints a bare JSON array of names, not the API's
+# {data: {keys: [...]}} envelope.
 - name: Resolve the set of AppRole names that actually exist live
   ansible.builtin.set_fact:
     openbao_approle_live_names: >-
-      {{ ((openbao_approle_live_list.stdout | default('{}') | from_json).data['keys']
-          | default([]))
+      {{ (openbao_approle_live_list.stdout | default('[]', true) | from_json)
          if (openbao_approle_live_list.rc | default(1)) == 0 else [] }}
   when: openbao_bootstrap_token is defined
 
