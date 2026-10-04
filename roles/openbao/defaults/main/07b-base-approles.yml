@@ -96,6 +96,14 @@ openbao_base_approles_core:
   - name: "{{ openbao_local_llm_workstation_approle_name }}"
     policy: "{{ openbao_local_llm_workstation_policy_name }}"
     secret_id_num_uses: 100
+  # agent-ssh-sign: workstation signing of non-root ai-agent SSH certificates
+  # (automation-ai, 2h). No read policy. Token lives at most as long as one
+  # certificate. 36h ttl (rotated-domain margin); 100 uses per secret_id.
+  - name: "{{ openbao_agent_ssh_sign_approle_name }}"
+    token_policies: [ssh-sign-automation-ai]
+    token_ttl: 30m
+    token_max_ttl: 2h
+    secret_id_num_uses: 100
   - name: "{{ openbao_hermes_approle_name }}"
     policy: "{{ openbao_hermes_policy_name }}"
   - name: "{{ openbao_hermes_write_approle_name }}"

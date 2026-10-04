@@ -178,8 +178,9 @@ openbao_secrets_domain_approle_names:
   - "{{ openbao_ntfy_approle_name }}"
   - "{{ openbao_apps_approle_name }}"
   - "{{ openbao_local_llm_approle_name }}"
-  # Workstation-class reader; its pair is the one republished to Doppler.
+  # Workstation-class; their pairs are republished to Doppler.
   - "{{ openbao_local_llm_workstation_approle_name }}"
+  - "{{ openbao_agent_ssh_sign_approle_name }}"
   # Consumed by ansible-proxmox-ai's openbao_secrets copy only; its pair rides
   # the same env document and the same scheduled rotation.
   - "{{ openbao_hermes_approle_name }}"

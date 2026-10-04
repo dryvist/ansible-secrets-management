@@ -133,6 +133,7 @@ openbao_approle_cidr_class_overrides:
   ntfy: machine_or_workstation
   local-llm: machine_or_workstation
   local-llm-workstation: workstation
+  agent-ssh-sign: machine_or_workstation
   # The daily session-archive launchd agent runs on the workstation.
   ai-sessions-backup: workstation
   # Human-gated, operator-driven (rotate-key.yml, W1c): the wrap+unlock and
