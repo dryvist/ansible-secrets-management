@@ -150,6 +150,7 @@ openbao_apps_read_published_apps:
 openbao_apps_read_apps: >-
   {{ ((openbao_generated_app_secrets.keys() | list)
       + (openbao_promoted_app_secrets.keys() | list)
+      + (openbao_router_key_catalog.keys() | list)
       + openbao_apps_read_published_apps)
      | reject('in', openbao_apps_read_excluded_generated_apps)
      | unique | sort }}

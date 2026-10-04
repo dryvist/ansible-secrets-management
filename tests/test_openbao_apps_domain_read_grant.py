@@ -37,6 +37,7 @@ def _read_apps(names: dict) -> set[str]:
     templar.available_variables = {
         "openbao_generated_app_secrets": _yaml(GENERATED_FILE)["openbao_generated_app_secrets"],
         "openbao_promoted_app_secrets": _yaml(PROMOTED_FILE)["openbao_promoted_app_secrets"],
+        "openbao_router_key_catalog": names.get("openbao_router_key_catalog", {}),
         "openbao_apps_read_published_apps": names.get("openbao_apps_read_published_apps", []),
         "openbao_cribl_edge_mac_a_app": cribl_edge["openbao_cribl_edge_mac_a_app"],
         "openbao_cribl_edge_mac_b_app": cribl_edge["openbao_cribl_edge_mac_b_app"],

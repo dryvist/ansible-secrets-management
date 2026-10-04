@@ -220,7 +220,7 @@
       OpenBao provisioning SKIPPED on {{ inventory_hostname }}: no
       OPENBAO_PROVISIONING_TOKEN and this is not a fresh init, so policies,
       AppRoles and app secrets were NOT reconciled
-      ({{ openbao_generated_app_secrets | default({}) | length }} generated-secret
+      ({{ (openbao_generated_app_secrets | combine(openbao_router_key_catalog)) | length }} generated-secret
       apps, {{ openbao_promoted_app_secrets | default({}) | length }} promoted,
       {{ openbao_policies | default([]) | length }} policies left untouched).
       Routine reconciliation is supposed to happen WITHOUT a provisioning token,
