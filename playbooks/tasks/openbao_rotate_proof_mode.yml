@@ -1,0 +1,16 @@
+---
+# Decides how openbao_rotate_one_domain.yml proves a freshly minted pair for
+# rotate_domain_name. A login from the rotation host is refused for a
+# workstation-class role (08b-cidr-and-unlock.yml) and for any role whose
+# declaration binds secret_id_bound_cidrs (07b-base-approles.yml), so those
+# are proven by a secret-id lookup instead.
+# tests/openbao_rotate/verify_proof_mode.yml includes this file directly.
+- name: Decide whether a lookup proves the new pair for {{ rotate_domain_name }}
+  ansible.builtin.set_fact:
+    rotate_proof_by_lookup: >-
+      {{ (openbao_approle_cidr_class_overrides[rotate_domain_name]
+          | default(openbao_approle_default_cidr_class)) == 'workstation'
+         or rotate_domain_name in (openbao_base_approles
+                                   | selectattr('secret_id_bound_cidrs', 'defined')
+                                   | map(attribute='name')) }}
+  no_log: false

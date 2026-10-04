@@ -130,6 +130,9 @@ openbao_approle_secret_id_ttl_overrides:
   local-llm: "{{ openbao_rotated_domain_secret_id_ttl }}"
   local-llm-workstation: "{{ openbao_rotated_domain_secret_id_ttl }}"
   hermes: "{{ openbao_rotated_domain_secret_id_ttl }}"
+  # open-llm keeps the global 24h bound, not the 36h margin above;
+  # tests/plane_identity_bounds/verify.yml pins it to 24h / 30 uses.
+  open-llm: "{{ openbao_approle_secret_id_ttl }}"
   approle-secret-id-rotate-scheduled: "{{ openbao_rotated_domain_secret_id_ttl }}"
 # num_uses 0 (unlimited redemptions) is permitted ONLY with a reason on the line.
 openbao_approle_secret_id_num_uses_overrides:

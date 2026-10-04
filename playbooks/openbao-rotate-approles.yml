@@ -30,11 +30,12 @@
 # approle-issuer, holds the grants this needs):
 #   1. mint a fresh secret_id (TTL taken from the role's OWN declared bound,
 #      never 0 -- see 07e-rotation-approles.yml, never invented here)
-#   2. CAS-write it into the env document under the OPENBAO_APPROLE_<NAME>_
+#   2. prove the new pair: a login, or a secret-id lookup for a role the
+#      rotation host cannot log in as (tasks/openbao_rotate_proof_mode.yml)
+#   3. CAS-write it into the env document under the OPENBAO_APPROLE_<NAME>_
 #      {ROLE,SECRET}_ID names, removing the domain's legacy
 #      <NAME>_VAULT_{ROLE,SECRET}_ID keys if present, every sibling domain's
 #      keys untouched
-#   3. prove the new pair logs in
 #   4. only THEN look up the previous secret_id's expiration and destroy it
 #      IF AND ONLY IF it never expires (expiration_time == ""); a previous
 #      secret_id minted with a finite TTL is left to expire on its own,

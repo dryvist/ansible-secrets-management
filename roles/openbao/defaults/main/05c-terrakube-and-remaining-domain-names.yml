@@ -168,11 +168,8 @@ openbao_host_secret_zero_approle_names:
   - "{{ openbao_reconcile_approle_name }}"
   - "{{ openbao_flow_lock_approle_name }}"
   - iac-platform-deploy
-# Every openbao_secrets domain AppRole, by name -- these ARE the domain
-# names (each pair declared 1:1 above), so this is the one place approle-
-# secret-id-rotate-policy.hcl.j2 scopes its secret-id
-# mint/destroy grants to, instead of a second hand-typed list that could
-# drift from the pairs above.
+# Every scheduled-rotation AppRole, by name; approle-secret-id-rotate-policy.hcl.j2
+# scopes its secret-id mint/destroy grants to this one list.
 openbao_secrets_domain_approle_names:
   - "{{ openbao_observability_approle_name }}"
   - "{{ openbao_local_cloud_approle_name }}"
@@ -186,6 +183,8 @@ openbao_secrets_domain_approle_names:
   # Consumed by ansible-proxmox-ai's openbao_secrets copy only; its pair rides
   # the same env document and the same scheduled rotation.
   - "{{ openbao_hermes_approle_name }}"
+  # Proven by lookup: its /32 refuses a login from the rotation host.
+  - "{{ openbao_open_llm_approle_name }}"
 # Provider-level API credentials live on exact leaves under a separately
 # supplied external KV location. Public configuration carries no path literal.
 openbao_ai_api_key_mount: >-
