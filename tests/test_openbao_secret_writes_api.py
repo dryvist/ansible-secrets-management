@@ -20,12 +20,14 @@ ROOT = Path(__file__).resolve().parents[1]
 SCAN = [ROOT / "roles", ROOT / "playbooks"]
 COMMAND_MODULES = {"command", "shell", "ansible.builtin.command", "ansible.builtin.shell"}
 URI_MODULES = {"uri", "ansible.builtin.uri"}
+# AppRole credential endpoints: their requests or responses carry a role_id or secret_id.
+APPROLE_CREDENTIAL_URL = re.compile(r"/(role-id|secret-id)\b|auth/approle/login")
 # `kv put` / `kv patch` in a cmd string, or 'kv', 'put' / 'kv', 'patch' in an argv list.
 KV_DATA_WRITE = re.compile(r"""kv['"]?\s*,?\s*['"]?(put|patch)\b""")
 
 
 def offenders(text_by_file):
-    argv_writes, unlogged_api_writes = [], []
+    argv_writes, unlogged_api_writes, unlogged_credentials = [], [], []
     for path, text in text_by_file.items():
         try:
             doc = yaml.safe_load(text)
@@ -39,9 +41,12 @@ def offenders(text_by_file):
             for module in URI_MODULES & task.keys():
                 spec = task[module] if isinstance(task[module], dict) else {}
                 if "/data/" in str(spec.get("url", "")) and str(spec.get("method", "GET")).upper() in {"POST", "PUT", "PATCH"}:
-                    if not (task.get("no_log") is True or inherited):
+                    if task.get("no_log", inherited) is not True:
                         unlogged_api_writes.append(f"{path}: {task.get('name')}")
-    return argv_writes, unlogged_api_writes
+                if APPROLE_CREDENTIAL_URL.search(str(spec.get("url", ""))):
+                    if task.get("no_log", inherited) is not True:
+                        unlogged_credentials.append(f"{path}: {task.get('name')}")
+    return argv_writes, unlogged_api_writes, unlogged_credentials
 
 
 def walk(node, inherited):
@@ -49,7 +54,7 @@ def walk(node, inherited):
         for item in node:
             yield from walk(item, inherited)
     elif isinstance(node, dict):
-        here = inherited or node.get("no_log") is True
+        here = node.get("no_log", inherited) is True
         if any(k in node for k in COMMAND_MODULES | URI_MODULES):
             yield node, inherited
         for key in ("block", "rescue", "always", "tasks", "pre_tasks", "post_tasks", "handlers"):
@@ -66,12 +71,32 @@ def repo_files():
 
 class SecretWritesUseTheApi(unittest.TestCase):
     def test_no_kv_data_write_through_argv(self):
-        argv_writes, _ = offenders(repo_files())
+        argv_writes = offenders(repo_files())[0]
         self.assertEqual(argv_writes, [], "KV data written via command/shell argv")
 
     def test_api_kv_data_writes_are_no_log(self):
-        _, unlogged = offenders(repo_files())
+        unlogged = offenders(repo_files())[1]
         self.assertEqual(unlogged, [], "KV data written via uri without no_log")
+
+    def test_approle_credential_requests_are_no_log(self):
+        unlogged = offenders(repo_files())[2]
+        self.assertEqual(unlogged, [], "role_id/secret_id request or response without no_log")
+
+    def test_detects_an_unlogged_role_id_read(self):
+        bad = {"x.yml": "- name: read it\n  ansible.builtin.uri:\n    url: http://a/v1/auth/approle/role/r/role-id\n  register: rid\n"}
+        self.assertEqual(offenders(bad)[2], ["x.yml: read it"])
+
+    def test_logged_off_role_id_read_passes(self):
+        ok = {"x.yml": "- name: read it\n  ansible.builtin.uri:\n    url: http://a/v1/auth/approle/role/r/role-id\n  no_log: true\n"}
+        self.assertEqual(offenders(ok)[2], [])
+
+    def test_block_no_log_covers_a_secret_id_lookup(self):
+        ok = {"x.yml": "- block:\n    - name: look up\n      ansible.builtin.uri:\n        url: http://a/v1/auth/approle/role/r/secret-id/lookup\n  no_log: true\n"}
+        self.assertEqual(offenders(ok)[2], [])
+
+    def test_task_no_log_false_overrides_a_logged_block(self):
+        bad = {"x.yml": "- block:\n    - name: look up\n      ansible.builtin.uri:\n        url: http://a/v1/auth/approle/role/r/secret-id/lookup\n      no_log: false\n  no_log: true\n"}
+        self.assertEqual(offenders(bad)[2], ["x.yml: look up"])
 
     def test_detects_an_argv_write(self):
         bad = {"x.yml": "- name: put it\n  ansible.builtin.command:\n    argv: \"{{ ['bao', 'kv', 'put', 'secret/apps/a'] + pairs }}\"\n"}

@@ -4,7 +4,7 @@
 # mint -> prove -> write -> destroy old. Nothing is published or destroyed
 # until the replacement is proven live.
 #
-# `no_log: true` covers every task that carries a secret_id or a token in
+# `no_log: true` covers every task that carries a role_id, secret_id or token in
 # its args or response; `no_log: false` is set explicitly on the handful of
 # tasks whose message is domain names and HTTP status only, so failures stay
 # loud instead of vanishing into a blanket no_log.
@@ -78,7 +78,7 @@
         status_code: 200
       register: rotate_role_id_read
       changed_when: false
-      no_log: false
+      no_log: true
 
     - name: Mint a fresh secret_id for {{ rotate_domain_name }}
       ansible.builtin.uri:
