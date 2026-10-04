@@ -47,17 +47,19 @@
             quiet: true
 
         - name: Create the missing Context7 field with a merge-preserving CAS write
-          ansible.builtin.command:
-            argv: >-
-              {{ ['bao', 'kv', 'put', '-cas=' ~ (openbao_context7_version | string),
-                  'secrets-external/ai/saas/context7']
-                 + (openbao_context7_merged.keys() | zip(openbao_context7_merged.values())
-                    | map('join', '=') | list) }}
+          ansible.builtin.uri:
+            url: "{{ openbao_write_addr }}/v1/secrets-external/data/ai/saas/context7"
+            method: POST
+            headers:
+              X-Vault-Token: "{{ openbao_bootstrap_token }}"
+            body_format: json
+            body:
+              options:
+                cas: "{{ openbao_context7_version | int }}"
+              data: "{{ openbao_context7_merged }}"
+            status_code: [200, 204]
           vars:
             openbao_context7_merged: >-
               {{ openbao_context7_data | combine({'CONTEXT7_API_KEY':
                    (openbao_context7_source.stdout | from_json).data.data.CONTEXT7_API_KEY}) }}
-          environment:
-            BAO_ADDR: "{{ openbao_write_addr }}"
-            BAO_TOKEN: "{{ openbao_bootstrap_token }}"
           changed_when: true

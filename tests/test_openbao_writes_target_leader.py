@@ -211,10 +211,10 @@ class DelegatedBaoCallsAreConsistent(unittest.TestCase):
             (TASKS / "seed_generated_app_secret.yml").read_text(encoding="utf-8")
         )
         read = next(t for t in tasks if t.get("register") == "openbao_seed_current")
-        write = next(t for t in tasks if "argv" in t.get("ansible.builtin.command", {}))
+        write = next(t for t in tasks if "ansible.builtin.uri" in t)
         for key in ("delegate_to", "become"):
             self.assertEqual(write.get(key), read[key], key)
-        self.assertEqual(write["environment"], read["environment"])
+        self.assertTrue(write["ansible.builtin.uri"]["url"].startswith(read["environment"]["BAO_ADDR"] + "/v1/"))
         self.assertEqual(write.get("vars", {}).get("ansible_become"), read["vars"]["ansible_become"])
 
     def _delegated_tasks(self):
@@ -231,8 +231,13 @@ class DelegatedBaoCallsAreConsistent(unittest.TestCase):
         # a converge that fails somewhere far from the cause.
         broken = []
         for name, task in self._delegated_tasks():
+            addr = (
+                (task.get("environment") or {}).get("BAO_ADDR")
+                or ("{{ openbao_cli_addr }}" if str((task.get("ansible.builtin.uri") or {}).get("url", ""))
+                    .startswith("{{ openbao_cli_addr }}/") else None)
+            )
             ok = (
-                task["environment"]["BAO_ADDR"] == "{{ openbao_cli_addr }}"
+                addr == "{{ openbao_cli_addr }}"
                 and task.get("delegate_to") == "{{ openbao_cli_host }}"
                 and task.get("become") == "{{ openbao_cli_become }}"
                 and (task.get("vars") or {}).get("ansible_become") == "{{ openbao_cli_become }}"

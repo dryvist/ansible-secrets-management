@@ -178,10 +178,12 @@ class SeedContext7Key(unittest.TestCase):
         variables["openbao_context7_merged"] = _render(
             task["vars"]["openbao_context7_merged"], variables, wrap=False,
         )
-        argv = _render(task["ansible.builtin.command"]["argv"], variables, wrap=False)
-        self.assertEqual(argv[:5], ["bao", "kv", "put", "-cas=4",
-                                  "secrets-external/ai/saas/context7"])
-        self.assertEqual(set(argv[5:]), {"sibling=preserved", "CONTEXT7_API_KEY=context7-only"})
+        uri = task["ansible.builtin.uri"]
+        self.assertTrue(uri["url"].endswith("/v1/secrets-external/data/ai/saas/context7"))
+        self.assertEqual(uri["method"], "POST")
+        self.assertEqual(int(_render(uri["body"]["options"]["cas"], variables, wrap=False)), 4)
+        self.assertEqual(variables["openbao_context7_merged"],
+                         {"sibling": "preserved", "CONTEXT7_API_KEY": "context7-only"})
 
 
 class PromoteAppSecret(unittest.TestCase):
