@@ -130,7 +130,7 @@
             == (_hermes_token_max_ttl | community.general.to_seconds | int)
           - _agent.secret_id_bound_cidrs == 'fixture-cidr'
           - _agent.manage_secret_id == false
-          - openbao_hermes_private_agent_approle_name in openbao_secrets_domain_approle_names
+          - openbao_hermes_private_agent_approle_name not in openbao_secrets_domain_approle_names
           - openbao_approle_env_prefix_overrides[openbao_hermes_private_agent_approle_name] == 'hermes-private'
           - openbao_hermes_private_agent_approle_name not in openbao_rotate_doppler_sync_domains
         quiet: true
@@ -146,7 +146,7 @@
       ansible.builtin.set_fact:
         openbao_hermes_private_agent_secret_id_cidr: ""
 
-    - name: Assert an empty CIDR keeps the role and rotation dormant
+    - name: Assert an empty CIDR keeps the role dormant
       ansible.builtin.assert:
         that:
           - openbao_hermes_private_agent_approles == []
