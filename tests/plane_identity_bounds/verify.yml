@@ -141,6 +141,27 @@
         - "{{ openbao_open_llm_approle_name }}"
         - proxman
 
+    # Workstation reads of the router credentials have their own identity, so
+    # workstation logins cannot spend the plane's local-llm secret_id.
+    - name: The workstation local-llm reader is finite and the plane pair stays off Doppler
+      vars:
+        row: >-
+          {{ openbao_approles
+             | selectattr('name', 'equalto', openbao_local_llm_workstation_approle_name) | first }}
+      ansible.builtin.assert:
+        that:
+          - (row.secret_id_num_uses | int) > 0
+          - >-
+            (openbao_approle_secret_id_ttl_overrides[openbao_local_llm_workstation_approle_name]
+             | community.general.to_seconds | int) > 0
+          - openbao_approle_cidr_class_map[openbao_local_llm_workstation_approle_name] == 'workstation'
+          - openbao_local_llm_workstation_approle_name in openbao_secrets_domain_approle_names
+          - openbao_local_llm_workstation_approle_name in openbao_rotate_doppler_sync_domains
+          - openbao_local_llm_approle_name not in openbao_rotate_doppler_sync_domains
+        fail_msg: >-
+          local-llm-workstation needs a finite, workstation-bound, rotated
+          secret_id republished to Doppler, and local-llm must not be.
+
     # The general guard. Any future non-expiring secret_id must earn it the same
     # way, or this fails on the day it is added rather than the day it leaks.
     # Both spellings are checked: the override map AND an inline declaration on
