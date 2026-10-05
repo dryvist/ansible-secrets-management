@@ -99,7 +99,8 @@ plans):
 | `ai-elevated` | `read-all` + `read-platform` | — | trusted infra-touching agents; no write[^ai-tiers] |
 | `ai-apply-<svc>` | `read-<svc>` | `write-<svc>` + `github-mint` | Task-scoped WRITE, one service; no standing secret_id; ≤1h[^ai-tiers] |
 | `ai-apply-all` | `read-write-all` | `read-write-all` + `github-mint` | Cross-domain WRITE rollup; no standing secret_id; ≤1h[^ai-tiers] |
-| `ai-admin` | all KV + policy/auth admin | policy/AppRole/token, all KV, AWS STS | Break-glass; **sole self-modify role**; ≤10m; alerted[^ai-tiers] |
+| `ai-admin` | all KV + policy/auth admin | policy/AppRole/token, all KV, AWS STS | Break-glass; human-gated; alerted[^ai-tiers] |
+| `ai-admin-session` | `ai-admin` | same administrator grant | Human-gated service-token session; 1h renewal / 8h explicit maximum; alerted[^ai-tiers] |
 | `snapshot` | `sys/storage/raft/snapshot` | — | least-priv backup identity |
 
 The AI rows above are **actor roles**: they carry no path rules themselves, only
@@ -138,8 +139,9 @@ secrets-engine paths and are returned through a short-lived OpenBao token.
     (`read-all`, `read-write-all`, any `ai-apply-*` role) can only widen KV reach —
     it can never name `sys/policies*`, `auth/*` (incl. `.../secret-id`),
     `auth/token/create`, or the IaC kernel (`secret/infra/*`). A bootstrap guard
-    refuses to render a leaf for a forbidden subtree. `ai-admin` is the sole role
-    that attaches a self-modify policy, and it is break-glass (≤10m, alerted).
+    refuses to render a leaf for a forbidden subtree. Only human-gated
+    administrator roles attach the self-modify policy; both are alerted, and
+    the session role has an explicit 8h hard maximum.
     Full grant/redeem runbook: docs.dryvist.com "AI Agent Access (OpenBao)".
 
 [^aws-sts]: Also grants `read`+`update` on `aws/sts/tf-proxmox` and

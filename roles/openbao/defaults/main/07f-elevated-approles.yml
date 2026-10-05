@@ -43,6 +43,17 @@ openbao_base_approles_elevated:
     manage_secret_id: false
     secret_id_ttl: "{{ openbao_ai_elevated_secret_id_ttl }}"
     secret_id_num_uses: 1
+  # ai-admin-session: same human-gated, alerted policy for the renewable
+  # service-token session; the explicit maximum bounds it to eight hours.
+  - name: "{{ openbao_ai_admin_session_approle_name }}"
+    policy: "{{ openbao_ai_admin_policy_name }}"
+    token_ttl: "{{ openbao_ai_admin_session_token_ttl }}"
+    token_max_ttl: "{{ openbao_ai_admin_session_token_max_ttl }}"
+    token_explicit_max_ttl: "{{ openbao_ai_admin_session_token_explicit_max_ttl }}"
+    token_type: service
+    manage_secret_id: false
+    secret_id_ttl: "{{ openbao_ai_elevated_secret_id_ttl }}"
+    secret_id_num_uses: 1
   # admin: the human operator's master-administrator identity, carrying the
   # ai-admin policy. manage_secret_id:false — the role is created inert and the
   # operator mints its secret_id out-of-band with the break-glass token.

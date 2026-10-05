@@ -181,6 +181,8 @@
       token_policies={{ (item.0.token_policies | default([item.0.policy])) | join(',') }}
       token_ttl={{ item.0.token_ttl | default(openbao_approle_token_ttl) }}
       token_max_ttl={{ item.0.token_max_ttl | default(openbao_approle_token_max_ttl) }}
+      token_explicit_max_ttl={{ item.0.token_explicit_max_ttl | default(0) }}
+      token_type={{ item.0.token_type | default('default') }}
       secret_id_ttl={{ approle_secret_id_ttl }}
       secret_id_num_uses={{ approle_secret_id_num_uses }}
       {{ ('secret_id_bound_cidrs=' ~ approle_bound_cidrs ~

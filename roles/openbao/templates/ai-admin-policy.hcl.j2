@@ -1,20 +1,21 @@
 {{ ansible_managed | comment }}
-# OpenBao policy for the ai-admin AppRole — BREAK-GLASS, the top tier of the
-# AI-agent access model. Full administrative reach over everything this role
-# provisions, enumerated rather than wildcarded.
+# OpenBao policy shared by the ai-admin AppRole and ai-admin-session —
+# BREAK-GLASS, the top tier of the AI-agent access model. Full administrative
+# reach over everything these roles provision, enumerated rather than wildcarded.
 #
 #   ai-readonly   read/plan/scan            (default, ambient, standing)
 #   ai-apply-<d>  scoped WRITE to domain d  (per-window, human-unlocked, 6h/12h)
-#   ai-admin      break-glass FULL admin    (per-window, human-unlocked, <=1h)   <-- this
+#   ai-admin         break-glass FULL admin (per-window, human-unlocked, <=1h)
+#   ai-admin-session FULL admin session     (human-unlocked, 1h renewals, <=8h)
 #
 # Containment is primarily temporal, procedural, and observational:
-#   * TEMPORAL      — the token lives at most the admin window (token_ttl 1h);
-#                     when it expires the agent must be re-unlocked.
+#   * TEMPORAL      — tokens renew hourly; the session role has an explicit
+#                     eight-hour hard maximum, after which it must be re-unlocked.
 #   * PROCEDURAL    — NEVER STANDING. manage_secret_id:false; the converge creates
 #                     the inert role only. A usable token exists solely after a
 #                     one-shot human "unlock" response-wraps a single-use
 #                     secret_id (`bao write -wrap-ttl=90s -f
-#                     auth/approle/role/ai-admin/secret-id`).
+#                     auth/approle/role/<role>/secret-id`).
 #   * OBSERVATIONAL — EVERY use is audited (file audit device -> Cribl ->
 #                     index=openbao_audit) and MUST fire an alert.
 #

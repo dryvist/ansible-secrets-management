@@ -138,10 +138,9 @@ openbao_base_policies_static:
   # ai-readonly / ai-elevated / ai-apply-<svc> no longer own standalone policies —
   # they are ACTOR roles that attach the base read-/write- capability leaves
   # (generated below into openbao_ai_capability_policies). ai-admin remains a
-  # standalone policy: it is the sole self-modify tier and is NOT composed leaves.
-  # ai-admin: break-glass full admin over the enumerated administrative surface
-  # this role provisions. Contained primarily by TTL (1h) + human unlock +
-  # alerting, and secondarily by the path list itself.
+  # standalone policy shared only by the human-gated administrator roles; it is
+  # NOT composed from capability leaves. The session role has an 8h hard cap.
+  # Containment also comes from human unlock, alerting, and the enumerated paths.
   - name: "{{ openbao_ai_admin_policy_name }}"
     template: ai-admin-policy.hcl.j2
   - name: "{{ openbao_snapshot_policy_name }}"

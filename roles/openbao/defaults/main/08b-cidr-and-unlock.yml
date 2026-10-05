@@ -53,6 +53,7 @@ openbao_approle_cidr_class_overrides:
   # workstation-only bound answers those calls 403 -- same shape as flow-lock.
   admin: machine_or_workstation
   ai-admin: workstation
+  ai-admin-session: workstation
   github-admin: workstation
   github-read: workstation
   github-write: workstation
