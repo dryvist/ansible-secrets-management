@@ -127,8 +127,9 @@ class PolicySyncRunsBeforeItsGrantConsumers(unittest.TestCase):
         not buried later in the sequence -- keep it next to the one fact
         (openbao_bootstrap_token / openbao_reconcile_mode) it depends on."""
         order = _global_task_order()
-        login_index = order.index(
-            "Use the reconcile token when it authenticated"
+        login_index = max(
+            order.index("Use the reconcile token when it authenticated"),
+            order.index("Use the per-call reconcile token when it authenticated"),
         )
         ask_index = order.index(ASK_TASK)
         sync_index = order.index(SYNC_TASK)

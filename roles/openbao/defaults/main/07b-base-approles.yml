@@ -11,6 +11,7 @@ openbao_base_approles_core:
   # there is no standing host or workstation secret_id to age out.
   - name: "{{ openbao_flow_lock_approle_name }}"
     policy: "{{ openbao_flow_lock_policy_name }}"
+    secret_id_issuance: per_call
     secret_id_ttl: 15m
     secret_id_num_uses: 1
   - name: "{{ openbao_ai_sessions_backup_approle_name }}"
@@ -184,6 +185,11 @@ openbao_base_approles_core:
     policy: "{{ openbao_reconcile_policy_name }}"
     token_ttl: 8h
     token_max_ttl: 8h
+    # This role receives one secret_id per call through approle-issuer. It is
+    # never probed, rotated, or published as stored secret-zero.
+    secret_id_issuance: per_call
+    secret_id_ttl: 15m
+    secret_id_num_uses: 1
   # approle-issuer: mints secret_ids for the enumerated non-break-glass roles
   # and does nothing else. Its own token TTL is short because a mint is a
   # single operation, not a session — nothing legitimate holds this for hours.

@@ -4,14 +4,18 @@
 # with non-alphanumerics -> '_' -- the same formula every other AppRole
 # credential helper in this estate already uses. A legacy
 # <NAME>_VAULT_{ROLE,SECRET}_ID pair is tried second for migration safety.
+# Domains declaring workstation_issuer_role use the existing per-call issuer
+# client when available; plane callers without issuer inputs keep their pair.
 openbao_secrets_domains:
   - name: observability
+    workstation_issuer_role: observability-workstation
     paths:
       # The store holds the `/main` keys, and the policy grants
       # `platform/<app>/*` — the bare `platform/splunk` is a 403, not a 404.
       - platform/splunk/main
       - platform/cribl/main
   - name: local-cloud
+    workstation_issuer_role: local-cloud-workstation
     paths:
       # As above: the policy grants `platform/object-storage/*` only, so the
       # bare key is a 403 even though it exists. optional: true -- no role or
@@ -22,6 +26,7 @@ openbao_secrets_domains:
         optional: true
       # platform/compute is not declared: the path holds no keys at all.
   - name: monitoring
+    workstation_issuer_role: monitoring-workstation
     paths:
       # The policy grants `apps/monitoring/*`; the bare path is a 403.
       - apps/monitoring/main
@@ -32,6 +37,7 @@ openbao_secrets_domains:
         path: platform/healthchecks-offsite
         optional: true
   - name: media
+    workstation_issuer_role: media-workstation
     paths:
       # One path per KV ENTRY. `vault_kv2_get` reads a single entry and does not
       # walk a subtree, and the media policy grants `apps/media/*` — which does
@@ -44,6 +50,7 @@ openbao_secrets_domains:
       - apps/media/prowlarr
       - apps/media/qbittorrent
   - name: apps
+    workstation_issuer_role: apps-workstation
     paths:
       # The dispatcher uses the write-only ntfy ai-jobs publisher token
       # created by the ntfy role (#2334) when OpenBao AppRole login is refused.

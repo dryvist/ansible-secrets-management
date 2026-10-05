@@ -166,7 +166,6 @@ openbao_host_secret_zero_approle_names:
   - "{{ openbao_terraform_approle_name }}"
   - "{{ openbao_approle_audit_approle_name }}"
   - "{{ openbao_approle_issuer_approle_name }}"
-  - "{{ openbao_reconcile_approle_name }}"
   - iac-platform-deploy
 # Every scheduled-rotation AppRole, by name; approle-secret-id-rotate-policy.hcl.j2
 # scopes its secret-id mint/destroy grants to this one list.
@@ -182,11 +181,9 @@ openbao_secrets_domain_approle_names: >-
      + openbao_cribl_edge_mac_approle_names
      + [openbao_agent_ssh_sign_approle_name,
       openbao_hermes_approle_name,
-      openbao_open_llm_approle_name]
-     + [openbao_reconcile_approle_name] }}
+      openbao_open_llm_approle_name] }}
 # Roles using lookup proof despite the runner's source class allowing login.
-openbao_approle_rotation_lookup_proof_names:
-  - "{{ openbao_reconcile_approle_name }}"
+openbao_approle_rotation_lookup_proof_names: []
 # Provider-level API credentials live on exact leaves under a separately
 # supplied external KV location. Public configuration carries no path literal.
 openbao_ai_api_key_mount: >-

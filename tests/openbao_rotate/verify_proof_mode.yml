@@ -1,8 +1,10 @@
 ---
-# Includes playbooks/tasks/openbao_rotate_proof_mode.yml for each case and
-# asserts how openbao_rotate_one_domain.yml proves the new pair: a role whose
-# source address the rotation host cannot satisfy is proven by lookup, never
-# by a login. Also asserts the env-document write follows the proof.
+# Includes playbooks/tasks/openbao_rotate_proof_mode.yml for the scheduled
+# rotation cases and asserts how openbao_rotate_one_domain.yml proves each new
+# pair. A role whose source address the rotation host cannot satisfy is proven
+# by lookup, never by a login. The per-call reconcile role stays outside the
+# scheduled rotation catalogs. Also asserts the env-document write follows the
+# proof.
 #
 # Usage: ansible-playbook tests/openbao_rotate/verify_proof_mode.yml -c local
 
@@ -47,16 +49,17 @@
           - not (rotate_proof_by_lookup | bool)
         fail_msg: apps has no address binding the rotation host fails; it must prove by login.
 
-    - name: Decide the proof for reconcile
-      ansible.builtin.include_tasks: "{{ _tasks_dir }}/openbao_rotate_proof_mode.yml"
-      vars:
-        rotate_domain_name: "{{ openbao_reconcile_approle_name }}"
-
-    - name: Assert reconcile is proven by lookup without a login
+    - name: Assert per-call reconcile stays outside scheduled rotation
       ansible.builtin.assert:
         that:
-          - rotate_proof_by_lookup | bool
-        fail_msg: Reconcile must use the non-consuming lookup proof.
+          - openbao_reconcile_approle_name not in openbao_secrets_domain_approle_names
+          - openbao_reconcile_approle_name not in openbao_host_secret_zero_approle_names
+          - openbao_reconcile_approle_name not in openbao_rotate_doppler_sync_domains
+          - openbao_reconcile_approle_name not in openbao_approle_rotation_lookup_proof_names
+          - openbao_reconcile_approle_name not in openbao_approle_secret_id_ttl_overrides
+        fail_msg: >-
+          Reconcile uses per-call credentials and must not enter scheduled
+          rotation, stored-secret publication, or lookup-proof catalogs.
 
     - name: Assert the login and lookup proofs key off the same decision
       ansible.builtin.assert:

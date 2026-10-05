@@ -90,6 +90,5 @@ class PolicySyncPairRunsFromTheController(unittest.TestCase):
         self.assertIn("openbao_bootstrap_token is defined", sync["when"])
         self.assertIn("openbao_reconcile_mode | default(false)", sync["when"])
 
-
 if __name__ == "__main__":
     unittest.main()

@@ -166,6 +166,18 @@ finite (`openbao_approle_secret_id_ttl`, `openbao_approle_secret_id_num_uses`
 in `defaults/main/08-admin-and-ttls.yml`), with per-role overrides and a
 documented reason required for any remaining `0`.
 
+The workstation per-call path uses `approle-issuer` for `flow-lock`,
+`openbao-reconcile`, and five workstation-only aliases for the domain prefetch
+roles. Each target secret_id is limited to 15 minutes and one use; the shared
+`flow-lock approle-token ROLE` command logs in, destroys that secret_id by its
+accessor, and prints only the client token. Issuer grants are generated only
+for roles explicitly marked `secret_id_issuance: per_call`; stored and
+scheduled-rotation identities are not eligible. Domain machine callers retain
+their existing rotated credentials. Per-call role IDs and secret IDs are
+excluded from liveness probes, rotation catalogs, controller files, and
+Doppler publication. Human-gated roles and the issuer's own bootstrap identity
+remain outside that mint set.
+
 Source binding uses named CIDR classes (`machine` / `workstation` / `ci`), whose
 values arrive by environment and are never committed. A class that a declared
 role uses but which was never supplied **fails the converge** rather than

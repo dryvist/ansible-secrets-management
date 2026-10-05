@@ -28,8 +28,8 @@ openbao_rustfs_rotate_approle_name: rustfs-rotate
 # approle-secret-id-rotate — narrower than approle-issuer: it may mint and
 # destroy a secret-id ONLY for the openbao_secrets domain AppRoles, and CAS
 # read+write the one KV document those domains' credentials live in
-# (secret/platform/ansible/env) -- approle-issuer can mint for every
-# issuable role but holds neither the destroy nor the KV-write capability.
+# (secret/platform/ansible/env) -- approle-issuer can mint only explicitly
+# per-call roles and holds neither the destroy nor the KV-write capability.
 # Same human-gated, inert, single-use shape as ai-rotate/apps-rotate: minting
 # a fresh domain credential and retiring the old one is a deliberate act, not
 # a routine unattended one.

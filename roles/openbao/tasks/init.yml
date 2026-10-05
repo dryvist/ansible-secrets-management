@@ -134,8 +134,14 @@
   # work; it needs OPENBAO_PROVISIONING_TOKEN.
   when: not (openbao_reconcile_mode | default(false))
 
-- name: Create the AppRoles and write their break-glass material
+- name: Declare AppRoles and reconcile their policy and TTL bounds
   ansible.builtin.import_tasks: init/10-approles.yml
+  tags:
+    - openbao_approle
+    - openbao_approle_config
+
+- name: Issue per-call and stored AppRole credentials
+  ansible.builtin.import_tasks: init/10b-approle-secret-ids.yml
   tags:
     - openbao_approle
 

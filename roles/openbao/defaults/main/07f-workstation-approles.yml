@@ -7,6 +7,44 @@ openbao_workstation_approles:
     policy: proxman
     token_ttl: 15m
     token_max_ttl: 30m
+  # Workstation prefetch uses separate, single-use roles for these domains.
+  # The machine-facing domain roles retain their scheduled credentials; each
+  # workstation alias shares only the same read policy and is minted per call.
+  - name: "{{ openbao_observability_approle_name }}-workstation"
+    policy: "{{ openbao_observability_policy_name }}"
+    secret_id_issuance: per_call
+    secret_id_ttl: 15m
+    secret_id_num_uses: 1
+    token_ttl: 15m
+    token_max_ttl: 15m
+  - name: "{{ openbao_local_cloud_approle_name }}-workstation"
+    policy: "{{ openbao_local_cloud_policy_name }}"
+    secret_id_issuance: per_call
+    secret_id_ttl: 15m
+    secret_id_num_uses: 1
+    token_ttl: 15m
+    token_max_ttl: 15m
+  - name: "{{ openbao_monitoring_approle_name }}-workstation"
+    policy: "{{ openbao_monitoring_policy_name }}"
+    secret_id_issuance: per_call
+    secret_id_ttl: 15m
+    secret_id_num_uses: 1
+    token_ttl: 15m
+    token_max_ttl: 15m
+  - name: "{{ openbao_media_approle_name }}-workstation"
+    policy: "{{ openbao_media_policy_name }}"
+    secret_id_issuance: per_call
+    secret_id_ttl: 15m
+    secret_id_num_uses: 1
+    token_ttl: 15m
+    token_max_ttl: 15m
+  - name: "{{ openbao_apps_approle_name }}-workstation"
+    policy: "{{ openbao_apps_policy_name }}"
+    secret_id_issuance: per_call
+    secret_id_ttl: 15m
+    secret_id_num_uses: 1
+    token_ttl: 15m
+    token_max_ttl: 15m
   # openbao-node-converge: the converge identity for the OpenBao-node play
   # (`--tags openbao` on `openbao_group`) — the single converge still run from
   # a workstation, because its inputs are the seal key and the provisioning

@@ -103,6 +103,40 @@
     - openbao_provisioning_token | length == 0
     - openbao_reconcile_token | length > 0
 
+- name: Mint a per-call reconcile token through the AppRole issuer
+  ansible.builtin.command:
+    argv:
+      - flow-lock
+      - approle-token
+      - "{{ openbao_reconcile_approle_name }}"
+  environment:
+    BAO_ADDR: "{{ openbao_reconcile_addr }}"
+  delegate_to: localhost
+  vars:
+    ansible_become: false
+  register: openbao_reconcile_issuer_login
+  changed_when: false
+  no_log: true
+  when:
+    - openbao_status.initialized
+    - openbao_provisioning_token | length == 0
+    - openbao_reconcile_token | length == 0
+    - openbao_reconcile_issuer_available | bool
+    - openbao_converge_role_id | length == 0
+    - openbao_converge_secret_id | length == 0
+    - openbao_reconcile_addr | length > 0
+
+- name: Use the per-call reconcile token when it authenticated
+  ansible.builtin.set_fact:
+    openbao_bootstrap_token: "{{ openbao_reconcile_issuer_login.stdout }}"
+    openbao_reconcile_mode: true
+  no_log: true
+  when:
+    - openbao_reconcile_issuer_login is defined
+    - not (openbao_reconcile_issuer_login.skipped | default(false))
+    - openbao_reconcile_issuer_login.rc | default(1) == 0
+    - openbao_reconcile_issuer_login.stdout | default('') | length > 0
+
 - name: Log in as the reconcile identity for routine RBAC reconciliation
   community.hashi_vault.vault_login:
     url: "{{ openbao_reconcile_addr }}"
@@ -121,6 +155,7 @@
     - openbao_status.initialized
     - openbao_provisioning_token | length == 0
     - openbao_reconcile_token | length == 0
+    - openbao_reconcile_issuer_login.skipped | default(true)
     - openbao_reconcile_role_id | length > 0
     - openbao_reconcile_secret_id | length > 0
     - openbao_reconcile_addr | length > 0
@@ -145,8 +180,8 @@
   ansible.builtin.fail:
     msg: >-
       OpenBao reconcile login returned no token on {{ inventory_hostname }},
-      so RBAC was NOT reconciled. Secret-zero IS present, so this is not the
-      never-bootstrapped case.
+      so RBAC was NOT reconciled. A configured AppRole pair failed to
+      authenticate.
       What the store actually said:
       {{ (openbao_reconcile_login.msg | default('(no message -- the module did not run)'))
          | regex_replace('\\s+', ' ') }}
@@ -155,8 +190,8 @@
       delegated. A rejection on source-address grounds is the CIDR class doing
       its job and means this identity may not reconcile from HERE -- do not add
       a range to get past it.
-      To deliberately fall back to the loud skip, unset
-      OPENBAO_APPROLE_OPENBAO_RECONCILE_{ROLE,SECRET}_ID.
+      The stored reconcile pair is not read. Check this CONVERGE pair or the
+      per-call approle-issuer credentials for this controller.
   when:
     - openbao_reconcile_login is defined
     - not (openbao_reconcile_login.skipped | default(false))
@@ -225,11 +260,11 @@
       {{ openbao_policies | default([]) | length }} policies left untouched).
       Routine reconciliation is supposed to happen WITHOUT a provisioning token,
       as the reconcile identity. Reaching this message means this host carries
-      NEITHER of the two ways to be that identity: no OPENBAO_RECONCILE_TOKEN
+      NEITHER of the supported ways to be that identity: no OPENBAO_RECONCILE_TOKEN
       (a token that already holds the policy, maintained by an agent on the
       host -- the intended shape for an unattended plane), and no secret-zero
-      (OPENBAO_APPROLE_OPENBAO_RECONCILE_ROLE_ID / _SECRET_ID). Supply one of
-      them. Until then a declared policy change does NOT land, on this run or
+      (CONVERGE_ROLE_ID / CONVERGE_SECRET_ID), and no per-call AppRole issuer
+      credentials. Supply one of them. Until then a declared policy change does NOT land, on this run or
       any future one, and the recap stays green while it does not.
   when: openbao_bootstrap_token is not defined
 

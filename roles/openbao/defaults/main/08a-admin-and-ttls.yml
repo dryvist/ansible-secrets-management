@@ -21,17 +21,18 @@ openbao_provisioning_token: >-
 # CONVERGE_ROLE_ID/SECRET_ID (whichever identity scripts/run-ansible.sh
 # actually authenticated as this run) is preferred: the execution plane's own
 # AppRole already carries the reconcile policy, so a plane-run converge needs
-# no separate reconcile secret-zero at all. The dedicated
-# OPENBAO_APPROLE_OPENBAO_RECONCILE_* pair remains the fallback for a
-# workstation converge that supplies it directly. Secret-zero is ambient env
-# (`doppler run`), same as every other AppRole; absent, the role falls back to
-# skipping and says so.
+# no separate reconcile secret-zero at all. A workstation uses approle-issuer
+# to mint one fresh reconcile secret_id per run when issuer credentials are
+# available. The old stored OPENBAO_APPROLE_OPENBAO_RECONCILE_* pair is not
+# read: a dead or absent pair must not become a fallback that blocks dispatch.
+openbao_converge_role_id: >-
+  {{ lookup('env', 'CONVERGE_ROLE_ID') | default('', true) }}
+openbao_converge_secret_id: >-
+  {{ lookup('env', 'CONVERGE_SECRET_ID') | default('', true) }}
 openbao_reconcile_role_id: >-
-  {{ lookup('env', 'CONVERGE_ROLE_ID')
-     | default(openbao_platform_env['OPENBAO_APPROLE_OPENBAO_RECONCILE_ROLE_ID'], true) }}
+  {{ openbao_converge_role_id }}
 openbao_reconcile_secret_id: >-
-  {{ lookup('env', 'CONVERGE_SECRET_ID')
-     | default(openbao_platform_env['OPENBAO_APPROLE_OPENBAO_RECONCILE_SECRET_ID'], true) }}
+  {{ openbao_converge_secret_id }}
 # --- Pre-issued reconcile token (the unattended execution plane) -------------
 # An alternative to holding secret-zero: a token that ALREADY carries the
 # reconcile policy, maintained by whatever runs the converge. The plane had
@@ -47,6 +48,10 @@ openbao_reconcile_secret_id: >-
 # tests/test_reconcile_identity_paths.py asserts the gating.
 openbao_reconcile_token: >-
   {{ lookup('env', 'OPENBAO_RECONCILE_TOKEN') | default('', true) }}
+
+openbao_reconcile_issuer_available: >-
+  {{ (lookup('env', 'OPENBAO_APPROLE_APPROLE_ISSUER_ROLE_ID') | length > 0
+      and lookup('env', 'OPENBAO_APPROLE_APPROLE_ISSUER_SECRET_ID') | length > 0) }}
 
 # The reconcile login is delegated to the controller, so it needs the address
 # the CONTROLLER can reach -- openbao_api_addr is the guest's own bind address.
@@ -137,7 +142,6 @@ openbao_approle_secret_id_ttl_overrides:
   # open-llm keeps the global 24h bound, not the 36h margin above;
   # tests/plane_identity_bounds/verify.yml pins it to 24h / 30 uses.
   open-llm: "{{ openbao_approle_secret_id_ttl }}"
-  openbao-reconcile: "{{ openbao_rotated_domain_secret_id_ttl }}"
   approle-secret-id-rotate-scheduled: "{{ openbao_rotated_domain_secret_id_ttl }}"
 # num_uses 0 (unlimited redemptions) is permitted ONLY with a reason on the line.
 openbao_approle_secret_id_num_uses_overrides:
