@@ -182,8 +182,8 @@ openbao_base_approles_core:
     token_ttl: 15m
   - name: "{{ openbao_reconcile_approle_name }}"
     policy: "{{ openbao_reconcile_policy_name }}"
-    token_ttl: 30m
-    token_max_ttl: 2h
+    token_ttl: 8h
+    token_max_ttl: 8h
   # approle-issuer: mints secret_ids for the enumerated non-break-glass roles
   # and does nothing else. Its own token TTL is short because a mint is a
   # single operation, not a session — nothing legitimate holds this for hours.
