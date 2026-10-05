@@ -102,6 +102,8 @@ openbao_approle_cidr_class_overrides:
   # single class here would break one caller or the other -- do not "tidy"
   # this back to `machine` or `workstation` alone.
   flow-lock: machine_or_workstation
+  # The mint authority is used by both the workstation and automation plane.
+  approle-issuer: machine_or_workstation
   # The routine reconcile identity runs from the execution plane AND is the
   # documented workstation path for read-only queries against the platform and
   # the trackers. It carried no override, so it declared as `machine` — and it

@@ -7,8 +7,12 @@ openbao_base_approles_core:
     token_policies:
       - "{{ openbao_terraform_apply_policy_name }}"
       - "{{ openbao_config_write_policy_name }}"
+  # flow-lock receives a fresh secret_id from approle-issuer for each command;
+  # there is no standing host or workstation secret_id to age out.
   - name: "{{ openbao_flow_lock_approle_name }}"
     policy: "{{ openbao_flow_lock_policy_name }}"
+    secret_id_ttl: 15m
+    secret_id_num_uses: 1
   - name: "{{ openbao_ai_sessions_backup_approle_name }}"
     policy: "{{ openbao_ai_sessions_backup_policy_name }}"
   - name: "{{ openbao_packer_approle_name }}"

@@ -167,7 +167,6 @@ openbao_host_secret_zero_approle_names:
   - "{{ openbao_approle_audit_approle_name }}"
   - "{{ openbao_approle_issuer_approle_name }}"
   - "{{ openbao_reconcile_approle_name }}"
-  - "{{ openbao_flow_lock_approle_name }}"
   - iac-platform-deploy
 # Every scheduled-rotation AppRole, by name; approle-secret-id-rotate-policy.hcl.j2
 # scopes its secret-id mint/destroy grants to this one list.
