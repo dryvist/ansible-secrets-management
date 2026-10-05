@@ -1,7 +1,7 @@
 {{ ansible_managed | comment }}
-# OpenBao policy for the observability AppRole — Splunk + Cribl (the ingest
-# pipeline shares HEC tokens, so they're one identity, not two). Read-only,
-# no access to the infra kernel or other platform services.
+# OpenBao policy for the observability AppRole — Splunk + Cribl ingest and the
+# read-only Splunk MCP connection used for AI-service health checks. No writes
+# or access to the infra kernel or other platform services.
 
 {% for sub in ['splunk', 'cribl'] %}
 path "{{ openbao_kv_mount }}/data/platform/{{ sub }}/*" {
@@ -13,6 +13,12 @@ path "{{ openbao_kv_mount }}/metadata/platform/{{ sub }}/*" {
 }
 
 {% endfor %}
+# The MCP connection belongs to a read-only Splunk search user. Keep this
+# cross-domain grant to its canonical KV-v2 data leaf; no metadata or siblings.
+path "{{ openbao_kv_mount }}/data/ai/mcp/splunk" {
+  capabilities = ["read"]
+}
+
 # OpenRouter usage/management key for the Cribl Stream OpenRouter REST
 # collectors (third-party SaaS, so secrets-external). Exact path only; the
 # router's per-model keys at ai/saas/openrouter stay out of this policy.
