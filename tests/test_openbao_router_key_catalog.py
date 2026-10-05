@@ -14,6 +14,7 @@ READ_DEFAULTS = ROOT / "roles/openbao/defaults/main/05c-terrakube-and-remaining-
 EXCLUDED_DEFAULTS = ROOT / "roles/openbao/defaults/main/05h-cribl-edge-readers.yml"
 GENERATION = ROOT / "roles/openbao/tasks/init/03-kv-mounts-and-seed-secrets.yml"
 OPEN_LLM_POLICY = ROOT / "roles/openbao/templates/open-llm-policy.hcl.j2"
+APPS_POLICY = ROOT / "roles/openbao/templates/apps-policy.hcl.j2"
 
 DEFAULTS_DATA = yaml.safe_load(DEFAULTS.read_text(encoding="utf-8"))
 READ_DATA = yaml.safe_load(READ_DEFAULTS.read_text(encoding="utf-8"))
@@ -64,6 +65,16 @@ def _generation_loop():
     return task["loop"]
 
 
+def _render_apps_policy(router_catalog):
+    environment = jinja2.Environment()
+    environment.filters["comment"] = str
+    return environment.from_string(APPS_POLICY.read_text(encoding="utf-8")).render(
+        ansible_managed="",
+        openbao_kv_mount="secret",
+        openbao_apps_read_apps=_read_apps(router_catalog),
+    )
+
+
 def test_public_router_key_entries_remain_literal_and_allowlisted():
     assert DEFAULTS_DATA["openbao_router_key_catalog"] == {}
     generated = DEFAULTS_DATA["openbao_generated_app_secrets"]
@@ -89,6 +100,12 @@ def test_router_catalog_entries_feed_generation_and_the_apps_read_paths():
         "contract-fixture"
     ]
     assert set(_read_apps(catalog)) - set(_read_apps({})) == set(catalog)
+
+    policy = _render_apps_policy(catalog)
+    assert 'path "secret/data/apps/contract-fixture"' in policy
+    assert 'path "secret/metadata/apps/contract-fixture"' in policy
+    assert 'path "secret/data/apps/*"' not in policy
+    assert 'path "secret/metadata/apps/*"' not in policy
 
 
 def test_open_llm_fields_mirror_the_generated_router_fields():
