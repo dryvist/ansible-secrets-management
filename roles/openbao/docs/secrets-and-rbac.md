@@ -85,7 +85,7 @@ plans):
 | `flow-lock` | `secret/locks/global`, `secret/infra/*` | `secret/locks/global` | Cross-repo apply lock; releases the lock via metadata delete |
 | `terrakube-<workspace>` JWT | Only that workspace's native paths | Workspace-specific | Short-lived; exact organization/workspace subject and audience |
 | `ansible-converge` | Platform, apps, MCP secrets, `platform/ansible/env` per mount | Exact MCP secrets | Config pulls, MCP publishers; no broad AI access |
-| `observability` | `secret/platform/{splunk,cribl}` | — | Ingest pipeline (shared HEC tokens) |
+| `observability` | `secret/platform/{splunk,cribl}`, `secret/ai/mcp/splunk` | — | Ingest pipeline and read-only Splunk MCP queries |
 | `local-cloud` | `secret/platform/{object-storage,compute}` | — | RustFS + compute creds |
 | `monitoring` | `secret/apps/monitoring` | — | netmon/unifi_metrics/prometheus_stack |
 | `media` | `secret/apps/media` | — | *arr/qBittorrent/Plex stack |
