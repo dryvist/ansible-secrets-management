@@ -93,6 +93,11 @@ openbao_approle_token_max_ttl: 4h
 # token to make that happen.
 openbao_approle_secret_id_ttl: 24h
 openbao_approle_secret_id_num_uses: 30
+# Shared bounds for secret_ids issued per call and the reconcile token window.
+openbao_approle_per_call_secret_id_ttl: 15m
+openbao_approle_per_call_secret_id_num_uses: 1
+openbao_reconcile_approle_token_ttl: 8h
+openbao_reconcile_approle_secret_id_num_uses: 100
 # The human-unlock tier: one wrapped, single-use secret_id per window.
 openbao_approle_human_secret_id_ttl: 15m
 

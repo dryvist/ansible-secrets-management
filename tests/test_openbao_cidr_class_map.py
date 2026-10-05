@@ -96,8 +96,12 @@ class TestCidrClassMap(unittest.TestCase):
             for role in self.variables["openbao_base_approles_core"]
             if role.get("name") == "{{ openbao_flow_lock_approle_name }}"
         )
-        self.assertEqual(role["secret_id_ttl"], "15m")
-        self.assertEqual(role["secret_id_num_uses"], 1)
+        self.assertEqual(
+            role["secret_id_ttl"], "{{ openbao_approle_per_call_secret_id_ttl }}"
+        )
+        self.assertEqual(
+            role["secret_id_num_uses"], "{{ openbao_approle_per_call_secret_id_num_uses }}"
+        )
         self.assertNotIn(
             "{{ openbao_flow_lock_approle_name }}",
             self.variables["openbao_host_secret_zero_approle_names"],
