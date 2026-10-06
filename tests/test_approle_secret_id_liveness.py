@@ -6,7 +6,9 @@ converge's own recap (`ok=N changed=0`) reads clean while every domain behind
 an expired secret_id sits isolated for the rest of the play (Vikunja 3197).
 
 roles/openbao/tasks/init/10b-approle-secret-ids.yml now probes every existing
-AppRole's stored credential and:
+AppRole's stored credential and also probes the per-call openbao-reconcile
+issuer path by minting and revoking a fresh secret_id. The stored credential
+probe:
 
   * in EVERY mode, folds a dead name into the set that gets a fresh
     secret_id minted (alongside anything created this run);
