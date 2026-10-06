@@ -87,6 +87,13 @@ def test_public_router_key_entries_remain_literal_and_allowlisted():
     )
 
 
+def test_glance_tile_key_is_generated_and_readable_by_the_apps_reader():
+    generated = DEFAULTS_DATA["openbao_generated_app_secrets"]
+    assert generated["glance"] == ["glance_llm_router_key"]
+    assert "glance" in _read_apps({})
+    assert 'path "secret/data/apps/glance"' in _render_apps_policy({})
+
+
 def test_router_catalog_entries_feed_generation_and_the_apps_read_paths():
     catalog = {"contract-fixture": ["contract_fixture_llm_router_key"]}
     generated = _render(
