@@ -140,6 +140,14 @@
     - openbao_approle
     - openbao_approle_config
 
+# The per-call liveness probe must stay after RBAC and AppRole declarations.
+# The first scoped converge selects openbao_rbac and openbao_approle, so the
+# issuer grants exist before this probe runs.
+- name: Probe the per-call reconcile issuer liveness path
+  ansible.builtin.import_tasks: init/10a-approle-issuer-liveness.yml
+  tags:
+    - openbao_approle
+
 - name: Issue per-call and stored AppRole credentials
   ansible.builtin.import_tasks: init/10b-approle-secret-ids.yml
   tags:

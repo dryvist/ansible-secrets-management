@@ -1,0 +1,50 @@
+---
+# Probe the per-call reconcile path after init/08 RBAC and init/10 AppRole
+# declarations. The first scoped converge selects openbao_rbac and
+# openbao_approle, so issuer grants exist before this probe runs. This executes
+# on every initialized cluster, even when a provisioning token is present.
+- name: Authenticate to approle-issuer for the reconcile liveness probe
+  community.hashi_vault.vault_login:
+    url: "{{ openbao_reconcile_addr }}"
+    auth_method: approle
+    role_id: "{{ openbao_approle_issuer_role_id }}"
+    secret_id: "{{ openbao_approle_issuer_secret_id }}"
+  delegate_to: localhost
+  vars:
+    ansible_become: false
+  register: openbao_reconcile_liveness_issuer_login
+  no_log: true
+  changed_when: false
+  when: openbao_status.initialized
+
+- name: Mint a reconcile liveness secret_id through approle-issuer
+  community.hashi_vault.vault_write:
+    url: "{{ openbao_reconcile_addr }}"
+    auth_method: token
+    path: "auth/approle/role/{{ openbao_reconcile_approle_name }}/secret-id"
+    data: {}
+    token: "{{ openbao_reconcile_liveness_issuer_login.login.auth.client_token }}"
+  delegate_to: localhost
+  vars:
+    ansible_become: false
+  register: openbao_reconcile_liveness_secret_id
+  no_log: true
+  changed_when: false
+  when: openbao_status.initialized
+
+- name: Revoke the reconcile liveness secret_id by accessor
+  community.hashi_vault.vault_write:
+    url: "{{ openbao_reconcile_addr }}"
+    auth_method: token
+    path: >-
+      auth/approle/role/{{ openbao_reconcile_approle_name }}/secret-id-accessor/destroy
+    data:
+      secret_id_accessor: >-
+        {{ openbao_reconcile_liveness_secret_id.data.data.secret_id_accessor }}
+    token: "{{ openbao_reconcile_liveness_issuer_login.login.auth.client_token }}"
+  delegate_to: localhost
+  vars:
+    ansible_become: false
+  no_log: true
+  changed_when: false
+  when: openbao_status.initialized

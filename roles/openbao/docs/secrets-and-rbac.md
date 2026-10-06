@@ -174,9 +174,17 @@ accessor, and prints only the client token. Issuer grants are generated only
 for roles explicitly marked `secret_id_issuance: per_call`; stored and
 scheduled-rotation identities are not eligible. Domain machine callers retain
 their existing rotated credentials. Per-call role IDs and secret IDs are
-excluded from liveness probes, rotation catalogs, controller files, and
-Doppler publication. Human-gated roles and the issuer's own bootstrap identity
-remain outside that mint set.
+excluded from stored-credential probes, rotation catalogs, controller files,
+and Doppler publication. Human-gated roles and the issuer's own bootstrap
+identity remain outside that mint set.
+
+The OpenBao role's routine reconciliation uses the same issuer directly through
+`community.hashi_vault`: it reads the declared `openbao-reconcile` role ID,
+mints one secret_id, logs in with it, then revokes it by accessor. Its issuer
+liveness probe runs for every initialized cluster, including provisioning-token
+runs, after RBAC and AppRole declarations have been applied. A first scoped
+converge selects `openbao_rbac` and `openbao_approle` so grants precede the
+probe.
 
 Source binding uses named CIDR classes (`machine` / `workstation` / `ci`), whose
 values arrive by environment and are never committed. A class that a declared

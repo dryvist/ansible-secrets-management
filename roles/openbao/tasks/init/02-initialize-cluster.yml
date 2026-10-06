@@ -72,12 +72,9 @@
 
 # Routine reconciliation. A change to the CONTENT of an already-declared policy
 # needs no operator: openbao-reconcile owns exactly the names this repo declares
-# and cannot reach the break-glass tiers or its own policy. Trying it here is
-# what removes the "declared two weeks ago, never actually live" failure.
-#
-# A failure is NOT fatal -- on a cluster that has never had a privileged run the
-# identity does not exist yet -- but it MUST be loud, because a silent failure
-# here reproduces the exact false green this block exists to remove.
+# and cannot reach the break-glass tiers or its own policy. Each routine run
+# obtains a fresh target secret_id from approle-issuer and destroys it after the
+# target login. Missing issuer credentials on an initialized cluster are fatal.
 # Delegated, like every other vault_login in this repo (see
 # openbao_secrets/tasks/publish.yml): community.hashi_vault needs hvac, which
 # lives in the controller's dev shell and NOT on the guests. Run on the guest it
@@ -91,76 +88,109 @@
 # ansible_become: false because a delegated task inherits the PLAY's become
 # regardless of any task-level setting, and would otherwise try to escalate on
 # the control node.
-# Preferred over secret-zero: whatever supplies a token is maintaining it.
-# Checked BEFORE the login so a host carrying both mints nothing extra.
-- name: Use the pre-issued reconcile token when one is supplied
-  ansible.builtin.set_fact:
-    openbao_bootstrap_token: "{{ openbao_reconcile_token }}"
-    openbao_reconcile_mode: true
-  no_log: true
-  when:
-    - openbao_status.initialized
-    - openbao_provisioning_token | length == 0
-    - openbao_reconcile_token | length > 0
-
-- name: Mint a per-call reconcile token through the AppRole issuer
-  ansible.builtin.command:
-    argv:
-      - flow-lock
-      - approle-token
-      - "{{ openbao_reconcile_approle_name }}"
-  environment:
-    BAO_ADDR: "{{ openbao_reconcile_addr }}"
+- name: Authenticate to the AppRole issuer for routine reconciliation
+  community.hashi_vault.vault_login:
+    url: "{{ openbao_reconcile_addr }}"
+    auth_method: approle
+    role_id: "{{ openbao_approle_issuer_role_id }}"
+    secret_id: "{{ openbao_approle_issuer_secret_id }}"
   delegate_to: localhost
   vars:
     ansible_become: false
   register: openbao_reconcile_issuer_login
-  changed_when: false
+  no_log: true
+  ignore_errors: true
+  when:
+    - openbao_status.initialized
+    - openbao_provisioning_token | length == 0
+
+- name: FAIL — the AppRole issuer could not authenticate
+  ansible.builtin.fail:
+    msg: >-
+      AppRole issuer login failed on {{ inventory_hostname }}. No reconcile
+      credential was minted; check the issuer declaration and caller source
+      class before retrying.
+  when:
+    - openbao_reconcile_issuer_login is defined
+    - not (openbao_reconcile_issuer_login.skipped | default(false))
+    - (openbao_reconcile_issuer_login.login | default({})).auth is not defined
+
+- name: Read the declared reconcile role_id through the issuer
+  community.hashi_vault.vault_read:
+    url: "{{ openbao_reconcile_addr }}"
+    auth_method: token
+    path: "auth/approle/role/{{ openbao_reconcile_approle_name }}/role-id"
+    token: "{{ openbao_reconcile_issuer_login.login.auth.client_token }}"
+  delegate_to: localhost
+  vars:
+    ansible_become: false
+  register: openbao_reconcile_role_id_read
   no_log: true
   when:
     - openbao_status.initialized
     - openbao_provisioning_token | length == 0
-    - openbao_reconcile_token | length == 0
-    - openbao_reconcile_issuer_available | bool
-    - openbao_converge_role_id | length == 0
-    - openbao_converge_secret_id | length == 0
-    - openbao_reconcile_addr | length > 0
 
-- name: Use the per-call reconcile token when it authenticated
-  ansible.builtin.set_fact:
-    openbao_bootstrap_token: "{{ openbao_reconcile_issuer_login.stdout }}"
-    openbao_reconcile_mode: true
+- name: Mint a single-use reconcile secret_id through the issuer
+  community.hashi_vault.vault_write:
+    url: "{{ openbao_reconcile_addr }}"
+    auth_method: token
+    path: "auth/approle/role/{{ openbao_reconcile_approle_name }}/secret-id"
+    data: {}
+    token: "{{ openbao_reconcile_issuer_login.login.auth.client_token }}"
+  delegate_to: localhost
+  vars:
+    ansible_become: false
+  register: openbao_reconcile_secret_id_mint
   no_log: true
   when:
-    - openbao_reconcile_issuer_login is defined
-    - not (openbao_reconcile_issuer_login.skipped | default(false))
-    - openbao_reconcile_issuer_login.rc | default(1) == 0
-    - openbao_reconcile_issuer_login.stdout | default('') | length > 0
+    - openbao_status.initialized
+    - openbao_provisioning_token | length == 0
 
-- name: Log in as the reconcile identity for routine RBAC reconciliation
+- name: Log in as openbao-reconcile with the single-use secret_id
   community.hashi_vault.vault_login:
     url: "{{ openbao_reconcile_addr }}"
     auth_method: approle
-    role_id: "{{ openbao_reconcile_role_id }}"
-    secret_id: "{{ openbao_reconcile_secret_id }}"
+    role_id: "{{ openbao_reconcile_role_id_read.data.data.role_id }}"
+    secret_id: "{{ openbao_reconcile_secret_id_mint.data.data.secret_id }}"
   delegate_to: localhost
   vars:
     ansible_become: false
   register: openbao_reconcile_login
   no_log: true
-  # ignore_errors, NOT `failed_when: false`: measured, the latter leaves the
-  # result with no `msg` at all, so the failure below cannot name the cause.
   ignore_errors: true
   when:
     - openbao_status.initialized
     - openbao_provisioning_token | length == 0
-    - openbao_reconcile_token | length == 0
-    - openbao_reconcile_issuer_login.skipped | default(true)
-    - openbao_reconcile_role_id | length > 0
-    - openbao_reconcile_secret_id | length > 0
-    - openbao_reconcile_addr | length > 0
 
-- name: Use the reconcile token when it authenticated
+- name: Destroy the single-use reconcile secret_id by accessor
+  community.hashi_vault.vault_write:
+    url: "{{ openbao_reconcile_addr }}"
+    auth_method: token
+    path: >-
+      auth/approle/role/{{ openbao_reconcile_approle_name }}/secret-id-accessor/destroy
+    data:
+      secret_id_accessor: "{{ openbao_reconcile_secret_id_mint.data.data.secret_id_accessor }}"
+    token: "{{ openbao_reconcile_issuer_login.login.auth.client_token }}"
+  delegate_to: localhost
+  vars:
+    ansible_become: false
+  no_log: true
+  when:
+    - openbao_status.initialized
+    - openbao_provisioning_token | length == 0
+
+- name: FAIL — the per-call reconcile credential could not authenticate
+  ansible.builtin.fail:
+    msg: >-
+      The per-call openbao-reconcile login failed on {{ inventory_hostname }}.
+      Its secret_id was revoked after the attempt. Check the issuer grant and
+      the target role bounds for this caller.
+  when:
+    - openbao_reconcile_login is defined
+    - not (openbao_reconcile_login.skipped | default(false))
+    - (openbao_reconcile_login.login | default({})).auth is not defined
+
+- name: Use the per-call reconcile token when it authenticated
   ansible.builtin.set_fact:
     openbao_bootstrap_token: "{{ openbao_reconcile_login.login.auth.client_token }}"
     openbao_reconcile_mode: true
@@ -259,13 +289,9 @@
       apps, {{ openbao_promoted_app_secrets | default({}) | length }} promoted,
       {{ openbao_policies | default([]) | length }} policies left untouched).
       Routine reconciliation is supposed to happen WITHOUT a provisioning token,
-      as the reconcile identity. Reaching this message means this host carries
-      NEITHER of the supported ways to be that identity: no OPENBAO_RECONCILE_TOKEN
-      (a token that already holds the policy, maintained by an agent on the
-      host -- the intended shape for an unattended plane), and no secret-zero
-      (CONVERGE_ROLE_ID / CONVERGE_SECRET_ID), and no per-call AppRole issuer
-      credentials. Supply one of them. Until then a declared policy change does NOT land, on this run or
-      any future one, and the recap stays green while it does not.
+      as the per-call openbao-reconcile identity. Reaching this message on an
+      initialized cluster means issuer credentials were not supplied; this run
+      cannot reconcile declarations and must not be treated as successful.
   when: openbao_bootstrap_token is not defined
 
 # --- KV v2 mount (add-if-missing) -------------------------------------------
