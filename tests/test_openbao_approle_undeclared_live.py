@@ -139,5 +139,30 @@ class TestMissingLive(unittest.TestCase):
         self.assertEqual(missing(["apps"], ["apps"]), [])
 
 
+LIST_TASK = "List every AppRole that actually exists in the store"
+DELETE_TASK = "Delete retired AppRoles that still exist live"
+
+
+class TestBaoCallsRunOnTheCliHost(unittest.TestCase):
+    """A provisioning token is bound to the operator's source class. Every bao
+    call in init/10 runs on openbao_cli_host against openbao_cli_addr; the
+    listing and the retired-role delete ran on the node against its own
+    address, so the first converge with a source-bound token read the refusal
+    as the policy gap and stopped before any role was reconciled."""
+
+    def test_the_listing_and_the_delete_carry_the_full_cli_switch(self):
+        for name in (LIST_TASK, DELETE_TASK):
+            task = _task(name)
+            self.assertEqual(task["environment"]["BAO_ADDR"], "{{ openbao_cli_addr }}", name)
+            self.assertEqual(task["delegate_to"], "{{ openbao_cli_host }}", name)
+            self.assertEqual(task["become"], "{{ openbao_cli_become }}", name)
+            self.assertEqual(task["vars"]["ansible_become"], "{{ openbao_cli_become }}", name)
+
+    def test_no_task_in_the_file_is_pinned_to_the_node_address(self):
+        for task in yaml.safe_load(TASKS.read_text(encoding="utf-8")):
+            env = task.get("environment") or {}
+            self.assertNotEqual(env.get("BAO_ADDR"), "{{ openbao_write_addr }}", task.get("name"))
+
+
 if __name__ == "__main__":
     unittest.main()
