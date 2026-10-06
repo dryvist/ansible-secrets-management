@@ -51,6 +51,10 @@
     - name: Pin the unconfigured case
       ansible.builtin.set_fact:
         openbao_github_hermes_installation_id: ""
+        # Fixture workspace names: a real converge reads these from the runtime
+        # environment, and the declared policy list renders them.
+        openbao_terrakube_network_workspace: example-network
+        openbao_terrakube_aws_workspace: example-aws
 
     - name: Assert no installation ID yields no sets and no mount
       ansible.builtin.assert:
@@ -58,12 +62,24 @@
           - openbao_github_hermes_permission_sets == []
           - openbao_github_hermes_mount not in (openbao_github_app_mounts | map(attribute='mount'))
 
+    - name: Assert no installation ID declares neither Hermes policy (an empty render must never reach a write)
+      ansible.builtin.assert:
+        that:
+          - openbao_github_hermes_public_policy_name not in (openbao_policies | map(attribute='name') | list)
+          - openbao_github_hermes_private_policy_name not in (openbao_policies | map(attribute='name') | list)
+
     - name: Pin the configured case
       ansible.builtin.set_fact:
         openbao_github_hermes_installation_id: "1"
         openbao_github_hermes_author_public_repos: [pub-a]
         openbao_github_oidc_docs_repository: example-org/example-docs
         openbao_aws_hermes_webhook_consumer_role_arn: fixture-arn
+
+    - name: Assert a configured installation declares both Hermes policies
+      ansible.builtin.assert:
+        that:
+          - openbao_github_hermes_public_policy_name in (openbao_policies | map(attribute='name') | list)
+          - openbao_github_hermes_private_policy_name in (openbao_policies | map(attribute='name') | list)
 
     - name: Prepare fixture permission sets
       ansible.builtin.set_fact:
