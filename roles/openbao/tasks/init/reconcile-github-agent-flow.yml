@@ -1,0 +1,59 @@
+---
+- name: Read the GitHub agent-flow OIDC role
+  ansible.builtin.command:
+    cmd: >-
+      bao read -format=json
+      auth/{{ openbao_github_oidc_auth_path }}/role/{{ openbao_github_agent_flow.name }}
+  environment:
+    BAO_ADDR: "{{ openbao_write_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  register: openbao_github_agent_flow_role_current
+  no_log: true
+  changed_when: false
+  failed_when: false
+
+- name: Reconcile the GitHub agent-flow OIDC role
+  vars:
+    _agent_flow_claims:
+      repository: "{{ openbao_github_agent_flow.repository }}"
+      job_workflow_ref: "{{ openbao_github_agent_flow.job_workflow_ref }}"
+      event_name: "{{ openbao_github_agent_flow.event_names }}"
+    _agent_flow_role_live: >-
+      {{ (openbao_github_agent_flow_role_current.stdout | default('{}') | from_json).data
+         | default({}, true) }}
+    _agent_flow_token_ttl_s: "{{ openbao_github_agent_flow.token_ttl | community.general.to_seconds | int }}"
+    _agent_flow_token_max_ttl_s: >-
+      {{ openbao_github_agent_flow.token_max_ttl | community.general.to_seconds | int }}
+  ansible.builtin.command:
+    cmd: >-
+      bao write
+      auth/{{ openbao_github_oidc_auth_path }}/role/{{ openbao_github_agent_flow.name }} -
+    stdin: >-
+      {{ {'role_type': 'jwt',
+            'user_claim': 'job_workflow_ref',
+            'bound_audiences': [openbao_github_oidc_audience],
+            'bound_claims': _agent_flow_claims,
+            'bound_claims_type': 'string',
+            'token_policies': [openbao_github_agent_flow.policy],
+            'token_no_default_policy': true,
+            'token_ttl': openbao_github_agent_flow.token_ttl,
+            'token_max_ttl': openbao_github_agent_flow.token_max_ttl} | to_json }}
+  environment:
+    BAO_ADDR: "{{ openbao_write_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  no_log: true
+  changed_when: true
+  when: >-
+    (openbao_github_agent_flow_role_current.rc | default(1)) != 0
+    or (_agent_flow_role_live.bound_audiences | default([]))
+       != [openbao_github_oidc_audience]
+    or (_agent_flow_role_live.bound_claims | default({}, true)) != _agent_flow_claims
+    or (_agent_flow_role_live.bound_claims_type | default('')) != 'string'
+    or (_agent_flow_role_live.user_claim | default('')) != 'job_workflow_ref'
+    or (_agent_flow_role_live.token_policies | default([]) | sort)
+       != [openbao_github_agent_flow.policy]
+    or not (_agent_flow_role_live.token_no_default_policy | default(false) | bool)
+    or (_agent_flow_role_live.token_ttl | default(0) | int)
+       != (_agent_flow_token_ttl_s | int)
+    or (_agent_flow_role_live.token_max_ttl | default(0) | int)
+       != (_agent_flow_token_max_ttl_s | int)

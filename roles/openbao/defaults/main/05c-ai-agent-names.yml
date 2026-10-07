@@ -8,6 +8,8 @@ openbao_hermes_private_agent_approle_name: hermes-private-agent
 # The auth role name is distinct from the private Hermes domain's env prefix.
 openbao_approle_env_prefix_overrides:
   hermes-private-agent: hermes-private
+  # Consumers read the donna domain's pair (OPENBAO_APPROLE_DONNA_*).
+  ai-donna: donna
 # Router virtual keys for the Hermes operating profiles. Shared reader for
 # now (one AppRole, four leaves); a per-profile split is a later follow-up.
 # One secret/apps/<name> leaf each, read only — see

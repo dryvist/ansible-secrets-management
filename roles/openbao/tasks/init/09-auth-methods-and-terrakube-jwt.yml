@@ -198,6 +198,10 @@
 - name: Configure the GitHub Actions OIDC auth method and its publisher role
   ansible.builtin.import_tasks: 09c-github-oidc.yml
 
+- name: Configure the local-only GitHub agent flow roles
+  ansible.builtin.import_tasks: 09d-github-agent-oidc.yml
+  when: openbao_github_agent_flow_roles | default([]) | length > 0
+
 # --- AppRoles (add-if-missing), one per RBAC group --------------------------
 
 # The human operator's own login is a third concern in this file (after the

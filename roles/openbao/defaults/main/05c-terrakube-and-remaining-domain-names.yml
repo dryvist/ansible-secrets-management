@@ -181,6 +181,7 @@ openbao_secrets_domain_approle_names: >-
      + openbao_cribl_edge_mac_approle_names
      + [openbao_agent_ssh_sign_approle_name,
       openbao_hermes_approle_name,
+      openbao_ai_donna_approle_name,
       openbao_open_llm_approle_name] }}
 # Roles using lookup proof despite the runner's source class allowing login.
 openbao_approle_rotation_lookup_proof_names: []

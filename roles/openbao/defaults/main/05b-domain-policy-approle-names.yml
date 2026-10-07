@@ -115,6 +115,25 @@ openbao_github_oidc_issuer: https://token.actions.githubusercontent.com
 # The audience GitHub is asked to stamp into the job token. Bounding it stops a
 # token minted for a different consumer of the same issuer being replayed here.
 openbao_github_oidc_audience: https://github.com/dryvist
+# Local-only repository-event agents each receive one short-lived role bound
+# to the caller repository, reusable workflow identity, event name and shared
+# GitHub OIDC audience. Their policy reads only that flow's generated router
+# key; publication jobs keep their existing, separate GitHub App token.
+openbao_github_agent_flow_roles:
+  - name: github-agent-ci-fix
+    policy: github-agent-ci-fix
+    repository: dryvist/ansible-proxmox-ai
+    job_workflow_ref: dryvist/ai-workflows/.github/workflows/cc-ci-fix.yml@refs/heads/main
+    event_names: [workflow_run]
+    token_ttl: 10m
+    token_max_ttl: 15m
+  - name: github-agent-pr-review
+    policy: github-agent-pr-review
+    repository: dryvist/ansible-proxmox-ai
+    job_workflow_ref: dryvist/ai-workflows/.github/workflows/cc-pr-review-responder.yml@refs/heads/main
+    event_names: [pull_request_review, pull_request_review_comment]
+    token_ttl: 10m
+    token_max_ttl: 15m
 # The one repository and the one ref a publisher token may be minted for. A
 # pull-request or branch build fails the ref bound, which is the build a fork's
 # contributor controls.

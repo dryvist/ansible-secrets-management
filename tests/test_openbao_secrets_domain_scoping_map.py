@@ -27,6 +27,9 @@ ROOT = Path(__file__).resolve().parent.parent
 PLAYBOOK = ROOT / "playbooks" / "site" / "00-load-and-telemetry.yml"
 DOMAIN_GROUPS_FILE = ROOT / "playbooks" / "site" / "vars" / "openbao_secrets_domain_groups.yml"
 DOMAINS_FILE = ROOT / "roles" / "openbao_secrets" / "defaults" / "main" / "01-domains.yml"
+LEGACY_PREFETCH_GROUPS_FILE = (
+    ROOT / "tests" / "inventory_load" / "managed_secrets_legacy_groups.yml"
+)
 
 PREFETCH_PLAY_NAME = "Pre-fetch resource-domain secrets from OpenBao"
 MEDIA_SCOPE_GROUP = "media_group"
@@ -67,6 +70,15 @@ def _declared_domain_names() -> set[str]:
     return {domain["name"] for domain in data["openbao_secrets_domains"]}
 
 
+def _legacy_prefetch_groups() -> set[str]:
+    with LEGACY_PREFETCH_GROUPS_FILE.open() as f:
+        return set(yaml.safe_load(f)["managed_secrets_legacy_groups"])
+
+
+def test_prefetch_play_selects_the_capability_group():
+    assert _hosts_pattern_groups(_prefetch_play()["hosts"]) == {"managed_secrets_group"}
+
+
 def test_every_mapped_domain_is_a_real_declared_domain():
     mapped_domains = set(_domain_groups().keys())
     declared_domains = _declared_domain_names()
@@ -81,9 +93,7 @@ def test_every_mapped_domain_is_a_real_declared_domain():
 
 
 def test_every_mapped_group_is_reachable_by_the_scoping_gate():
-    play = _prefetch_play()
-    in_play_groups = _hosts_pattern_groups(play["hosts"])
-    reachable_groups = in_play_groups | {MEDIA_SCOPE_GROUP} | DEADMAN_SCOPE_GROUPS
+    reachable_groups = _legacy_prefetch_groups() | {MEDIA_SCOPE_GROUP} | DEADMAN_SCOPE_GROUPS
 
     all_mapped_groups: set[str] = set()
     for groups in _domain_groups().values():
@@ -209,8 +219,7 @@ def _domains_consumed_by_group(group: str, declared_domains: set[str]) -> set[st
 
 
 def test_every_domain_a_group_actually_consumes_is_declared_in_the_map():
-    play = _prefetch_play()
-    in_play_groups = _hosts_pattern_groups(play["hosts"])
+    in_play_groups = _legacy_prefetch_groups()
     declared_domains = _declared_domain_names()
     domain_groups = _domain_groups()
 

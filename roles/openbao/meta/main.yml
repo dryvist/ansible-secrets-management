@@ -14,4 +14,7 @@ galaxy_info:
     - vault
     - secrets
     - raft
-dependencies: []
+dependencies:
+  - role: dryvist.homelab.llm_router_key_catalog
+    tags:
+      - always
