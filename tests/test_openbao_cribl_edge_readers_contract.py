@@ -75,7 +75,9 @@ def _read_apps() -> set[str]:
     values = {
         "openbao_generated_app_secrets": generated,
         "openbao_promoted_app_secrets": promoted,
-        "openbao_router_key_catalog": generated_defaults["openbao_router_key_catalog"],
+        # The generated catalog is loaded by openbao's role dependency; this
+        # contract isolates Cribl's existing grants from that integration.
+        "openbao_router_key_catalog": {},
         "openbao_apps_read_published_apps": names[
             "openbao_apps_read_published_apps"
         ],

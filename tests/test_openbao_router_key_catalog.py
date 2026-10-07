@@ -10,6 +10,7 @@ from ansible.template import Templar, trust_as_template
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULTS = ROOT / "roles/openbao/defaults/main/01c-app-secrets-generated.yml"
+OPENBAO_META = ROOT / "roles/openbao/meta/main.yml"
 READ_DEFAULTS = ROOT / "roles/openbao/defaults/main/05c-terrakube-and-remaining-domain-names.yml"
 EXCLUDED_DEFAULTS = ROOT / "roles/openbao/defaults/main/05h-cribl-edge-readers.yml"
 GENERATION = ROOT / "roles/openbao/tasks/init/03-kv-mounts-and-seed-secrets.yml"
@@ -19,6 +20,7 @@ APPS_POLICY = ROOT / "roles/openbao/templates/apps-policy.hcl.j2"
 DEFAULTS_DATA = yaml.safe_load(DEFAULTS.read_text(encoding="utf-8"))
 READ_DATA = yaml.safe_load(READ_DEFAULTS.read_text(encoding="utf-8"))
 EXCLUDED_DATA = yaml.safe_load(EXCLUDED_DEFAULTS.read_text(encoding="utf-8"))
+OPENBAO_META_DATA = yaml.safe_load(OPENBAO_META.read_text(encoding="utf-8"))
 
 
 def _render(value, variables):
@@ -76,7 +78,12 @@ def _render_apps_policy(router_catalog):
 
 
 def test_public_router_key_entries_remain_literal_and_allowlisted():
-    assert DEFAULTS_DATA["openbao_router_key_catalog"] == {}
+    assert DEFAULTS_DATA["openbao_router_key_catalog"] == (
+        "{{ llm_router_key_catalog_facts.openbao_router_key_catalog }}"
+    )
+    assert OPENBAO_META_DATA["dependencies"] == [
+        {"role": "dryvist.homelab.llm_router_key_catalog", "tags": ["always"]}
+    ]
     generated = DEFAULTS_DATA["openbao_generated_app_secrets"]
     assert generated["agy"] == ["agy_llm_router_key"]
     assert generated["hermes-private"] == ["hermes_private_llm_router_key"]
