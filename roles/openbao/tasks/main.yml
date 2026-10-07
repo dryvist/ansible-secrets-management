@@ -47,7 +47,7 @@
     - openbao_engines
 
 # The finer per-phase tags (openbao_bootstrap, openbao_rbac,
-# openbao_approle, openbao_kv_seed, openbao_engines, ...) live inside this
+# openbao_approle_config, openbao_approle, openbao_kv_seed, openbao_engines, ...) live inside this
 # file, on its own render/service tasks and on each of ITS includes -- see
 # main/configure_and_bootstrap.yml.
 - name: Phase 6+ -- render config, start the service, bootstrap, and deploy timers

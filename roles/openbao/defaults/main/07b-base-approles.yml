@@ -7,8 +7,13 @@ openbao_base_approles_core:
     token_policies:
       - "{{ openbao_terraform_apply_policy_name }}"
       - "{{ openbao_config_write_policy_name }}"
+  # flow-lock receives a fresh secret_id from approle-issuer for each command;
+  # there is no standing host or workstation secret_id to age out.
   - name: "{{ openbao_flow_lock_approle_name }}"
     policy: "{{ openbao_flow_lock_policy_name }}"
+    secret_id_issuance: per_call
+    secret_id_ttl: "{{ openbao_approle_per_call_secret_id_ttl }}"
+    secret_id_num_uses: "{{ openbao_approle_per_call_secret_id_num_uses }}"
   - name: "{{ openbao_ai_sessions_backup_approle_name }}"
     policy: "{{ openbao_ai_sessions_backup_policy_name }}"
   - name: "{{ openbao_packer_approle_name }}"
@@ -178,8 +183,13 @@ openbao_base_approles_core:
     token_ttl: 15m
   - name: "{{ openbao_reconcile_approle_name }}"
     policy: "{{ openbao_reconcile_policy_name }}"
-    token_ttl: 30m
-    token_max_ttl: 2h
+    token_ttl: "{{ openbao_reconcile_approle_token_ttl }}"
+    token_max_ttl: "{{ openbao_reconcile_approle_token_ttl }}"
+    # This role receives one secret_id per call through approle-issuer. It is
+    # never probed, rotated, or published as stored secret-zero.
+    secret_id_issuance: per_call
+    secret_id_ttl: "{{ openbao_approle_per_call_secret_id_ttl }}"
+    secret_id_num_uses: "{{ openbao_reconcile_approle_secret_id_num_uses }}"
   # approle-issuer: mints secret_ids for the enumerated non-break-glass roles
   # and does nothing else. Its own token TTL is short because a mint is a
   # single operation, not a session — nothing legitimate holds this for hours.

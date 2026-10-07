@@ -32,6 +32,7 @@
             name: openbao
           tags:
             - openbao_approle
+            - openbao_approle_config
             - openbao_audit
             - openbao_auth_methods
             - openbao_bootstrap

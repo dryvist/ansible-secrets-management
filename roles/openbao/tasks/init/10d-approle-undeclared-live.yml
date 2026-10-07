@@ -23,12 +23,21 @@
 # alongside this assert) -- a reconcile identity that has not yet had that
 # policy rewritten by a provisioning run gets a 403 here, which is caught and
 # named below rather than silently read as "no identities exist".
+#
+# Runs where every sibling bao call in init/10 runs (openbao_cli_host, against
+# openbao_cli_addr): a provisioning token is bound to the operator's source
+# class, so the same call made from the node itself arrives from an address
+# outside that class and reads as this very 403 even though the policy holds.
 - name: List every AppRole that actually exists in the store
   ansible.builtin.command:
     cmd: "bao list -format=json auth/approle/role"
   environment:
-    BAO_ADDR: "{{ openbao_write_addr }}"
+    BAO_ADDR: "{{ openbao_cli_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
   register: openbao_approle_live_list
   no_log: true
   changed_when: false
@@ -72,8 +81,12 @@
   ansible.builtin.command:
     cmd: "bao delete auth/approle/role/{{ item }}"
   environment:
-    BAO_ADDR: "{{ openbao_write_addr }}"
+    BAO_ADDR: "{{ openbao_cli_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
   loop: "{{ openbao_retired_approles | select('in', openbao_approle_live_names | default([])) | list }}"
   no_log: true
   changed_when: true

@@ -181,6 +181,8 @@
       token_policies={{ (item.0.token_policies | default([item.0.policy])) | join(',') }}
       token_ttl={{ item.0.token_ttl | default(openbao_approle_token_ttl) }}
       token_max_ttl={{ item.0.token_max_ttl | default(openbao_approle_token_max_ttl) }}
+      token_explicit_max_ttl={{ item.0.token_explicit_max_ttl | default(0) }}
+      token_type={{ item.0.token_type | default('default') }}
       secret_id_ttl={{ approle_secret_id_ttl }}
       secret_id_num_uses={{ approle_secret_id_num_uses }}
       {{ ('secret_id_bound_cidrs=' ~ approle_bound_cidrs ~
@@ -238,14 +240,6 @@
 - name: Reconcile TTL and token bounds on existing AppRoles
   ansible.builtin.import_tasks: 10c-approle-ttl-bounds.yml
 
-# Issuing the credentials for whatever was just created is the other half of
-# this job and lives in its own file: everything above DECLARES roles (create,
-# reconcile policies, and reconcile bounds on ones that already exist),
-# everything below ISSUES credentials for the ones that were new. Split
-# because the combined file exceeded the repo's per-file token budget —
-# which is the budget working as intended: an agent changing the mint path
-# should not have to read the declaration path to find it. Included last so
-# ordering is unchanged; the facts it consumes (openbao_approle_checks,
-# openbao_manageable_approles) are set above and cross the include intact.
-- name: Issue credentials for the AppRoles created this run
-  ansible.builtin.import_tasks: 10b-approle-secret-ids.yml
+# Credential issuance is a separate import from init.yml, so a targeted
+# openbao_approle_config run reconciles declarations and bounds without
+# creating or publishing any secret_id.

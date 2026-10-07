@@ -85,7 +85,7 @@ plans):
 | `flow-lock` | `secret/locks/global`, `secret/infra/*` | `secret/locks/global` | Cross-repo apply lock; releases the lock via metadata delete |
 | `terrakube-<workspace>` JWT | Only that workspace's native paths | Workspace-specific | Short-lived; exact organization/workspace subject and audience |
 | `ansible-converge` | Platform, apps, MCP secrets, `platform/ansible/env` per mount | Exact MCP secrets | Config pulls, MCP publishers; no broad AI access |
-| `observability` | `secret/platform/{splunk,cribl}` | — | Ingest pipeline (shared HEC tokens) |
+| `observability` | `secret/platform/{splunk,cribl}`, `secret/ai/mcp/splunk` | — | Ingest pipeline and read-only Splunk MCP queries |
 | `local-cloud` | `secret/platform/{object-storage,compute}` | — | RustFS + compute creds |
 | `monitoring` | `secret/apps/monitoring` | — | netmon/unifi_metrics/prometheus_stack |
 | `media` | `secret/apps/media` | — | *arr/qBittorrent/Plex stack |
@@ -99,7 +99,8 @@ plans):
 | `ai-elevated` | `read-all` + `read-platform` | — | trusted infra-touching agents; no write[^ai-tiers] |
 | `ai-apply-<svc>` | `read-<svc>` | `write-<svc>` + `github-mint` | Task-scoped WRITE, one service; no standing secret_id; ≤1h[^ai-tiers] |
 | `ai-apply-all` | `read-write-all` | `read-write-all` + `github-mint` | Cross-domain WRITE rollup; no standing secret_id; ≤1h[^ai-tiers] |
-| `ai-admin` | all KV + policy/auth admin | policy/AppRole/token, all KV, AWS STS | Break-glass; **sole self-modify role**; ≤10m; alerted[^ai-tiers] |
+| `ai-admin` | all KV + policy/auth admin | policy/AppRole/token, all KV, AWS STS | Break-glass; human-gated; alerted[^ai-tiers] |
+| `ai-admin-session` | `ai-admin` | same administrator grant | Human-gated service-token session; 1h renewal / 8h explicit maximum; alerted[^ai-tiers] |
 | `snapshot` | `sys/storage/raft/snapshot` | — | least-priv backup identity |
 
 The AI rows above are **actor roles**: they carry no path rules themselves, only
@@ -138,8 +139,9 @@ secrets-engine paths and are returned through a short-lived OpenBao token.
     (`read-all`, `read-write-all`, any `ai-apply-*` role) can only widen KV reach —
     it can never name `sys/policies*`, `auth/*` (incl. `.../secret-id`),
     `auth/token/create`, or the IaC kernel (`secret/infra/*`). A bootstrap guard
-    refuses to render a leaf for a forbidden subtree. `ai-admin` is the sole role
-    that attaches a self-modify policy, and it is break-glass (≤10m, alerted).
+    refuses to render a leaf for a forbidden subtree. Only human-gated
+    administrator roles attach the self-modify policy; both are alerted, and
+    the session role has an explicit 8h hard maximum.
     Full grant/redeem runbook: docs.dryvist.com "AI Agent Access (OpenBao)".
 
 [^aws-sts]: Also grants `read`+`update` on `aws/sts/tf-proxmox` and
@@ -163,6 +165,26 @@ Nothing rotated them, so "rotate manually" never happened. The defaults are now
 finite (`openbao_approle_secret_id_ttl`, `openbao_approle_secret_id_num_uses`
 in `defaults/main/08-admin-and-ttls.yml`), with per-role overrides and a
 documented reason required for any remaining `0`.
+
+The workstation per-call path uses `approle-issuer` for `flow-lock`,
+`openbao-reconcile`, and five workstation-only aliases for the domain prefetch
+roles. Each target secret_id is limited to 15 minutes and one use; the shared
+`flow-lock approle-token ROLE` command logs in, destroys that secret_id by its
+accessor, and prints only the client token. Issuer grants are generated only
+for roles explicitly marked `secret_id_issuance: per_call`; stored and
+scheduled-rotation identities are not eligible. Domain machine callers retain
+their existing rotated credentials. Per-call role IDs and secret IDs are
+excluded from stored-credential probes, rotation catalogs, controller files,
+and Doppler publication. Human-gated roles and the issuer's own bootstrap
+identity remain outside that mint set.
+
+The OpenBao role's routine reconciliation uses the same issuer directly through
+`community.hashi_vault`: it reads the declared `openbao-reconcile` role ID,
+mints one secret_id, logs in with it, then revokes it by accessor. Its issuer
+liveness probe runs for every initialized cluster, including provisioning-token
+runs, after RBAC and AppRole declarations have been applied. A first scoped
+converge selects `openbao_rbac` and `openbao_approle` so grants precede the
+probe.
 
 Source binding uses named CIDR classes (`machine` / `workstation` / `ci`), whose
 values arrive by environment and are never committed. A class that a declared

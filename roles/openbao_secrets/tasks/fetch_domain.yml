@@ -29,6 +29,16 @@
       {{ openbao_domain.name | upper | regex_replace('[^A-Z0-9]', '_') }}_VAULT
   no_log: true
 
+- name: Resolve whether a workstation issuer pair is present for {{ openbao_domain.name }}
+  ansible.builtin.set_fact:
+    openbao_secrets_domain_issuer_inputs_present: >-
+      {{ lookup('env', 'OPENBAO_APPROLE_APPROLE_ISSUER_ROLE_ID') | length > 0
+         or lookup('env', 'OPENBAO_APPROLE_APPROLE_ISSUER_SECRET_ID') | length > 0 }}
+    openbao_secrets_domain_issuer_available: >-
+      {{ lookup('env', 'OPENBAO_APPROLE_APPROLE_ISSUER_ROLE_ID') | length > 0
+         and lookup('env', 'OPENBAO_APPROLE_APPROLE_ISSUER_SECRET_ID') | length > 0 }}
+  no_log: true
+
 - name: Resolve role_id/secret_id values, new name, then legacy, then the operator pair for {{ openbao_domain.name }}
   ansible.builtin.set_fact:
     openbao_secrets_domain_role_id: >-
@@ -45,10 +55,33 @@
                    else '', true) }}
   no_log: true
 
+- name: Derive the domain login path for {{ openbao_domain.name }}
+  ansible.builtin.set_fact:
+    openbao_secrets_domain_use_issuer: >-
+      {{ (openbao_domain.workstation_issuer_role | default('') | length > 0)
+         and openbao_secrets_domain_issuer_available | bool }}
+    openbao_secrets_domain_login_configured: >-
+      {{ ((openbao_domain.workstation_issuer_role | default('') | length > 0)
+          and openbao_secrets_domain_issuer_available | bool)
+         or (openbao_secrets_domain_role_id | length > 0
+             and openbao_secrets_domain_secret_id | length > 0) }}
+  no_log: true
+
+- name: Fail on an incomplete workstation issuer pair for {{ openbao_domain.name }}
+  ansible.builtin.fail:
+    msg: >-
+      The approle-issuer pair is incomplete for {{ openbao_domain.name }};
+      refusing to fall back to its stored target secret_id.
+  when:
+    - openbao_domain.workstation_issuer_role | default('') | length > 0
+    - openbao_secrets_domain_issuer_inputs_present | bool
+    - not (openbao_secrets_domain_issuer_available | bool)
+
 - name: Fail on missing credentials for {{ openbao_domain.name }}
   ansible.builtin.fail:
     msg: >-
-      Neither {{ openbao_secrets_domain_env_new_prefix }}_ROLE_ID/_SECRET_ID
+      Neither a complete workstation approle-issuer pair nor
+      {{ openbao_secrets_domain_env_new_prefix }}_ROLE_ID/_SECRET_ID
       nor the legacy {{ openbao_secrets_domain_env_legacy_prefix }}_ROLE_ID/
       _SECRET_ID nor OPERATOR_VAULT_ROLE_ID/_SECRET_ID are both set, so the {{ openbao_domain.name }} domain cannot
       be read and every one of its consumers would render an empty
@@ -57,9 +90,7 @@
       opt this domain out deliberately.
   when:
     - openbao_domain.name not in openbao_secrets_optional_domains
-    - >-
-      openbao_secrets_domain_role_id | length == 0
-      or openbao_secrets_domain_secret_id | length == 0
+    - not (openbao_secrets_domain_login_configured | bool)
 
 - name: Warn that this domain is opted out and being skipped -- {{ openbao_domain.name }}
   ansible.builtin.debug:
@@ -69,9 +100,7 @@
       Its consumers resolve nothing from OpenBao on this run.
   when:
     - openbao_domain.name in openbao_secrets_optional_domains
-    - >-
-      openbao_secrets_domain_role_id | length == 0
-      or openbao_secrets_domain_secret_id | length == 0
+    - not (openbao_secrets_domain_login_configured | bool)
 
 - name: Decide whether every path is optional for {{ openbao_domain.name }}
   ansible.builtin.set_fact:
@@ -87,8 +116,7 @@
       {{ _not_optional | length == 0 }}
   no_log: false
   when:
-    - openbao_secrets_domain_role_id | length > 0
-    - openbao_secrets_domain_secret_id | length > 0
+    - openbao_secrets_domain_login_configured | bool
 
 # block/rescue, not the site.yml-wide record_isolated_failure.yml mechanism:
 # that helper aggregates PLAY-level all-hosts-failed aborts across
@@ -99,8 +127,7 @@
 # using its own accumulator instead.
 - name: Fetch and merge secrets for {{ openbao_domain.name }}
   when:
-    - openbao_secrets_domain_role_id | length > 0
-    - openbao_secrets_domain_secret_id | length > 0
+    - openbao_secrets_domain_login_configured | bool
   block:
     - name: Attempt the fetch for {{ openbao_domain.name }}
       no_log: true
@@ -111,8 +138,22 @@
         - name: Reset the per-domain merge accumulator for {{ openbao_domain.name }}
           ansible.builtin.set_fact:
             openbao_secrets_domain_merged: {}
+            openbao_secrets_domain_token: ""
+            openbao_secrets_domain_login_ok: false
 
-        - name: Log in with the AppRole for {{ openbao_domain.name }}
+        - name: Mint a per-call token through approle-issuer for {{ openbao_domain.name }}
+          ansible.builtin.command:
+            argv:
+              - flow-lock
+              - approle-token
+              - "{{ openbao_domain.workstation_issuer_role }}"
+          register: openbao_secrets_domain_issuer_login
+          changed_when: false
+          check_mode: false
+          when: openbao_secrets_domain_use_issuer | bool
+          no_log: true
+
+        - name: Log in with the stored AppRole for {{ openbao_domain.name }}
           community.hashi_vault.vault_login:
             url: "{{ hostvars['localhost'].openbao_secrets_active_addr | default(openbao_secrets_bao_addr, true) }}"
             auth_method: approle
@@ -128,9 +169,26 @@
           check_mode: false
           # Decided by login_gate.yml below, never by a task failure.
           failed_when: false
+          when: not (openbao_secrets_domain_use_issuer | bool)
 
         - name: Decide what the login result means for {{ openbao_domain.name }}
           ansible.builtin.include_tasks: login_gate.yml
+          when: not (openbao_secrets_domain_use_issuer | bool)
+
+        - name: Keep the issuer-minted token in Ansible memory for {{ openbao_domain.name }}
+          ansible.builtin.set_fact:
+            openbao_secrets_domain_token: "{{ openbao_secrets_domain_issuer_login.stdout }}"
+            openbao_secrets_domain_login_ok: true
+          when: openbao_secrets_domain_use_issuer | bool
+          no_log: true
+
+        - name: Keep the stored-pair token in Ansible memory for {{ openbao_domain.name }}
+          ansible.builtin.set_fact:
+            openbao_secrets_domain_token: "{{ openbao_secrets_domain_login.login.auth.client_token }}"
+          when:
+            - not (openbao_secrets_domain_use_issuer | bool)
+            - openbao_secrets_domain_login_ok | bool
+          no_log: true
 
         - name: Read and merge after a successful login for {{ openbao_domain.name }}
           when: openbao_secrets_domain_login_ok | bool
@@ -149,7 +207,7 @@
               community.hashi_vault.vault_kv2_get:
                 url: "{{ hostvars['localhost'].openbao_secrets_active_addr | default(openbao_secrets_bao_addr, true) }}"
                 auth_method: token
-                token: "{{ openbao_secrets_domain_login.login.auth.client_token }}"
+                token: "{{ openbao_secrets_domain_token }}"
                 # item.mount (direct attribute access) used to fall back to Jinja's
                 # lenient Undefined when a mapping omitted `mount`. ansible-core 2.21's
                 # "Finalization of task args" resolves this with raw Python attribute
@@ -235,3 +293,21 @@
               — its consumers cannot distinguish a missing credential from a
               live one.)
           when: not openbao_secrets_domain_all_optional
+      always:
+        - name: Revoke the per-call token for {{ openbao_domain.name }}
+          ansible.builtin.uri:
+            url: >-
+              {{ hostvars['localhost'].openbao_secrets_active_addr
+                 | default(openbao_secrets_bao_addr, true) }}/v1/auth/token/revoke-self
+            method: POST
+            headers:
+              X-Vault-Token: "{{ openbao_secrets_domain_token }}"
+            status_code: [204]
+            validate_certs: "{{ openbao_secrets_validate_certs }}"
+          when:
+            - openbao_secrets_domain_use_issuer | bool
+            - openbao_secrets_domain_token is defined
+            - openbao_secrets_domain_token | length > 0
+          check_mode: false
+          changed_when: false
+          no_log: true

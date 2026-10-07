@@ -31,6 +31,19 @@
     approle_token_ttl: "{{ item.0.token_ttl | default(openbao_approle_token_ttl) }}"
     approle_token_max_ttl: "{{ item.0.token_max_ttl | default(openbao_approle_token_max_ttl) }}"
     live: "{{ (item.1.stdout | default('{}') | from_json).data | default({}) }}"
+    # Full AppRole writes replace omitted fields. Preserve undeclared live
+    # type and explicit max TTL on bound-only updates; declared values reconcile.
+    approle_token_type: "{{ item.0.token_type | default(live.token_type | default('default')) }}"
+    approle_token_explicit_max_ttl: >-
+      {{ item.0.token_explicit_max_ttl
+         | default(live.token_explicit_max_ttl | default(0)) }}
+    token_type_drift: >-
+      {{ item.0.token_type is defined
+         and (live.token_type | default('default')) != item.0.token_type }}
+    token_explicit_max_ttl_drift: >-
+      {{ item.0.token_explicit_max_ttl is defined
+         and (live.token_explicit_max_ttl | default(0) | int)
+             != (item.0.token_explicit_max_ttl | community.general.to_seconds | int) }}
     desired_secret_id_ttl_s: "{{ approle_secret_id_ttl | community.general.to_seconds }}"
     desired_token_ttl_s: "{{ approle_token_ttl | community.general.to_seconds }}"
     desired_token_max_ttl_s: "{{ approle_token_max_ttl | community.general.to_seconds }}"
@@ -56,6 +69,8 @@
       token_policies={{ (item.0.token_policies | default([item.0.policy])) | join(',') }}
       token_ttl={{ approle_token_ttl }}
       token_max_ttl={{ approle_token_max_ttl }}
+      token_explicit_max_ttl={{ approle_token_explicit_max_ttl }}
+      token_type={{ approle_token_type }}
       secret_id_ttl={{ approle_secret_id_ttl }}
       secret_id_num_uses={{ approle_secret_id_num_uses }}
       {{ ('secret_id_bound_cidrs=' ~ approle_bound_cidrs ~
@@ -80,4 +95,6 @@
           != approle_secret_id_num_uses | int)
       or (live.token_ttl | default(0) | int != desired_token_ttl_s | int)
       or (live.token_max_ttl | default(0) | int != desired_token_max_ttl_s | int)
+      or (token_explicit_max_ttl_drift | bool)
+      or (token_type_drift | bool)
       or (cidr_drift | bool)

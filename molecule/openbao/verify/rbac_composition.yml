@@ -47,8 +47,8 @@
 # policy NAMES to a token, so if every base leaf excludes those paths, so does
 # every union of leaves. We prove it by rendering every generated capability
 # policy and scanning its GRANT lines (dropping `#` comment lines, which name
-# the excluded paths in prose). `ai-admin` is the ONE self-modify role and is
-# deliberately NOT part of this composition — it is asserted separately.
+# the excluded paths in prose). The administrator roles are deliberately NOT
+# part of this composition — they are asserted separately.
 - name: Load OpenBao role defaults (rendered) for the composition invariant
   ansible.builtin.include_vars:
     dir: "{{ playbook_dir }}/../../roles/openbao/defaults/main"
@@ -272,7 +272,7 @@
   vars:
     gated_roles: >-
       {{ (openbao_ai_domains | map('regex_replace', '^(.+)$', 'ai-apply-\1') | list)
-         + ['ai-apply-all', 'ai-admin'] }}
+         + ['ai-apply-all', 'ai-admin', 'ai-admin-session'] }}
   ansible.builtin.assert:
     that:
       - >-
@@ -280,18 +280,48 @@
         | selectattr('name', 'in', gated_roles)
         | selectattr('manage_secret_id', 'equalto', false)
         | list | length == (gated_roles | length)
-    fail_msg: "An apply/admin AI actor role (ai-apply-*/ai-admin) is missing manage_secret_id:false"
+    fail_msg: >-
+      An apply/admin AI actor role (ai-apply-*, ai-admin, ai-admin-session) is
+      missing manage_secret_id:false.
 
-# ai-admin is the ONLY role permitted to self-modify (policy/auth/token). Prove
-# it attaches its own standalone ai-admin policy, NOT the composed base leaves.
-- name: Assert ai-admin is the sole self-modify role (standalone policy, not composed leaves)
+# Both human-gated administrator roles attach the standalone ai-admin policy,
+# never composed base leaves. The session role has a service token and an 8h cap.
+- name: Assert the administrator roles use the standalone policy and bounded session type
   vars:
     admin_role: "{{ openbao_approles | selectattr('name', 'equalto', 'ai-admin') | first }}"
+    session_role: >-
+      {{ openbao_approles | selectattr('name', 'equalto', 'ai-admin-session') | first }}
   ansible.builtin.assert:
     that:
       - admin_role.policy | default('') == 'ai-admin'
       - admin_role.token_policies is not defined
-    fail_msg: "ai-admin must attach the standalone ai-admin policy, not composed base leaves."
+      - session_role.policy | default('') == 'ai-admin'
+      - session_role.token_policies is not defined
+      - session_role.token_type == 'service'
+      - session_role.token_ttl == '1h'
+      - session_role.token_max_ttl == '8h'
+      - session_role.token_explicit_max_ttl == '8h'
+      - session_role.manage_secret_id == false
+      - session_role.secret_id_num_uses == 1
+    fail_msg: >-
+      Administrator roles must use the standalone ai-admin policy; the session
+      role must be human-gated with service tokens and an 8h maximum.
+
+- name: Assert the session role is available only through human unlock
+  vars:
+    human_unlock_policy: >-
+      {{ lookup('template', playbook_dir ~ '/../../roles/openbao/templates/human-unlock-policy.hcl.j2') }}
+    approle_issuer_policy: >-
+      {{ lookup('template', playbook_dir ~ '/../../roles/openbao/templates/approle-issuer-policy.hcl.j2') }}
+  ansible.builtin.assert:
+    that:
+      - "'auth/approle/role/ai-admin-session/secret-id' in human_unlock_policy"
+      - "'auth/approle/role/ai-admin-session/role-id' in human_unlock_policy"
+      - "'auth/approle/role/ai-admin-session/secret-id' not in approle_issuer_policy"
+      - "'auth/approle/role/ai-admin-session/role-id' not in approle_issuer_policy"
+    fail_msg: >-
+      The session role must be mintable through human-unlock only, never through
+      approle-issuer.
 
 - name: Assert every committed exact-claim Terrakube JWT role is declared
   ansible.builtin.assert:

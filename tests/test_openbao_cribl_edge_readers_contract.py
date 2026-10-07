@@ -69,13 +69,13 @@ def _reader_policy(bucket: str) -> str:
 def _read_apps() -> set[str]:
     names = _yaml(DEFAULTS / "05c-terrakube-and-remaining-domain-names.yml")
     edge = _yaml(DEFAULTS / "05h-cribl-edge-readers.yml")
-    generated = _yaml(DEFAULTS / "01c-app-secrets-generated.yml")[
-        "openbao_generated_app_secrets"
-    ]
+    generated_defaults = _yaml(DEFAULTS / "01c-app-secrets-generated.yml")
+    generated = generated_defaults["openbao_generated_app_secrets"]
     promoted = _yaml(DEFAULTS / "01b-app-secrets.yml")["openbao_promoted_app_secrets"]
     values = {
         "openbao_generated_app_secrets": generated,
         "openbao_promoted_app_secrets": promoted,
+        "openbao_router_key_catalog": generated_defaults["openbao_router_key_catalog"],
         "openbao_apps_read_published_apps": names[
             "openbao_apps_read_published_apps"
         ],
@@ -227,6 +227,7 @@ class CriblEdgeReaderContract(unittest.TestCase):
         )["openbao_secrets_domain_approle_names"]
         rotation_values = {}
         for defaults_file in (
+            "05b-domain-policy-approle-names.yml",
             "05c-terrakube-and-remaining-domain-names.yml",
             "05c-ai-agent-names.yml",
             "05-ssh-ca-engine.yml",
@@ -268,7 +269,7 @@ class CriblEdgeReaderContract(unittest.TestCase):
                 )
                 self.assertEqual(_seconds(ttl_defaults["openbao_rotated_domain_secret_id_ttl"]), 129600)
                 self.assertEqual(cidr_defaults["openbao_approle_cidr_class_overrides"][role_name], "workstation")
-                self.assertNotIn(role_name, rotated_roles)
+                self.assertIn(role_name, rotated_roles)
 
     def test_bounds_contract_rejects_unbounded_or_broader_values(self):
         def valid(secret_id_ttl: str, uses: int, cidr_class: str) -> bool:

@@ -11,42 +11,14 @@ openbao_platform_env: "{{ hostvars['localhost'].openbao_platform_env_doc | defau
 openbao_provisioning_token: >-
   {{ lookup('env', 'OPENBAO_PROVISIONING_TOKEN') | default('', true) }}
 
-# --- Routine reconciliation identity (no operator, no admin token) -----------
-# openbao-reconcile owns, BY NAME, the policies and AppRoles this repo declares.
-# It excludes the break-glass tiers and its own policy, so it cannot widen
-# itself. Wiring it here is what makes a change to the CONTENT of an
-# already-declared policy land on a routine converge instead of skipping
-# silently.
-#
-# CONVERGE_ROLE_ID/SECRET_ID (whichever identity scripts/run-ansible.sh
-# actually authenticated as this run) is preferred: the execution plane's own
-# AppRole already carries the reconcile policy, so a plane-run converge needs
-# no separate reconcile secret-zero at all. The dedicated
-# OPENBAO_APPROLE_OPENBAO_RECONCILE_* pair remains the fallback for a
-# workstation converge that supplies it directly. Secret-zero is ambient env
-# (`doppler run`), same as every other AppRole; absent, the role falls back to
-# skipping and says so.
-openbao_reconcile_role_id: >-
-  {{ lookup('env', 'CONVERGE_ROLE_ID')
-     | default(openbao_platform_env['OPENBAO_APPROLE_OPENBAO_RECONCILE_ROLE_ID'], true) }}
-openbao_reconcile_secret_id: >-
-  {{ lookup('env', 'CONVERGE_SECRET_ID')
-     | default(openbao_platform_env['OPENBAO_APPROLE_OPENBAO_RECONCILE_SECRET_ID'], true) }}
-# --- Pre-issued reconcile token (the unattended execution plane) -------------
-# An alternative to holding secret-zero: a token that ALREADY carries the
-# reconcile policy, maintained by whatever runs the converge. The plane had
-# neither, so every routine converge skipped the whole provisioning path and
-# still reported success.
-#
-# A standing secret_id is not the fix — a bounded one expires and returns the
-# silence, an unbounded one is what these bounds exist to remove. A token lets
-# an agent hold the long-lived half, so the converge holds no secret_id at all.
-#
-# Treated as the RECONCILE identity, not a provisioning token: the
-# least-privilege filter below still applies.
-# tests/test_reconcile_identity_paths.py asserts the gating.
-openbao_reconcile_token: >-
-  {{ lookup('env', 'OPENBAO_RECONCILE_TOKEN') | default('', true) }}
+# --- Per-call reconcile identity ---------------------------------------------
+# Never read a stored openbao-reconcile secret_id, or reuse CONVERGE_* for the
+# reconcile login. The routine path authenticates to approle-issuer, mints one
+# target secret_id, logs in as openbao-reconcile, then destroys that secret_id.
+openbao_approle_issuer_role_id: >-
+  {{ lookup('env', 'OPENBAO_APPROLE_APPROLE_ISSUER_ROLE_ID') | default('', true) }}
+openbao_approle_issuer_secret_id: >-
+  {{ lookup('env', 'OPENBAO_APPROLE_APPROLE_ISSUER_SECRET_ID') | default('', true) }}
 
 # The reconcile login is delegated to the controller, so it needs the address
 # the CONTROLLER can reach -- openbao_api_addr is the guest's own bind address.
@@ -88,6 +60,11 @@ openbao_approle_token_max_ttl: 4h
 # token to make that happen.
 openbao_approle_secret_id_ttl: 24h
 openbao_approle_secret_id_num_uses: 30
+# Shared bounds for secret_ids issued per call and the reconcile token window.
+openbao_approle_per_call_secret_id_ttl: 15m
+openbao_approle_per_call_secret_id_num_uses: 1
+openbao_reconcile_approle_token_ttl: 8h
+openbao_reconcile_approle_secret_id_num_uses: 1
 # The human-unlock tier: one wrapped, single-use secret_id per window.
 openbao_approle_human_secret_id_ttl: 15m
 

@@ -150,6 +150,7 @@ openbao_apps_read_published_apps:
 openbao_apps_read_apps: >-
   {{ ((openbao_generated_app_secrets.keys() | list)
       + (openbao_promoted_app_secrets.keys() | list)
+      + (openbao_router_key_catalog.keys() | list)
       + openbao_apps_read_published_apps)
      | reject('in', openbao_apps_read_excluded_generated_apps)
      | unique | sort }}
@@ -157,18 +158,14 @@ openbao_local_llm_policy_name: local-llm
 openbao_local_llm_approle_name: local-llm
 openbao_local_llm_workstation_policy_name: local-llm-workstation
 openbao_local_llm_workstation_approle_name: local-llm-workstation
-# Host identities whose secret-zero is delivered to guests through the env
-# document (secret/platform/ansible/env) rather than the converge operator's
-# environment. openbao-rotate-approles.yml writes them only on an explicit
-# `-e bootstrap_seed_only=true` run; scheduled rotation skips them.
+# Host secret-zero identities delivered through the env document. Seed mode
+# writes these; scheduled rotation follows the domain catalog below.
 openbao_host_secret_zero_approle_names:
   - "{{ openbao_slack_admin_approle_name }}"
   - "{{ openbao_slack_ops_approle_name }}"
   - "{{ openbao_terraform_approle_name }}"
   - "{{ openbao_approle_audit_approle_name }}"
   - "{{ openbao_approle_issuer_approle_name }}"
-  - "{{ openbao_reconcile_approle_name }}"
-  - "{{ openbao_flow_lock_approle_name }}"
   - iac-platform-deploy
 # Every scheduled-rotation AppRole, by name; approle-secret-id-rotate-policy.hcl.j2
 # scopes its secret-id mint/destroy grants to this one list.
@@ -181,9 +178,12 @@ openbao_secrets_domain_approle_names: >-
       openbao_apps_approle_name,
       openbao_local_llm_approle_name,
       openbao_local_llm_workstation_approle_name]
+     + openbao_cribl_edge_mac_approle_names
      + [openbao_agent_ssh_sign_approle_name,
       openbao_hermes_approle_name,
       openbao_open_llm_approle_name] }}
+# Roles using lookup proof despite the runner's source class allowing login.
+openbao_approle_rotation_lookup_proof_names: []
 # Provider-level API credentials live on exact leaves under a separately
 # supplied external KV location. Public configuration carries no path literal.
 openbao_ai_api_key_mount: >-

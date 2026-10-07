@@ -54,11 +54,22 @@ def test_default_ai_policies_can_read_shared_splunk_secret():
     assert 'capabilities = ["read"]' in local_llm
 
 
-def test_unrelated_domain_identity_cannot_read_shared_splunk_secret():
+def test_observability_can_read_only_the_canonical_splunk_search_secret():
     policy = _read("roles/openbao/templates/observability-policy.hcl.j2")
+    exact_grant = (
+        f'{CANONICAL_DATA_PATH} {{\n'
+        '  capabilities = ["read"]\n}'
+    )
+    internal_ai_paths = [
+        line
+        for line in policy.splitlines()
+        if line.startswith('path "{{ openbao_kv_mount }}/data/ai/')
+    ]
 
-    assert "ai/mcp/splunk" not in policy
-    assert "{{ openbao_kv_mount }}/data/ai/" not in policy
+    assert exact_grant in policy
+    assert internal_ai_paths == [f"{CANONICAL_DATA_PATH} {{"]
+    assert CANONICAL_METADATA_PATH not in policy
+    assert 'capabilities = ["create", "update", "read"]' not in policy
 
 
 def test_observability_reads_only_the_openrouter_usage_key():
