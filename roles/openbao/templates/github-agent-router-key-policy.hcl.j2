@@ -1,0 +1,5 @@
+{{ ansible_managed | comment }}
+# Each repository-event agent can read only its own generated LiteLLM key.
+path "{{ item.path }}" {
+  capabilities = ["read"]
+}

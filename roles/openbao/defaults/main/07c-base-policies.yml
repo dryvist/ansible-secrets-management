@@ -73,6 +73,12 @@ openbao_base_policies_static:
     template: local-llm-policy.hcl.j2
   - name: "{{ openbao_local_llm_workstation_policy_name }}"
     template: local-llm-workstation-policy.hcl.j2
+  - name: github-agent-ci-fix
+    template: github-agent-router-key-policy.hcl.j2
+    path: "{{ openbao_kv_mount }}/data/apps/github-actions-ci-fix"
+  - name: github-agent-pr-review
+    template: github-agent-router-key-policy.hcl.j2
+    path: "{{ openbao_kv_mount }}/data/apps/github-actions-pr-review"
   - name: "{{ openbao_hermes_policy_name }}"
     template: hermes-policy.hcl.j2
   - name: "{{ openbao_hermes_write_policy_name }}"

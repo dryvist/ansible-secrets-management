@@ -1,0 +1,10 @@
+---
+# One exact OIDC role per local-only event flow. Each role receives one
+# flow-specific read policy and cannot mint GitHub credentials.
+- name: Reconcile GitHub agent-flow OIDC roles
+  ansible.builtin.include_tasks: reconcile-github-agent-flow.yml
+  loop: "{{ openbao_github_agent_flow_roles }}"
+  loop_control:
+    loop_var: openbao_github_agent_flow
+    label: "{{ openbao_github_agent_flow.name }}"
+  when: openbao_bootstrap_token is defined
