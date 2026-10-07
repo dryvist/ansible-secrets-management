@@ -40,14 +40,15 @@
         _apps_policy: >-
           {{ lookup('template', _openbao_role ~ '/templates/apps-policy.hcl.j2') }}
 
-    - name: Benchmark and program keys are generated once and readable at their source path
+    - name: The benchmark key is generated once and readable at its source path
       ansible.builtin.assert:
         quiet: true
         that:
-          - openbao_router_key_catalog.benchmark[0] == 'benchmark_llm_router_key'
-          - >-
-            openbao_router_key_catalog.benchmark[1:]
-            == llm_router_key_catalog_facts.program_key_catalog.benchmark
+          - openbao_router_key_catalog.keys() | list == ['benchmark']
+          - openbao_router_key_catalog.benchmark == ['benchmark_llm_router_key']
+          - openbao_router_key_catalog.benchmark | length == 1
+          - llm_router_key_catalog_facts.program_key_catalog is not defined
+          - llm_router_key_catalog_facts.program_key_definitions is not defined
           - >-
             openbao_generated_app_secrets | combine(openbao_router_key_catalog)
             | dict2items | selectattr('key', 'equalto', 'benchmark')
