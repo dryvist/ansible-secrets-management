@@ -1,0 +1,58 @@
+---
+- name: Shared router key catalog drives OpenBao generation and read access
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    _openbao_role: "{{ playbook_dir }}/../roles/openbao"
+  tasks:
+    - name: Load the OpenBao promoted-secret defaults
+      ansible.builtin.include_vars:
+        file: "{{ _openbao_role }}/defaults/main/01b-app-secrets.yml"
+
+    - name: Load the OpenBao generated-secret defaults
+      ansible.builtin.include_vars:
+        file: "{{ _openbao_role }}/defaults/main/01c-app-secrets-generated.yml"
+
+    - name: Load the OpenBao app-reader defaults
+      ansible.builtin.include_vars:
+        file: "{{ _openbao_role }}/defaults/main/05c-terrakube-and-remaining-domain-names.yml"
+
+    - name: Load the generated-app exclusions
+      ansible.builtin.include_vars:
+        file: "{{ _openbao_role }}/defaults/main/05h-cribl-edge-readers.yml"
+
+    - name: Load the generated-key lifecycle defaults
+      ansible.builtin.include_vars:
+        file: "{{ _openbao_role }}/defaults/main/01b-app-secret-generation.yml"
+
+    - name: Load the single-source router key catalog
+      ansible.builtin.include_role:
+        name: dryvist.homelab.llm_router_key_catalog
+        public: true
+
+    - name: Set the test KV mount
+      ansible.builtin.set_fact:
+        openbao_kv_mount: secret
+
+    - name: Render the app reader policy for the generated catalog
+      ansible.builtin.set_fact:
+        _apps_policy: >-
+          {{ lookup('template', _openbao_role ~ '/templates/apps-policy.hcl.j2') }}
+
+    - name: Benchmark and program keys are generated once and readable at their source path
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - openbao_router_key_catalog.benchmark[0] == 'benchmark_llm_router_key'
+          - >-
+            openbao_router_key_catalog.benchmark[1:]
+            == llm_router_key_catalog_facts.program_key_catalog.benchmark
+          - >-
+            openbao_generated_app_secrets | combine(openbao_router_key_catalog)
+            | dict2items | selectattr('key', 'equalto', 'benchmark')
+            | map(attribute='value') | first == openbao_router_key_catalog.benchmark
+          - "'benchmark' in openbao_apps_read_apps"
+          - "'path \"secret/data/apps/benchmark\"' in _apps_policy"
+          - "'path \"secret/metadata/apps/benchmark\"' in _apps_policy"
+          - openbao_seed_rotate_fields == []
