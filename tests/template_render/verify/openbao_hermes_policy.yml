@@ -58,6 +58,8 @@
       ansible.builtin.assert:
         that:
           - openbao_hermes_approle_name in openbao_secrets_domain_approle_names
+          - openbao_ai_donna_approle_name in openbao_secrets_domain_approle_names
+          - openbao_approle_env_prefix_overrides[openbao_ai_donna_approle_name] == 'donna'
           - >-
             openbao_secrets_domain_approle_names
             | reject('in', openbao_approle_secret_id_ttl_overrides) | list == []
