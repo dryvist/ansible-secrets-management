@@ -1,6 +1,6 @@
 ---
-# Assert the hermes set maps verbatim, resolve each set's repository list from
-# the reads in 05b-github-app-mount.yml (openbao_github_app_mount_public_repos /
+# Assert the hermes and work set maps verbatim, resolve each set's repository
+# list from the reads in 05b-github-app-mount.yml (openbao_github_app_mount_public_repos /
 # _private_repos) and refuse an unbounded, truncated or visibility-crossing
 # list. Separate file so the
 # template-render tests run the same tasks against fixture responses.
@@ -55,6 +55,19 @@
   loop_control:
     label: "{{ item.name }}"
   when: gm.mount == openbao_github_hermes_mount
+
+- name: "Assert the work sets hold exactly their declared maps on mount {{ gm.mount }}"
+  ansible.builtin.assert:
+    that:
+      - item.permissions == openbao_github_work_set_permissions.get(item.name, {})
+    fail_msg: >-
+      {{ gm.mount }}/permissionset/{{ item.name }} must carry exactly
+      {{ openbao_github_work_set_permissions.get(item.name, {}) }}.
+    quiet: true
+  loop: "{{ gm.permission_sets }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: gm.mount == openbao_github_work_mount
 
 # ponytail: one page of 100; add pagination when a list passes 100 repos.
 - name: "Resolve the set repository lists on mount {{ gm.mount }}"

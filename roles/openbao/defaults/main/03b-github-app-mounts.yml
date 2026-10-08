@@ -9,6 +9,7 @@
 #   github         everyday read/write
 #   github-agents  untrusted-tier writes, scoped by the App's installation
 #   github-hermes  review and allowlisted authoring, split by repository visibility
+#   github-work    read and write over one installation, no administration
 openbao_github_everyday_mount: github
 openbao_github_everyday_dryvist_installation_id: >-
   {{ openbao_platform_env['OPENBAO_GITHUB_DRYVIST_INSTALLATION_ID'] | default('', true) }}
@@ -100,6 +101,39 @@ openbao_github_hermes_permission_sets: >-
          if openbao_github_hermes_author_private_repos | length > 0 else []))
      if openbao_github_hermes_installation_id | length > 0 else [] }}
 
+# github-work: one installation, a read set and a write set, neither holding
+# administration. Its mount follows the hermes shape: no installation ID means
+# no sets, and an empty set list means no mount and no policy.
+openbao_github_work_mount: github-work
+openbao_github_work_installation_id: >-
+  {{ openbao_platform_env['OPENBAO_GITHUB_WORK_INSTALLATION_ID'] | default('', true) }}
+openbao_github_work_read_permissions:
+  contents: read
+  metadata: read
+  pull_requests: read
+  issues: read
+  actions: read
+  checks: read
+openbao_github_work_write_permissions:
+  contents: write
+  pull_requests: write
+  issues: write
+  actions: read
+  checks: read
+  metadata: read
+# Each set's map is asserted verbatim in 05b-github-app-set-checks.yml.
+openbao_github_work_set_permissions:
+  work-read: "{{ openbao_github_work_read_permissions }}"
+  work-write: "{{ openbao_github_work_write_permissions }}"
+openbao_github_work_permission_sets: >-
+  {{ ([{'name': 'work-read',
+        'installation_id': openbao_github_work_installation_id,
+        'permissions': openbao_github_work_read_permissions},
+       {'name': 'work-write',
+        'installation_id': openbao_github_work_installation_id,
+        'permissions': openbao_github_work_write_permissions}]
+      if openbao_github_work_installation_id | length > 0 else []) }}
+
 openbao_github_app_mounts_base:
   - mount: "{{ openbao_github_everyday_mount }}"
     app_id: "{{ lookup('env', 'OPENBAO_GITHUB_EVERYDAY_APP_ID') | default('', true) }}"
@@ -115,7 +149,12 @@ openbao_github_app_mounts: >-
           'app_id': lookup('env', 'OPENBAO_GITHUB_HERMES_APP_ID') | default('', true),
           'private_key': lookup('env', 'OPENBAO_GITHUB_HERMES_APP_PRIVATE_KEY') | default('', true),
           'permission_sets': openbao_github_hermes_permission_sets}]
-        if openbao_github_hermes_permission_sets | length > 0 else []) }}
+        if openbao_github_hermes_permission_sets | length > 0 else [])
+     + ([{'mount': openbao_github_work_mount,
+          'app_id': lookup('env', 'OPENBAO_GITHUB_WORK_APP_ID') | default('', true),
+          'private_key': lookup('env', 'OPENBAO_GITHUB_WORK_PRIVATE_KEY') | default('', true),
+          'permission_sets': openbao_github_work_permission_sets}]
+        if openbao_github_work_permission_sets | length > 0 else []) }}
 
 # Accounts any App may be installed on: a comma-separated list in the env
 # document (openbao_platform_env). The exposure check fails closed while it is
