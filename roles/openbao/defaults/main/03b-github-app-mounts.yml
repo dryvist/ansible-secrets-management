@@ -126,13 +126,10 @@ openbao_github_work_set_permissions:
   work-read: "{{ openbao_github_work_read_permissions }}"
   work-write: "{{ openbao_github_work_write_permissions }}"
 openbao_github_work_permission_sets: >-
-  {{ ([{'name': 'work-read',
-        'installation_id': openbao_github_work_installation_id,
-        'permissions': openbao_github_work_read_permissions},
-       {'name': 'work-write',
-        'installation_id': openbao_github_work_installation_id,
-        'permissions': openbao_github_work_write_permissions}]
-      if openbao_github_work_installation_id | length > 0 else []) }}
+  {{ (openbao_github_work_set_permissions
+      | dict2items(key_name='name', value_name='permissions')
+      | map('combine', {'installation_id': openbao_github_work_installation_id}) | list)
+     if openbao_github_work_installation_id | length > 0 else [] }}
 
 openbao_github_app_mounts_base:
   - mount: "{{ openbao_github_everyday_mount }}"
