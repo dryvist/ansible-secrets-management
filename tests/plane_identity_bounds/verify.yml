@@ -122,24 +122,24 @@
     - name: The dispatcher and workstation tool identities keep finite secret_id bounds
       vars:
         rows: >-
-          {{ openbao_approles | selectattr('name', 'equalto', item) | list }}
+          {{ openbao_approles | selectattr('name', 'equalto', item.name) | list }}
       ansible.builtin.assert:
         that:
           - rows | length > 0
           - >-
             rows | map(attribute='secret_id_num_uses',
                        default=openbao_approle_secret_id_num_uses_overrides.get(
-                         item, openbao_approle_secret_id_num_uses))
-            | map('int') | unique | list == [30]
+                         item.name, openbao_approle_secret_id_num_uses))
+            | map('int') | unique | list == [item.uses]
           - >-
             rows | map(attribute='secret_id_ttl',
                        default=openbao_approle_secret_id_ttl_overrides.get(
-                         item, openbao_approle_secret_id_ttl))
+                         item.name, openbao_approle_secret_id_ttl))
             | map('community.general.to_seconds') | map('int') | unique | list == [86400]
-        fail_msg: "{{ item }} requires a 30-use, 24-hour secret_id."
+        fail_msg: "{{ item.name }} requires a {{ item.uses }}-use, 24-hour secret_id (0 = unlimited)."
       loop:
-        - "{{ openbao_open_llm_approle_name }}"
-        - proxman
+        - { name: "{{ openbao_open_llm_approle_name }}", uses: 0 }
+        - { name: proxman, uses: 30 }
 
     - name: The dispatcher pair is rotated on schedule and never republished to Doppler
       ansible.builtin.assert:
