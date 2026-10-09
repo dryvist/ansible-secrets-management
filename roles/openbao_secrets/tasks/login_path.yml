@@ -1,0 +1,36 @@
+---
+# Decides how ONE domain logs in; included by fetch_domain.yml. The workstation
+# issuer exchange is taken only when the domain declares workstation_issuer_role,
+# the approle-issuer pair is complete, and flow-lock resolves on the controller,
+# where the fetch runs (main.yml delegates it to localhost). Otherwise the domain
+# logs in with its stored pair. The path taken is reported for every domain that
+# has a login.
+- name: Derive the domain login path for {{ openbao_domain.name }}
+  ansible.builtin.set_fact:
+    openbao_secrets_domain_use_issuer: >-
+      {{ (openbao_domain.workstation_issuer_role | default('') | length > 0)
+         and openbao_secrets_domain_issuer_available | bool
+         and (lookup('ansible.builtin.pipe', 'command -v flow-lock || true') | length > 0) }}
+  no_log: true
+
+- name: Derive whether a login is configured for {{ openbao_domain.name }}
+  ansible.builtin.set_fact:
+    openbao_secrets_domain_login_configured: >-
+      {{ openbao_secrets_domain_use_issuer | bool
+         or (openbao_secrets_domain_role_id | length > 0
+             and openbao_secrets_domain_secret_id | length > 0) }}
+  no_log: true
+
+- name: Report the login path for {{ openbao_domain.name }}
+  ansible.builtin.debug:
+    msg: >-
+      {{ openbao_domain.name }}:
+      {% if openbao_secrets_domain_use_issuer | bool -%}
+      workstation issuer exchange ({{ openbao_domain.workstation_issuer_role }})
+      {%- elif (openbao_domain.workstation_issuer_role | default('') | length > 0)
+               and openbao_secrets_domain_issuer_available | bool -%}
+      stored AppRole pair (approle-issuer pair present, flow-lock not found on the controller)
+      {%- else -%}
+      stored AppRole pair
+      {%- endif %}
+  when: openbao_secrets_domain_login_configured | bool

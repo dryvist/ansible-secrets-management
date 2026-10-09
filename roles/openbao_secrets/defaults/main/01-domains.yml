@@ -4,8 +4,9 @@
 # with non-alphanumerics -> '_' -- the same formula every other AppRole
 # credential helper in this estate already uses. A legacy
 # <NAME>_VAULT_{ROLE,SECRET}_ID pair is tried second for migration safety.
-# Domains declaring workstation_issuer_role use the existing per-call issuer
-# client when available; plane callers without issuer inputs keep their pair.
+# Domains declaring workstation_issuer_role use the per-call issuer client
+# when the approle-issuer pair is set and flow-lock resolves on the
+# controller; every other caller keeps its stored pair (tasks/login_path.yml).
 openbao_secrets_domains:
   - name: observability
     workstation_issuer_role: observability-workstation

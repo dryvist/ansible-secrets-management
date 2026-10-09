@@ -55,17 +55,8 @@
                    else '', true) }}
   no_log: true
 
-- name: Derive the domain login path for {{ openbao_domain.name }}
-  ansible.builtin.set_fact:
-    openbao_secrets_domain_use_issuer: >-
-      {{ (openbao_domain.workstation_issuer_role | default('') | length > 0)
-         and openbao_secrets_domain_issuer_available | bool }}
-    openbao_secrets_domain_login_configured: >-
-      {{ ((openbao_domain.workstation_issuer_role | default('') | length > 0)
-          and openbao_secrets_domain_issuer_available | bool)
-         or (openbao_secrets_domain_role_id | length > 0
-             and openbao_secrets_domain_secret_id | length > 0) }}
-  no_log: true
+- name: Decide the login path for {{ openbao_domain.name }}
+  ansible.builtin.include_tasks: login_path.yml
 
 - name: Fail on an incomplete workstation issuer pair for {{ openbao_domain.name }}
   ansible.builtin.fail:
