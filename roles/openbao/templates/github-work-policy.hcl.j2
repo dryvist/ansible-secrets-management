@@ -1,0 +1,16 @@
+{{ ansible_managed | comment }}
+# github-work — the work identity's GitHub tokens, minted only from the
+# {{ openbao_github_work_mount }} mount. Each path is one permission set, and
+# each set is pinned to that mount's single App installation. The raw
+# {{ openbao_github_work_mount }}/token endpoint, the other GitHub mounts and
+# every other set are not granted.
+#
+# create is granted with read and update: a POST mint routes as CreateOperation
+# on the plugin's token paths, which have no existence check (the same
+# requirement as the github-write raw token path).
+{% for permission_set in openbao_github_work_permission_sets %}
+path "{{ openbao_github_work_mount }}/token/{{ permission_set.name }}" {
+  capabilities = ["create", "read", "update"]
+}
+
+{% endfor %}

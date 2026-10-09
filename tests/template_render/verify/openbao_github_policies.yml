@@ -322,6 +322,15 @@
           - openbao_github_app_mount_sets == []
         fail_msg: The agents mount must carry no permission set; its App installation is the scope.
 
+    - name: Assert no other tier reaches the work mount
+      ansible.builtin.assert:
+        that:
+          - >-
+            (_publisher_paths + _mint_paths + _read_paths + _repo_create_paths
+             + _org_admin_paths + _write_paths + _open_llm_paths + _ai_public_paths)
+            | select('match', '^' ~ openbao_github_work_mount ~ '/') | list == []
+        fail_msg: Only github-work may mint from {{ openbao_github_work_mount }}.
+
     - name: Assert no set on the per-App mounts carries administration
       ansible.builtin.assert:
         that:

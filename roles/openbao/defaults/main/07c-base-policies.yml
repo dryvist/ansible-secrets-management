@@ -124,6 +124,8 @@ openbao_base_policies_static:
     template: hermes-public-policy.hcl.j2
   - name: "{{ openbao_github_hermes_private_policy_name }}"
     template: hermes-private-policy.hcl.j2
+  - name: "{{ openbao_github_work_policy_name }}"
+    template: github-work-policy.hcl.j2
   - name: "{{ openbao_reconcile_policy_name }}"
     template: openbao-reconcile-policy.hcl.j2
   - name: "{{ openbao_policy_sync_policy_name }}"
@@ -212,13 +214,16 @@ openbao_credential_publish_apps:
 
 # Policies whose template emits a `path` stanza only for a configured input.
 # With that input unset the mount they govern is not created either (see
-# openbao_github_hermes_permission_sets), so the policies are not declared:
-# `bao policy write` replaces the stored ACL, and an empty render must never
-# reach it. Setting the input brings the mount and its policies back together.
+# openbao_github_hermes_permission_sets and openbao_github_work_permission_sets),
+# so the policies are not declared: `bao policy write` replaces the stored ACL,
+# and an empty render must never reach it. Setting the input brings the mount
+# and its policies back together.
 openbao_policies_without_inputs: >-
-  {{ [openbao_github_hermes_public_policy_name,
-      openbao_github_hermes_private_policy_name]
-     if openbao_github_hermes_permission_sets | length == 0 else [] }}
+  {{ ([openbao_github_hermes_public_policy_name,
+       openbao_github_hermes_private_policy_name]
+      if openbao_github_hermes_permission_sets | length == 0 else [])
+     + ([openbao_github_work_policy_name]
+        if openbao_github_work_permission_sets | length == 0 else []) }}
 
 openbao_policies: >-
   {{ (openbao_base_policies

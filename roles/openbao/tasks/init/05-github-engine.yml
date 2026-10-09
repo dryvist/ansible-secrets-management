@@ -26,8 +26,12 @@
       -version={{ openbao_github_plugin_catalog_version }}
       secret {{ openbao_github_plugin_name }}
   environment:
-    BAO_ADDR: "{{ openbao_write_addr }}"
+    BAO_ADDR: "{{ openbao_cli_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
   register: openbao_github_plugin_check
   no_log: true
   changed_when: false
@@ -45,8 +49,12 @@
       -version={{ openbao_github_plugin_catalog_version }}
       secret {{ openbao_github_plugin_name }}
   environment:
-    BAO_ADDR: "{{ openbao_write_addr }}"
+    BAO_ADDR: "{{ openbao_cli_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
   register: openbao_github_plugin_register
   no_log: true
   changed_when: true
@@ -62,8 +70,12 @@
       -plugin-version={{ openbao_github_plugin_catalog_version }}
       {{ openbao_github_plugin_name }}
   environment:
-    BAO_ADDR: "{{ openbao_write_addr }}"
+    BAO_ADDR: "{{ openbao_cli_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
   no_log: true
   changed_when: true
   when:
@@ -77,8 +89,12 @@
       bao secrets tune -plugin-version={{ openbao_github_plugin_catalog_version }}
       {{ openbao_github_mount }}/
   environment:
-    BAO_ADDR: "{{ openbao_write_addr }}"
+    BAO_ADDR: "{{ openbao_cli_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
   register: openbao_github_plugin_tune
   no_log: true
   changed_when: true
@@ -94,8 +110,12 @@
   ansible.builtin.command:
     cmd: "bao plugin reload -plugin={{ openbao_github_plugin_name }} -scope=global"
   environment:
-    BAO_ADDR: "{{ openbao_write_addr }}"
+    BAO_ADDR: "{{ openbao_cli_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
   no_log: true
   changed_when: true
   when:
@@ -109,8 +129,12 @@
   ansible.builtin.command:
     cmd: "bao read -format=json {{ openbao_github_mount }}/config"
   environment:
-    BAO_ADDR: "{{ openbao_write_addr }}"
+    BAO_ADDR: "{{ openbao_cli_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
   register: openbao_github_config_check
   no_log: true
   changed_when: false
@@ -148,7 +172,7 @@
 
 - name: Configure the GitHub App credentials (first configuration only)
   ansible.builtin.uri:
-    url: "{{ openbao_api_addr }}/v1/{{ openbao_github_mount }}/config"
+    url: "{{ openbao_cli_addr }}/v1/{{ openbao_github_mount }}/config"
     method: POST
     headers:
       X-Vault-Token: "{{ openbao_bootstrap_token }}"
@@ -160,6 +184,10 @@
     status_code:
       - 200
       - 204
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
   no_log: true
   when:
     - openbao_bootstrap_token is defined
@@ -261,7 +289,7 @@
 - name: Reconcile the GitHub token permission sets
   ansible.builtin.uri:
     url: >-
-      {{ openbao_api_addr }}/v1/{{ openbao_github_mount
+      {{ openbao_cli_addr }}/v1/{{ openbao_github_mount
       }}/permissionset/{{ item.0.name }}
     method: POST
     headers:
@@ -276,6 +304,10 @@
     status_code:
       - 200
       - 204
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
   loop: >-
     {{ openbao_github_admin_permission_sets
        | zip(openbao_github_permission_set_checks.results | default([])) | list }}

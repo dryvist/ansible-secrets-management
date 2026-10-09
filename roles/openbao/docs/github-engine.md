@@ -17,6 +17,7 @@ configuration, so each App's own grant caps every token its mount mints:
 | `github-admin` | admin | admin, repo-create, docs-publisher, runner, exporter |
 | `github-agents` | agents | none: `open-llm` mints from the raw `github-agents/token`, pinned to the App's installation |
 | `github-hermes` | hermes | `hermes-{review,author}-{public,private}`, split by repository visibility |
+| `github-work` | work | `work-read` and `work-write`, both pinned to the work installation; no administration |
 
 A key is required only for first configuration or an explicit rotation; routine
 converges never rewrite it. Installation IDs come from the env document

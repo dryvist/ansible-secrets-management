@@ -62,8 +62,12 @@
          | map('regex_replace', '^', 'paths=sys/policies/acl/')
          | join(' ') }}
   environment:
-    BAO_ADDR: "{{ openbao_write_addr }}"
+    BAO_ADDR: "{{ openbao_cli_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
   register: openbao_policy_capabilities
   changed_when: false
   failed_when: false

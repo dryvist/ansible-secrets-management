@@ -107,6 +107,19 @@ openbao_workstation_approles:
     token_max_ttl: 15m
     secret_id_ttl: "0s"
     secret_id_num_uses: 0
+  # github-work: the work identity's GitHub tokens through the github-work
+  # mount, both sets pinned to one installation. Workstation class (08b) and a
+  # short token. manage_secret_id: false, so human-unlock mints the secret_id
+  # and it lives root-owned on the workstation; the converge never reads or
+  # publishes it, so it is never in Doppler. secret_id "0s" and 0 uses, as for
+  # github-write: nothing re-mints it, so a finite bound would expire a
+  # credential nothing replaces.
+  - name: "{{ openbao_github_work_approle_name }}"
+    policy: "{{ openbao_github_work_policy_name }}"
+    token_ttl: 30m
+    manage_secret_id: false
+    secret_id_ttl: "0s"
+    secret_id_num_uses: 0
   # admin-issuer: mints secret_ids for the role above, rotates its own, and
   # carries the everyday write policies (github-write and every write realm).
   # INERT and non-expiring: issued once, never re-minted by the converge or

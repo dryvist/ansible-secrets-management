@@ -5,8 +5,12 @@
       bao read -format=json
       auth/{{ openbao_github_oidc_auth_path }}/role/{{ openbao_github_agent_flow.name }}
   environment:
-    BAO_ADDR: "{{ openbao_write_addr }}"
+    BAO_ADDR: "{{ openbao_cli_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
   register: openbao_github_agent_flow_role_current
   no_log: true
   changed_when: false
@@ -14,6 +18,7 @@
 
 - name: Reconcile the GitHub agent-flow OIDC role
   vars:
+    ansible_become: "{{ openbao_cli_become }}"
     _agent_flow_claims:
       repository: "{{ openbao_github_agent_flow.repository }}"
       job_workflow_ref: "{{ openbao_github_agent_flow.job_workflow_ref }}"
@@ -39,8 +44,10 @@
             'token_ttl': openbao_github_agent_flow.token_ttl,
             'token_max_ttl': openbao_github_agent_flow.token_max_ttl} | to_json }}
   environment:
-    BAO_ADDR: "{{ openbao_write_addr }}"
+    BAO_ADDR: "{{ openbao_cli_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
   no_log: true
   changed_when: true
   when: >-

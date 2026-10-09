@@ -27,8 +27,12 @@
       -version={{ openbao_aws_plugin_catalog_version }}
       secret {{ openbao_aws_plugin_name }}
   environment:
-    BAO_ADDR: "{{ openbao_write_addr }}"
+    BAO_ADDR: "{{ openbao_cli_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
   register: openbao_aws_plugin_check
   no_log: true
   changed_when: false
@@ -46,8 +50,12 @@
       -version={{ openbao_aws_plugin_catalog_version }}
       secret {{ openbao_aws_plugin_name }}
   environment:
-    BAO_ADDR: "{{ openbao_write_addr }}"
+    BAO_ADDR: "{{ openbao_cli_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
   no_log: true
   register: openbao_aws_plugin_register
   changed_when: true
@@ -63,8 +71,12 @@
       -plugin-version={{ openbao_aws_plugin_catalog_version }}
       {{ openbao_aws_plugin_name }}
   environment:
-    BAO_ADDR: "{{ openbao_write_addr }}"
+    BAO_ADDR: "{{ openbao_cli_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
   no_log: true
   changed_when: true
   when:
@@ -78,8 +90,12 @@
       bao secrets tune -plugin-version={{ openbao_aws_plugin_catalog_version }}
       {{ openbao_aws_mount }}/
   environment:
-    BAO_ADDR: "{{ openbao_write_addr }}"
+    BAO_ADDR: "{{ openbao_cli_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
   no_log: true
   register: openbao_aws_plugin_tune
   changed_when: true
@@ -95,8 +111,12 @@
   ansible.builtin.command:
     cmd: "bao plugin reload -plugin={{ openbao_aws_plugin_name }} -scope=global"
   environment:
-    BAO_ADDR: "{{ openbao_write_addr }}"
+    BAO_ADDR: "{{ openbao_cli_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
   no_log: true
   changed_when: true
   when:
@@ -113,8 +133,12 @@
   ansible.builtin.command:
     cmd: "bao read -format=json {{ openbao_aws_mount }}/config/root"
   environment:
-    BAO_ADDR: "{{ openbao_write_addr }}"
+    BAO_ADDR: "{{ openbao_cli_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
   register: openbao_aws_root_check
   no_log: true
   changed_when: false
@@ -146,7 +170,7 @@
 # deliberate, separate operator action.
 - name: Configure the AWS engine root credentials (first configuration only)
   ansible.builtin.uri:
-    url: "{{ openbao_api_addr }}/v1/{{ openbao_aws_mount }}/config/root"
+    url: "{{ openbao_cli_addr }}/v1/{{ openbao_aws_mount }}/config/root"
     method: POST
     headers:
       X-Vault-Token: "{{ openbao_bootstrap_token }}"
@@ -158,6 +182,10 @@
     status_code:
       - 200
       - 204
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
   no_log: true
   changed_when: true
   when:
@@ -171,8 +199,12 @@
   ansible.builtin.command:
     cmd: "bao read -format=json {{ openbao_aws_mount }}/roles/{{ openbao_aws_role_name }}"
   environment:
-    BAO_ADDR: "{{ openbao_write_addr }}"
+    BAO_ADDR: "{{ openbao_cli_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
   register: openbao_aws_role_check
   no_log: true
   changed_when: false
@@ -190,8 +222,12 @@
       default_sts_ttl={{ openbao_aws_default_sts_ttl }}
       max_sts_ttl={{ openbao_aws_max_sts_ttl }}
   environment:
-    BAO_ADDR: "{{ openbao_write_addr }}"
+    BAO_ADDR: "{{ openbao_cli_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
   no_log: true
   changed_when: true
   when:
@@ -204,8 +240,12 @@
   ansible.builtin.command:
     cmd: "bao read -format=json {{ openbao_aws_mount }}/roles/{{ openbao_aws_iac_admin_role_name }}"
   environment:
-    BAO_ADDR: "{{ openbao_write_addr }}"
+    BAO_ADDR: "{{ openbao_cli_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
   register: openbao_aws_iac_admin_role_check
   no_log: true
   changed_when: false
@@ -223,8 +263,12 @@
       default_sts_ttl={{ openbao_aws_iac_admin_default_sts_ttl }}
       max_sts_ttl={{ openbao_aws_iac_admin_max_sts_ttl }}
   environment:
-    BAO_ADDR: "{{ openbao_write_addr }}"
+    BAO_ADDR: "{{ openbao_cli_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
   no_log: true
   changed_when: true
   when:
@@ -239,8 +283,12 @@
       bao read -format=json
       {{ openbao_aws_mount }}/roles/{{ openbao_aws_hermes_webhook_consumer_role_name }}
   environment:
-    BAO_ADDR: "{{ openbao_write_addr }}"
+    BAO_ADDR: "{{ openbao_cli_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
   register: openbao_aws_hermes_webhook_consumer_role_check
   no_log: true
   changed_when: false
@@ -259,8 +307,12 @@
       default_sts_ttl={{ openbao_aws_hermes_webhook_consumer_sts_ttl }}
       max_sts_ttl={{ openbao_aws_hermes_webhook_consumer_sts_ttl }}
   environment:
-    BAO_ADDR: "{{ openbao_write_addr }}"
+    BAO_ADDR: "{{ openbao_cli_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
   no_log: true
   changed_when: true
   when:
