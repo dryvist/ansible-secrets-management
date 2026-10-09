@@ -122,6 +122,10 @@ openbao_approle_secret_id_num_uses_overrides:
   # session; capping redemptions here would strand them at an arbitrary login.
   # Bounded instead by the CIDR class below until it is deliberately re-minted.
   ai-orchestrator: 0
+  # The dispatcher redeems its secret_id once per job and once per renewal, so
+  # a use cap empties it between rotations. Bounded by the 24h ttl, the
+  # scheduled 12h rotation and its single-host CIDR instead.
+  open-llm: 0
   # github-read / github-write moved to their 07b declarations, next to the
   # secret_id_ttl they pair with.
   # The write realm roles (github-write-work etc.) keep the default 30-use cap

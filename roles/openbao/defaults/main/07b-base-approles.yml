@@ -211,8 +211,8 @@ openbao_base_approles_core:
     policy: "{{ openbao_ai_orchestrator_policy_name }}"
     token_ttl: 30m  # demoted: broad-write identity gets a short token TTL
   # open-llm: the untrusted-tier dispatcher. Machine class, bound to the
-  # dispatcher host's /32. Its secret_id keeps the global finite bounds
-  # (24h, 30 uses); tests/plane_identity_bounds/verify.yml fails on 0/0.
+  # dispatcher host's /32. Its secret_id keeps the 24h ttl with unlimited uses
+  # (08a overrides); tests/plane_identity_bounds/verify.yml pins both.
   # 15m token, renewed up to a 60m job budget through the default policy's
   # renew-self.
   - name: "{{ openbao_open_llm_approle_name }}"
