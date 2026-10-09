@@ -40,7 +40,6 @@ openbao_approle_secret_id_rotate_approle_name: approle-secret-id-rotate
 # wrap a secret_id every cycle) can authenticate. Same machine class and
 # same secret_id lifetime as every other unattended machine identity
 # (openbao_approle_cidr_class_map's default + openbao_approle_secret_id_ttl
-# / _num_uses -- no override, see splunk-mcp-rotate for the identical
-# precedent): liveness-probed and re-minted by a provisioning run exactly
+# / _num_uses -- no override): liveness-probed and re-minted by a provisioning run exactly
 # like the domain AppRoles this identity itself rotates.
 openbao_approle_secret_id_rotate_scheduled_approle_name: approle-secret-id-rotate-scheduled

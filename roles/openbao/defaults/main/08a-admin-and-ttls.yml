@@ -116,6 +116,16 @@ openbao_approle_secret_id_ttl_overrides:
   # tests/plane_identity_bounds/verify.yml pins it to 24h / 30 uses.
   open-llm: "{{ openbao_approle_secret_id_ttl }}"
   approle-secret-id-rotate-scheduled: "{{ openbao_rotated_domain_secret_id_ttl }}"
+  # Standing identities outside the scheduled rotation: their secret_id is
+  # rendered onto the host (or held by the operator's deploy) at converge
+  # time, and nothing re-mints it. Non-expiring, bounded by the source-address
+  # class each carries in 08b, the same shape as the roles declared "0s" in
+  # 07b/07d. slack-admin and slack-ops take the same value from 04.
+  iac-platform-deploy: "0s"
+  snapshot: "0s"
+  splunk-mcp-rotate: "0s"
+  secret-age-audit: "0s"
+  github-runner: "0s"
 # num_uses 0 (unlimited redemptions) is permitted ONLY with a reason on the line.
 openbao_approle_secret_id_num_uses_overrides:
   # Its secret_id is live, non-expiring, and in active use by every agent
@@ -126,6 +136,16 @@ openbao_approle_secret_id_num_uses_overrides:
   # a use cap empties it between rotations. Bounded by the 24h ttl, the
   # scheduled 12h rotation and its single-host CIDR instead.
   open-llm: 0
+  # The standing, non-expiring identities above: each systemd timer, runner
+  # agent or deploy redeems its one secret_id on every run, so a redemption
+  # cap would strand it mid-schedule. Bounded by its 08b source class instead.
+  iac-platform-deploy: 0  # operator deploy, redeemed per run
+  snapshot: 0  # snapshot timer, redeemed per run
+  splunk-mcp-rotate: 0  # splunk-mcp rotator timer, redeemed per run
+  secret-age-audit: 0  # secret-age timer, redeemed per run
+  github-runner: 0  # runner bao agent, redeemed per job
+  slack-admin: 0  # slack-admin rotator timer, redeemed per run
+  slack-ops: 0  # workstation Slack helper, redeemed per call
   # github-read / github-write moved to their 07b declarations, next to the
   # secret_id_ttl they pair with.
   # The write realm roles (github-write-work etc.) keep the default 30-use cap

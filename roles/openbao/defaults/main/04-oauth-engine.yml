@@ -29,13 +29,12 @@ openbao_oauthapp_plugin_tarball_sha256: 086b84e0199a63a05fc73dd198eadc962b10c413
 openbao_slack_admin_policy_name: slack-admin
 openbao_slack_admin_approle_name: slack-admin
 # Token TTL stays short-lived: each minted token is held only for the
-# duration of a rotation. The secret_id is a separate, standing credential,
-# but "standing" no longer means non-expiring — it takes the estate-wide
-# machine bound (openbao_approle_secret_id_ttl) like github-read, github-write
-# and flow-lock, because a rotation job's credential that never expires is a
-# permanent key sitting in a systemd env file.
+# duration of a rotation. The secret_id is a separate, standing credential
+# rendered into the rotator's systemd env file at converge time; nothing
+# re-mints it, so it is non-expiring and bounded by the source-address class
+# slack-admin carries in 08b (redemptions: 08a).
 openbao_slack_admin_token_ttl: 15m
-openbao_slack_admin_secret_id_ttl: "{{ openbao_approle_secret_id_ttl }}"
+openbao_slack_admin_secret_id_ttl: "0s"
 
 # slack-ops: read-only on the single secrets-external KV-v2 entry holding the
 # static, non-expiring homelabops bot token (conversations.*/chat.* scopes) —
@@ -43,7 +42,7 @@ openbao_slack_admin_secret_id_ttl: "{{ openbao_approle_secret_id_ttl }}"
 openbao_slack_ops_policy_name: slack-ops
 openbao_slack_ops_approle_name: slack-ops
 # Token TTL stays short-lived like slack-admin: each minted token is held
-# only for the duration of one request. Its secret_id takes the same
-# estate-wide machine bound as slack-admin's, for the same reason.
+# only for the duration of one request. Its secret_id has the same shape as
+# slack-admin's: non-expiring, bounded by its 08b source-address class.
 openbao_slack_ops_token_ttl: 15m
-openbao_slack_ops_secret_id_ttl: "{{ openbao_approle_secret_id_ttl }}"
+openbao_slack_ops_secret_id_ttl: "0s"
