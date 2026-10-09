@@ -81,6 +81,9 @@ class TestApproleLockoutTune(unittest.TestCase):
         # Only exercising the drift-comparison condition, so satisfy the
         # sibling "openbao_bootstrap_token is defined" gate with a stand-in.
         self.variables["openbao_bootstrap_token"] = "test-token"
+        # The task's vars also resolve the CLI switch's become value, which is
+        # defined outside the defaults file loaded here.
+        self.variables["openbao_cli_become"] = False
         self.task = _task()
 
     def test_lockout_defaults_are_declared_and_non_empty(self):

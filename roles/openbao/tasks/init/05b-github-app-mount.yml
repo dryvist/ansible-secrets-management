@@ -11,8 +11,12 @@
       -plugin-version={{ openbao_github_plugin_catalog_version }}
       {{ openbao_github_plugin_name }}
   environment:
-    BAO_ADDR: "{{ openbao_write_addr }}"
+    BAO_ADDR: "{{ openbao_cli_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
   no_log: true
   changed_when: true
   when: (gm.mount ~ '/') not in (openbao_mounts_raw.stdout | from_json).keys()
@@ -21,8 +25,12 @@
   ansible.builtin.command:
     cmd: "bao read -format=json {{ gm.mount }}/config"
   environment:
-    BAO_ADDR: "{{ openbao_write_addr }}"
+    BAO_ADDR: "{{ openbao_cli_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
   register: openbao_github_app_mount_config
   no_log: true
   changed_when: false
@@ -37,7 +45,7 @@
 
 - name: "Configure the App credentials (first or deliberate) on mount {{ gm.mount }}"
   ansible.builtin.uri:
-    url: "{{ openbao_api_addr }}/v1/{{ gm.mount }}/config"
+    url: "{{ openbao_cli_addr }}/v1/{{ gm.mount }}/config"
     method: POST
     headers:
       X-Vault-Token: "{{ openbao_bootstrap_token }}"
@@ -49,6 +57,10 @@
     status_code:
       - 200
       - 204
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
   no_log: true
   register: openbao_github_app_mount_configure
   when:
@@ -102,7 +114,7 @@
 # metadata-only token minted from this mount and revoked straight after.
 - name: "Mint a metadata-only token for sets that are private-only on mount {{ gm.mount }}"
   ansible.builtin.uri:
-    url: "{{ openbao_api_addr }}/v1/{{ gm.mount }}/token"
+    url: "{{ openbao_cli_addr }}/v1/{{ gm.mount }}/token"
     method: POST
     headers:
       X-Vault-Token: "{{ openbao_bootstrap_token }}"
@@ -111,6 +123,10 @@
       installation_id: "{{ item.installation_id | int }}"
       permissions:
         metadata: read
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
   loop: "{{ gm.permission_sets | selectattr('private_repos_of', 'defined') | list }}"
   loop_control:
     label: "{{ item.name }}"
@@ -132,7 +148,7 @@
 
 - name: "Revoke the metadata-only tokens on mount {{ gm.mount }}"
   ansible.builtin.uri:
-    url: "{{ openbao_api_addr }}/v1/sys/leases/revoke"
+    url: "{{ openbao_cli_addr }}/v1/sys/leases/revoke"
     method: PUT
     headers:
       X-Vault-Token: "{{ openbao_bootstrap_token }}"
@@ -142,6 +158,10 @@
     status_code:
       - 200
       - 204
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
   loop: "{{ openbao_github_app_mount_private_tokens.results }}"
   loop_control:
     label: "{{ item.item.name }}"
@@ -171,7 +191,7 @@
 
 - name: "Reconcile the permission sets on mount {{ gm.mount }}"
   ansible.builtin.uri:
-    url: "{{ openbao_api_addr }}/v1/{{ gm.mount }}/permissionset/{{ item.0.name }}"
+    url: "{{ openbao_cli_addr }}/v1/{{ gm.mount }}/permissionset/{{ item.0.name }}"
     method: POST
     headers:
       X-Vault-Token: "{{ openbao_bootstrap_token }}"
@@ -184,6 +204,10 @@
     status_code:
       - 200
       - 204
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
   loop: >-
     {{ openbao_github_app_mount_sets
        | zip(openbao_github_app_mount_set_checks.results | default([])) | list }}
@@ -203,8 +227,12 @@
   ansible.builtin.command:
     cmd: "bao list -format=json {{ gm.mount }}/permissionset"
   environment:
-    BAO_ADDR: "{{ openbao_write_addr }}"
+    BAO_ADDR: "{{ openbao_cli_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
   register: openbao_github_app_mount_set_list
   no_log: true
   changed_when: false
@@ -216,8 +244,12 @@
   ansible.builtin.command:
     cmd: "bao delete {{ gm.mount }}/permissionset/{{ item }}"
   environment:
-    BAO_ADDR: "{{ openbao_write_addr }}"
+    BAO_ADDR: "{{ openbao_cli_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
   loop: >-
     {{ ((openbao_github_app_mount_set_list.stdout | default('[]', true)) | from_json)
        | difference(openbao_github_app_mount_sets | map(attribute='name') | list) }}

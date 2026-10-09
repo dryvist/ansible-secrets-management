@@ -16,8 +16,12 @@
   ansible.builtin.command:
     cmd: bao auth enable userpass
   environment:
-    BAO_ADDR: "{{ openbao_write_addr }}"
+    BAO_ADDR: "{{ openbao_cli_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
   no_log: true
   changed_when: true
   when:
@@ -33,8 +37,12 @@
   ansible.builtin.command:
     cmd: "bao read -format=json auth/userpass/users/{{ openbao_human_unlock_user }}"
   environment:
-    BAO_ADDR: "{{ openbao_write_addr }}"
+    BAO_ADDR: "{{ openbao_cli_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
   register: openbao_human_unlock_user_check
   no_log: true
   changed_when: false
@@ -67,8 +75,12 @@
       {{ ('token_bound_cidrs=' ~ openbao_approle_cidr_classes[openbao_human_unlock_cidr_class])
          if (openbao_approle_cidr_classes[openbao_human_unlock_cidr_class] | length > 0) else '' }}
   environment:
-    BAO_ADDR: "{{ openbao_write_addr }}"
+    BAO_ADDR: "{{ openbao_cli_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
   no_log: true
   changed_when: true
   when:
@@ -83,8 +95,12 @@
   ansible.builtin.command:
     cmd: bao list -format=json identity/mfa/method/totp
   environment:
-    BAO_ADDR: "{{ openbao_write_addr }}"
+    BAO_ADDR: "{{ openbao_cli_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
   register: openbao_mfa_totp_list
   no_log: true
   changed_when: false
@@ -105,8 +121,12 @@
   ansible.builtin.command:
     cmd: bao write -format=json sys/capabilities-self paths=identity/mfa/method/totp
   environment:
-    BAO_ADDR: "{{ openbao_write_addr }}"
+    BAO_ADDR: "{{ openbao_cli_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
   register: openbao_mfa_capabilities
   changed_when: false
   failed_when: false
@@ -191,8 +211,12 @@
       method_name={{ openbao_human_unlock_mfa_method_name }}
       issuer={{ openbao_human_unlock_mfa_issuer }}
   environment:
-    BAO_ADDR: "{{ openbao_write_addr }}"
+    BAO_ADDR: "{{ openbao_cli_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
   register: openbao_mfa_totp_created
   no_log: true
   changed_when: true
@@ -230,8 +254,12 @@
   ansible.builtin.command:
     cmd: bao auth list -format=json
   environment:
-    BAO_ADDR: "{{ openbao_write_addr }}"
+    BAO_ADDR: "{{ openbao_cli_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
   register: openbao_auth_raw_after
   no_log: true
   changed_when: false
@@ -268,8 +296,12 @@
       mfa_method_ids={{ openbao_mfa_totp_method_id }}
       auth_method_accessors={{ (openbao_auth_raw_after.stdout | from_json)['userpass/'].accessor }}
   environment:
-    BAO_ADDR: "{{ openbao_write_addr }}"
+    BAO_ADDR: "{{ openbao_cli_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
   no_log: true
   changed_when: true
   when:

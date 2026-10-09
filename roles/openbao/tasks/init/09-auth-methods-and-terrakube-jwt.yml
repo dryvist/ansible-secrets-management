@@ -3,8 +3,12 @@
   ansible.builtin.command:
     cmd: bao auth list -format=json
   environment:
-    BAO_ADDR: "{{ openbao_write_addr }}"
+    BAO_ADDR: "{{ openbao_cli_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
   register: openbao_auth_raw
   no_log: true
   changed_when: false
@@ -14,8 +18,12 @@
   ansible.builtin.command:
     cmd: bao auth enable approle
   environment:
-    BAO_ADDR: "{{ openbao_write_addr }}"
+    BAO_ADDR: "{{ openbao_cli_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
   no_log: true
   changed_when: true
   when:
@@ -32,8 +40,12 @@
   ansible.builtin.command:
     cmd: bao read -format=json sys/auth/approle/tune
   environment:
-    BAO_ADDR: "{{ openbao_write_addr }}"
+    BAO_ADDR: "{{ openbao_cli_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
   register: openbao_approle_mount_tune_current
   no_log: true
   changed_when: false
@@ -48,6 +60,7 @@
     # user_lockout_counter_reset_duration. (The write/CLI side keys them
     # lockout_threshold etc. inside user_lockout_config; the read shape is
     # different, confirmed against a live sys/auth/approle/tune response.)
+    ansible_become: "{{ openbao_cli_become }}"
     live: >-
       {{ (openbao_approle_mount_tune_current.stdout | default('{}') | from_json).data
          | default({}, true) }}
@@ -59,8 +72,10 @@
       -user-lockout-counter-reset-duration={{ openbao_approle_lockout_counter_reset }}s
       approle
   environment:
-    BAO_ADDR: "{{ openbao_write_addr }}"
+    BAO_ADDR: "{{ openbao_cli_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
   no_log: true
   changed_when: true
   when:
@@ -79,8 +94,12 @@
   ansible.builtin.command:
     cmd: "bao auth enable -path={{ openbao_terrakube_jwt_auth_path }} jwt"
   environment:
-    BAO_ADDR: "{{ openbao_write_addr }}"
+    BAO_ADDR: "{{ openbao_cli_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
   no_log: true
   changed_when: true
   when:
@@ -91,8 +110,12 @@
   ansible.builtin.command:
     cmd: "bao read -format=json auth/{{ openbao_terrakube_jwt_auth_path }}/config"
   environment:
-    BAO_ADDR: "{{ openbao_write_addr }}"
+    BAO_ADDR: "{{ openbao_cli_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
   register: openbao_terrakube_jwt_config_current
   no_log: true
   changed_when: false
@@ -106,8 +129,12 @@
       {{ {'oidc_discovery_url': openbao_terrakube_jwt_issuer,
             'bound_issuer': openbao_terrakube_jwt_issuer} | to_json }}
   environment:
-    BAO_ADDR: "{{ openbao_write_addr }}"
+    BAO_ADDR: "{{ openbao_cli_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
   no_log: true
   changed_when: true
   when:
@@ -165,8 +192,12 @@
                             else [])) | sort,
             'token_ttl': openbao_terrakube_jwt_token_ttl} | to_json }}
   environment:
-    BAO_ADDR: "{{ openbao_write_addr }}"
+    BAO_ADDR: "{{ openbao_cli_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
   loop: "{{ openbao_terrakube_workspaces | zip(openbao_terrakube_jwt_role_reads.results | default([])) | list }}"
   loop_control:
     label: "{{ item.0.name }}"

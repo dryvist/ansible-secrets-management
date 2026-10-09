@@ -14,8 +14,12 @@
   ansible.builtin.command:
     cmd: "bao auth enable -path={{ openbao_github_oidc_auth_path }} jwt"
   environment:
-    BAO_ADDR: "{{ openbao_write_addr }}"
+    BAO_ADDR: "{{ openbao_cli_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
   no_log: true
   changed_when: true
   when:
@@ -26,8 +30,12 @@
   ansible.builtin.command:
     cmd: "bao read -format=json auth/{{ openbao_github_oidc_auth_path }}/config"
   environment:
-    BAO_ADDR: "{{ openbao_write_addr }}"
+    BAO_ADDR: "{{ openbao_cli_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
   register: openbao_github_oidc_config_current
   no_log: true
   changed_when: false
@@ -45,8 +53,12 @@
       {{ {'oidc_discovery_url': openbao_github_oidc_issuer,
             'bound_issuer': openbao_github_oidc_issuer} | to_json }}
   environment:
-    BAO_ADDR: "{{ openbao_write_addr }}"
+    BAO_ADDR: "{{ openbao_cli_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
   no_log: true
   changed_when: true
   when:
@@ -66,8 +78,12 @@
       bao read -format=json
       auth/{{ openbao_github_oidc_auth_path }}/role/{{ openbao_github_docs_publisher_policy_name }}
   environment:
-    BAO_ADDR: "{{ openbao_write_addr }}"
+    BAO_ADDR: "{{ openbao_cli_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
   register: openbao_github_oidc_docs_role_current
   no_log: true
   changed_when: false
@@ -85,6 +101,7 @@
 # exist only for a job that satisfied all three bounds.
 - name: Reconcile the docs-publisher OIDC role
   vars:
+    ansible_become: "{{ openbao_cli_become }}"
     _docs_role_claims:
       repository: "{{ openbao_github_oidc_docs_repository }}"
       ref: "{{ openbao_github_oidc_docs_ref }}"
@@ -108,8 +125,10 @@
             'token_ttl': openbao_github_oidc_docs_token_ttl,
             'token_max_ttl': openbao_github_oidc_docs_token_max_ttl} | to_json }}
   environment:
-    BAO_ADDR: "{{ openbao_write_addr }}"
+    BAO_ADDR: "{{ openbao_cli_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
   no_log: true
   changed_when: true
   when:
@@ -150,8 +169,12 @@
       bao read -format=json
       auth/{{ openbao_github_oidc_auth_path }}/role/{{ openbao_uicheck_policy_name }}
   environment:
-    BAO_ADDR: "{{ openbao_write_addr }}"
+    BAO_ADDR: "{{ openbao_cli_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
   register: openbao_github_oidc_uicheck_role_current
   no_log: true
   changed_when: false
@@ -160,6 +183,7 @@
 
 - name: Reconcile the uicheck OIDC role
   vars:
+    ansible_become: "{{ openbao_cli_become }}"
     _uicheck_role_claims:
       job_workflow_ref: "{{ openbao_uicheck_job_workflow_ref }}"
       repository_owner: "{{ openbao_uicheck_repository_owner }}"
@@ -183,8 +207,10 @@
             'token_ttl': openbao_uicheck_token_ttl,
             'token_max_ttl': openbao_uicheck_token_max_ttl} | to_json }}
   environment:
-    BAO_ADDR: "{{ openbao_write_addr }}"
+    BAO_ADDR: "{{ openbao_cli_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
   no_log: true
   changed_when: true
   when:
