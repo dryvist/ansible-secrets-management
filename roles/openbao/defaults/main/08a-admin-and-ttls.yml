@@ -80,12 +80,14 @@ openbao_approle_human_secret_id_ttl: 15m
 # iac-platform tofu/semaphore/schedules.tf's openbao_rotate_scheduled
 # schedule (Semaphore project schedule id 5, template 40, resource
 # semaphoreui_project_schedule.openbao_rotate_scheduled) runs
-# openbao-rotate-approles-scheduled on cron "13 3,15 * * *" -- every 12h.
+# openbao-rotate-approles-scheduled on cron "13 3,15 * * *" -- every 12h,
+# declared once here as openbao_rotate_scheduled_interval.
 # 3x that interval is the margin for one missed run before a domain's
 # env-document credential goes stale (Vikunja 3197's isolation failure,
 # the reason #1963 made these never-expire in the first place -- scheduled
 # rotation is now the thing that re-mints them, so a finite bound no
 # longer reproduces that failure).
+openbao_rotate_scheduled_interval: 12h
 openbao_rotated_domain_secret_id_ttl: 36h
 
 # Per-role overrides, name -> value. An entry in openbao_base_approles wins over
@@ -112,9 +114,7 @@ openbao_approle_secret_id_ttl_overrides:
   hermes: "{{ openbao_rotated_domain_secret_id_ttl }}"
   hermes-private-agent: "{{ openbao_rotated_domain_secret_id_ttl }}"
   ai-donna: "{{ openbao_rotated_domain_secret_id_ttl }}"
-  # open-llm keeps the global 24h bound, not the 36h margin above;
-  # tests/plane_identity_bounds/verify.yml pins it to 24h / 30 uses.
-  open-llm: "{{ openbao_approle_secret_id_ttl }}"
+  open-llm: "{{ openbao_rotated_domain_secret_id_ttl }}"
   approle-secret-id-rotate-scheduled: "{{ openbao_rotated_domain_secret_id_ttl }}"
   # Standing identities outside the scheduled rotation: their secret_id is
   # rendered onto the host (or held by the operator's deploy) at converge
