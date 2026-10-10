@@ -1,0 +1,31 @@
+---
+# OpenBao audit _time assertions for the ai_stamp pipeline, kept apart from
+# assertions_inputs.yml to stay under the CI token-limit gate.
+# Runs the rendered expression itself, so a regex or Date.parse regression
+# fails here instead of silently restamping audit events with arrival time.
+- name: Evaluate the openbao audit _time expression against sample records
+  vars:
+    _time_fn: >-
+      {{ (_cribl_stream_ai_pipeline | from_yaml).functions
+         | selectattr('filter', 'search', 'in_ai_openbao_audit') | first }}
+  ansible.builtin.command:
+    argv:
+      - node
+      - -e
+      - >-
+        const f = new Function('_raw', '_time', 'return ' + process.argv[1]);
+        const head = '<182>Oct  9 03:33:06 host-a openbao-audit: ';
+        console.log(JSON.stringify([
+        f(head + '{"time":"2026-10-09T03:33:06.111700186Z","type":"request"}', 1),
+        f(head + 'not json', 7)]))
+      - "{{ (_time_fn.conf.add | selectattr('name', 'equalto', '_time') | first).value }}"
+  register: _audit_time_eval
+  changed_when: false
+
+- name: Assert audit events take the record time, falling back to the header
+  ansible.builtin.assert:
+    that:
+      - (_audit_time_eval.stdout | from_json) == [1791516786.111, 7]
+    fail_msg: >-
+      openbao audit _time must come from the record's own "time" field (and
+      keep the header time when there is none). Got {{ _audit_time_eval.stdout }}.
