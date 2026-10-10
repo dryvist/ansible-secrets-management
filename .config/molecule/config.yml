@@ -1,0 +1,14 @@
+---
+# Molecule global config. Every scenario deep-merges its own molecule.yml on
+# top of this file; a scenario overrides any key it needs to change.
+
+dependency:
+  name: galaxy
+  options:
+    requirements-file: ${MOLECULE_PROJECT_DIRECTORY}/requirements.yml
+
+driver:
+  name: docker
+
+verifier:
+  name: ansible
