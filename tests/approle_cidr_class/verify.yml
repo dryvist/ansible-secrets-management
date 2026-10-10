@@ -168,7 +168,8 @@
         that:
           - >-
             openbao_retired_approles | sort
-            == ['claude-identity', 'github-admin-claude', 'github-agents', 'github-work', 'open-llm-workstation']
+            == ['claude-identity', 'github-admin-claude', 'github-agents', 'github-work',
+                'github-write-work', 'open-llm-workstation']
           - openbao_approles | map(attribute='name') | select('in', openbao_retired_approles) | list == []
           - openbao_approle_cidr_class_overrides | list | select('in', openbao_retired_approles) | list == []
           - openbao_base_policies_static | map(attribute='name') | select('in', openbao_retired_policies) | list == []

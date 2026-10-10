@@ -38,7 +38,7 @@
         openbao_management_cidrs: "192.0.2.0/24"
         openbao_workstation_cidrs: "198.51.100.0/24"
         openbao_ci_cidrs: "203.0.113.0/24"
-        openbao_github_write_scopes: "{{ {openbao_github_write_work_approle_name: ['test-repo']} }}"
+        openbao_github_write_scopes: {"github-write-fixture": ["test-repo"]}
 
     - name: The plane identity is declared, or this test asserts nothing
       ansible.builtin.assert:
@@ -99,19 +99,19 @@
       vars:
         realms: >-
           {{ openbao_approles
-             | selectattr('name', 'equalto', openbao_github_write_work_approle_name) | list }}
+             | selectattr('name', 'equalto', 'github-write-fixture') | list }}
       ansible.builtin.assert:
         that:
           - realms | length > 0
           - >-
             realms | map(attribute='secret_id_num_uses',
                          default=openbao_approle_secret_id_num_uses_overrides.get(
-                           openbao_github_write_work_approle_name, openbao_approle_secret_id_num_uses))
+                           'github-write-fixture', openbao_approle_secret_id_num_uses))
             | unique | list == [30]
           - >-
             realms | map(attribute='secret_id_ttl',
                          default=openbao_approle_secret_id_ttl_overrides.get(
-                           openbao_github_write_work_approle_name, openbao_approle_secret_id_ttl))
+                           'github-write-fixture', openbao_approle_secret_id_ttl))
             | map('community.general.to_seconds') | map('int') | unique | list == [86400]
           - >-
             realms | map(attribute='token_ttl', default=openbao_approle_token_ttl)
