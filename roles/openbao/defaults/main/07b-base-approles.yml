@@ -92,9 +92,12 @@ openbao_base_approles_core:
   # Model selection and limits remain in LiteLLM configuration; adding a
   # provider to the inventory does not enable a model or require the leaf to
   # be seeded.
+  # Unlimited uses like the domains above: every converge and router start
+  # redeems it, so a use cap empties it between rotations.
   - name: "{{ openbao_local_llm_approle_name }}"
     token_policies: >-
       {{ [openbao_local_llm_policy_name] + openbao_ai_api_key_policy_names }}
+    secret_id_num_uses: 0
   # local-llm-workstation: workstation reads of secret/ai/llm. Separate from
   # local-llm so workstation logins cannot exhaust the plane's secret_id.
   # 36h ttl (rotated-domain margin); 100 uses per secret_id, replaced every 12h.
@@ -109,8 +112,11 @@ openbao_base_approles_core:
     token_ttl: 30m
     token_max_ttl: 2h
     secret_id_num_uses: 100
+  # hermes / ai-donna: rotated domains redeemed on every converge and agent
+  # start; unlimited uses, bounded by the machine class and the rotated ttl.
   - name: "{{ openbao_hermes_approle_name }}"
     policy: "{{ openbao_hermes_policy_name }}"
+    secret_id_num_uses: 0
   - name: "{{ openbao_hermes_write_approle_name }}"
     policy: "{{ openbao_hermes_write_policy_name }}"
   # llm-router-write: single-purpose writer for the llm-router Redis credential,
@@ -120,6 +126,7 @@ openbao_base_approles_core:
     policy: "{{ openbao_llm_router_write_policy_name }}"
   - name: "{{ openbao_ai_donna_approle_name }}"
     policy: "{{ openbao_ai_donna_policy_name }}"
+    secret_id_num_uses: 0
   # config-read: sole consumer identity on the non-secret `config` mount.
   # Read + list everywhere in that mount, nothing outside it. Like `public`,
   # leaking it costs nothing — the mount holds no exploitable value by
@@ -145,13 +152,13 @@ openbao_base_approles_core:
   # github-write are standing ambient identities consumed by nix-darwin's
   # `openbao-github-creds` (role_id/secret_id operator-held in Doppler,
   # injected as ambient env, same shape as ai-orchestrator). github-write is
-  # bounded by the per-repo allowlist + the write-lease lock rather than a
-  # human gate (user decision 2026-07-17: ambient for allowlisted repos).
+  # bounded by the App installation's repository selection + the write-lease
+  # lock rather than a human gate (ambient write, operator decision).
   # github-admin is INERT break-glass like ai-admin: no standing secret_id; a
   # human wraps a single-use secret_id per elevation.
   # secret_id_ttl "0s" + num_uses 0: nothing re-mints these, so a finite bound
   # expires a credential nothing replaces. Same reason as semaphore above and
-  # the four in 07d. "0s" not 0: 10c compares via to_seconds.
+  # the three in 07d. "0s" not 0: 10c compares via to_seconds.
   - name: "{{ openbao_github_read_approle_name }}"
     policy: "{{ openbao_github_read_policy_name }}"
     secret_id_ttl: "0s"

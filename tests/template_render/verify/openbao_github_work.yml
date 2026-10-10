@@ -1,10 +1,11 @@
 ---
-# The github-work mount: two sets, one policy, one AppRole, and the converge
+# The github-work mount: two sets, two policies, two AppRoles, and the converge
 # checks (roles/openbao/tasks/init/05b-github-app-set-checks.yml) run against
-# fixture responses. The policy must grant exactly the two work set paths; the
-# sets must carry the declared maps with no administration; the AppRole must be
-# inert for the converge and human-minted.
-- name: Render and verify the github-work mount, sets, policy and AppRole
+# fixture responses. Each policy must grant exactly its own work set path and
+# neither the other set nor the raw endpoint; the sets must carry the declared
+# maps with no administration; the AppRoles must be inert for the converge and
+# human-minted.
+- name: Render and verify the github-work mount, sets, policies and AppRoles
   hosts: localhost
   connection: local
   gather_facts: false
@@ -31,6 +32,21 @@
       metadata: read
     _administration_keys: [administration, organization_administration]
     _empty_fixture: {results: []}
+    _work_policies:
+      - policy: "{{ openbao_github_work_read_policy_name }}"
+        template: github-work-read-policy.hcl.j2
+        set_name: work-read
+      - policy: "{{ openbao_github_work_write_policy_name }}"
+        template: github-work-write-policy.hcl.j2
+        set_name: work-write
+    _work_approles:
+      - approle: "{{ openbao_github_work_read_approle_name }}"
+        policy: "{{ openbao_github_work_read_policy_name }}"
+      - approle: "{{ openbao_github_work_write_approle_name }}"
+        policy: "{{ openbao_github_work_write_policy_name }}"
+    _work_secret_id_paths:
+      - "auth/approle/role/{{ openbao_github_work_read_approle_name }}/secret-id"
+      - "auth/approle/role/{{ openbao_github_work_write_approle_name }}/secret-id"
 
   tasks:
     - name: Load the openbao role defaults
@@ -50,7 +66,9 @@
         that:
           - openbao_github_work_permission_sets == []
           - openbao_github_work_mount not in (openbao_github_app_mounts | map(attribute='mount') | list)
-          - openbao_github_work_policy_name not in (openbao_policies | map(attribute='name') | list)
+          - >-
+            _work_policies | map(attribute='policy')
+            | select('in', openbao_policies | map(attribute='name') | list) | list == []
         quiet: true
 
     - name: Pin the configured case
@@ -61,7 +79,9 @@
       ansible.builtin.assert:
         that:
           - openbao_github_work_mount in (openbao_github_app_mounts | map(attribute='mount') | list)
-          - openbao_github_work_policy_name in (openbao_policies | map(attribute='name') | list)
+          - >-
+            _work_policies | map(attribute='policy')
+            | reject('in', openbao_policies | map(attribute='name') | list) | list == []
           - >-
             (openbao_github_work_permission_sets | items2dict(key_name='name', value_name='permissions'))
             == {'work-read': _read, 'work-write': _write}
@@ -79,35 +99,44 @@
              | flatten | selectattr('key', 'in', _administration_keys) | list) == []
         quiet: true
 
-    - name: Render the work policy
+    - name: Render the work policies
       ansible.builtin.template:
-        src: "{{ _template_dir }}/github-work-policy.hcl.j2"
-        dest: "{{ _fixture_dir }}/github-work-policy.hcl"
+        src: "{{ _template_dir }}/{{ item.template }}"
+        dest: "{{ _fixture_dir }}/{{ item.set_name }}-policy.hcl"
         mode: "0644"
+      loop: "{{ _work_policies }}"
 
-    - name: Read the rendered work policy
+    - name: Read the rendered work policies
       ansible.builtin.slurp:
-        src: "{{ _fixture_dir }}/github-work-policy.hcl"
+        src: "{{ _fixture_dir }}/{{ item.set_name }}-policy.hcl"
+      loop: "{{ _work_policies }}"
       register: _work_policy_raw
 
-    - name: Assert the work policy grants exactly the two work sets and no other path
+    - name: Assert each work policy grants exactly its own work set and no other path
       vars:
         _m: "{{ openbao_github_work_mount }}"
-        _policy: "{{ _work_policy_raw.content | b64decode }}"
-        _paths: >-
-          {{ _policy | regex_findall('(?m)^path "([^"]+)"') }}
-        _capabilities: >-
-          {{ _policy | regex_findall('capabilities = (.*)') }}
+        _work_read_text: "{{ _work_policy_raw.results[0].content | b64decode }}"
+        _work_write_text: "{{ _work_policy_raw.results[1].content | b64decode }}"
+        _work_read_policy_paths: >-
+          {{ _work_read_text | regex_findall('(?m)^path "([^"]+)"') }}
+        _work_write_policy_paths: >-
+          {{ _work_write_text | regex_findall('(?m)^path "([^"]+)"') }}
       ansible.builtin.assert:
         that:
-          - _paths == [_m ~ '/token/work-read', _m ~ '/token/work-write']
-          - _m ~ '/token' not in _paths
-          - _capabilities | select('search', 'list|delete|sudo') | list == []
-          - _policy is not search('administration')
+          - _work_read_policy_paths == [_m ~ '/token/work-read']
+          - _work_write_policy_paths == [_m ~ '/token/work-write']
+          - _m ~ '/token' not in (_work_read_policy_paths + _work_write_policy_paths)
+          - _work_read_text is not search('administration')
+          - _work_write_text is not search('administration')
+          - (_work_read_text | regex_findall('capabilities = (.*)') | select('search', 'list|delete|sudo') | list) == []
+          - >-
+            (_work_write_text | regex_findall('capabilities = (.*)')
+             | select('search', 'list|delete|sudo') | list) == []
         fail_msg: >-
-          The github-work policy grants {{ _paths }}. It must grant exactly the
-          work-read and work-write sets on {{ _m }}, with no raw token path and
-          no list, delete or sudo capability.
+          The work policies grant {{ _work_read_policy_paths }} (read) and
+          {{ _work_write_policy_paths }} (write). Each must grant exactly its own
+          work set on {{ _m }}, with no raw token path and no list, delete or
+          sudo capability.
         quiet: true
 
     - name: Assert the work sets hold their declared maps and resolve to the whole installation
@@ -156,17 +185,29 @@
             that: _refused | bool
             quiet: true
 
-    - name: Assert the work AppRole is human-minted, workstation-bound and short-lived
+    - name: Assert each work AppRole is human-minted, workstation-bound and short-lived
       vars:
         _role: >-
-          {{ openbao_approles | selectattr('name', 'equalto', openbao_github_work_approle_name) | first }}
+          {{ openbao_approles | selectattr('name', 'equalto', item.approle) | first }}
       ansible.builtin.assert:
         that:
-          - _role.policy == openbao_github_work_policy_name
+          - _role.policy == item.policy
           - _role.manage_secret_id is defined and not _role.manage_secret_id
           - _role.token_ttl == '30m'
-          - openbao_approle_cidr_class_map[openbao_github_work_approle_name] == 'workstation'
-          - openbao_github_work_approle_name not in openbao_rotate_doppler_sync_domains
+          - _role.secret_id_ttl == '0s'
+          - _role.secret_id_num_uses == 0
+          - openbao_approle_cidr_class_map[item.approle] == 'workstation'
+          - item.approle not in openbao_rotate_doppler_sync_domains
+        quiet: true
+      loop: "{{ _work_approles }}"
+
+    - name: Assert github-work is retired and no longer declared
+      ansible.builtin.assert:
+        that:
+          - "'github-work' in openbao_retired_approles"
+          - "'github-work' in openbao_retired_policies"
+          - "'github-work' not in (openbao_approles | map(attribute='name') | list)"
+          - "'github-work' not in (openbao_policies | map(attribute='name') | list)"
         quiet: true
 
     - name: Render the human-unlock and approle-issuer policies
@@ -186,9 +227,8 @@
         - human-unlock-policy.hcl
         - approle-issuer-policy.hcl
 
-    - name: Assert human-unlock mints the work secret_id and approle-issuer never does
+    - name: Assert human-unlock mints both work secret_ids and approle-issuer mints neither
       vars:
-        _secret_id_path: "auth/approle/role/{{ openbao_github_work_approle_name }}/secret-id"
         _unlock_paths: >-
           {{ _unlock_issuer_raw.results[0].content | b64decode
              | regex_findall('(?m)^path "([^"]+)"') }}
@@ -197,9 +237,9 @@
              | regex_findall('(?m)^path "([^"]+)"') }}
       ansible.builtin.assert:
         that:
-          - _secret_id_path in _unlock_paths
-          - _secret_id_path not in _issuer_paths
+          - _work_secret_id_paths | select('in', _unlock_paths) | list == _work_secret_id_paths
+          - _work_secret_id_paths | select('in', _issuer_paths) | list == []
         fail_msg: >-
-          human-unlock must mint {{ openbao_github_work_approle_name }}'s secret_id
-          (the role is inert), and approle-issuer must not.
+          human-unlock must mint the secret_id of each work AppRole (the roles are
+          inert), and approle-issuer must mint neither.
         quiet: true

@@ -1,5 +1,4 @@
 {{ ansible_managed | comment }}
-{% if openbao_github_write_installation_scope %}
 # github-write — installation-scoped WRITE minting, parameter-pinned. This is the
 # ONE policy allowed to touch the raw {{ openbao_github_everyday_mount }}/token endpoint,
 # and the parameter pinning is the entire privilege boundary:
@@ -15,30 +14,6 @@
 #     installation token's permissions below the App's grant, so a map can
 #     reduce a token and never widen it; the App grant stays the ceiling. The
 #     credential helper sends a fixed minimal map on every write mint.
-{% else %}
-# github-write — per-repository WRITE minting, parameter-pinned. This is the
-# ONE policy allowed to touch the raw {{ openbao_github_everyday_mount }}/token endpoint,
-# and the parameter pinning is the entire privilege boundary:
-#
-#   * required_parameters forces every request to name an installation AND a
-#     repositories value — an unconstrained request (= full installation
-#     ceiling) is impossible.
-#   * allowed_parameters restricts installation_id to the two known
-#     installations and repositories to the administrator allowlist
-#     (openbao_github_write_repo_allowlist). STRING-FORM CONTRACT (verified
-#     live 2026-07-18): the ACL does not element-match LIST-valued request
-#     parameters, so callers MUST send `repositories` as a plain string (the
-#     plugin's TypeCommaStringSlice accepts it) and `installation_id` as a
-#     string. The allowlist is exact literals only — a glob would let
-#     "nix-a,evil" ride a "nix-*" prefix through the plugin's comma split.
-#     Listing any key denies all unlisted parameters, so org_name and
-#     repository_ids — both alternate selectors that would bypass the name
-#     allowlist — are denied by construction.
-#   * `permissions` is allowed with any value. GitHub only narrows an
-#     installation token's permissions below the App's grant, so a map can
-#     reduce a token and never widen it; the App grant stays the ceiling. The
-#     credential helper sends a fixed minimal map on every write mint.
-{% endif %}
 #
 # The write-lease lock subtree implements claim-before-work (see
 # session-coordination): the wrapper CAS-acquires
@@ -60,15 +35,7 @@ path "{{ openbao_github_everyday_mount }}/token" {
       "{{ openbao_github_everyday_dryvist_installation_id }}",
       "{{ openbao_github_everyday_personal_installation_id }}"
     ]
-{% if openbao_github_write_installation_scope %}
     "repositories" = []
-{% else %}
-    "repositories" = [
-{% for repo in openbao_github_write_repo_allowlist %}
-      "{{ repo }}"{{ "," if not loop.last }}
-{% endfor %}
-    ]
-{% endif %}
     "permissions" = []
   }
 }
