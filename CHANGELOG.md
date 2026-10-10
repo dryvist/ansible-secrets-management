@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.3.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.2.0...v0.3.0) (2026-10-10)
+
+
+### ⚠ BREAKING CHANGES
+
+* **openbao:** drop the github-write repository allowlist ([#2528](https://github.com/dryvist/ansible-secrets-management/issues/2528))
+
+### Features
+
+* **openbao:** drop the github-write repository allowlist ([#2528](https://github.com/dryvist/ansible-secrets-management/issues/2528)) ([3cecb78](https://github.com/dryvist/ansible-secrets-management/commit/3cecb7860325c3c2a18fe2e62f0f7492537444d6))
+* **openbao:** port six ansible-proxmox-apps commits ([5ab3a03](https://github.com/dryvist/ansible-secrets-management/commit/5ab3a03dc1936310b89f94b1e4281f6fc36f5cfe))
+* **openbao:** split github-work into read and write identities ([#2523](https://github.com/dryvist/ansible-secrets-management/issues/2523)) ([d7933e5](https://github.com/dryvist/ansible-secrets-management/commit/d7933e50ad2e60e91e3aa365a414841fab3e9302))
+
+
+### Bug Fixes
+
+* **openbao:** compare /32 AppRole binds without the prefix length ([#2526](https://github.com/dryvist/ansible-secrets-management/issues/2526)) ([dbf96e2](https://github.com/dryvist/ansible-secrets-management/commit/dbf96e2112e7bb2ed3c12efdc19bbf8cb4142cf9))
+* **openbao:** refuse to render the voter-health env file without a HEC token ([#2531](https://github.com/dryvist/ansible-secrets-management/issues/2531)) ([34502b9](https://github.com/dryvist/ansible-secrets-management/commit/34502b9aab8c2cf29fbe84348dda472e46fb1ab6))
+* **openbao:** unlimited secret_id uses for local-llm, hermes and ai-donna ([#2524](https://github.com/dryvist/ansible-secrets-management/issues/2524)) ([7d89ed6](https://github.com/dryvist/ansible-secrets-management/commit/7d89ed6b4a1b47ecc8ead52c5212c2c0063dedd2))
+
 ## [0.2.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.1.0...v0.2.0) (2026-10-10)
 
 
