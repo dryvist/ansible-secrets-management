@@ -143,6 +143,10 @@ openbao_base_policies_static:
   # AppRole, so it has no row in openbao_approles.
   - name: "{{ openbao_human_unlock_policy_name }}"
     template: human-unlock-policy.hcl.j2
+  # human-unlock-untrusted: the phone-approved grant for the untrusted client.
+  # Per-service apply-role secret_ids only; see the template.
+  - name: "{{ openbao_human_unlock_untrusted_policy_name }}"
+    template: human-unlock-untrusted-policy.hcl.j2
   - name: "{{ openbao_ai_orchestrator_policy_name }}"
     template: ai-orchestrator-policy.hcl.j2
   - name: "{{ openbao_open_llm_policy_name }}"

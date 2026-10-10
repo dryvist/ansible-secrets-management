@@ -185,7 +185,7 @@
             that: _refused | bool
             quiet: true
 
-    - name: Assert each work AppRole is human-minted, workstation-bound and short-lived
+    - name: Assert each work AppRole is human-minted, workstation-bound and capped at one hour
       vars:
         _role: >-
           {{ openbao_approles | selectattr('name', 'equalto', item.approle) | first }}
@@ -193,7 +193,8 @@
         that:
           - _role.policy == item.policy
           - _role.manage_secret_id is defined and not _role.manage_secret_id
-          - _role.token_ttl == '30m'
+          - _role.token_ttl == '1h'
+          - _role.token_explicit_max_ttl == '1h'
           - _role.secret_id_ttl == '0s'
           - _role.secret_id_num_uses == 0
           - openbao_approle_cidr_class_map[item.approle] == 'workstation'

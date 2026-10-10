@@ -1,0 +1,86 @@
+---
+# Phone-approved elevation: the Authelia JWT mount and its two elevation roles.
+# Included from 09-auth-methods-and-terrakube-jwt.yml, which registers the auth
+# listing this file reads (openbao_auth_raw).
+
+- name: Assert the Authelia elevation inputs are supplied
+  ansible.builtin.assert:
+    that:
+      - openbao_authelia_jwt_issuer | length > 0
+      - openbao_elevate_subject | length > 0
+      - openbao_approle_cidr_classes.workstation | length > 0
+    fail_msg: >-
+      OPENBAO_AUTHELIA_ISSUER_URL, OPENBAO_ELEVATE_SUBJECT and
+      OPENBAO_WORKSTATION_CIDRS must all be set before the Authelia elevation
+      roles can be written.
+  run_once: true
+  when: openbao_bootstrap_token is defined
+
+- name: Enable the Authelia JWT auth method
+  ansible.builtin.command:
+    cmd: "bao auth enable -path={{ openbao_authelia_jwt_auth_path }} jwt"
+  environment:
+    BAO_ADDR: "{{ openbao_cli_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
+  no_log: true
+  changed_when: true
+  when:
+    - openbao_bootstrap_token is defined
+    - (openbao_authelia_jwt_auth_path ~ '/') not in (openbao_auth_raw.stdout | from_json).keys()
+
+# bound_issuer alongside the discovery URL, as for the GitHub OIDC mount: the
+# discovery URL says where the keys come from, bound_issuer says whose `iss`
+# claim is acceptable.
+- name: Configure Authelia as the JWT issuer
+  ansible.builtin.command:
+    cmd: "bao write auth/{{ openbao_authelia_jwt_auth_path }}/config -"
+    stdin: >-
+      {{ {'oidc_discovery_url': openbao_authelia_jwt_issuer,
+            'bound_issuer': openbao_authelia_jwt_issuer} | to_json }}
+  environment:
+    BAO_ADDR: "{{ openbao_cli_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
+  no_log: true
+  changed_when: true
+  when: openbao_bootstrap_token is defined
+
+# Written on every provisioning run. Every field is declared here, so a re-write
+# sets the same values and nothing else; a drift compare would repeat the whole
+# field set. The audience, the operator subject and the workstation CIDR class
+# are the three independent bounds; the policy is the only grant.
+- name: Reconcile the phone-approval JWT roles
+  ansible.builtin.command:
+    cmd: "bao write auth/{{ openbao_authelia_jwt_auth_path }}/role/{{ item.name }} -"
+    stdin: >-
+      {{ {'role_type': 'jwt',
+            'user_claim': 'sub',
+            'bound_audiences': [item.audience],
+            'bound_claims': {'sub': openbao_elevate_subject},
+            'bound_claims_type': 'string',
+            'token_policies': [item.policy],
+            'token_ttl': openbao_elevate_token_ttl,
+            'token_max_ttl': openbao_elevate_token_max_ttl,
+            'token_num_uses': 0,
+            'token_bound_cidrs': openbao_approle_cidr_classes.workstation | split(',') | map('trim') | list,
+            'max_age': openbao_elevate_max_age} | to_json }}
+  environment:
+    BAO_ADDR: "{{ openbao_cli_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
+  loop: "{{ openbao_elevate_roles }}"
+  loop_control:
+    label: "{{ item.name }}"
+  no_log: true
+  changed_when: true
+  when: openbao_bootstrap_token is defined
