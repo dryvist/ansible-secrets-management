@@ -2,7 +2,7 @@
 # Policy templates rendered + written on the bootstrap host. Each entry maps a
 # policy name to its template; add a row to grow the RBAC surface.
 #
-# BEFORE ADDING A ROW, read .claude/rules/openbao-plugins-first.md. A policy
+# BEFORE ADDING A ROW, apply the plugins-first rule. A policy
 # granting KV read for a resource that has a secrets engine is manual credential
 # control and is rejected. GitHub has one (mount `github`) and AWS has one (mount
 # `aws`), both enabled by default. A GitHub token grant is ALWAYS the existing

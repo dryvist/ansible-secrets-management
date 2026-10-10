@@ -140,7 +140,7 @@ openbao_vikunja_mcp_approle_name: vikunja-mcp
 # dispatch-queue token and the Anthropic + OpenAI model-provider keys. None of
 # the three has an OpenBao secrets engine (Vikunja is self-hosted; Anthropic
 # and OpenAI are third-party SaaS with no plugin), so KV is the correct tier
-# per .claude/rules/openbao-plugins-first.md — NOT a duplicate of local-llm's
+# per the plugins-first rule — NOT a duplicate of local-llm's
 # broad ai/* read, and NOT any GitHub/AWS grant (the worker consumes neither).
 openbao_ai_runner_policy_name: ai-runner
 openbao_ai_runner_approle_name: ai-runner

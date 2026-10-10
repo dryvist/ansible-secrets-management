@@ -9,7 +9,7 @@
 # Every probe below hits a voter's OWN plain-HTTP api_addr directly (its VLAN
 # IP) — never the Traefik ingress VIP: OpenBao has no loopback listener and an
 # https:// probe to a backend reads 000, lying about the node being down (see
-# .claude/rules/ip-addressing.md and openbao.hcl.j2's tls_disable=1 listener).
+# the IP-addressing rule and openbao.hcl.j2's tls_disable=1 listener).
 #
 # Leader-gated (mirrors templates/openbao-snapshot.sh.j2): only the node that
 # is CURRENTLY the Raft leader performs the full cross-cluster sweep each
