@@ -246,3 +246,14 @@
           - Langfuse is narrowed to /api/public, so /api/auth stays gated
           - Semaphore's allowlist covers its API paths without exposing /api/auth
           - entries omitting `resource` keep the previous default
+
+    - name: Assert the OpenBao elevation clients and policy are absent while the feature is off
+      ansible.builtin.assert:
+        that:
+          - not (authelia_bao_elevation_enabled | bool)
+          - _clients | selectattr('client_id', 'match', '^bao-elevate-') | list | length == 0
+          - "'authorization_policies' not in _oidc"
+        fail_msg: an OpenBao elevation client or policy rendered with authelia_bao_elevation_enabled false
+      vars:
+        _oidc: "{{ (_authelia_raw.content | b64decode | from_yaml).identity_providers.oidc }}"
+        _clients: "{{ _oidc.clients }}"

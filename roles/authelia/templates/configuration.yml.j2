@@ -53,6 +53,7 @@ identity_providers:
     # window in which a code shown on a phone can be approved (default is 10).
     lifespans:
       device_code: 5m
+{% if authelia_bao_elevation_enabled %}
     # OpenBao login approval. Only the device-code clients below use this policy.
     # Deny by default; the one rule admits the operator, from the approval
     # networks only. The rule has no fallback, so an empty network list must be
@@ -67,6 +68,7 @@ identity_providers:
 {% for n in authelia_approve_networks %}
               - '{{ n }}'
 {% endfor %}
+{% endif %}
     clients:
       - client_id: '{{ authelia_oidc_hermes_client_id }}'
         client_name: Hermes Dashboard
@@ -243,6 +245,7 @@ identity_providers:
         authorization_policy: two_factor
         require_pkce: false
         token_endpoint_auth_method: client_secret_basic
+{% if authelia_bao_elevation_enabled %}
       # OpenBao login approval clients. Device-code grant only: no redirect URI
       # and no authorization-code grant, so neither can drive a browser redirect.
       # consent_mode explicit makes each approval an affirmative action on the
@@ -273,6 +276,7 @@ identity_providers:
         consent_mode: explicit
         authorization_policy: elevate
         token_endpoint_auth_method: none
+{% endif %}
 
 access_control:
   default_policy: deny

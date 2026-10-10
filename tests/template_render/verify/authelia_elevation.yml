@@ -42,6 +42,7 @@
     - name: Scope the approval networks for the render
       ansible.builtin.set_fact:
         authelia_approve_networks: ["192.0.2.0/24"]
+        authelia_bao_elevation_enabled: true
 
     - name: Render the Authelia configuration
       ansible.builtin.template:
