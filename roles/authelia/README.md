@@ -35,6 +35,14 @@ URIs and secret hash files live in `defaults/main/01-oidc-clients.yml`.
 `litellm` is the AI repo's LiteLLM proxy Admin UI (AI `roles/llm_router`);
 its redirect is `https://llm.<domain>/sso/callback`.
 
+`bao-elevate-trusted` (confidential) and `bao-elevate-untrusted` (public) are
+device-code clients that approve OpenBao logins. They have no redirect URI. The
+`elevate` authorization policy denies by default and admits only the operator
+account, and only from the networks in `AUTHELIA_APPROVE_NETWORKS`. The
+converge refuses to render the policy while that variable is unset. The trusted
+client's secret is read from `secret/apps/authelia` like the other confidential
+clients.
+
 ## Secrets — generated at the source, no shared store
 
 Per the workspace generate-at-source rule, NONE of Authelia's secrets live in
