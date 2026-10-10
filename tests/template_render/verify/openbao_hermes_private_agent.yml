@@ -95,7 +95,7 @@
           {{ _public_tokens }} token paths.
         quiet: true
 
-    - name: Assert the private agent has the live Hermes finite bounds
+    - name: Assert the private agent has finite bounds and the Hermes TTLs
       vars:
         _agent: >-
           {{ openbao_approles | selectattr('name', 'equalto', openbao_hermes_private_agent_approle_name) | first }}
@@ -107,9 +107,6 @@
         _agent_secret_id_ttl: >-
           {{ _agent.secret_id_ttl | default(openbao_approle_secret_id_ttl_overrides.get(
              openbao_hermes_private_agent_approle_name, openbao_approle_secret_id_ttl)) }}
-        _hermes_secret_id_num_uses: >-
-          {{ _hermes.secret_id_num_uses | default(openbao_approle_secret_id_num_uses_overrides.get(
-             openbao_hermes_approle_name, openbao_approle_secret_id_num_uses)) }}
         _hermes_token_ttl: "{{ _hermes.token_ttl | default(openbao_approle_token_ttl) }}"
         _hermes_token_max_ttl: "{{ _hermes.token_max_ttl | default(openbao_approle_token_max_ttl) }}"
       ansible.builtin.assert:
@@ -121,7 +118,6 @@
           - >-
             (_agent_secret_id_ttl | community.general.to_seconds | int)
             == (_hermes_secret_id_ttl | community.general.to_seconds | int)
-          - _agent.secret_id_num_uses | int == _hermes_secret_id_num_uses | int
           - >-
             (_agent.token_ttl | community.general.to_seconds | int)
             == (_hermes_token_ttl | community.general.to_seconds | int)

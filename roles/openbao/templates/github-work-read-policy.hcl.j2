@@ -1,0 +1,16 @@
+{{ ansible_managed | comment }}
+# github-work-read — the work identity's GitHub read tier, minted only from the
+# {{ openbao_github_work_mount }} mount. It grants the work-read set alone: the
+# work-write set, the raw {{ openbao_github_work_mount }}/token endpoint and
+# every other GitHub mount are not granted. The set is pinned to that mount's
+# single App installation.
+#
+# create is granted with read and update: a POST mint routes as CreateOperation
+# on the plugin's token paths, which have no existence check (the same
+# requirement as the github-write raw token path).
+{% for permission_set in openbao_github_work_permission_sets | selectattr('name', 'equalto', 'work-read') %}
+path "{{ openbao_github_work_mount }}/token/{{ permission_set.name }}" {
+  capabilities = ["create", "read", "update"]
+}
+
+{% endfor %}
