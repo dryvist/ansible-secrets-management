@@ -174,6 +174,32 @@
         quiet: true
       loop: "{{ openbao_secrets_domain_approle_names + [openbao_approle_secret_id_rotate_scheduled_approle_name] }}"
 
+    # Deny by default: a scheduled-rotation domain is redeemed on every converge
+    # or service start, so a use cap empties it between rotations. Only the
+    # identities listed here keep a finite cap.
+    - name: Every scheduled-rotation domain has unlimited uses unless listed as finite
+      vars:
+        # Workstation reader and per-Mac Edge readers (workstation class), the
+        # workstation certificate signer (one login per signature), and the
+        # rotate identity (redeemed twice a day).
+        _finite: >-
+          {{ [openbao_local_llm_workstation_approle_name, openbao_agent_ssh_sign_approle_name,
+              openbao_approle_secret_id_rotate_scheduled_approle_name]
+             + openbao_cribl_edge_mac_approle_names }}
+        _declared: >-
+          {{ openbao_approle_secret_id_num_uses_overrides.get(item, openbao_approle_secret_id_num_uses) }}
+        _uses: >-
+          {{ openbao_approles | selectattr('name', 'equalto', item)
+             | map(attribute='secret_id_num_uses', default=_declared) | first | default(_declared) | int }}
+      ansible.builtin.assert:
+        that:
+          - (_uses | int) > 0 if item in _finite else (_uses | int) == 0
+        fail_msg: >-
+          {{ item }} has secret_id_num_uses {{ _uses }}; scheduled-rotation domains
+          need 0 unless listed as finite, and listed ones need a cap above 0.
+        quiet: true
+      loop: "{{ openbao_secrets_domain_approle_names + [openbao_approle_secret_id_rotate_scheduled_approle_name] }}"
+
     # Workstation reads of the router credentials have their own identity, so
     # workstation logins cannot spend the plane's local-llm secret_id.
     - name: The workstation local-llm reader is finite and the plane pair stays off Doppler
