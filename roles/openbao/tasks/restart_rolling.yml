@@ -1,0 +1,67 @@
+---
+# Rolling restart of the voters flagged by the "Restart openbao" handler.
+# Included once per handler flush, on the run_once host. Flagged voters are
+# restarted one at a time: standby voters first, the active voter last. Each
+# restart waits until that voter is healthy before the next one starts, and a
+# voter that never becomes healthy fails the play before any other voter is
+# restarted.
+
+- name: Collect the voters flagged for restart
+  ansible.builtin.set_fact:
+    openbao_restart_hosts: >-
+      {{ ansible_play_hosts
+         | map('extract', hostvars)
+         | selectattr('openbao_restart_pending', 'defined')
+         | selectattr('openbao_restart_pending')
+         | map(attribute='inventory_hostname')
+         | list }}
+
+- name: Log the voters pending restart
+  ansible.builtin.debug:
+    msg: "openbao voters pending restart: {{ openbao_restart_hosts | join(', ') or 'none' }}"
+
+# Each voter's own health: 200 is active, 429 standby, 501 uninitialized,
+# 503 sealed. The active voter is restarted last.
+- name: Read the health of each flagged voter to find the active one
+  ansible.builtin.uri:
+    url: "{{ hostvars[item].openbao_restart_api_addr }}/v1/sys/health"
+    method: GET
+    status_code: [200, 429, 472, 473, 501, 503]
+  delegate_to: "{{ item }}"
+  loop: "{{ openbao_restart_hosts }}"
+  loop_control:
+    label: "{{ item }}"
+  register: openbao_restart_probes
+  changed_when: false
+
+- name: Log the health of each flagged voter
+  ansible.builtin.debug:
+    msg: "{{ item.item }} health before restart: HTTP {{ item.status }}"
+  loop: "{{ openbao_restart_probes.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: Order the flagged voters with the active voter last
+  ansible.builtin.set_fact:
+    openbao_restart_order: >-
+      {{ (openbao_restart_hosts | reject('in', openbao_restart_active) | list)
+         + (openbao_restart_hosts | select('in', openbao_restart_active) | list) }}
+  vars:
+    openbao_restart_active: >-
+      {{ openbao_restart_probes.results
+         | selectattr('status', 'equalto', 200)
+         | map(attribute='item')
+         | list }}
+
+- name: Log the restart order
+  ansible.builtin.debug:
+    msg: "openbao restart order: {{ openbao_restart_order | join(' -> ') or 'none' }}"
+
+- name: Restart and wait for each flagged voter in turn
+  any_errors_fatal: true
+  block:
+    - name: Restart each flagged voter in turn
+      ansible.builtin.include_tasks: restart_rolling_host.yml
+      loop: "{{ openbao_restart_order }}"
+      loop_control:
+        loop_var: openbao_restart_host

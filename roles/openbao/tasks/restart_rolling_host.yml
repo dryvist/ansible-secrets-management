@@ -1,0 +1,39 @@
+---
+# One flagged voter, run by restart_rolling.yml: restart its service on that
+# node, then wait until its own sys/health reports active (200) or standby
+# (429), which means initialized, unsealed and joined. The wait is bounded;
+# when it runs out the task fails and the play stops.
+
+- name: Log the restart of voter {{ openbao_restart_host }}
+  ansible.builtin.debug:
+    msg: "restarting openbao on {{ openbao_restart_host }}"
+
+- name: Restart openbao on voter {{ openbao_restart_host }}
+  ansible.builtin.systemd:
+    name: openbao
+    state: restarted
+    daemon_reload: true
+  delegate_to: "{{ openbao_restart_host }}"
+
+- name: Wait for openbao health on voter {{ openbao_restart_host }}
+  ansible.builtin.uri:
+    url: "{{ hostvars[openbao_restart_host].openbao_restart_api_addr }}/v1/sys/health"
+    method: GET
+    status_code: [200, 429, 472, 473, 501, 503]
+  delegate_to: "{{ openbao_restart_host }}"
+  register: openbao_restart_health
+  until: openbao_restart_health.status | default(0) in [200, 429]
+  retries: 60
+  delay: 5
+  changed_when: false
+
+- name: Log the health of the restarted voter
+  ansible.builtin.debug:
+    msg: "{{ openbao_restart_host }} health after restart: HTTP {{ openbao_restart_health.status }}"
+
+# Cleared so a later flush does not restart this voter again.
+- name: Clear the restart flag on voter {{ openbao_restart_host }}
+  ansible.builtin.set_fact:
+    openbao_restart_pending: false
+  delegate_to: "{{ openbao_restart_host }}"
+  delegate_facts: true

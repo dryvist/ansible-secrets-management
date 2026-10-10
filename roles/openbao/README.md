@@ -38,6 +38,12 @@ including rolling expansion and seal-key rotation, are in
 [Installation and usage](docs/installation-and-usage.md) and
 [Operations](docs/operations.md).
 
+When a config or unit change notifies a restart, only the voters that changed
+restart. They restart one at a time, with the active voter last. Each voter
+must report initialized, unsealed and joined before the next one restarts. If
+a voter does not come back within the retry window, the play fails and no
+other voter restarts.
+
 ## Docs
 
 - [Architecture and resilience](docs/architecture-and-resilience.md) — the

@@ -1,10 +1,19 @@
 ---
-- name: Restart openbao
-  ansible.builtin.systemd:
-    name: openbao
-    state: restarted
-    daemon_reload: true
+# Notified by the config and unit tasks. Flags each notified voter; the handler
+# below restarts the flagged voters one at a time.
+- name: Flag openbao voter for restart
+  ansible.builtin.set_fact:
+    openbao_restart_pending: true
+    openbao_restart_api_addr: "{{ openbao_api_addr }}"
+  listen: Restart openbao
   when: ansible_virtualization_type | default('') != 'docker'
+
+# Defined after the flag handler, so it runs once per flush after every flag is
+# set. Restarts only the flagged voters, one at a time, active voter last.
+- name: Restart flagged openbao voters one at a time
+  ansible.builtin.include_tasks: restart_rolling.yml
+  listen: Restart openbao
+  run_once: true
 
 - name: Restart rsyslog
   ansible.builtin.systemd:
