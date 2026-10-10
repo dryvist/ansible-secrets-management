@@ -289,29 +289,41 @@
       no_log: true
       when: not (bootstrap_seed_only | bool)
 
-    - name: Rotate each domain's AppRole secret_id in turn
-      ansible.builtin.include_tasks: tasks/openbao_rotate_one_domain.yml
-      loop: "{{ rotate_domain_names }}"
-      loop_control:
-        loop_var: rotate_domain_name
-
     # openbao_approle_secret_id_rotate_scheduled_approle_name comes from the
     # "Load the AppRole name lists" directory load above.
     # tests/openbao_rotate/verify_scheduled_self_rotate_vars.yml guards it.
-    # Same tasks file, targeted at approle-secret-id-rotate-scheduled itself,
-    # run last so every domain is already rotated first. Its own previous
-    # secret_id is left to expire, same as any other finite-TTL previous
-    # value -- never destroyed by this step.
+    # Same tasks file, targeted at approle-secret-id-rotate-scheduled itself.
+    # It runs FIRST: the identity that keeps this schedule alive renews
+    # before any domain can fail. The login token above stays valid for the
+    # domain loop. Its own previous secret_id is left to expire, same as any
+    # other finite-TTL previous value -- never destroyed by this step.
     - name: Rotate the scheduled identity's own secret_id (scheduled mode)
       ansible.builtin.include_tasks: tasks/openbao_rotate_one_domain.yml
       vars:
         rotate_domain_name: "{{ openbao_approle_secret_id_rotate_scheduled_approle_name }}"
       when: rotate_scheduled_mode | bool
 
+    - name: Rotate each domain's AppRole secret_id in turn
+      ansible.builtin.include_tasks: tasks/openbao_rotate_one_domain.yml
+      loop: "{{ rotate_domain_names }}"
+      loop_control:
+        loop_var: rotate_domain_name
+
     - name: Say what must happen next
       ansible.builtin.debug:
         msg: >-
-          Rotated {{ rotate_domain_names | join(', ') }}. Nothing is live yet
+          Rotated {{ rotate_domain_names | difference(rotate_failed_domains | default([]))
+                     | join(', ') }}. Nothing is live yet
           -- every consumer still holds its old credential until you
           re-converge in a fresh process (a value read at process start by
           `lookup('env', ...)` is invisible to the run that wrote it).
+
+    # A domain that fails is recorded by the rescue in
+    # tasks/openbao_rotate_one_domain.yml and the loop moves on. The run still
+    # ends failed, with one stable message, so the failure alerts.
+    - name: Fail the run when any identity did not rotate
+      ansible.builtin.fail:
+        msg: >-
+          AppRole rotation failed for: {{ rotate_failed_domains | sort | join(', ') }}.
+          Every other identity rotated.
+      when: rotate_failed_domains | default([]) | length > 0

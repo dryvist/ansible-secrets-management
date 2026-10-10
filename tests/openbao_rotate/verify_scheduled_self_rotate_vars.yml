@@ -3,7 +3,7 @@
 # that runs in scheduled mode (no `when`, or a `when` on
 # rotate_scheduled_mode), then asserts the scheduled identity's own AppRole
 # name resolves. The self-rotation step templates that name, so a run that
-# cannot resolve it fails after every domain has rotated.
+# cannot resolve it fails before any domain rotates.
 #
 # Usage: ansible-playbook tests/openbao_rotate/verify_scheduled_self_rotate_vars.yml -c local
 
@@ -52,7 +52,7 @@
           openbao_approle_secret_id_rotate_scheduled_approle_name in
           scheduled mode; the self-rotation step fails on it.
 
-    - name: Assert the scheduled identity logs in before domains and rotates itself last
+    - name: Assert the scheduled identity rotates itself first and a failed domain cannot stop the run
       ansible.builtin.assert:
         that:
           - >-
@@ -65,9 +65,19 @@
             _rotate_task_names.index("Authenticate as approle-secret-id-rotate")
             < _rotate_task_names.index("Rotate each domain's AppRole secret_id in turn")
           - >-
+            _rotate_task_names.index("Rotate the scheduled identity's own secret_id (scheduled mode)")
+            < _rotate_task_names.index("Rotate each domain's AppRole secret_id in turn")
+          - >-
             _rotate_task_names.index("Rotate each domain's AppRole secret_id in turn")
-            < _rotate_task_names.index("Rotate the scheduled identity's own secret_id (scheduled mode)")
+            < _rotate_task_names.index("Fail the run when any identity did not rotate")
+          - _rotate_task_names[-1] == "Fail the run when any identity did not rotate"
+          - >-
+            (lookup('ansible.builtin.file', _rotate_playbook_dir ~ '/tasks/openbao_rotate_one_domain.yml')
+             | from_yaml | selectattr('rescue', 'defined') | map(attribute='rescue') | flatten
+             | map('dict2items') | flatten | map(attribute='key')
+             | select('equalto', 'ansible.builtin.set_fact') | list | length) == 1
         fail_msg: >-
-          The scheduled run must authenticate with its dedicated identity before the
-          domain loop and rotate that identity only after all domains complete.
+          The scheduled run must authenticate with its dedicated identity, rotate that
+          identity before the domain loop, keep going past a failed domain (rescue in
+          tasks/openbao_rotate_one_domain.yml), and end with the failure report.
         quiet: true

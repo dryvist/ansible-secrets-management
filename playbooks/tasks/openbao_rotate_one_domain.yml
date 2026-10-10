@@ -285,3 +285,10 @@
           {{ rotate_domain_name }}: rotated
           ({{ rotate_new_prefix }}_ROLE_ID/_SECRET_ID written; {{ _old_status }}).
       no_log: false
+  # One identity failing must not stop the rest. Record the name (never the
+  # failed result, which can carry a secret) and let the playbook report it.
+  rescue:
+    - name: Record a failed rotation for {{ rotate_domain_name }}
+      ansible.builtin.set_fact:
+        rotate_failed_domains: "{{ rotate_failed_domains | default([]) + [rotate_domain_name] }}"
+      no_log: false
