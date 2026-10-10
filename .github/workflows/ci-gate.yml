@@ -44,7 +44,9 @@ jobs:
   molecule:
     name: Molecule
     needs: ci
-    if: ${{ needs.ci.outputs.molecule == 'true' }}
+    # v1.11 reports molecule=true with an empty scenario list when no
+    # scenario's files changed; an empty matrix would fail the job.
+    if: ${{ needs.ci.outputs.molecule == 'true' && needs.ci.outputs.molecule_scenarios != '[]' }}
     uses: ./.github/workflows/_molecule.yml
     with:
       scenarios: ${{ needs.ci.outputs.molecule_scenarios }}
