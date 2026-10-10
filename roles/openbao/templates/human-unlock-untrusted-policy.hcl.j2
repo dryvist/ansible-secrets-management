@@ -1,0 +1,21 @@
+{{ ansible_managed | comment }}
+# human-unlock-untrusted — the grant behind the phone-approved untrusted client.
+# It mints secret_ids for the per-service apply roles only, one role per entry in
+# openbao_ai_domains. The apply roles are enumerated by name, so ai-apply-all and
+# every administrator, policy, issuer and GitHub-admin identity are unreachable
+# from this policy. Nothing else is granted.
+{% for svc in openbao_ai_domains %}
+
+# --- ai-apply-{{ svc }}: per-service apply role (inert, human-gated) ---------
+path "auth/approle/role/ai-apply-{{ svc }}/role-id" {
+  capabilities = ["read"]
+}
+path "auth/approle/role/ai-apply-{{ svc }}/secret-id" {
+  capabilities = ["create", "update"]
+}
+{% endfor %}
+
+# --- Self-service token introspection ----------------------------------------
+path "auth/token/lookup-self" {
+  capabilities = ["read"]
+}
