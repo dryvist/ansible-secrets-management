@@ -125,7 +125,9 @@ openbao_github_oidc_audience: https://github.com/dryvist
 # to the caller repository, reusable workflow identity, event name and shared
 # GitHub OIDC audience. Their policy reads only that flow's generated router
 # key; publication jobs keep their existing, separate GitHub App token.
-openbao_github_agent_flow_roles:
+openbao_github_agent_flow_roles: >-
+  {{ openbao_github_agent_flow_base_roles + openbao_github_router_snapshot_flow_roles }}
+openbao_github_agent_flow_base_roles:
   - name: github-agent-ci-fix
     policy: github-agent-ci-fix
     repository: dryvist/ansible-proxmox-ai
@@ -140,6 +142,19 @@ openbao_github_agent_flow_roles:
     event_names: [pull_request_review, pull_request_review_comment]
     token_ttl: 10m
     token_max_ttl: 15m
+# The docs site's scheduled router snapshot. Bound to the docs source
+# repository's own workflow file on its default branch; unset yields no role,
+# as for the publisher below.
+openbao_github_router_snapshot_flow_roles: >-
+  {{ [{'name': 'docs-router-snapshot',
+       'policy': 'docs-router-snapshot',
+       'repository': openbao_github_oidc_docs_repository,
+       'job_workflow_ref': openbao_github_oidc_docs_repository
+         ~ '/.github/workflows/router-snapshot.yml@' ~ openbao_github_oidc_docs_ref,
+       'event_names': ['schedule', 'workflow_dispatch'],
+       'token_ttl': '10m',
+       'token_max_ttl': '15m'}]
+     if openbao_github_oidc_docs_repository | length > 0 else [] }}
 # The one repository and the one ref a publisher token may be minted for. A
 # pull-request or branch build fails the ref bound, which is the build a fork's
 # contributor controls.

@@ -1,0 +1,115 @@
+---
+# The docs-router-snapshot set writes to one repository. The mint and
+# orchestrator policies select sets by REJECTING tiers, so the set's tier is
+# the only thing keeping that write out of every ambient identity. Rendering
+# every tier policy against the real defaults is the only place that shows.
+- name: Render and verify the docs router snapshot policy
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    ansible_become: false
+    _fixture_dir: "{{ render_tmp }}"
+    _template_dir: "../../../roles/openbao/templates"
+    ansible_managed: "test fixture"
+    _snapshot_path: >-
+      {{ openbao_github_mount }}/token/{{ openbao_github_router_snapshot_set_name }}
+    _snapshot_kv_path: "{{ openbao_kv_mount }}/data/apps/docs-router-snapshot"
+    _other_policies:
+      - github-docs-publisher-policy.hcl
+      - github-mint-policy.hcl
+      - github-read-policy.hcl
+      - github-repo-create-policy.hcl
+      - github-org-admin-policy.hcl
+      - github-write-policy.hcl
+      - open-llm-policy.hcl
+      - ai-public-policy.hcl
+      - ai-orchestrator-policy.hcl
+
+  tasks:
+    - name: Load the openbao role defaults
+      ansible.builtin.include_vars:
+        dir: ../../../roles/openbao/defaults/main
+
+    # set_fact, not task vars: include_vars outranks task vars.
+    - name: Pin the docs source repository and the agents installation
+      ansible.builtin.set_fact:
+        openbao_github_oidc_docs_repository: fixture-owner/fixture-source
+        openbao_github_docs_publisher_repos: [fixture-repo]
+        openbao_github_agents_installation_id: "4242"
+
+    - name: Render the snapshot policy and every other tier policy
+      ansible.builtin.template:
+        src: "{{ _template_dir }}/{{ item }}.j2"
+        dest: "{{ _fixture_dir }}/snapshot-{{ item }}"
+        mode: "0644"
+      loop: "{{ ['docs-router-snapshot-policy.hcl'] + _other_policies }}"
+
+    - name: Read the rendered policies
+      ansible.builtin.slurp:
+        src: "{{ _fixture_dir }}/snapshot-{{ item }}"
+      register: _snapshot_raw
+      loop: "{{ ['docs-router-snapshot-policy.hcl'] + _other_policies }}"
+
+    - name: Reduce each rendered policy to its path lines
+      ansible.builtin.set_fact:
+        _snapshot_paths: "{{ _paths[0] }}"
+        _other_paths: "{{ _paths[1:] | flatten }}"
+      vars:
+        _paths: >-
+          {{ _snapshot_raw.results | map(attribute='content') | map('b64decode')
+             | map('regex_findall', '(?m)^path "([^"]+)"') | list }}
+
+    - name: Assert the snapshot policy grants exactly its key and its own set
+      ansible.builtin.assert:
+        that:
+          - _snapshot_paths == [_snapshot_kv_path, _snapshot_path]
+          - >-
+            (openbao_github_permission_sets
+             | selectattr('name', 'equalto', openbao_github_router_snapshot_set_name)
+             | map(attribute='repositories') | first) == ['fixture-source']
+          - >-
+            (openbao_github_router_snapshot_flow_roles | first).job_workflow_ref
+            == 'fixture-owner/fixture-source/.github/workflows/router-snapshot.yml@refs/heads/main'
+        fail_msg: >-
+          The docs-router-snapshot policy grants {{ _snapshot_paths }}. It must
+          grant its own key read and one set scoped to the docs source
+          repository only.
+
+    - name: Assert no other tier inherits the snapshot set
+      ansible.builtin.assert:
+        that:
+          - _snapshot_path not in _other_paths
+        fail_msg: >-
+          A tier other than docs-router-snapshot grants its set. The mint and
+          orchestrator policies select by rejecting tiers, so the set must keep
+          a rejected tier.
+
+    - name: Pin the docs source repository to the unconfigured case
+      ansible.builtin.set_fact:
+        openbao_github_oidc_docs_repository: ""
+
+    - name: Render the snapshot policy with no docs source repository
+      ansible.builtin.template:
+        src: "{{ _template_dir }}/docs-router-snapshot-policy.hcl.j2"
+        dest: "{{ _fixture_dir }}/snapshot-unset.hcl"
+        mode: "0644"
+
+    - name: Read the snapshot policy rendered without a repository
+      ansible.builtin.slurp:
+        src: "{{ _fixture_dir }}/snapshot-unset.hcl"
+      register: _snapshot_unset_raw
+
+    # An omitted repository list scopes a set to the whole installation.
+    - name: Assert an unconfigured docs source yields only the key read and no role
+      ansible.builtin.assert:
+        that:
+          - >-
+            (_snapshot_unset_raw.content | b64decode
+             | regex_findall('(?m)^path "([^"]+)"')) == [_snapshot_kv_path]
+          - openbao_github_router_snapshot_permission_sets == []
+          - openbao_github_router_snapshot_flow_roles == []
+        fail_msg: >-
+          With no docs source repository the snapshot set and OIDC role must
+          not exist.

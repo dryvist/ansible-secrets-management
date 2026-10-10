@@ -1,0 +1,13 @@
+{{ ansible_managed | comment }}
+# docs-router-snapshot — the docs site's scheduled router snapshot. Reads its
+# own generated router key and mints the one set scoped to the docs source
+# repository. Renders only the key read when that set is not declared.
+path "{{ openbao_kv_mount }}/data/apps/docs-router-snapshot" {
+  capabilities = ["read"]
+}
+{% for permission_set in openbao_github_permission_sets | selectattr('name', 'equalto', openbao_github_router_snapshot_set_name) %}
+
+path "{{ permission_set.mount }}/token/{{ permission_set.name }}" {
+  capabilities = ["create", "read", "update"]
+}
+{% endfor %}
