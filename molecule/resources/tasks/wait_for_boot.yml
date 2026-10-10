@@ -1,0 +1,13 @@
+---
+# A test instance answers wait_for_connection as soon as its init process
+# accepts an exec, which is before systemd has finished booting. The boot
+# still applies the tmpfiles rule that empties /tmp, and a module whose
+# payload was extracted there in that window fails with a missing-file
+# traceback. `raw` is the one action that ships no payload, so it is the one
+# that can safely run before the boot has settled; --wait blocks until it
+# has. A degraded result is not this task's concern.
+- name: Wait for the instance to finish booting
+  ansible.builtin.raw: systemctl is-system-running --wait
+  register: _molecule_boot
+  changed_when: false
+  failed_when: false

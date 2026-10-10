@@ -1,0 +1,23 @@
+---
+# Point apt inside a test container at the estate's cache when the runner host
+# hands one over (APT_PROXY_URL, rendered into the runner's env by
+# roles/github_runner). Unset -- a developer workstation -- means go direct, so
+# a scenario behaves the same everywhere and only its download time differs.
+#
+# Included from every scenario's prepare.yml -- the upstream image carries
+# no apt config of its own.
+#
+# https stays direct: apt's https method inherits the http proxy when its own
+# is unset, and the cache does not tunnel TLS, so an https repository would be
+# silently skipped rather than fetched.
+- name: Point apt at the estate cache when one is declared
+  when: lookup('env', 'APT_PROXY_URL') | length > 0
+  become: true
+  ansible.builtin.copy:
+    dest: /etc/apt/apt.conf.d/01proxy
+    content: |
+      Acquire::http::Proxy "{{ lookup('env', 'APT_PROXY_URL') }}";
+      Acquire::https::Proxy "DIRECT";
+    owner: root
+    group: root
+    mode: "0644"
