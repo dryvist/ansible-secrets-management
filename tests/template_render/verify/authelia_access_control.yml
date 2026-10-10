@@ -38,6 +38,7 @@
       terrakube_dex: x
       grafana: x
       litellm: x
+      bao_elevate_trusted: x
     # Supplied by inventory/group_vars/all.yml at run time.
     ingress_domain: example.test
     grafana_hostname: grafana

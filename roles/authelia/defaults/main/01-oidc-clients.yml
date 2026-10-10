@@ -100,6 +100,30 @@ authelia_oidc_litellm_client_secret_plain: >-
      or undef(hint='authelia_oidc_litellm_client_secret missing from OpenBao secret/apps/authelia') }}
 authelia_oidc_litellm_client_secret_hash_file: "{{ authelia_secrets_dir }}/oidc_litellm_client_secret_hash"
 
+# OpenBao login approval, device-code clients. The trusted client is the
+# workstation's (confidential; its secret is read from OpenBao like the clients
+# above). The untrusted client is for sandboxed agents (public, no secret). Neither
+# has a redirect URI: the device flow never redirects a browser. Authelia shows
+# client_name on the approval page, so each client names itself there.
+authelia_oidc_bao_elevate_trusted_client_id: bao-elevate-trusted
+authelia_oidc_bao_elevate_trusted_client_secret_plain: >-
+  {{ (bao_apps_secrets.authelia_oidc_bao_elevate_trusted_client_secret | default('', true))
+     or undef(hint='authelia_oidc_bao_elevate_trusted_client_secret missing from OpenBao '
+                   ~ 'secret/apps/authelia') }}
+authelia_oidc_bao_elevate_trusted_client_secret_hash_file: >-
+  {{ authelia_secrets_dir }}/oidc_bao_elevate_trusted_client_secret_hash
+authelia_oidc_bao_elevate_untrusted_client_id: bao-elevate-untrusted
+
+# Source networks allowed to approve, and the one account allowed to approve.
+# Read from env as a comma-separated CIDR list, the same channel as
+# WALL_KIOSK_CLIENTS. An empty list is refused by an assert in
+# tasks/oidc_client_secrets.yml before the config renders: an approval rule with
+# no networks would match every source address.
+authelia_approve_networks: >-
+  {{ (lookup('env', 'AUTHELIA_APPROVE_NETWORKS') | default('', true)).split(',')
+     | map('trim') | reject('equalto', '') | list }}
+authelia_approve_subject: "user:{{ authelia_admin_user }}"
+
 # Drives tasks/oidc_client_secrets.yml's create-if-absent hash loop and
 # configuration.yml.j2's lookup of the resulting digests. Add a confidential
 # client by appending here — never by editing the task file.
@@ -125,3 +149,6 @@ authelia_oidc_confidential_clients:
   - name: litellm
     secret_plain: "{{ authelia_oidc_litellm_client_secret_plain }}"
     hash_file: "{{ authelia_oidc_litellm_client_secret_hash_file }}"
+  - name: bao_elevate_trusted
+    secret_plain: "{{ authelia_oidc_bao_elevate_trusted_client_secret_plain }}"
+    hash_file: "{{ authelia_oidc_bao_elevate_trusted_client_secret_hash_file }}"

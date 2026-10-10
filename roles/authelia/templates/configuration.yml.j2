@@ -49,6 +49,24 @@ identity_providers:
           - email_verified
           - preferred_username
           - name
+    # Device codes are bearer-equivalent until approved. Five minutes bounds the
+    # window in which a code shown on a phone can be approved (default is 10).
+    lifespans:
+      device_code: 5m
+    # OpenBao login approval. Only the device-code clients below use this policy.
+    # Deny by default; the one rule admits the operator, from the approval
+    # networks only. The rule has no fallback, so an empty network list must be
+    # refused before render (see tasks/oidc_client_secrets.yml).
+    authorization_policies:
+      elevate:
+        default_policy: deny
+        rules:
+          - policy: two_factor
+            subject: '{{ authelia_approve_subject }}'
+            networks:
+{% for n in authelia_approve_networks %}
+              - '{{ n }}'
+{% endfor %}
     clients:
       - client_id: '{{ authelia_oidc_hermes_client_id }}'
         client_name: Hermes Dashboard
@@ -225,6 +243,36 @@ identity_providers:
         authorization_policy: two_factor
         require_pkce: false
         token_endpoint_auth_method: client_secret_basic
+      # OpenBao login approval clients. Device-code grant only: no redirect URI
+      # and no authorization-code grant, so neither can drive a browser redirect.
+      # consent_mode explicit makes each approval an affirmative action on the
+      # approval page, which shows client_name. Scope and networks are enforced by
+      # the elevate authorization policy above.
+      - client_id: '{{ authelia_oidc_bao_elevate_trusted_client_id }}'
+        client_name: OpenBao elevation (trusted)
+        client_secret: '{{ authelia_oidc_client_secret_hashes.bao_elevate_trusted }}'
+        public: false
+        scopes:
+          - openid
+          - profile
+          - groups
+        grant_types:
+          - urn:ietf:params:oauth:grant-type:device_code
+        consent_mode: explicit
+        authorization_policy: elevate
+        token_endpoint_auth_method: client_secret_post
+      - client_id: '{{ authelia_oidc_bao_elevate_untrusted_client_id }}'
+        client_name: OpenBao elevation (untrusted)
+        public: true
+        scopes:
+          - openid
+          - profile
+          - groups
+        grant_types:
+          - urn:ietf:params:oauth:grant-type:device_code
+        consent_mode: explicit
+        authorization_policy: elevate
+        token_endpoint_auth_method: none
 
 access_control:
   default_policy: deny
