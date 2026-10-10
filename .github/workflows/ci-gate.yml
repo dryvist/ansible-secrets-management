@@ -49,9 +49,57 @@ jobs:
     with:
       scenarios: ${{ needs.ci.outputs.molecule_scenarios }}
 
+  # Role tests moved from the consuming repository, run with the same
+  # invocations that repository used: the verify playbooks, then pytest.
+  tests:
+    name: Role tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.14"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: "latest"
+
+      - name: Install Ansible, pytest and PyYAML
+        run: uv pip install --system 'ansible-core>=2.16' pytest pyyaml
+
+      - name: Install the collection's dependencies
+        run: ansible-galaxy collection install -r requirements.yml
+
+      - name: Verify the AppRole source-address class map
+        run: ansible-playbook tests/approle_cidr_class/verify.yml
+
+      - name: Verify the execution plane's credential is bounded elsewhere
+        run: ansible-playbook tests/plane_identity_bounds/verify.yml
+
+      - name: Verify every non-expiring secret_id has a compensating control
+        run: ansible-playbook tests/nonexpiring_secret_ids/verify.yml
+
+      - name: Verify the AppRole CIDR bound drift
+        run: python3 -m pytest -v tests/test_openbao_approle_cidr_drift.py
+
+      - name: Verify the base-policy derivation for Terrakube workspaces
+        run: python3 -m pytest -v tests/test_terrakube_base_policies_derivation.py
+
+      - name: Verify the AppRole secret_id liveness probe
+        run: python3 -m pytest -v tests/test_approle_secret_id_liveness.py
+
+      - name: Verify the voter-health sampler emits the quorum token
+        run: python3 -m pytest -v tests/test_voter_health_emits_quorum_contract.py
+
   gate:
     name: Merge Gate
-    needs: [ci, molecule]
+    needs: [ci, molecule, tests]
     if: ${{ always() && !cancelled() }}
     runs-on: ubuntu-latest
     steps:

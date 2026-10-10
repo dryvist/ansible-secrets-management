@@ -1,0 +1,99 @@
+---
+# A secret_id that never expires must be bounded by something else.
+#
+# Several identities here carry one deliberately, because nothing re-mints
+# their credential and a finite lifetime would therefore retire a credential
+# with no replacement — which is exactly how the converge silently moved onto
+# an unbounded identity on 2026-09-06 and stopped reconciling the store.
+#
+# The exception is only defensible while another control holds. Two count:
+#
+#   * a source-address class that is not `unbound` — a leaked copy is useless
+#     from anywhere else; or
+#   * exclusion from routine reconciliation — nothing running as that identity
+#     can rewrite the bounds that make it safe.
+#
+# Either is sufficient. Neither is optional. This asserts the disjunction so a
+# future non-expiring credential fails on the day it is added rather than the
+# day it leaks, and so removing the last remaining control is caught rather
+# than read as a tidy-up.
+#
+# Rendered from the role's own defaults, never restated: these names are
+# generated, and computing them another way has already produced three
+# different wrong answers in this repository.
+- name: Verify every non-expiring secret_id carries a compensating control
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    role_defaults: "{{ playbook_dir }}/../../roles/openbao/defaults/main"
+    openbao_management_cidrs: "192.0.2.0/24"
+    openbao_workstation_cidrs: "198.51.100.0/24"
+    openbao_ci_cidrs: "203.0.113.0/24"
+    openbao_ssh_source_cidrs: "192.0.2.0/24"
+
+  tasks:
+    - name: Load the openbao role defaults
+      ansible.builtin.include_vars:
+        dir: "{{ role_defaults }}"
+
+    # include_vars outranks play vars, so the fixture ranges have to be set
+    # AFTER the load or the defaults' own env-derived (empty here) values win.
+    - name: Supply the range inputs the class definitions read
+      ansible.builtin.set_fact:
+        openbao_management_cidrs: "192.0.2.0/24"
+        openbao_workstation_cidrs: "198.51.100.0/24"
+        openbao_ci_cidrs: "203.0.113.0/24"
+
+    - name: Collect every declared non-expiring secret_id
+      ansible.builtin.set_fact:
+        # Both spellings: an inline declaration on the role, and the override
+        # map. A guard that read only the map missed the very identity it was
+        # written for.
+        openbao_forever_names: >-
+          {{ ((openbao_approles
+               | selectattr('secret_id_ttl', 'defined')
+               | selectattr('secret_id_ttl', 'in', [0, '0', '0s'])
+               | map(attribute='name') | list)
+              + ((openbao_approle_secret_id_ttl_overrides | default({}))
+                 | dict2items | selectattr('value', 'in', [0, '0', '0s'])
+                 | map(attribute='key') | list)) | unique | sort }}
+
+    - name: The guard is looking at something, not passing on an empty set
+      ansible.builtin.assert:
+        that:
+          - openbao_forever_names | length > 0
+        fail_msg: >-
+          No declared identity carries a non-expiring secret_id, so every
+          assertion below passes by finding nothing. If that exception has
+          genuinely been retired, delete this test deliberately rather than
+          leave a check that cannot fail.
+
+    - name: Each one is bound by place, or cannot rewrite its own bounds
+      vars:
+        unprotected: >-
+          {{ openbao_forever_names
+             | reject('in', openbao_reconcile_excluded_policies)
+             | rejectattr('__undefined__', 'defined')
+             | select('in', (openbao_approle_cidr_class_map | dict2items
+                             | selectattr('value', 'equalto', 'unbound')
+                             | map(attribute='key') | list)
+                            + (openbao_forever_names
+                               | reject('in', openbao_approle_cidr_class_map | list)
+                               | list))
+             | list }}
+      ansible.builtin.assert:
+        that:
+          - unprotected | length == 0
+        fail_msg: >-
+          {{ unprotected | join(', ') }} carry a secret_id that never expires
+          with no compensating control: not bound to a source-address class,
+          and not excluded from routine reconciliation. Add one or the other.
+          A never-expiring credential accepted from anywhere, whose own bounds
+          the holder can rewrite, is the shape this programme exists to remove.
+
+    - name: Report what is exempt and why, so the set stays deliberate
+      ansible.builtin.debug:
+        msg: >-
+          non-expiring secret_ids: {{ openbao_forever_names | join(', ') }} —
+          each bounded by source class or excluded from self-management.
