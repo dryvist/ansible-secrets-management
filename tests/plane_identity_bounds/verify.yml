@@ -1,0 +1,309 @@
+---
+# The execution plane's identity holds a secret_id that never expires. That is
+# defensible only while other things bound it, and none of them are visible
+# from the line that grants the exception.
+#
+# It carries the reconcile policy, so a routine converge runs AS it. Without an
+# exclusion, that run can rewrite its own AppRole — including the grant that is
+# the entire justification for the non-expiring credential. An identity able to
+# edit its own bounds has no bounds.
+#
+# This asserts the CONJUNCTION, because removing any single control while
+# leaving the exception in place is the failure mode, and it would read as a
+# tidy-up rather than as the widening it is.
+#
+# Everything is RENDERED from the role's own defaults, never restated: these
+# names are generated, and computing them another way has already produced
+# three different wrong answers in this repository.
+- name: Verify the execution plane's non-expiring credential is bounded elsewhere
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    role_defaults: "{{ playbook_dir }}/../../roles/openbao/defaults/main"
+    openbao_management_cidrs: "192.0.2.0/24"
+    openbao_workstation_cidrs: "198.51.100.0/24"
+    openbao_ci_cidrs: "203.0.113.0/24"
+    openbao_ssh_source_cidrs: "192.0.2.0/24"
+
+  tasks:
+    - name: Load the openbao role defaults
+      ansible.builtin.include_vars:
+        dir: "{{ role_defaults }}"
+
+    # include_vars outranks play vars, so the fixture ranges have to be set
+    # AFTER the load or the defaults' own env-derived (empty here) values win.
+    - name: Supply the range inputs the class definitions read
+      ansible.builtin.set_fact:
+        openbao_management_cidrs: "192.0.2.0/24"
+        openbao_workstation_cidrs: "198.51.100.0/24"
+        openbao_ci_cidrs: "203.0.113.0/24"
+        openbao_github_write_scopes: {"github-write-fixture": ["test-repo"]}
+
+    - name: The plane identity is declared, or this test asserts nothing
+      ansible.builtin.assert:
+        that:
+          - openbao_semaphore_approle_name in (openbao_approles | map(attribute='name') | list)
+        fail_msg: >-
+          The execution plane's identity is not in the declared AppRole set, so
+          every assertion below would pass by looking up nothing.
+
+    - name: It can actually reconcile, which is the whole point of it
+      vars:
+        plane: >-
+          {{ openbao_approles
+             | selectattr('name', 'equalto', openbao_semaphore_approle_name) | first }}
+      ansible.builtin.assert:
+        that:
+          - openbao_reconcile_policy_name in (plane.token_policies | default([]))
+        fail_msg: >-
+          The execution plane's identity does not carry the reconcile policy, so
+          an unattended converge cannot be the reconcile identity at all. It
+          then skips the entire provisioning path — policies, AppRoles, TTL
+          bounds and generated application secrets — and still reports success.
+          That is exactly the silence this attachment exists to end.
+
+    - name: Only the inert provisioning identity carries policy-sync
+      vars:
+        plane: >-
+          {{ openbao_approles
+             | selectattr('name', 'equalto', openbao_semaphore_approle_name) | first }}
+        holder: >-
+          {{ openbao_workstation_approles
+             | selectattr('name', 'equalto', openbao_policy_sync_approle_name) | first }}
+      ansible.builtin.assert:
+        that:
+          - openbao_policy_sync_policy_name not in (plane.token_policies | default([]))
+          - openbao_policy_sync_policy_name in holder.token_policies
+          - not holder.manage_secret_id
+          - holder.secret_id_num_uses == 1
+          - openbao_policy_sync_policy_name in openbao_reconcile_excluded_policies
+        fail_msg: >-
+          policy-sync must be held only by the inert, single-use
+          openbao-policy-sync AppRole, never by the plane identity, and must be
+          in openbao_reconcile_excluded_policies so reconcile cannot rewrite it.
+
+    - name: It cannot reconcile its own role and retune its own bounds
+      ansible.builtin.assert:
+        that:
+          - openbao_semaphore_approle_name in openbao_reconcile_excluded_policies
+        fail_msg: >-
+          The execution plane's identity is not excluded from routine
+          reconciliation while holding the reconcile policy. A converge running
+          as it could rewrite its own AppRole, including the non-expiring
+          secret_id and the grant that justifies it. The deliberate consequence
+          of the exclusion is that this role changes only under a privileged
+          run — the human checkpoint the credential is traded against.
+
+    - name: The write realm keeps finite credential and token bounds
+      vars:
+        realms: >-
+          {{ openbao_approles
+             | selectattr('name', 'equalto', 'github-write-fixture') | list }}
+      ansible.builtin.assert:
+        that:
+          - realms | length > 0
+          - >-
+            realms | map(attribute='secret_id_num_uses',
+                         default=openbao_approle_secret_id_num_uses_overrides.get(
+                           'github-write-fixture', openbao_approle_secret_id_num_uses))
+            | unique | list == [30]
+          - >-
+            realms | map(attribute='secret_id_ttl',
+                         default=openbao_approle_secret_id_ttl_overrides.get(
+                           'github-write-fixture', openbao_approle_secret_id_ttl))
+            | map('community.general.to_seconds') | map('int') | unique | list == [86400]
+          - >-
+            realms | map(attribute='token_ttl', default=openbao_approle_token_ttl)
+            | map('community.general.to_seconds') | map('int') | unique | list == [1800]
+        fail_msg: >-
+          The write realm requires a 30-use, 24-hour secret_id and a 30-minute token.
+
+    - name: The dispatcher and workstation tool identities keep finite secret_id bounds
+      vars:
+        rows: >-
+          {{ openbao_approles | selectattr('name', 'equalto', item.name) | list }}
+      ansible.builtin.assert:
+        that:
+          - rows | length > 0
+          - >-
+            rows | map(attribute='secret_id_num_uses',
+                       default=openbao_approle_secret_id_num_uses_overrides.get(
+                         item.name, openbao_approle_secret_id_num_uses))
+            | map('int') | unique | list == [item.uses]
+          - >-
+            rows | map(attribute='secret_id_ttl',
+                       default=openbao_approle_secret_id_ttl_overrides.get(
+                         item.name, openbao_approle_secret_id_ttl))
+            | map('community.general.to_seconds') | map('int') | unique | list
+            == [item.ttl | community.general.to_seconds | int]
+        fail_msg: "{{ item.name }} requires a {{ item.uses }}-use, {{ item.ttl }} secret_id (0 = unlimited)."
+      loop:
+        - { name: "{{ openbao_open_llm_approle_name }}", uses: 0, ttl: "{{ openbao_rotated_domain_secret_id_ttl }}" }
+        - { name: proxman, uses: 30, ttl: 24h }
+
+    - name: The dispatcher pair is rotated on schedule and never republished to Doppler
+      ansible.builtin.assert:
+        that:
+          - openbao_open_llm_approle_name in openbao_secrets_domain_approle_names
+          - >-
+            (openbao_approle_secret_id_ttl_overrides[openbao_open_llm_approle_name]
+             | community.general.to_seconds | int)
+            == (openbao_rotated_domain_secret_id_ttl | community.general.to_seconds | int)
+          - openbao_open_llm_approle_name not in openbao_rotate_doppler_sync_domains
+        fail_msg: >-
+          open-llm needs scheduled rotation with the rotated-domain secret_id ttl
+          and must stay out of openbao_rotate_doppler_sync_domains.
+
+    # A scheduled domain whose secret_id outlives fewer than three rotation
+    # intervals expires after a single missed run. 0s (never expires) is exempt.
+    - name: Every scheduled-rotation domain outlives three rotation intervals
+      vars:
+        _min_seconds: "{{ (openbao_rotate_scheduled_interval | community.general.to_seconds | int) * 3 }}"
+        _declared: "{{ openbao_approle_secret_id_ttl_overrides.get(item, openbao_approle_secret_id_ttl) }}"
+        _ttl_seconds: >-
+          {{ (openbao_approles | selectattr('name', 'equalto', item)
+              | map(attribute='secret_id_ttl', default=_declared) | first | default(_declared))
+             | community.general.to_seconds | int }}
+      ansible.builtin.assert:
+        that:
+          - (_ttl_seconds | int) == 0 or (_ttl_seconds | int) >= (_min_seconds | int)
+        fail_msg: >-
+          {{ item }} secret_id ttl {{ _ttl_seconds }}s is under 3x the
+          {{ openbao_rotate_scheduled_interval }} rotation interval ({{ _min_seconds }}s).
+        quiet: true
+      loop: "{{ openbao_secrets_domain_approle_names + [openbao_approle_secret_id_rotate_scheduled_approle_name] }}"
+
+    # Deny by default: a scheduled-rotation domain is redeemed on every converge
+    # or service start, so a use cap empties it between rotations. Only the
+    # identities listed here keep a finite cap.
+    - name: Every scheduled-rotation domain has unlimited uses unless listed as finite
+      vars:
+        # Workstation reader and per-Mac Edge readers (workstation class), the
+        # workstation certificate signer (one login per signature), and the
+        # rotate identity (redeemed twice a day).
+        _finite: >-
+          {{ [openbao_local_llm_workstation_approle_name, openbao_agent_ssh_sign_approle_name,
+              openbao_approle_secret_id_rotate_scheduled_approle_name]
+             + openbao_cribl_edge_mac_approle_names }}
+        _declared: >-
+          {{ openbao_approle_secret_id_num_uses_overrides.get(item, openbao_approle_secret_id_num_uses) }}
+        _uses: >-
+          {{ openbao_approles | selectattr('name', 'equalto', item)
+             | map(attribute='secret_id_num_uses', default=_declared) | first | default(_declared) | int }}
+      ansible.builtin.assert:
+        that:
+          - (_uses | int) > 0 if item in _finite else (_uses | int) == 0
+        fail_msg: >-
+          {{ item }} has secret_id_num_uses {{ _uses }}; scheduled-rotation domains
+          need 0 unless listed as finite, and listed ones need a cap above 0.
+        quiet: true
+      loop: "{{ openbao_secrets_domain_approle_names + [openbao_approle_secret_id_rotate_scheduled_approle_name] }}"
+
+    # Workstation reads of the router credentials have their own identity, so
+    # workstation logins cannot spend the plane's local-llm secret_id.
+    - name: The workstation local-llm reader is finite and the plane pair stays off Doppler
+      vars:
+        row: >-
+          {{ openbao_approles
+             | selectattr('name', 'equalto', openbao_local_llm_workstation_approle_name) | first }}
+      ansible.builtin.assert:
+        that:
+          - (row.secret_id_num_uses | int) > 0
+          - >-
+            (openbao_approle_secret_id_ttl_overrides[openbao_local_llm_workstation_approle_name]
+             | community.general.to_seconds | int) > 0
+          - openbao_approle_cidr_class_map[openbao_local_llm_workstation_approle_name] == 'workstation'
+          - openbao_local_llm_workstation_approle_name in openbao_secrets_domain_approle_names
+          - openbao_local_llm_workstation_approle_name in openbao_rotate_doppler_sync_domains
+          - openbao_local_llm_approle_name not in openbao_rotate_doppler_sync_domains
+        fail_msg: >-
+          local-llm-workstation needs a finite, workstation-bound, rotated
+          secret_id republished to Doppler, and local-llm must not be.
+
+    # The workstation SSH signer holds the one signing policy and nothing else,
+    # with finite bounds and a token that never outlives a certificate.
+    - name: The workstation SSH signer is sign-only, finite, and rotated to Doppler
+      vars:
+        row: >-
+          {{ openbao_approles
+             | selectattr('name', 'equalto', openbao_agent_ssh_sign_approle_name) | first }}
+        cert_ttl: >-
+          {{ (openbao_ssh_roles | selectattr('name', 'equalto', 'automation-ai') | first).ttl }}
+      ansible.builtin.assert:
+        that:
+          - row.token_policies == ['ssh-sign-automation-ai']
+          - row.policy is not defined
+          - (row.secret_id_num_uses | int) > 0
+          - >-
+            (openbao_approle_secret_id_ttl_overrides[openbao_agent_ssh_sign_approle_name]
+             | community.general.to_seconds | int) > 0
+          - (row.token_ttl | community.general.to_seconds | int) <= (cert_ttl | int)
+          - (row.token_max_ttl | community.general.to_seconds | int) <= (cert_ttl | int)
+          - openbao_approle_cidr_class_map[openbao_agent_ssh_sign_approle_name] == 'machine_or_workstation'
+          - openbao_agent_ssh_sign_approle_name in openbao_secrets_domain_approle_names
+          - openbao_agent_ssh_sign_approle_name in openbao_rotate_doppler_sync_domains
+        fail_msg: >-
+          agent-ssh-sign must carry exactly ssh-sign-automation-ai, a finite
+          rotated secret_id republished to Doppler, and a token no longer than
+          the automation-ai certificate.
+
+    # The general guard. Any future non-expiring secret_id must earn it the same
+    # way, or this fails on the day it is added rather than the day it leaks.
+    # Both spellings are checked: the override map AND an inline declaration on
+    # the role itself, because the first version of this guard read only the
+    # map and would have missed the very identity it was written for.
+    #
+    # CORRECTED, and the correction matters — read before tightening this back.
+    # An earlier version accepted only exclusion from reconciliation, and so
+    # failed the four identities that were declared to match what the store
+    # already held. Being RECONCILED BY the unattended identity is not the
+    # hazard; being able to RECONCILE ITSELF is, and the assertion directly
+    # above is what tests for that. A source-address class that is not
+    # `unbound` is a compensating control in its own right — a leaked secret_id
+    # is useless from anywhere else — and it is the control this programme
+    # names alongside lifetime and redemption limits. Excluding a role from
+    # reconciliation is the heavier remedy, reserved for the role that holds
+    # the reconcile policy, because exclusion also means nothing manages it.
+    - name: Every non-expiring secret_id is bounded by something else
+      vars:
+        from_overrides: >-
+          {{ (openbao_approle_secret_id_ttl_overrides | default({}))
+             | dict2items | selectattr('value', 'in', [0, '0', '0s'])
+             | map(attribute='key') | list }}
+        from_declarations: >-
+          {{ openbao_approles
+             | selectattr('secret_id_ttl', 'defined')
+             | selectattr('secret_id_ttl', 'in', [0, '0', '0s'])
+             | map(attribute='name') | list }}
+        bound_by_place: >-
+          {{ (openbao_approle_cidr_class_map | default({})) | dict2items
+             | rejectattr('value', 'equalto', 'unbound')
+             | map(attribute='key') | list }}
+        unprotected: >-
+          {{ (from_overrides + from_declarations) | unique
+             | reject('in', openbao_reconcile_excluded_policies)
+             | reject('in', bound_by_place) | list }}
+      ansible.builtin.assert:
+        that:
+          - unprotected | length == 0
+        fail_msg: >-
+          {{ unprotected | join(', ') }} declare a secret_id that never expires
+          with nothing standing in for the lifetime. Give it one, or bind it to
+          a source-address class, or exclude the role so nothing running as it
+          can rewrite its own controls. Any of the three; none of them
+          optional.
+
+    - name: The guard is looking at something, not passing on an empty set
+      vars:
+        forever: >-
+          {{ openbao_approles | selectattr('secret_id_ttl', 'defined')
+             | selectattr('secret_id_ttl', 'in', [0, '0', '0s'])
+             | map(attribute='name') | list }}
+      ansible.builtin.assert:
+        that:
+          - forever | length > 0
+        fail_msg: >-
+          No declared role carries a non-expiring secret_id, so the guard above
+          asserted nothing. If that exception has genuinely been retired, delete
+          the guard deliberately rather than leaving a check that cannot fail.
