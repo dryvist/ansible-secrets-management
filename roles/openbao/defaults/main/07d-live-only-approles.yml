@@ -1,7 +1,7 @@
 ---
-# The four identities that were live and declared nowhere (names in 05e).
+# The three identities that were live and declared nowhere (names in 05e).
 #
-# What bounds them meanwhile is the source range, applied to all four, and
+# What bounds them meanwhile is the source range, applied to all three, and
 # asserted by tests/plane_identity_bounds/verify.yml.
 #
 openbao_live_only_approles:
@@ -17,6 +17,3 @@ openbao_live_only_approles:
     policy: "{{ openbao_media_rotate_live_policy_name }}"
     secret_id_ttl: "0s"
     secret_id_num_uses: 0
-  - name: "{{ openbao_github_write_work_approle_name }}"
-    policy: "{{ openbao_github_write_work_live_policy_name }}"
-    token_ttl: "{{ openbao_github_write_scope_token_ttl }}"

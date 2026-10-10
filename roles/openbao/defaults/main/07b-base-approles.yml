@@ -158,7 +158,7 @@ openbao_base_approles_core:
   # human wraps a single-use secret_id per elevation.
   # secret_id_ttl "0s" + num_uses 0: nothing re-mints these, so a finite bound
   # expires a credential nothing replaces. Same reason as semaphore above and
-  # the four in 07d. "0s" not 0: 10c compares via to_seconds.
+  # the three in 07d. "0s" not 0: 10c compares via to_seconds.
   - name: "{{ openbao_github_read_approle_name }}"
     policy: "{{ openbao_github_read_policy_name }}"
     secret_id_ttl: "0s"
