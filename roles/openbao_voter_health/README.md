@@ -9,6 +9,16 @@ longitudinal evidence a future, separately-approved membership change would
 need — **it makes no membership, policy, or AppRole change itself**, and
 deploying it is reversible (stop/disable the timer, nothing else changes).
 
+## Installation
+
+Install the collection with `ansible-galaxy install -r requirements.yml` from the repository
+root. Reference the role by its fully qualified name, `dryvist.secrets_management.openbao_voter_health`.
+
+## Usage
+
+Apply the role to the `openbao_group` inventory group. The role reads `tofu_data` and the
+`SPLUNK_HEC_TOKEN` environment variable. `defaults/main.yml` lists the other inputs.
+
 ## How it works
 
 - Deployed identically on every `openbao_group` member (same footprint as
