@@ -92,6 +92,17 @@
           non-Docker host -- rsyslogd -N1 hard-fails config validation on a
           duplicate module load.
 
+    - name: Assert the audit input saves its read offset during the run
+      ansible.builtin.assert:
+        that:
+          - >-
+            'PersistStateInterval="100"'
+            in _openbao_rsyslog_by_name['test_openbao_audit_rsyslog.conf']
+        fail_msg: >-
+          The openbao audit imfile input must set PersistStateInterval. Without
+          it rsyslog saves the read offset only on a clean shutdown, and an
+          unclean stop re-ships every audit record since the last clean save.
+
     - name: Assert the module load appears exactly once under Docker (audit.yml skipped)
       ansible.builtin.assert:
         that:

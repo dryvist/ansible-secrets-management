@@ -41,10 +41,15 @@ ruleset(name="openbao_audit") {
   stop
 }
 
+# PersistStateInterval: imfile otherwise saves its read offset only on a
+# clean shutdown, so a host that loses power re-reads the file from the last
+# clean save and re-ships every record since. Saving every 100 lines bounds
+# that replay to 100 records.
 input(type="imfile"
       File="{{ openbao_audit_log_path }}"
       Tag="openbao-audit:"
       Severity="info"
       Facility="local6"
       reopenOnTruncate="on"
+      PersistStateInterval="100"
       Ruleset="openbao_audit")
