@@ -32,7 +32,7 @@ Apply the role to the `openbao_group` inventory group. The role reads `tofu_data
   (`is_self`, `leader_address`).
 - Host + port are never hardcoded — the FQDN is derived from
   `tofu_data.domain` and the port from `tofu_data.constants`
-  (`.claude/rules/ip-addressing.md`). The Splunk HEC token is the same
+  (the IP-addressing rule). The Splunk HEC token is the same
   `SPLUNK_HEC_TOKEN` every other HEC consumer in this repo already uses — no
   new secret is introduced.
 

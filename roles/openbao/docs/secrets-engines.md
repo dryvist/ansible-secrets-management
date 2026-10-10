@@ -65,7 +65,7 @@ an OAuthapp upgrade as a reviewed supply-chain event.
 Adding the first OAuth-brokered credential means adding its server
 configuration, consumer AppRole/policy, and drift assertions to
 `tasks/init.yml` and `defaults/main.yml` — see
-`.claude/rules/openbao-plugins-first.md` for the engine-first policy this
+the plugins-first rule for the engine-first policy this
 mount exists to satisfy.
 
 ## Credential rotation (on-box timers, table-driven)
