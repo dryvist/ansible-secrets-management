@@ -71,34 +71,6 @@
     - openbao_engines
   when: not (openbao_reconcile_mode | default(false))
 
-- name: Configure the per-App GitHub mounts
-  ansible.builtin.include_tasks: init/05b-github-app-mount.yml
-  loop: "{{ openbao_github_app_mounts }}"
-  loop_control:
-    loop_var: gm
-    label: "{{ gm.mount }}"
-  when:
-    - not (openbao_reconcile_mode | default(false))
-    - openbao_bootstrap_token is defined
-    - openbao_github_engine_enabled | bool
-
-# Runs on the controller: it already holds the App keys, and the store host
-# has no Python cryptography for the JWT signature. ansible_become is a
-# connection variable, so it is set as a var (the become keyword loses to the
-# inventory's ansible_become on a delegated task).
-- name: Check each GitHub App with a key in this run for exposure
-  ansible.builtin.include_tasks:
-    file: init/05c-github-app-exposure.yml
-    apply:
-      delegate_to: localhost
-      vars:
-        ansible_become: false
-  loop: "{{ openbao_github_app_exposure_targets }}"
-  loop_control:
-    loop_var: ga
-    label: "{{ ga.app_id }}"
-  when: not (openbao_reconcile_mode | default(false))
-
 - name: Register and configure the OAuthapp secrets engine
   ansible.builtin.import_tasks: init/06-oauth-engine.yml
   tags:
@@ -120,6 +92,49 @@
   ansible.builtin.import_tasks: init/08-rbac-policies.yml
   tags:
     - openbao_rbac
+
+# After 08: a new mount's path reaches the provisioning policy only once 08
+# rewrites it. Dynamic includes: the tag reaches the loaded tasks only via
+# `apply:` (see the rotation-exempt include below). `--tags
+# openbao_github_mounts,openbao_rbac` scopes a run to these includes and the
+# policies, without the rest of the bootstrap phases.
+- name: Configure the per-App GitHub mounts
+  ansible.builtin.include_tasks:
+    file: init/05b-github-app-mount.yml
+    apply:
+      tags:
+        - openbao_github_mounts
+  tags:
+    - openbao_github_mounts
+  loop: "{{ openbao_github_app_mounts }}"
+  loop_control:
+    loop_var: gm
+    label: "{{ gm.mount }}"
+  when:
+    - not (openbao_reconcile_mode | default(false))
+    - openbao_bootstrap_token is defined
+    - openbao_github_engine_enabled | bool
+
+# Runs on the controller: it already holds the App keys, and the store host
+# has no Python cryptography for the JWT signature. ansible_become is a
+# connection variable, so it is set as a var (the become keyword loses to the
+# inventory's ansible_become on a delegated task).
+- name: Check each GitHub App with a key in this run for exposure
+  ansible.builtin.include_tasks:
+    file: init/05c-github-app-exposure.yml
+    apply:
+      delegate_to: localhost
+      vars:
+        ansible_become: false
+      tags:
+        - openbao_github_mounts
+  tags:
+    - openbao_github_mounts
+  loop: "{{ openbao_github_app_exposure_targets }}"
+  loop_control:
+    loop_var: ga
+    label: "{{ ga.app_id }}"
+  when: not (openbao_reconcile_mode | default(false))
 
 - name: Enable AppRole/JWT auth and reconcile Terrakube workspace JWT roles
   ansible.builtin.import_tasks: init/09-auth-methods-and-terrakube-jwt.yml

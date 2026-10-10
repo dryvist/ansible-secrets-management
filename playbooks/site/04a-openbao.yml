@@ -37,6 +37,7 @@
             - openbao_auth_methods
             - openbao_bootstrap
             - openbao_engines
+            - openbao_github_mounts
             - openbao_kv_seed
             - openbao_plugins
             - openbao_rbac
