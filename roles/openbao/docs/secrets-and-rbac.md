@@ -101,6 +101,8 @@ plans):
 | `ai-apply-all` | `read-write-all` | `read-write-all` + `github-mint` | Cross-domain WRITE rollup; no standing secret_id; ≤1h[^ai-tiers] |
 | `ai-admin` | all KV + policy/auth admin | policy/AppRole/token, all KV, AWS STS | Break-glass; human-gated; alerted[^ai-tiers] |
 | `ai-admin-session` | `ai-admin` | same administrator grant | Human-gated service-token session; 1h renewal / 8h explicit maximum; alerted[^ai-tiers] |
+| `elevate-trusted` (`auth/authelia`) | `human-unlock` | secret_id mint, human-gated tiers | Phone-approved; 5m[^elevate] |
+| `elevate-untrusted` (`auth/authelia`) | `human-unlock-untrusted` | secret_id mint, `ai-apply-<svc>` | Phone-approved, untrusted; 5m[^elevate] |
 | `snapshot` | `sys/storage/raft/snapshot` | — | least-priv backup identity |
 
 The AI rows above are **actor roles**: they carry no path rules themselves, only
@@ -143,6 +145,11 @@ secrets-engine paths and are returned through a short-lived OpenBao token.
     administrator roles attach the self-modify policy; both are alerted, and
     the session role has an explicit 8h hard maximum.
     The operator runbook covers the full grant/redeem flow.
+
+[^elevate]: JWT roles on the `authelia` mount. Each binds one client audience
+    and the operator `sub`, both from the environment, plus the workstation
+    source class. A token carries only the listed policy, lasts 5m, and cannot
+    renew.
 
 [^aws-sts]: Also grants `read`+`update` on `aws/sts/tf-proxmox` and
     `aws/sts/openbao-iac-admin` — dynamic AWS STS creds (assumed_role) for
