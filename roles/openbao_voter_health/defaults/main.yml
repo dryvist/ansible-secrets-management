@@ -26,7 +26,7 @@ openbao_voter_health_interval: "5min"
 openbao_voter_health_timeout_seconds: 5
 
 # --- Splunk HEC shipping ------------------------------------------------
-# Host + port are never hardcoded (.claude/rules/ip-addressing.md): the FQDN
+# Host + port are never hardcoded (the IP-addressing rule): the FQDN
 # is derived from tofu_data.domain and the port from tofu_data.constants.
 # The token is delivered the same way every other HEC consumer in this repo
 # gets it (SPLUNK_HEC_TOKEN, Doppler/SOPS — see AGENTS.md env var table); this

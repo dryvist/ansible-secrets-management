@@ -18,7 +18,7 @@ openbao_unauthenticated_metrics_access: true
 # --- Voter health telemetry (read-only; no Raft/policy/AppRole changes) -----
 # An on-box systemd timer, deployed on every openbao_group member, samples
 # every voter's OWN plain-HTTP api_addr (never the Traefik ingress VIP — see
-# .claude/rules/ip-addressing.md; a backend has no loopback listener and an
+# the IP-addressing rule; a backend has no loopback listener and an
 # https:// probe to it lies with a 000). The script leader-gates via
 # /v1/sys/leader (mirrors templates/openbao-snapshot.sh.j2): only the current
 # leader performs the full cross-cluster sweep each cycle, so standbys no-op

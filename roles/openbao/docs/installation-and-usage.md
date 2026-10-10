@@ -29,4 +29,3 @@ On the **first** run the bootstrap node initializes the cluster and writes the
 break-glass files to the controller (see below); the peers join + auto-unseal.
 Every subsequent run is a no-op: install is skipped (version present) and the
 bootstrap steps short-circuit on their existence checks.
-

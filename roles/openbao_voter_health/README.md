@@ -9,6 +9,16 @@ longitudinal evidence a future, separately-approved membership change would
 need — **it makes no membership, policy, or AppRole change itself**, and
 deploying it is reversible (stop/disable the timer, nothing else changes).
 
+## Installation
+
+Install the collection with `ansible-galaxy install -r requirements.yml` from the repository
+root. Reference the role by its fully qualified name, `dryvist.secrets_management.openbao_voter_health`.
+
+## Usage
+
+Apply the role to the `openbao_group` inventory group. The role reads `tofu_data` and the
+`SPLUNK_HEC_TOKEN` environment variable. `defaults/main.yml` lists the other inputs.
+
 ## How it works
 
 - Deployed identically on every `openbao_group` member (same footprint as
@@ -22,7 +32,7 @@ deploying it is reversible (stop/disable the timer, nothing else changes).
   (`is_self`, `leader_address`).
 - Host + port are never hardcoded — the FQDN is derived from
   `tofu_data.domain` and the port from `tofu_data.constants`
-  (`.claude/rules/ip-addressing.md`). The Splunk HEC token is the same
+  (the IP-addressing rule). The Splunk HEC token is the same
   `SPLUNK_HEC_TOKEN` every other HEC consumer in this repo already uses — no
   new secret is introduced.
 

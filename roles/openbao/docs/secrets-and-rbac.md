@@ -142,7 +142,7 @@ secrets-engine paths and are returned through a short-lived OpenBao token.
     refuses to render a leaf for a forbidden subtree. Only human-gated
     administrator roles attach the self-modify policy; both are alerted, and
     the session role has an explicit 8h hard maximum.
-    Full grant/redeem runbook: docs.dryvist.com "AI Agent Access (OpenBao)".
+    The operator runbook covers the full grant/redeem flow.
 
 [^aws-sts]: Also grants `read`+`update` on `aws/sts/tf-proxmox` and
     `aws/sts/openbao-iac-admin` — dynamic AWS STS creds (assumed_role) for

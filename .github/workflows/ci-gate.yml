@@ -1,0 +1,62 @@
+---
+# CI Gate — wrapper around the shared ansible CI gate.
+#
+# ansible-lint and the standardized change filter live in
+# dryvist/.github/.github/workflows/_ansible-ci.yml so lint runs identically
+# across the dryvist Ansible repositories.
+#
+# Molecule stays local. The shared workflow runs lint only (molecule: false),
+# and this wrapper's molecule job consumes the scenario filter exported by the
+# shared workflow, so there is one change-detection definition. The local
+# "Merge Gate" aggregates every job.
+
+name: CI Gate
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  ci:
+    permissions:
+      contents: read
+      pull-requests: read
+    uses: dryvist/.github/.github/workflows/_ansible-ci.yml@main
+    with:
+      # Molecule is owned locally (see header); the shared workflow runs lint only.
+      molecule: false
+      # The only scenario is openbao. Its filter lists the roles its converge
+      # play includes plus the scenario directory. A change that matches no
+      # filter widens to every scenario, per the shared workflow's rule.
+      molecule_scenario_filters: |
+        openbao:
+          - 'roles/openbao/**'
+          - 'molecule/openbao/**'
+
+  molecule:
+    name: Molecule
+    needs: ci
+    if: ${{ needs.ci.outputs.molecule == 'true' }}
+    uses: ./.github/workflows/_molecule.yml
+    with:
+      scenarios: ${{ needs.ci.outputs.molecule_scenarios }}
+
+  gate:
+    name: Merge Gate
+    needs: [ci, molecule]
+    if: ${{ always() && !cancelled() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check all results
+        uses: re-actors/alls-green@b5b5b37504aa4183270bd3d855c52a67f212be35 # release/v1
+        with:
+          allowed-skips: molecule
+          jobs: ${{ toJSON(needs) }}

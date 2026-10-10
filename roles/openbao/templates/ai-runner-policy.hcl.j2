@@ -4,7 +4,7 @@
 # role's openbao_secrets `ai-runner` domain in ansible-proxmox-ai). Read-only
 # on exactly the dispatch credential plus two external provider-key leaves.
 # All three are third-party secrets with no OpenBao secrets engine, so KV is
-# the correct tier (.claude/rules/openbao-plugins-first.md). Exact paths only —
+# the correct tier (the plugins-first rule). Exact paths only —
 # no ai/* glob — so this credential can never widen to the rest of ai/*.
 # The consumer reads known keys with vault_kv2_get and never enumerates, so no
 # metadata list is granted (same rationale as ai-public).

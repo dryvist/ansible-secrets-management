@@ -1,0 +1,20 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "local>dryvist/.github"
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Track the OpenBao server version pin in the openbao role defaults against OpenBao release tags.",
+      "managerFilePatterns": [
+        "/^roles/openbao/defaults/main/.+\\.ya?ml$/"
+      ],
+      "matchStrings": [
+        "openbao_version:\\s*\"(?<currentValue>[0-9.]+)\""
+      ],
+      "datasourceTemplate": "github-releases",
+      "depNameTemplate": "openbao/openbao"
+    }
+  ]
+}
