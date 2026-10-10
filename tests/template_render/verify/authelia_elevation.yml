@@ -1,0 +1,120 @@
+---
+- name: Render and verify the Authelia OpenBao elevation clients and policy
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    ansible_become: false
+    # Minimal stand-ins, as in authelia_access_control.yml. Only the elevation
+    # clients, the elevate policy and the device-code lifespan are asserted here.
+    tofu_data:
+      domain: example.test
+      constants:
+        service_ports:
+          authelia_portal: 9091
+    authelia_oidc_hmac_secret: x
+    authelia_oidc_jwks_key: x
+    wall_kiosk_route_names: [wall, glance]
+    authelia_wall_kiosk_networks: ["192.0.2.10/32"]
+    # One digest stand-in per confidential client, keyed by name (see
+    # authelia_access_control.yml for why these are listed literally).
+    authelia_oidc_client_secret_hashes:
+      homarr: x
+      langfuse: x
+      phoenix: x
+      semaphore: x
+      terrakube_dex: x
+      grafana: x
+      litellm: x
+      bao_elevate_trusted: x
+    ingress_domain: example.test
+    grafana_hostname: grafana
+
+  tasks:
+    - name: Load the authelia role defaults
+      ansible.builtin.include_vars:
+        dir: "../../../roles/authelia/defaults/main"
+
+    # The defaults read AUTHELIA_APPROVE_NETWORKS from env, which is empty here.
+    # set_fact outranks include_vars, so the render gets a documentation-range
+    # network without touching the environment.
+    - name: Scope the approval networks for the render
+      ansible.builtin.set_fact:
+        authelia_approve_networks: ["192.0.2.0/24"]
+
+    - name: Render the Authelia configuration
+      ansible.builtin.template:
+        src: "../../../roles/authelia/templates/configuration.yml.j2"
+        dest: "{{ render_tmp }}/authelia-elevation-configuration.yml"
+        mode: "0600"
+
+    - name: Read back the rendered configuration
+      ansible.builtin.slurp:
+        src: "{{ render_tmp }}/authelia-elevation-configuration.yml"
+      register: _authelia_elevation_raw
+
+    - name: Parse the rendered configuration
+      ansible.builtin.set_fact:
+        _authelia_config: "{{ _authelia_elevation_raw.content | b64decode | from_yaml }}"
+
+    - name: Assert the OpenBao elevation clients stay device-code only
+      ansible.builtin.assert:
+        that:
+          # Regression guard. Neither client may gain an authorization-code grant
+          # or a redirect URI, or it could drive a browser redirect. The trusted
+          # client stays confidential; the untrusted one stays public with no secret.
+          - _trusted.public == false
+          - _trusted.token_endpoint_auth_method == 'client_secret_post'
+          - _trusted.client_secret is defined
+          - _trusted.grant_types == ['urn:ietf:params:oauth:grant-type:device_code']
+          - _trusted.redirect_uris is not defined
+          - _untrusted.public == true
+          - _untrusted.token_endpoint_auth_method == 'none'
+          - _untrusted.client_secret is not defined
+          - _untrusted.grant_types == ['urn:ietf:params:oauth:grant-type:device_code']
+          - _untrusted.redirect_uris is not defined
+          - _trusted.consent_mode == 'explicit'
+          - _untrusted.consent_mode == 'explicit'
+          - _trusted.authorization_policy == 'elevate'
+          - _untrusted.authorization_policy == 'elevate'
+        fail_msg: >-
+          an OpenBao elevation client drifted from device-code only
+          (trusted={{ _trusted | default('ABSENT') }}, untrusted={{ _untrusted | default('ABSENT') }})
+      vars:
+        _clients: "{{ _authelia_config['identity_providers']['oidc']['clients'] }}"
+        _trusted: "{{ _clients | selectattr('client_id', 'eq', 'bao-elevate-trusted') | first }}"
+        _untrusted: "{{ _clients | selectattr('client_id', 'eq', 'bao-elevate-untrusted') | first }}"
+
+    - name: Assert the elevate policy admits only the operator, from the approval networks
+      ansible.builtin.assert:
+        that:
+          # Deny by default. One rule, which must name the operator and the
+          # approval networks together: a subject with no network criterion would
+          # approve from any address.
+          - _elevate.default_policy == 'deny'
+          - _elevate.rules | length == 1
+          - _elevate.rules[0].policy == 'two_factor'
+          - _elevate.rules[0].subject == authelia_approve_subject
+          - _elevate.rules[0].networks == ['192.0.2.0/24']
+        fail_msg: >-
+          the elevate authorization policy is not deny-by-default with one
+          operator rule scoped to the approval networks (got {{ _elevate | default('ABSENT') }})
+      vars:
+        _elevate: "{{ _authelia_config['identity_providers']['oidc']['authorization_policies']['elevate'] }}"
+
+    - name: Assert the device-code lifespan is five minutes
+      ansible.builtin.assert:
+        that:
+          - _lifespans.device_code == '5m'
+        fail_msg: "device_code lifespan is not 5m (got {{ _lifespans.device_code | default('ABSENT') }})"
+      vars:
+        _lifespans: "{{ _authelia_config['identity_providers']['oidc']['lifespans'] }}"
+
+    - name: Authelia elevation verification PASSED
+      ansible.builtin.debug:
+        msg: |
+          Authelia elevation assertions passed:
+          - both OpenBao elevation clients are device-code only
+          - the elevate policy is deny-by-default with one operator rule scoped to the approval networks
+          - the device-code lifespan is five minutes
