@@ -1,0 +1,18 @@
+---
+collections:
+  - name: ansible.utils
+    version: ">=2.10.0"
+
+  - name: community.crypto
+    version: ">=2.0.0"
+
+  - name: community.general
+    version: ">=10.3.0"
+
+  - name: community.hashi_vault
+    version: ">=6.0.0"
+
+  # renovate: datasource=git-refs depName=https://github.com/dryvist/homelab-contracts.git currentValue=main
+  - name: https://github.com/dryvist/homelab-contracts.git#/ansible/
+    type: git
+    version: 3bcdc9ddbf56427752a2c04bfab25768a3bbc339
