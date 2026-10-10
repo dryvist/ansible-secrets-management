@@ -3,6 +3,17 @@
 # main.yml on every openbao node when enabled. READ-ONLY: never touches Raft
 # membership, policy, or AppRole state (see README.md "Voter health scoring").
 
+# The token comes from the controller environment. Without it the template
+# renders an empty token over the live one and the sampler stops shipping.
+- name: Refuse to render the voter-health EnvironmentFile without a HEC token
+  ansible.builtin.assert:
+    that:
+      - openbao_voter_health_hec_token | length > 0
+    fail_msg: >-
+      SPLUNK_HEC_TOKEN is unset on the controller. Run under the secret-store
+      environment that supplies it; rendering now would blank the live token.
+    quiet: true
+
 - name: Render the OpenBao voter-health EnvironmentFile (HEC token + optional AppRole creds)
   ansible.builtin.template:
     src: openbao-voter-health.env.j2
