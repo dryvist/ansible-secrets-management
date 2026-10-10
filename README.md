@@ -20,6 +20,17 @@ ansible-galaxy install -r requirements.yml
 Consume a role by its fully qualified name, for example `dryvist.secrets_management.openbao`.
 Each role's README and defaults files list the inputs that the role reads.
 
+## Consumer inputs
+
+The roles read these names from the consuming playbook, inventory, or environment:
+
+- Inventory groups `openbao_group` and `traefik_group`.
+- `tofu_data`, a mapping with the keys `domain`, `ingress_vip`, and `constants`
+  (`service_ports`, `ai_log_routing`).
+- `ingress_domain`.
+- The `PROXMOX_SUBDOMAIN` environment variable.
+- `bao_apps_secrets`, a keyed secret map.
+
 ## Roles
 
 | Role | Purpose |
