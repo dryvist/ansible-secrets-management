@@ -18,6 +18,8 @@ openbao_reconcile_excluded_policies:
   # Anything that can rewrite this policy can grant itself the break-glass
   # unlock, so the unattended identity must not reach it.
   - "{{ openbao_human_unlock_policy_name }}"
+  # Same unlock grant, reached from the phone-approved client.
+  - "{{ openbao_human_unlock_untrusted_policy_name }}"
   - "{{ openbao_ai_admin_policy_name }}"
   - "{{ openbao_github_admin_policy_name }}"
   - "{{ openbao_slack_admin_policy_name }}"
