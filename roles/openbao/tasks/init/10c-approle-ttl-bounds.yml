@@ -57,12 +57,16 @@
     # bindings off every existing role, which is the opposite of this gate's
     # job. `default([], true)` and not `default([])`: OpenBao returns JSON null
     # for an unset bound-CIDR field, which is defined and would slip through.
+    # OpenBao stores a single-address /32 token bind as the bare address, so
+    # both sides compare with a trailing /32 removed.
+    desired_bound_cidrs_cmp: >-
+      {{ desired_bound_cidrs | map('regex_replace', '/32$', '') | sort | list }}
     cidr_drift: >-
       {{ (desired_bound_cidrs | length > 0 or approle_cidr_class == 'unbound')
-         and ((live.secret_id_bound_cidrs | default([], true)
-               | map('trim') | sort | list != desired_bound_cidrs)
-              or (live.token_bound_cidrs | default([], true)
-                  | map('trim') | sort | list != desired_bound_cidrs)) }}
+         and ((live.secret_id_bound_cidrs | default([], true) | map('trim')
+               | map('regex_replace', '/32$', '') | sort | list != desired_bound_cidrs_cmp)
+              or (live.token_bound_cidrs | default([], true) | map('trim')
+                  | map('regex_replace', '/32$', '') | sort | list != desired_bound_cidrs_cmp)) }}
   ansible.builtin.command:
     cmd: >-
       bao write auth/approle/role/{{ item.0.name }}
