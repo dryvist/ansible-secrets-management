@@ -3,6 +3,9 @@
 # OIDC token; OpenBao trades that token at auth/authelia/login for a short-lived
 # token scoped to exactly one policy. The issuer and the operator subject arrive
 # by environment and are never committed.
+# Off by default. When true, the converge requires OPENBAO_AUTHELIA_ISSUER_URL,
+# OPENBAO_ELEVATE_SUBJECT and the workstation CIDR class.
+openbao_authelia_elevation_enabled: false
 openbao_authelia_jwt_auth_path: authelia
 # Empty when unset. 09e-authelia-elevation.yml asserts it is non-empty before
 # any write, so an unset variable fails the converge instead of configuring a

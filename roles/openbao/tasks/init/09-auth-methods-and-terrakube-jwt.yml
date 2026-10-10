@@ -236,6 +236,7 @@
 # Phone-approved elevation: the Authelia JWT mount and its two elevation roles.
 - name: Configure the Authelia JWT auth method and its elevation roles
   ansible.builtin.import_tasks: 09e-authelia-elevation.yml
+  when: openbao_authelia_elevation_enabled | bool
 
 # --- AppRoles (add-if-missing), one per RBAC group --------------------------
 
