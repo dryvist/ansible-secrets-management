@@ -1,0 +1,22 @@
+---
+namespace: dryvist
+name: secrets_management
+version: 0.1.0
+readme: README.md
+authors:
+  - dryvist
+description: OpenBao secrets management roles - server install and Raft cluster, AppRole and policy sync, secret rotation, and TOTP and admin-group bootstrap.
+license:
+  - Apache-2.0
+tags:
+  - openbao
+  - secrets
+  - vault
+  - infrastructure
+repository: https://github.com/dryvist/ansible-secrets-management
+issues: https://github.com/dryvist/ansible-secrets-management/issues
+build_ignore:
+  - "*.tar.gz"
+  - .DS_Store
+  - .worktrees
+  - .direnv
