@@ -38,50 +38,13 @@
       ansible.builtin.include_vars:
         dir: ../../../roles/openbao/defaults/main
 
-    - name: Assert general write installation scope defaults off
-      ansible.builtin.assert:
-        that:
-          - openbao_github_write_installation_scope is sameas false
-        fail_msg: The general write policy must retain its per-repository allowlist by default.
-
-    - name: Save the configured general write allowlist
-      ansible.builtin.set_fact:
-        _github_write_original_repos: "{{ openbao_github_write_repo_allowlist }}"
-
-    - name: Pin the general write allowlist to a fixture repository
-      ansible.builtin.set_fact:
-        openbao_github_write_repo_allowlist: [fixture-repo]
-
-    - name: Render the general write policy with its default scope
-      ansible.builtin.template:
-        src: "{{ _template_dir }}/github-write-policy.hcl.j2"
-        dest: "{{ _fixture_dir }}/github-write-default.hcl"
-        mode: "0644"
-
-    - name: Read the general write policy rendered with its default scope
-      ansible.builtin.slurp:
-        src: "{{ _fixture_dir }}/github-write-default.hcl"
-      register: _github_write_default_raw
-
-    - name: Assert the default general write policy renders its repository allowlist
-      ansible.builtin.assert:
-        that:
-          - >-
-            (_github_write_default_raw.content | b64decode)
-            is search('(?s)"repositories" = \[\s*"fixture-repo"\s*\]')
-        fail_msg: The default general write policy must render the configured repository allowlist.
-
-    - name: Enable installation scope for the contract render
-      ansible.builtin.set_fact:
-        openbao_github_write_installation_scope: true
-
-    - name: Render the general write policy with installation scope enabled
+    - name: Render the general write policy
       ansible.builtin.template:
         src: "{{ _template_dir }}/github-write-policy.hcl.j2"
         dest: "{{ _fixture_dir }}/github-write-installation.hcl"
         mode: "0644"
 
-    - name: Read the general write policy rendered with installation scope
+    - name: Read the rendered general write policy
       ansible.builtin.slurp:
         src: "{{ _fixture_dir }}/github-write-installation.hcl"
       register: _github_write_installation_raw
@@ -96,11 +59,6 @@
             'fixture-repo' not in
             (_github_write_installation_raw.content | b64decode)
         fail_msg: Installation scope must leave repository selection to the GitHub installation.
-
-    - name: Restore the configured general write policy defaults
-      ansible.builtin.set_fact:
-        openbao_github_write_installation_scope: false
-        openbao_github_write_repo_allowlist: "{{ _github_write_original_repos }}"
 
     # set_fact, not task vars: include_vars sits ABOVE task vars in Ansible's
     # precedence order, so a task-level override of a value it loaded is

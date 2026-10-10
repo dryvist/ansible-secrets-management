@@ -88,7 +88,8 @@ openbao_github_docs_publisher_permissions:
 # rather than a set with an empty repository list — an omitted `repositories`
 # on a permission set means the WHOLE installation, so an unconfigured
 # publisher must not exist rather than exist unbounded. Explicit literals
-# only, never a glob, for the reason recorded with the write allowlist.
+# only, never a glob: the plugin comma-splits the value, so "a,evil" would
+# ride an "a*" prefix.
 openbao_github_docs_publisher_repos: >-
   {{ (lookup('env', 'OPENBAO_GITHUB_DOCS_PUBLISHER_REPOS') | default('', true)).split(',')
      | map('trim') | reject('equalto', '') | list }}
@@ -119,9 +120,9 @@ openbao_github_docs_publisher_permission_sets: >-
 # App ceiling) are minted only through the inert, human-gated github-admin
 # identity. Per-repo WRITE tokens intentionally have NO set here — they use
 # the raw github/token endpoint, parameter-pinned by the github-write policy
-# to exactly one allowlisted repository per request (a stored set cannot be
-# narrowed by the request body at plugin v2.3.2, so per-repo scoping must
-# ride the raw endpoint).
+# to the known installations (a stored set cannot be narrowed by the request
+# body at plugin v2.3.2, so per-repo token scoping must ride the raw
+# endpoint).
 openbao_github_base_permission_sets:
   - name: dryvist-full-automation
     tier: admin

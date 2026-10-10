@@ -152,8 +152,8 @@ openbao_base_approles_core:
   # github-write are standing ambient identities consumed by nix-darwin's
   # `openbao-github-creds` (role_id/secret_id operator-held in Doppler,
   # injected as ambient env, same shape as ai-orchestrator). github-write is
-  # bounded by the per-repo allowlist + the write-lease lock rather than a
-  # human gate (user decision 2026-07-17: ambient for allowlisted repos).
+  # bounded by the App installation's repository selection + the write-lease
+  # lock rather than a human gate (ambient write, operator decision).
   # github-admin is INERT break-glass like ai-admin: no standing secret_id; a
   # human wraps a single-use secret_id per elevation.
   # secret_id_ttl "0s" + num_uses 0: nothing re-mints these, so a finite bound
