@@ -17,4 +17,6 @@ Group={{ openbao_group }}
 # {{ rotator.approle }} AppRole role_id/secret_id (0600, root:openbao).
 EnvironmentFile={{ openbao_config_dir }}/openbao-rotate-{{ rotator.name }}.env
 ExecStart=/usr/local/bin/openbao-rotate-{{ rotator.name }}.sh
+# Holds the alert-once latch (STATE_DIRECTORY in the script).
+StateDirectory=openbao-rotate
 NoNewPrivileges=yes

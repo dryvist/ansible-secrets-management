@@ -24,6 +24,10 @@ HC_URL="{{ rotator.healthcheck_url | default('') }}"
 ROLE_ID="${OPENBAO_APPROLE_{{ rotator.approle | upper | replace('-', '_') }}_ROLE_ID}"
 SECRET_ID="${OPENBAO_APPROLE_{{ rotator.approle | upper | replace('-', '_') }}_SECRET_ID}"
 HOST="$(hostname)"
+# Alert-once latch. systemd's StateDirectory= sets STATE_DIRECTORY; the ntfy
+# alert fires on the first failure only, and the first success after it
+# sends one resolved message (which also closes the ntfy-zammad ticket).
+LATCH="${STATE_DIRECTORY:-/var/lib/openbao-rotate}/${ROTATOR_NAME}.failing"
 
 log() { logger -t "openbao-rotate-${ROTATOR_NAME}" "$*"; echo "openbao-rotate-${ROTATOR_NAME}: $*"; }
 
@@ -34,17 +38,34 @@ hc_ping() {
   curl -fsS --max-time 8 "${HC_URL}$1" >/dev/null 2>&1 || true
 }
 
-# Alert + signal the deadman failure endpoint, then exit non-zero.
+# Alert (first failure only) + signal the deadman failure endpoint every
+# run, then exit non-zero.
 fail() {
   local msg="${ROTATOR_NAME} rotation FAILED on ${HOST}: $*"
   log "${msg}"
-  if [ -n "${NTFY_URL}" ]; then
+  if [ -e "${LATCH}" ]; then
+    log "still failing; already alerted"
+  elif [ -n "${NTFY_URL}" ]; then
     curl -fsS --max-time 8 -H "Title: openbao rotate ${ROTATOR_NAME}" -H "Priority: urgent" \
       -H "Tags: rotating_light" -d "${msg}" "${NTFY_URL}" >/dev/null 2>&1 || true
   fi
+  touch "${LATCH}" 2>/dev/null || log "cannot write ${LATCH}; the next failure alerts again"
   hc_ping /fail
   exit 1
 }
+
+# Every failure exits through fail() with status 1, so a zero exit is a
+# success: clear the latch and say so once.
+recover_on_success() {
+  [ "$?" -eq 0 ] && [ -e "${LATCH}" ] || return 0
+  rm -f "${LATCH}"
+  log "recovered"
+  [ -n "${NTFY_URL}" ] || return 0
+  curl -fsS --max-time 8 -H "Title: openbao rotate ${ROTATOR_NAME}" \
+    -H "Tags: white_check_mark" -d "${ROTATOR_NAME} rotation recovered on ${HOST}" \
+    "${NTFY_URL}" >/dev/null 2>&1 || true
+}
+trap recover_on_success EXIT
 
 # Without this, a missing curl/jq reads as "AppRole login failed", which
 # points at the credential rather than at the missing package.

@@ -1,0 +1,123 @@
+---
+# Behavioral verification for the alert-once latch in
+# roles/openbao/templates/openbao-rotate.sh.j2. Runs the rendered
+# generic+splunk-mcp script against a stub `curl` on PATH:
+#
+#   1. two failing runs in a row send exactly one ntfy alert, and the second
+#      still pings the healthchecks /fail endpoint;
+#   2. the next successful run clears the latch and sends one resolved
+#      message;
+#   3. a further successful run sends nothing.
+#
+# Needs GNU `date -d`, which the rendered script uses.
+#
+# Usage: ansible-playbook tests/openbao_rotate/verify_alert_once.yml -c local
+
+- name: Verify the rotator alerts once per failure streak
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    ansible_become: false
+    _template_dir: "../../roles/openbao/templates"
+    openbao_api_addr: "http://openbao-test:8200"
+    openbao_kv_mount: "secret"
+    rotator:
+      name: splunk-mcp
+      mint: splunk-mcp
+      approle: splunk-mcp-rotate
+      target: { mount: secret, path: ai/mcp/splunk }
+      field: SPLUNK_MCP_TOKEN
+      rotate_at_days: 30
+      rotate_max_days: 47
+      minter_secret: apps/splunk-rotator
+      ntfy_url: "http://ntfy-test/topic"
+      healthcheck_url: "http://hc-test/ping"
+    _env:
+      PATH: "{{ fixture_dir }}/bin:{{ lookup('env', 'PATH') }}"
+      STATE_DIRECTORY: "{{ fixture_dir }}/state"
+      OPENBAO_APPROLE_SPLUNK_MCP_ROTATE_ROLE_ID: test-role-id
+      OPENBAO_APPROLE_SPLUNK_MCP_ROTATE_SECRET_ID: test-secret-id
+      STUB_CALL_LOG: "{{ fixture_dir }}/calls.log"
+
+  tasks:
+    - name: Create a directory unique to this run
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: verify_rotate_alert_once_
+      register: _tmp
+
+    - name: Publish the fixture directory
+      ansible.builtin.set_fact:
+        fixture_dir: "{{ _tmp.path }}"
+
+    - name: Create the stub-curl and state directories
+      ansible.builtin.file:
+        path: "{{ fixture_dir }}/{{ item }}"
+        state: directory
+        mode: "0755"
+      loop: [bin, state]
+
+    - name: Render the generic+splunk-mcp composed script
+      ansible.builtin.template:
+        src: "{{ _template_dir }}/openbao-rotate.sh.j2"
+        dest: "{{ fixture_dir }}/rotate.sh"
+        mode: "0755"
+
+    # Logs each URL with the Tags header, so an alert and a resolved message
+    # are told apart. Login fails while STUB_LOGIN_FAIL is set; otherwise the
+    # rotation stamp is fresh and the script exits 0 without rotating.
+    - name: Install the stub curl
+      ansible.builtin.copy:
+        dest: "{{ fixture_dir }}/bin/curl"
+        mode: "0755"
+        content: |
+          #!/usr/bin/env bash
+          url="${!#}"
+          tags=""
+          for a in "$@"; do case "${a}" in Tags:*) tags="${a}" ;; esac; done
+          printf '%s %s\n' "${url}" "${tags}" >> "${STUB_CALL_LOG}"
+          case "${url}" in
+            */auth/approle/login)
+              [ -z "${STUB_LOGIN_FAIL:-}" ] || exit 22
+              echo '{"auth":{"client_token":"test-vault-token"}}'
+              ;;
+            */metadata/ai/mcp/splunk)
+              echo "{\"data\":{\"custom_metadata\":{\"rotated_SPLUNK_MCP_TOKEN\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}}}"
+              ;;
+          esac
+
+    - name: Run the script twice with a failing login, then twice healthy
+      ansible.builtin.command: "{{ fixture_dir }}/rotate.sh"
+      environment: "{{ _env | combine({'STUB_LOGIN_FAIL': '1'} if item == 'fail' else {}) }}"
+      register: _runs
+      changed_when: false
+      failed_when: _runs.rc != (1 if item == 'fail' else 0)
+      loop: [fail, fail, ok, ok]
+
+    - name: Read the stub call log
+      ansible.builtin.slurp:
+        src: "{{ fixture_dir }}/calls.log"
+      register: _calls
+
+    - name: Assert one alert, a /fail ping per failure, and one resolved message
+      vars:
+        _lines: "{{ (_calls.content | b64decode).splitlines() }}"
+        _ntfy: "{{ _lines | select('search', '^http://ntfy-test/topic ') | list }}"
+      ansible.builtin.assert:
+        that:
+          - _ntfy | length == 2
+          - "'rotating_light' in _ntfy[0]"
+          - "'white_check_mark' in _ntfy[1]"
+          - _lines | select('search', '^http://hc-test/ping/fail ') | list | length == 2
+          - "'already alerted' in _runs.results[1].stdout"
+          - "'recovered' in _runs.results[2].stdout"
+          - "'recovered' not in _runs.results[3].stdout"
+        fail_msg: "ntfy calls={{ _ntfy }} all calls={{ _lines }}"
+
+    - name: Assert the latch is gone after recovery
+      ansible.builtin.stat:
+        path: "{{ fixture_dir }}/state/splunk-mcp.failing"
+      register: _latch
+      failed_when: _latch.stat.exists
