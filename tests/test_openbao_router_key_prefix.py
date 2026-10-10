@@ -7,8 +7,7 @@ ever accepted it. Router-key fields (openbao_app_secret_router_key_suffix)
 get one carve-out: regenerate when empty OR when stored but missing the
 prefix. Every other field keeps the empty-only rule untouched.
 
-Renders the REAL `when` expression, never a reimplementation, the same
-pattern test_openbao_denied_vs_absent_writes.py uses.
+Renders the REAL `when` expression, never a reimplementation.
 """
 
 from pathlib import Path
