@@ -92,3 +92,18 @@ def test_unreachable_voters_are_still_counted_separately() -> None:
             f"{name}: keep unreachable voters distinct from ship failures; "
             "collapsing them loses which half is broken"
         )
+
+
+def test_env_file_is_never_rendered_without_a_token() -> None:
+    """A converge without SPLUNK_HEC_TOKEN must fail, not blank the live token."""
+    tasks = {
+        _ROOT / "roles/openbao/tasks/voter_health.yml": "openbao_voter_health_hec_token",
+        _ROOT / "roles/openbao_voter_health/tasks/main.yml": "openbao_voter_health_splunk_hec_token",
+    }
+    for path, var in tasks.items():
+        body = path.read_text(encoding="utf-8")
+        guard = body.find(f"- {var} | length > 0")
+        render = body.find("src: openbao-voter-health.env.j2")
+        assert 0 <= guard < render, (
+            f"{path}: assert {var} is non-empty before rendering the env file"
+        )
