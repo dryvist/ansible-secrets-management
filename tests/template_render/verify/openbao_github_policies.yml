@@ -329,7 +329,9 @@
             (_publisher_paths + _mint_paths + _read_paths + _repo_create_paths
              + _org_admin_paths + _write_paths + _open_llm_paths + _ai_public_paths)
             | select('match', '^' ~ openbao_github_work_mount ~ '/') | list == []
-        fail_msg: Only github-work may mint from {{ openbao_github_work_mount }}.
+        fail_msg: >-
+          Only the github-work-read and github-work-write policies may mint from
+          {{ openbao_github_work_mount }}.
 
     - name: Assert no set on the per-App mounts carries administration
       ansible.builtin.assert:

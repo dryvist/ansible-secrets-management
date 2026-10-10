@@ -82,10 +82,13 @@ openbao_packer_approle_name: packer
 #                                              standing ambient identity, like
 #                                              github-write, so repo creation
 #                                              needs no per-call human unlock
-#   github-work  -> github-work/token/work-{read,write}  one installation;
-#                                              read and write sets, no
-#                                              administration; standing
-#                                              workstation identity
+#   github-work-read  -> github-work/token/work-read   one installation; read
+#                                              set only, no administration;
+#                                              standing workstation identity
+#   github-work-write -> github-work/token/work-write  one installation; write
+#                                              set only, no administration;
+#                                              workstation identity, each use
+#                                              sudo/Touch-ID gated
 #
 # Deliberately NOT members of openbao_ai_domains: estate AI identities mint
 # via the `github-mint` capability policy (read-tier sets only) instead.
@@ -106,8 +109,10 @@ openbao_github_runner_policy_name: github-runner
 openbao_github_runner_approle_name: github-runner
 openbao_github_exporter_policy_name: github-exporter
 openbao_github_exporter_approle_name: github-exporter
-openbao_github_work_policy_name: github-work
-openbao_github_work_approle_name: github-work
+openbao_github_work_read_policy_name: github-work-read
+openbao_github_work_read_approle_name: github-work-read
+openbao_github_work_write_policy_name: github-work-write
+openbao_github_work_write_approle_name: github-work-write
 # docs-publisher: the documentation publisher's own identity. Mints exactly
 # one repository-scoped write set and nothing else — it holds no read set, no
 # raw token path and no lock subtree, so a leaked secret-zero can open a pull

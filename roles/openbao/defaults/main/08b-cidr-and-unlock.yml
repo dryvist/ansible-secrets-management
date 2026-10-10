@@ -57,9 +57,10 @@ openbao_approle_cidr_class_overrides:
   github-admin: workstation
   github-read: workstation
   github-write: workstation
-  # github-work: the work identity's git/gh path, redeemed from the operator's
-  # workstation like github-write.
-  github-work: workstation
+  # github-work-read and github-work-write: the work identity's git/gh path,
+  # redeemed from the operator's workstation like github-write.
+  github-work-read: workstation
+  github-work-write: workstation
   # repo-create is an interactive, one-at-a-time operator action (the helper
   # refuses to run without a terminal), so it is redeemed from the workstation.
   github-repo-create: workstation

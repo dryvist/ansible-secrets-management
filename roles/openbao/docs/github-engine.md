@@ -100,6 +100,12 @@ Token access is tiered; the tier IS the privilege boundary:
   also reads `secret/apps/hermes-webhook` (written by the AWS Terrakube
   workspace) and mints `aws/sts/hermes-webhook-consumer` when that role's ARN
   is configured.
+- **work (`github-work-read`, `github-work-write`)** — `github-work/token/work-read`
+  and `github-work/token/work-write`, one set each, both pinned to the work
+  installation; no administration. Each set has its own policy and AppRole, and
+  neither policy grants the other set or the raw `github-work/token` endpoint.
+  Both AppRoles are workstation-class with a 30m token and human-minted
+  secret_ids (`manage_secret_id: false`).
 
 Estate identities (`ai-apply-*`, `ai-orchestrator`) attach the `github-mint`
 capability policy, which grants the read-tier sets only. No policy except
