@@ -29,7 +29,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
-    uses: dryvist/.github/.github/workflows/_ansible-ci.yml@main
+    uses: dryvist/.github/.github/workflows/_ansible-ci.yml@8b2ab29ff2a86547cefab11913d737f1062b1a7c # main
     with:
       # Molecule is owned locally (see header); the shared workflow runs lint only.
       molecule: false
