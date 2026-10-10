@@ -109,8 +109,9 @@ openbao_workstation_approles:
     secret_id_num_uses: 0
   # github-work-read and github-work-write: the work identity's GitHub tokens
   # through the github-work mount, one permission set each, both pinned to one
-  # installation. Workstation class (08b), short token, manage_secret_id: false
-  # so human-unlock mints each secret_id. secret_id "0s" and 0 uses: nothing
+  # installation. Workstation class (08b). Each token runs 1h with an explicit
+  # 1h maximum and cannot be renewed past it. manage_secret_id: false so
+  # human-unlock mints each secret_id. secret_id "0s" and 0 uses: nothing
   # re-mints them, so a finite bound would expire a credential nothing replaces.
   # github-work-read: its pair is held in Doppler like github-read (the
   # operator's ambient read pair).
@@ -118,13 +119,15 @@ openbao_workstation_approles:
   # use is sudo/Touch-ID gated, and it is never in Doppler.
   - name: "{{ openbao_github_work_read_approle_name }}"
     policy: "{{ openbao_github_work_read_policy_name }}"
-    token_ttl: 30m
+    token_ttl: 1h
+    token_explicit_max_ttl: 1h
     manage_secret_id: false
     secret_id_ttl: "0s"
     secret_id_num_uses: 0
   - name: "{{ openbao_github_work_write_approle_name }}"
     policy: "{{ openbao_github_work_write_policy_name }}"
-    token_ttl: 30m
+    token_ttl: 1h
+    token_explicit_max_ttl: 1h
     manage_secret_id: false
     secret_id_ttl: "0s"
     secret_id_num_uses: 0
