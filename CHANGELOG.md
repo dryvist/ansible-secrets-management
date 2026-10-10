@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/dryvist/ansible-secrets-management/compare/v0.3.0...v0.3.1) (2026-10-10)
+
+
+### Bug Fixes
+
+* **openbao:** accept spent reconcile secret_id on accessor destroy ([#10](https://github.com/dryvist/ansible-secrets-management/issues/10)) ([e5629ab](https://github.com/dryvist/ansible-secrets-management/commit/e5629ab6110ee72858161ac903da49e4f377de41))
+
 ## [0.3.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.2.0...v0.3.0) (2026-10-10)
 
 
