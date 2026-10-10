@@ -63,7 +63,7 @@ openbao_packer_policy_name: packer
 openbao_packer_approle_name: packer
 # GitHub token tiers for the workstation git/gh path — engine-minted App
 # installation tokens, NEVER stored PATs (there is no secret/github/* KV path;
-# see .claude/rules/openbao-plugins-first.md). nix-darwin's
+# see the plugins-first rule). nix-darwin's
 # `openbao-github-creds` logs in as one of these; the AppRole IS the tier:
 #
 #   github-read  -> github/token/read-*        all-repo, read-only permission

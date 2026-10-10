@@ -13,7 +13,7 @@
 # writes a policy or AppRole, and never mutates cluster state. Every probe
 # below hits a voter's OWN plain-HTTP API port directly — never the Traefik
 # ingress VIP (TLS terminates there; an https:// probe to a backend reads 000
-# and lies about the node being down — see .claude/rules/ip-addressing.md and
+# and lies about the node being down — see the IP-addressing rule and
 # openbao.hcl.j2's tls_disable=1 backend listener).
 #
 # journald marker (logger -t openbao-voter-health), for Splunk alert rules:

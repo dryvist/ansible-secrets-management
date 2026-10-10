@@ -7,8 +7,7 @@ provisions a KV v2 mount, the secret hierarchy, the RBAC policies, and one
 AppRole per resource-domain identity (see
 [Secret hierarchy and RBAC](docs/secrets-and-rbac.md)).
 
-> **Before changing anything here, read
-> [`.claude/rules/openbao-plugins-first.md`](../../.claude/rules/openbao-plugins-first.md).**
+> **Before changing anything here, apply the plugins-first rule.**
 > Secrets engines are mandatory wherever one exists: GitHub tokens are minted
 > from `github/token/<permission_set>` (estate identities attach the existing
 > `github-mint` policy; the workstation tiers are `github-read` /

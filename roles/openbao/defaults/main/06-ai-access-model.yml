@@ -33,8 +33,8 @@
 # renewal, 8h hard maximum for the session role) +
 # procedural (human unlock) + observational (alerted every use), with the path
 # list bounding it to what break-glass actually does rather than to every mount
-# that will ever exist. See the docs.dryvist.com "AI Agent Access (OpenBao)"
-# runbook for the full unlock/grant flow.
+# that will ever exist. The operator runbook for AI agent access covers the
+# full unlock/grant flow.
 #
 # SINGLE SOURCE OF TRUTH: add a writable service = ONE entry here. It renders a
 # new read-<svc>+write-<svc> pair, which auto-joins read-all/read-write-all and

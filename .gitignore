@@ -1,0 +1,8 @@
+.worktrees/
+.direnv/
+.venv/
+.ansible/
+.molecule/
+__pycache__/
+*.pyc
+.DS_Store

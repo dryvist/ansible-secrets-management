@@ -115,7 +115,7 @@ An on-box `openbao-voter-health.timer` (every `openbao_voter_health_interval`,
 default `5min`), deployed on every `openbao_group` member, samples every
 voter's own plain-HTTP `api_addr` — never the Traefik ingress VIP, since a
 backend has no loopback listener and an `https://` probe to it lies with a
-`000` (see [`.claude/rules/ip-addressing.md`](../../../.claude/rules/ip-addressing.md)).
+`000` (see the IP-addressing rule).
 Like the snapshot timer it leader-gates at runtime via `/v1/sys/leader`
 `is_self`, so exactly one voter performs the full cross-cluster sweep per
 cycle regardless of who holds leadership.
@@ -140,8 +140,8 @@ Each cycle ships one Splunk HEC event per voter (`index=openbao`,
 | `sampled_by` | which voter performed the sweep (the leader at sample time) |
 
 Reference SPL — a 7/30-day per-voter uptime and latency scorecard, a flap
-count, and an alert for a voter unhealthy for more than 24h — lives in
-[`docs/openbao-voter-health-spl.md`](../../../docs/openbao-voter-health-spl.md).
+count, and an alert for a voter unhealthy for more than 24h — is kept
+outside this collection.
 
 ### Keep/demote evidence thresholds
 
