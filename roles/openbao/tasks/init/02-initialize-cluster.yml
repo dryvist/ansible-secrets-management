@@ -163,17 +163,31 @@
     - openbao_provisioning_token | length == 0
 
 - name: Destroy the single-use reconcile secret_id by accessor
-  community.hashi_vault.vault_write:
-    url: "{{ openbao_reconcile_addr }}"
-    auth_method: token
-    path: >-
-      auth/approle/role/{{ openbao_reconcile_approle_name }}/secret-id-accessor/destroy
-    data:
+  ansible.builtin.uri:
+    url: >-
+      {{ openbao_reconcile_addr }}/v1/auth/approle/role/{{ openbao_reconcile_approle_name }}/secret-id-accessor/destroy
+    method: POST
+    headers:
+      X-Vault-Token: "{{ openbao_reconcile_issuer_login.login.auth.client_token }}"
+    body_format: json
+    body:
       secret_id_accessor: "{{ openbao_reconcile_secret_id_mint.data.data.secret_id_accessor }}"
-    token: "{{ openbao_reconcile_issuer_login.login.auth.client_token }}"
+    # The login above spent this num_uses=1 secret_id, and OpenBao has already
+    # removed it with its accessor, so there is nothing left to destroy. That
+    # one 500 is success; any other status or body still fails. failed_when
+    # replaces the module's own status check, so a module failure is re-raised.
+    status_code: [204, 500]
+    return_content: true
   delegate_to: localhost
   vars:
     ansible_become: false
+  register: openbao_reconcile_destroy
+  changed_when: openbao_reconcile_destroy.status == 204
+  failed_when: >-
+    (openbao_reconcile_destroy.failed | default(false))
+    or (openbao_reconcile_destroy.status | default(0) == 500
+        and 'failed to find accessor entry for secret_id_accessor'
+        not in (openbao_reconcile_destroy.content | default('')))
   no_log: true
   when:
     - openbao_status.initialized
