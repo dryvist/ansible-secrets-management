@@ -303,7 +303,7 @@
           paths while preserving plain child-token creation.
         quiet: true
 
-    - name: Assert only the two AI admin roles attach the guard overlay
+    - name: Assert only the admin window attaches the guard overlay
       vars:
         _ai_admin_role: >-
           {{ openbao_approles | selectattr('name', 'equalto', openbao_ai_admin_approle_name) | first }}
@@ -313,9 +313,8 @@
           {{ openbao_approles | selectattr('name', 'equalto', 'admin') | first }}
       ansible.builtin.assert:
         that:
-          - >-
-            (_ai_admin_role.token_policies | sort)
-            == ([openbao_ai_admin_policy_name, openbao_ai_admin_guard_policy_name] | sort)
+          - _ai_admin_role.policy == openbao_ai_admin_policy_name
+          - _ai_admin_role.token_policies is not defined
           - >-
             (_ai_admin_session_role.token_policies | sort)
             == ([openbao_ai_admin_policy_name, openbao_ai_admin_guard_policy_name] | sort)

@@ -36,9 +36,9 @@ openbao_base_approles_elevated:
   # provisions — enumerated paths, with sudo only where OpenBao requires it, no
   # longer a bare `path "*"`. NO standing secret_id; a token exists only after a
   # human one-shot unlock and lives the admin window (1h), alerted on every use.
-  # ai-admin-guard denies the paths that would let it outlive or recreate itself.
+  # It stays unguarded: provisioning runs that change the guarded objects use it.
   - name: "{{ openbao_ai_admin_approle_name }}"
-    token_policies: ["{{ openbao_ai_admin_policy_name }}", "{{ openbao_ai_admin_guard_policy_name }}"]
+    policy: "{{ openbao_ai_admin_policy_name }}"
     token_ttl: "{{ openbao_ai_admin_token_ttl }}"
     token_max_ttl: "{{ openbao_ai_admin_token_ttl }}"
     manage_secret_id: false
