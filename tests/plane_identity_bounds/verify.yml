@@ -180,11 +180,11 @@
     # identities listed here keep a finite cap.
     - name: Every scheduled-rotation domain has unlimited uses unless listed as finite
       vars:
-        # Workstation reader and per-Mac Edge readers (workstation class), the
-        # workstation certificate signer (one login per signature), and the
-        # rotate identity (redeemed twice a day).
+        # Workstation readers, the certificate signer, and the rotate identity.
         _finite: >-
-          {{ [openbao_local_llm_workstation_approle_name, openbao_agent_ssh_sign_approle_name,
+          {{ [openbao_local_llm_workstation_approle_name,
+              openbao_agent_ssh_sign_approle_name,
+              openbao_agent_workstation_approle_name,
               openbao_approle_secret_id_rotate_scheduled_approle_name]
              + openbao_cribl_edge_mac_approle_names }}
         _declared: >-
@@ -258,6 +258,7 @@
       ansible.builtin.assert:
         that:
           - row.name == openbao_agent_workstation_approle_name
+          - row.secret_id_num_uses | int == 100
           - openbao_approle_cidr_class_map[openbao_agent_workstation_approle_name] == 'workstation'
           - openbao_agent_workstation_approle_name in openbao_secrets_domain_approle_names
           - openbao_agent_workstation_approle_name in openbao_rotate_doppler_sync_domains
