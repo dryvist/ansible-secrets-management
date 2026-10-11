@@ -86,7 +86,9 @@
 # script actually makes — login, the two-mount KV walk (secret/ has one
 # directory holding four leaves; secrets-external/ is genuinely empty —
 # `[]`, rc 0, NOT a failure), one metadata read per leaf, and the AppRole
-# secret-id accessor lookup. SIMULATE_ROOT_DENIAL=1 (env, Case B1 only)
+# secret-id accessor lookup. secret/empty/ and empty-role's secret-id list
+# answer the way OpenBao 2.6 does for an empty list under -format=json:
+# `{}` on stdout, nothing on stderr, rc 2 — absent, never a denial. SIMULATE_ROOT_DENIAL=1 (env, Case B1 only)
 # flips secret/'s root list to a DENIAL (non-zero rc, no ABSENT_MARKER
 # text) instead of its normal listing. SIMULATE_GARBAGE_TS=1 (env, Case
 # R2 only) adds a fifth leaf whose rotated_password value is not a
@@ -106,7 +108,9 @@
             echo "permission denied" >&2
             exit 2
           fi
-          echo '["apps/"]' ;;
+          echo '["apps/","empty/"]' ;;
+        "kv list -format=json secret/empty/")
+          echo '{}'; exit 2 ;;
         "kv list -format=json secret/apps/")
           if [ "${SIMULATE_GARBAGE_TS:-0}" = "1" ]; then
             echo '["overdue-app","due-app","exempt-app","ok-app","garbage-app"]'
@@ -134,7 +138,9 @@
           jq -n --arg t "{{ _fresh_ts.stdout }}" \
             '{data:{updated_time:$t,current_version:1,custom_metadata:{}}}' ;;
         "list -format=json auth/approle/role")
-          echo '["test-role"]' ;;
+          echo '["test-role","empty-role"]' ;;
+        "list -format=json auth/approle/role/empty-role/secret-id")
+          echo '{}'; exit 2 ;;
         "list -format=json auth/approle/role/test-role/secret-id")
           echo '["accessor1"]' ;;
         "write -format=json auth/approle/role/test-role/secret-id-accessor/lookup secret_id_accessor=accessor1")
