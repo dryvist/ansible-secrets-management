@@ -105,6 +105,15 @@ plans):
 | `elevate-untrusted` (`auth/authelia`) | `human-unlock-untrusted` | secret_id mint, `ai-apply-<svc>` | Phone-approved, untrusted; 5m[^elevate] |
 | `snapshot` | `sys/storage/raft/snapshot` | — | least-priv backup identity |
 
+The `ai-admin-session` role also attaches `ai-admin-guard`, which
+denies orphan and role-based token creation, edits or secret_id minting for
+human-gated AppRoles, reads of or changes to `ai-admin`, `ai-admin-guard`, or either
+human-unlock policy, enabling, disabling or tuning auth methods and audit
+devices, userpass or MFA settings, and
+moving or retuning the Enterprise owner-token mount. Plain child-token creation
+and listing auth methods and audit devices remain allowed. The one-shot
+`ai-admin` role stays unguarded; provisioning runs that change these objects use it.
+
 The AI rows above are **actor roles**: they carry no path rules themselves, only
 attach **actor-agnostic base capability policies** — `read-<svc>` / `write-<svc>`
 (one pair per entry in `openbao_ai_domains`), plus `github-mint`. The rollups

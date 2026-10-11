@@ -36,6 +36,7 @@ openbao_base_approles_elevated:
   # provisions — enumerated paths, with sudo only where OpenBao requires it, no
   # longer a bare `path "*"`. NO standing secret_id; a token exists only after a
   # human one-shot unlock and lives the admin window (1h), alerted on every use.
+  # It stays unguarded: provisioning runs that change the guarded objects use it.
   - name: "{{ openbao_ai_admin_approle_name }}"
     policy: "{{ openbao_ai_admin_policy_name }}"
     token_ttl: "{{ openbao_ai_admin_token_ttl }}"
@@ -44,9 +45,10 @@ openbao_base_approles_elevated:
     secret_id_ttl: "{{ openbao_ai_elevated_secret_id_ttl }}"
     secret_id_num_uses: 1
   # ai-admin-session: same human-gated, alerted policy for the renewable
-  # service-token session; the explicit maximum bounds it to eight hours.
+  # service-token session; the explicit maximum bounds it to eight hours, and
+  # ai-admin-guard keeps it from extending or re-minting itself.
   - name: "{{ openbao_ai_admin_session_approle_name }}"
-    policy: "{{ openbao_ai_admin_policy_name }}"
+    token_policies: ["{{ openbao_ai_admin_policy_name }}", "{{ openbao_ai_admin_guard_policy_name }}"]
     token_ttl: "{{ openbao_ai_admin_session_token_ttl }}"
     token_max_ttl: "{{ openbao_ai_admin_session_token_max_ttl }}"
     token_explicit_max_ttl: "{{ openbao_ai_admin_session_token_explicit_max_ttl }}"

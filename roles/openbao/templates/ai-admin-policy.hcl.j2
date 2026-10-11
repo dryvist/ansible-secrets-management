@@ -118,6 +118,14 @@ path "{{ mount.path | default(mount) }}/*" {
 }
 {% endfor %}
 
+# Read the human-gated enterprise owner token.
+path "{{ openbao_github_enterprise_owner_mount }}/data/*" {
+  capabilities = ["read", "list"]
+}
+path "{{ openbao_github_enterprise_owner_mount }}/metadata/*" {
+  capabilities = ["read", "list"]
+}
+
 # --- Secrets engines: configure the engine AND mint from it -------------------
 # Break-glass covers repairing an engine's configuration (a rotated App key, a
 # re-pointed IAM role), which is why these are the full capability set and not

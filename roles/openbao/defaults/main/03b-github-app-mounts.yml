@@ -12,6 +12,7 @@
 #   github-work    read and write over one installation, no administration
 #   github-enterprise-read  human-gated raw-token read tier
 #   github-enterprise       human-gated raw-token admin tier
+#   github-enterprise-owner human-gated stored owner token, readable by the admin tiers only
 openbao_github_everyday_mount: github
 openbao_github_everyday_dryvist_installation_id: >-
   {{ openbao_platform_env['OPENBAO_GITHUB_DRYVIST_INSTALLATION_ID'] | default('', true) }}
@@ -143,6 +144,7 @@ openbao_github_enterprise_read_installation_id: >-
 openbao_github_enterprise_mount: github-enterprise
 openbao_github_enterprise_installation_id: >-
   {{ openbao_platform_env['OPENBAO_GITHUB_ENTERPRISE_INSTALLATION_ID'] | default('', true) }}
+openbao_github_enterprise_owner_mount: github-enterprise-owner
 openbao_github_enterprise_app_mounts: >-
   {{ ([{'mount': openbao_github_enterprise_read_mount,
         'app_id': lookup('env', 'OPENBAO_GITHUB_ENTERPRISE_READ_APP_ID') | default('', true),

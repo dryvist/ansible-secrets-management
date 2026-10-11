@@ -1,0 +1,58 @@
+{{ ansible_managed | comment }}
+# ai-admin-guard — explicit denies that constrain the ai-admin-session window.
+# Plain child-token creation remains allowed; orphan and role-based tokens do not.
+# Listing auth methods and audit devices (sys/auth, sys/audit) stays allowed;
+# enabling, disabling or tuning them (sys/auth/*, sys/audit/*) does not.
+
+{% set human_gated_approles = openbao_approles
+     | selectattr('manage_secret_id', 'defined')
+     | rejectattr('manage_secret_id')
+     | map(attribute='name') | list %}
+{% set guarded_approles = (human_gated_approles + ['admin']) | unique | sort | list %}
+
+{% for path in [
+     'auth/token/create-orphan',
+     'auth/token/create/*',
+     'auth/token/roles/*',
+     'auth/token/roles'] %}
+path "{{ path }}" {
+  capabilities = ["deny"]
+}
+{% endfor %}
+
+{% for approle_name in guarded_approles %}
+path "auth/approle/role/{{ approle_name }}" {
+  capabilities = ["deny"]
+}
+path "auth/approle/role/{{ approle_name }}/*" {
+  capabilities = ["deny"]
+}
+{% endfor %}
+
+{% for policy_name in [
+     openbao_ai_admin_policy_name,
+     openbao_ai_admin_guard_policy_name,
+     openbao_human_unlock_policy_name,
+     openbao_human_unlock_untrusted_policy_name] %}
+path "sys/policies/acl/{{ policy_name }}" {
+  capabilities = ["deny"]
+}
+{% endfor %}
+
+{% for path in [
+     'auth/userpass/*',
+     'identity/mfa/*',
+     'sys/auth/*',
+     'sys/audit/*',
+     'sys/remount'] %}
+path "{{ path }}" {
+  capabilities = ["deny"]
+}
+{% endfor %}
+
+path "sys/mounts/{{ openbao_github_enterprise_owner_mount }}" {
+  capabilities = ["deny"]
+}
+path "sys/mounts/{{ openbao_github_enterprise_owner_mount }}/*" {
+  capabilities = ["deny"]
+}

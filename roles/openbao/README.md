@@ -14,8 +14,10 @@ AppRole per resource-domain identity (see
 > policy; workstation tiers include `github-read`, `github-write`,
 > `github-admin`, `github-enterprise-read`, and `github-enterprise-admin`.
 > AWS credentials come from `aws/sts/<role>`.
-> A static PAT or access key stored in KV is manual credential control and is
-> rejected. KV is only for values no engine can mint.
+> Static PATs and access keys in KV are rejected as substitutes for
+> engine-minted credentials. The one stored-token exception is the GitHub
+> Enterprise owner token: human-unlock can write it to a dedicated KV v2 mount,
+> and only the admin tiers can read it.
 >
 > The human-gated GitHub tiers include `github-admin`,
 > `github-enterprise-read`, and `github-enterprise-admin`; see the GitHub
