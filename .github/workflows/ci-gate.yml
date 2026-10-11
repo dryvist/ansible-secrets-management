@@ -97,6 +97,9 @@ jobs:
       - name: Verify the voter-health sampler emits the quorum token
         run: python3 -m pytest -v tests/test_voter_health_emits_quorum_contract.py
 
+      - name: Verify the run wrapper's inventory and recap verdict
+        run: python3 -m pytest -v tests/test_run_ansible_wrapper.py
+
   gate:
     name: Merge Gate
     needs: [ci, molecule, tests]
