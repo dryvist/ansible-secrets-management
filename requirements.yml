@@ -18,4 +18,4 @@ collections:
   # renovate: datasource=git-refs depName=https://github.com/dryvist/homelab-contracts.git currentValue=main
   - name: https://github.com/dryvist/homelab-contracts.git#/ansible/
     type: git
-    version: 0e35299b1128102c993fa274dba5d2385d8f06e0
+    version: 8bfbe749becb948b694dfa687a99fe33d4ae45c3

@@ -29,6 +29,22 @@
   delegate_to: localhost
   become: false
 
+# The per-service apply-role names are generated from openbao_ai_domains. A
+# domain named `all` or containing a glob character would render a policy path
+# that matches ai-apply-all, which the untrusted tier must never reach. Checked
+# before any policy is written.
+- name: Assert no AI domain name is a wildcard or the all rollup
+  ansible.builtin.assert:
+    that:
+      - openbao_ai_domains | select('search', '^all$|[*]') | list | length == 0
+    fail_msg: >-
+      openbao_ai_domains contains "all" or a "*" glob: {{ openbao_ai_domains }}.
+      Rendered ai-apply-<svc> policy paths would match ai-apply-all.
+    success_msg: "No AI domain name is a wildcard or the all rollup."
+  run_once: true
+  delegate_to: localhost
+  become: false
+
 # The policy-sync pair (ask capability + rewrite the reconcile policy from
 # the declared set) now runs in init/02-initialize-cluster.yml, immediately
 # after the reconcile login succeeds -- BEFORE init/07 (SSH signing roles)

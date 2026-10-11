@@ -116,10 +116,12 @@ openbao_base_approles_elevated:
     secret_id_num_uses: 0
   # agent-workstation: the same converge-domain reads for the automation
   # account on the operator workstation, as its own identity so it can be
-  # revoked and audited apart from the operator's.
+  # revoked and audited apart from the operator's. Also attached: the ai-apply-all
+  # policy set (read-write-all leaves, github-mint, ssh-sign-automation-ai).
+  # `unique`: 'read-apps' is listed above and is also a read-write-all leaf.
   - name: agent-workstation
     token_policies: >-
-      {{ [openbao_apps_policy_name, openbao_media_policy_name,
+      {{ ([openbao_apps_policy_name, openbao_media_policy_name,
           openbao_monitoring_policy_name, openbao_local_cloud_policy_name,
           openbao_observability_policy_name, openbao_local_llm_policy_name,
           openbao_vikunja_mcp_policy_name, openbao_github_read_policy_name,
@@ -128,7 +130,10 @@ openbao_base_approles_elevated:
           openbao_vikunja_live_policy_name, 'read-apps', 'read-platform']
          + openbao_ai_api_key_policy_names
          + (openbao_github_write_scopes.keys() | list)
-         + (['ssh-sign-automation-ansible'] if openbao_ssh_engine_enabled else []) }}
+         + (['ssh-sign-automation-ansible'] if openbao_ssh_engine_enabled else [])
+         + openbao_read_write_all_policies + ['github-mint']
+         + (['ssh-sign-automation-ai'] if openbao_ssh_engine_enabled else []))
+         | unique }}
     secret_id_ttl: "0s"
     secret_id_num_uses: 0
   # ai-runner: standing, ambient READ identity like local-llm / hermes. The

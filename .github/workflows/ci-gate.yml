@@ -29,7 +29,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
-    uses: dryvist/.github/.github/workflows/_ansible-ci.yml@main
+    uses: dryvist/.github/.github/workflows/_ansible-ci.yml@c4501ea67ce4469a5cc95216c9a989516da2adb8 # v1.10.0
     with:
       # Molecule is owned locally (see header); the shared workflow runs lint only.
       molecule: false
@@ -96,6 +96,9 @@ jobs:
 
       - name: Verify the voter-health sampler emits the quorum token
         run: python3 -m pytest -v tests/test_voter_health_emits_quorum_contract.py
+
+      - name: Verify the run wrapper's inventory and recap verdict
+        run: python3 -m pytest -v tests/test_run_ansible_wrapper.py
 
   gate:
     name: Merge Gate
