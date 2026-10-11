@@ -284,19 +284,20 @@
       An apply/admin AI actor role (ai-apply-*, ai-admin, ai-admin-session) is
       missing manage_secret_id:false.
 
-# Both human-gated administrator roles attach the standalone ai-admin policy,
-# never composed base leaves. The session role has a service token and an 8h cap.
-- name: Assert the administrator roles use the standalone policy and bounded session type
+# Both human-gated administrator roles attach the standalone ai-admin policy plus
+# the ai-admin-guard deny overlay, never composed base leaves. The session role
+# has a service token and an 8h cap.
+- name: Assert the administrator roles use the standalone policy, the guard and bounded session type
   vars:
     admin_role: "{{ openbao_approles | selectattr('name', 'equalto', 'ai-admin') | first }}"
     session_role: >-
       {{ openbao_approles | selectattr('name', 'equalto', 'ai-admin-session') | first }}
   ansible.builtin.assert:
     that:
-      - admin_role.policy | default('') == 'ai-admin'
-      - admin_role.token_policies is not defined
-      - session_role.policy | default('') == 'ai-admin'
-      - session_role.token_policies is not defined
+      - admin_role.policy is not defined
+      - admin_role.token_policies == ['ai-admin', 'ai-admin-guard']
+      - session_role.policy is not defined
+      - session_role.token_policies == ['ai-admin', 'ai-admin-guard']
       - session_role.token_type == 'service'
       - session_role.token_ttl == '1h'
       - session_role.token_max_ttl == '8h'

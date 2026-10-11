@@ -183,6 +183,7 @@
       ansible.builtin.assert:
         that:
           - openbao_github_enterprise_admin_policy_name in openbao_reconcile_excluded_policies
+          - openbao_ai_admin_guard_policy_name in openbao_reconcile_excluded_policies
           - openbao_github_enterprise_read_policy_name not in openbao_reconcile_excluded_policies
         quiet: true
 
@@ -265,4 +266,59 @@
         fail_msg: >-
           Only ai-admin may read the owner mount; reconcile must omit it and
           human-unlock may only create or update the stored PAT.
+        quiet: true
+
+    - name: Render the ai-admin guard policy
+      ansible.builtin.template:
+        src: "{{ _template_dir }}/ai-admin-guard-policy.hcl.j2"
+        dest: "{{ _fixture_dir }}/ai-admin-guard.hcl"
+        mode: "0644"
+
+    - name: Read the ai-admin guard policy
+      ansible.builtin.slurp:
+        src: "{{ _fixture_dir }}/ai-admin-guard.hcl"
+      register: _ai_admin_guard_raw
+
+    - name: Assert the admin guard denies self-extension paths
+      vars:
+        _guard_policy_text: "{{ _ai_admin_guard_raw.content | b64decode }}"
+      ansible.builtin.assert:
+        that:
+          - >-
+            _guard_policy_text is search('(?ms)^path "auth/token/create-orphan"'
+            ~ ' \\{\\s*capabilities = \\["deny"\\]\\s*\\}')
+          - >-
+            _guard_policy_text is search('(?ms)^path "auth/approle/role/' ~ openbao_ai_admin_session_approle_name
+            ~ '/\\*" \\{\\s*capabilities = \\["deny"\\]\\s*\\}')
+          - >-
+            _guard_policy_text is search('(?ms)^path "sys/policies/acl/' ~ openbao_ai_admin_policy_name
+            ~ '" \\{\\s*capabilities = \\["deny"\\]\\s*\\}')
+          - >-
+            _guard_policy_text is search('(?ms)^path "sys/audit/\\*" \\{\\s*capabilities = \\["deny"\\]\\s*\\}')
+          - >-
+            _guard_policy_text is search('(?ms)^path "identity/mfa/\\*" \\{\\s*capabilities = \\["deny"\\]\\s*\\}')
+          - _guard_policy_text is not search('(?m)^path "auth/token/create"')
+        fail_msg: >-
+          ai-admin-guard must deny the requested self-extension and control-plane
+          paths while preserving plain child-token creation.
+        quiet: true
+
+    - name: Assert only the two AI admin roles attach the guard overlay
+      vars:
+        _ai_admin_role: >-
+          {{ openbao_approles | selectattr('name', 'equalto', openbao_ai_admin_approle_name) | first }}
+        _ai_admin_session_role: >-
+          {{ openbao_approles | selectattr('name', 'equalto', openbao_ai_admin_session_approle_name) | first }}
+        _operator_admin_role: >-
+          {{ openbao_approles | selectattr('name', 'equalto', 'admin') | first }}
+      ansible.builtin.assert:
+        that:
+          - >-
+            (_ai_admin_role.token_policies | sort)
+            == ([openbao_ai_admin_policy_name, openbao_ai_admin_guard_policy_name] | sort)
+          - >-
+            (_ai_admin_session_role.token_policies | sort)
+            == ([openbao_ai_admin_policy_name, openbao_ai_admin_guard_policy_name] | sort)
+          - _operator_admin_role.policy == openbao_ai_admin_policy_name
+          - _operator_admin_role.token_policies is not defined
         quiet: true

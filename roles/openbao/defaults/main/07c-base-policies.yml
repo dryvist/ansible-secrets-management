@@ -160,6 +160,9 @@ openbao_base_policies_static:
   # Containment also comes from human unlock, alerting, and the enumerated paths.
   - name: "{{ openbao_ai_admin_policy_name }}"
     template: ai-admin-policy.hcl.j2
+  # Explicit deny overlay limiting the human-unlocked admin roles.
+  - name: "{{ openbao_ai_admin_guard_policy_name }}"
+    template: ai-admin-guard-policy.hcl.j2
   - name: "{{ openbao_snapshot_policy_name }}"
     template: snapshot-policy.hcl.j2
   - name: "{{ openbao_apps_seed_policy_name }}"
