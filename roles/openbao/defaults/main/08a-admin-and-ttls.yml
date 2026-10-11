@@ -115,6 +115,7 @@ openbao_approle_secret_id_ttl_overrides:
   hermes-private-agent: "{{ openbao_rotated_domain_secret_id_ttl }}"
   ai-donna: "{{ openbao_rotated_domain_secret_id_ttl }}"
   open-llm: "{{ openbao_rotated_domain_secret_id_ttl }}"
+  ci-resolver: "{{ openbao_rotated_domain_secret_id_ttl }}"
   approle-secret-id-rotate-scheduled: "{{ openbao_rotated_domain_secret_id_ttl }}"
   # Standing identities outside the scheduled rotation: their secret_id is
   # rendered onto the host (or held by the operator's deploy) at converge
@@ -136,6 +137,9 @@ openbao_approle_secret_id_num_uses_overrides:
   # a use cap empties it between rotations. Bounded by the 24h ttl, the
   # scheduled 12h rotation and its single-host CIDR instead.
   open-llm: 0
+  # ci-resolver redeems its secret_id for dispatcher jobs; its scheduled
+  # rotation and shared single-host CIDR bound the unlimited-use pair.
+  ci-resolver: 0
   # The standing, non-expiring identities above: each systemd timer, runner
   # agent or deploy redeems its one secret_id on every run, so a redemption
   # cap would strand it mid-schedule. Bounded by its 08b source class instead.

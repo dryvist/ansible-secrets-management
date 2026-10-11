@@ -85,3 +85,8 @@ def test_a_published_only_bucket_is_missing_without_the_published_list():
     read_apps = _read_apps(names)
     missing = _unreadable(_apps_domain_paths(), read_apps, POLICY_TEMPLATE.read_text(encoding="utf-8"))
     assert "apps/pve-exporter" in missing
+
+
+def test_the_ci_resolver_bucket_is_not_granted_to_the_apps_reader():
+    assert "ci-resolver" in _yaml(PROMOTED_FILE)["openbao_promoted_app_secrets"]
+    assert "ci-resolver" not in _read_apps(_yaml(NAMES_FILE))

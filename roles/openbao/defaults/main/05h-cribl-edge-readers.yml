@@ -8,6 +8,8 @@ openbao_cribl_edge_mac_b_approle_name: cribl-edge-mac-b
 openbao_apps_read_excluded_generated_apps:
   - "{{ openbao_cribl_edge_mac_a_app }}"
   - "{{ openbao_cribl_edge_mac_b_app }}"
+  # Read only by the ci-resolver AppRole (github-ci-resolver-policy.hcl.j2).
+  - ci-resolver
 openbao_cribl_edge_mac_approle_names:
   - "{{ openbao_cribl_edge_mac_a_approle_name }}"
   - "{{ openbao_cribl_edge_mac_b_approle_name }}"

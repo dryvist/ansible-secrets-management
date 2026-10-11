@@ -184,7 +184,8 @@ openbao_secrets_domain_approle_names: >-
       openbao_agent_workstation_approle_name,
       openbao_hermes_approle_name,
       openbao_ai_donna_approle_name,
-      openbao_open_llm_approle_name] }}
+      openbao_open_llm_approle_name,
+      openbao_github_ci_resolver_approle_name] }}
 # Roles using lookup proof despite the runner's source class allowing login.
 openbao_approle_rotation_lookup_proof_names: []
 # Provider-level API credentials live on exact leaves under a separately

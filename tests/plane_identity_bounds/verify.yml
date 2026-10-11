@@ -139,7 +139,7 @@
         fail_msg: >-
           The write realm requires a 30-use, 24-hour secret_id and a 30-minute token.
 
-    - name: The dispatcher and workstation tool identities keep finite secret_id bounds
+    - name: The dispatcher and workstation tool identities keep declared secret_id bounds
       vars:
         rows: >-
           {{ openbao_approles | selectattr('name', 'equalto', item.name) | list }}
@@ -160,20 +160,25 @@
         fail_msg: "{{ item.name }} requires a {{ item.uses }}-use, {{ item.ttl }} secret_id (0 = unlimited)."
       loop:
         - { name: "{{ openbao_open_llm_approle_name }}", uses: 0, ttl: "{{ openbao_rotated_domain_secret_id_ttl }}" }
+        - name: "{{ openbao_github_ci_resolver_approle_name }}"
+          uses: 0
+          ttl: "{{ openbao_rotated_domain_secret_id_ttl }}"
         - { name: proxman, uses: 30, ttl: 24h }
 
-    - name: The dispatcher pair is rotated on schedule and never republished to Doppler
+    - name: Dispatcher pairs rotate through the platform env document, not Doppler
       ansible.builtin.assert:
         that:
           - openbao_open_llm_approle_name in openbao_secrets_domain_approle_names
+          - openbao_github_ci_resolver_approle_name in openbao_secrets_domain_approle_names
           - >-
             (openbao_approle_secret_id_ttl_overrides[openbao_open_llm_approle_name]
              | community.general.to_seconds | int)
             == (openbao_rotated_domain_secret_id_ttl | community.general.to_seconds | int)
           - openbao_open_llm_approle_name not in openbao_rotate_doppler_sync_domains
+          - openbao_github_ci_resolver_approle_name not in openbao_rotate_doppler_sync_domains
         fail_msg: >-
-          open-llm needs scheduled rotation with the rotated-domain secret_id ttl
-          and must stay out of openbao_rotate_doppler_sync_domains.
+          Both dispatcher identities need scheduled rotation through the
+          platform env document and must stay out of Doppler republishing.
 
     # A scheduled domain whose secret_id outlives fewer than three rotation
     # intervals expires after a single missed run. 0s (never expires) is exempt.

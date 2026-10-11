@@ -227,6 +227,13 @@ openbao_base_approles_core:
     secret_id_bound_cidrs: "{{ openbao_open_llm_secret_id_cidr }}"
     token_ttl: 15m
     token_max_ttl: 60m
+  # ci-resolver: dispatcher-side mint identity, on the same machine class and
+  # source-address bound as open-llm, with the same short renewable token.
+  - name: "{{ openbao_github_ci_resolver_approle_name }}"
+    policy: "{{ openbao_github_ci_resolver_policy_name }}"
+    secret_id_bound_cidrs: "{{ openbao_open_llm_secret_id_cidr }}"
+    token_ttl: 15m
+    token_max_ttl: 60m
   # ai-readonly / ai-elevated ACTOR roles: standing (ambient) READ tiers. Their
   # token_policies ATTACH composed rollups — no standalone ai-* policy object.
   # ai-readonly = read-all (every read-<svc>); ai-elevated = read-all + the

@@ -127,6 +127,9 @@ openbao_github_enterprise_admin_approle_name: github-enterprise-admin
 # raw token path and no lock subtree, so a leaked secret-zero can open a pull
 # request against one repository and do nothing anywhere else.
 openbao_github_docs_publisher_policy_name: docs-publisher
+# ci-resolver: the dispatcher's repository-scoped GitHub token identity.
+openbao_github_ci_resolver_policy_name: github-ci-resolver
+openbao_github_ci_resolver_approle_name: ci-resolver
 # GitHub Actions OIDC workload identity. The publish workflow presents the
 # token GitHub mints for its own job, so the runner stores no credential at
 # all; the role name is the policy name, as everywhere else here.
