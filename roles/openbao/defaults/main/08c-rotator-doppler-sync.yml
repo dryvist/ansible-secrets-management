@@ -26,8 +26,10 @@ openbao_rotate_doppler_config: >-
 # read by the rotate identity's own already-authenticated OpenBao token (see
 # the matching grant in templates/approle-secret-id-rotate-policy.hcl.j2).
 # An internal KV path, not an external identity -- literal here, same as
-# every other path in this file family (e.g. rotate_env_path).
-openbao_rotate_doppler_token_kv_path: platform/rotator/doppler-sync-token
+# every other path in this file family (e.g. rotate_env_path). The live token
+# lives at a top-level root outside the ai/apps/platform read-leaf catalogs,
+# and must exist here before the next rotator run.
+openbao_rotate_doppler_token_kv_path: rotator/doppler-sync-token
 openbao_rotate_doppler_sync_domains:
   - apps
   - local-llm-workstation
