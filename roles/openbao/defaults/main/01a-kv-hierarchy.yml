@@ -31,9 +31,11 @@ openbao_config_mount: config
 # deliberately left at its default (0 = versions never time-expire): history
 # that silently ages out is not history you can roll back to.
 openbao_config_mount_max_versions: 30
-# Every KV v2 mount this role provisions (add-if-missing, then tuned to the
-# declared retention). `max_versions` is optional — omit it to leave a mount on
-# the KV v2 default, which is what the two credential mounts do today.
+# Every shared KV v2 mount this role provisions (add-if-missing, then tuned to
+# the declared retention). `max_versions` is optional — omit it to leave a mount
+# on the KV v2 default, which is what the two credential mounts do today.
+# `github-enterprise-owner` is enabled separately and stays out of this list:
+# ai-admin and openbao-reconcile derive broad KV access from these entries.
 openbao_kv_mounts:
   - path: "{{ openbao_kv_mount }}"
   # External-SaaS credentials; a literal here for the same reason the policy

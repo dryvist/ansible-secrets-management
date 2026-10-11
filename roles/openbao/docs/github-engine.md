@@ -21,6 +21,10 @@ configuration, so each App's own grant caps every token its mount mints:
 | `github-enterprise-read` | read-only Enterprise App | none: raw token endpoint, pinned to its installation |
 | `github-enterprise` | admin Enterprise App | none: raw token endpoint, pinned to its installation |
 
+The Enterprise owner token is stored separately in the `github-enterprise-owner`
+KV v2 mount. The human-unlock login can create or replace it; only the admin
+tiers can read its data and metadata.
+
 A key is required only for first configuration or an explicit rotation; routine
 converges never rewrite it. Installation IDs come from the env document
 (`secret/platform/ansible/env`).
