@@ -20,6 +20,7 @@
   gather_facts: false
 
   vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
     role_defaults: "{{ playbook_dir }}/../../roles/openbao/defaults/main"
     openbao_management_cidrs: "192.0.2.0/24"
     openbao_workstation_cidrs: "198.51.100.0/24"
@@ -247,6 +248,23 @@
           agent-ssh-sign must carry exactly ssh-sign-automation-ai, a finite
           rotated secret_id republished to Doppler, and a token no longer than
           the automation-ai certificate.
+
+    - name: The automation identity stays workstation-bound and scheduled
+      vars:
+        row: >-
+          {{ openbao_approles
+             | selectattr('name', 'equalto', openbao_agent_workstation_approle_name)
+             | first }}
+      ansible.builtin.assert:
+        that:
+          - row.name == openbao_agent_workstation_approle_name
+          - openbao_approle_cidr_class_map[openbao_agent_workstation_approle_name] == 'workstation'
+          - openbao_agent_workstation_approle_name in openbao_secrets_domain_approle_names
+          - openbao_agent_workstation_approle_name in openbao_rotate_doppler_sync_domains
+          - openbao_agent_workstation_approle_name in openbao_rotate_doppler_only_domains
+        fail_msg: >-
+          The automation workstation identity must stay in the workstation
+          address class and scheduled Doppler-only rotation set.
 
     # The general guard. Any future non-expiring secret_id must earn it the same
     # way, or this fails on the day it is added rather than the day it leaks.
