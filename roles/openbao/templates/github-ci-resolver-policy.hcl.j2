@@ -1,0 +1,19 @@
+{{ ansible_managed | comment }}
+# ci-resolver mints only its explicitly repository-scoped stored set and reads
+# the service configuration bucket. No raw token endpoint or other set is
+# reachable. When no repository list exists, the entire policy is empty.
+{% if openbao_github_ci_resolver_permission_sets | length > 0 %}
+{% for permission_set in openbao_github_permission_sets | selectattr('tier', 'equalto', 'ci-resolver') %}
+path "{{ permission_set.mount }}/token/{{ permission_set.name }}" {
+  capabilities = ["create", "read", "update"]
+}
+
+{% endfor %}
+path "{{ openbao_kv_mount }}/data/apps/open-llm" {
+  capabilities = ["read"]
+}
+
+path "{{ openbao_kv_mount }}/metadata/apps/open-llm" {
+  capabilities = ["read"]
+}
+{% endif %}

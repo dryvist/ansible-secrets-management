@@ -18,6 +18,7 @@
     _snapshot_kv_path: "{{ openbao_kv_mount }}/data/apps/docs-router-snapshot"
     _other_policies:
       - github-docs-publisher-policy.hcl
+      - github-ci-resolver-policy.hcl
       - github-mint-policy.hcl
       - github-read-policy.hcl
       - github-repo-create-policy.hcl

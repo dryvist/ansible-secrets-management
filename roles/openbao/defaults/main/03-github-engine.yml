@@ -95,6 +95,26 @@ openbao_github_docs_publisher_repos: >-
      | map('trim') | reject('equalto', '') | list }}
 # App bucket the publisher policy may read (01c-app-secrets-generated.yml).
 openbao_github_docs_publisher_kv_app: github-actions
+# CI resolver tier: one explicitly repository-scoped stored set. With no
+# repository list the set is omitted; an omitted repositories key would mean
+# the whole installation.
+openbao_github_ci_resolver_set_name: ci-resolver-dryvist
+openbao_github_ci_resolver_permissions:
+  actions: write
+  checks: write
+  contents: write
+  pull_requests: write
+# Explicit repository names only, supplied by the secret store; no globs.
+openbao_github_ci_resolver_repos: >-
+  {{ (lookup('env', 'OPENBAO_GITHUB_CI_RESOLVER_REPOS') | default('', true)).split(',')
+     | map('trim') | reject('equalto', '') | list }}
+openbao_github_ci_resolver_permission_sets: >-
+  {{ [{'name': openbao_github_ci_resolver_set_name,
+       'tier': 'ci-resolver',
+       'installation_id': openbao_github_dryvist_installation_id,
+       'repositories': openbao_github_ci_resolver_repos,
+       'permissions': openbao_github_ci_resolver_permissions}]
+     if openbao_github_ci_resolver_repos | length > 0 else [] }}
 # The docs site's router snapshot workflow opens its pull request in the docs
 # SOURCE repository, so its set names that repository and nothing else. Same
 # rule as the publisher set: an unset repository yields no set. Tier `agents`
@@ -152,12 +172,13 @@ openbao_github_base_permission_sets:
     tier: exporter
     installation_id: "{{ openbao_github_dryvist_installation_id }}"
     permissions: "{{ openbao_github_exporter_permissions }}"
-# Full set list = the static base above + the publish tier, which exists only
-# when its repository list is configured.
+# Full set list = the static base above plus repository-scoped tiers, which
+# exist only when their repository lists are configured.
 # Sets on the admin mount only; 05-github-engine.yml reconciles exactly these.
 openbao_github_admin_permission_sets: >-
   {{ openbao_github_base_permission_sets
      + openbao_github_docs_publisher_permission_sets
+     + openbao_github_ci_resolver_permission_sets
      + openbao_github_router_snapshot_permission_sets }}
 # Every set on every GitHub mount, each tagged with its mount, for the policy
 # templates.

@@ -131,6 +131,7 @@
         - github-write-policy.hcl
         - open-llm-policy.hcl
         - github-docs-publisher-policy.hcl
+        - github-ci-resolver-policy.hcl
         - ai-public-policy.hcl
         - ai-orchestrator-policy.hcl
         - hermes-policy.hcl

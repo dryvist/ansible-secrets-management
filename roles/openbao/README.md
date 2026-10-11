@@ -22,6 +22,9 @@ AppRole per resource-domain identity (see
 > The human-gated GitHub tiers include `github-admin`,
 > `github-enterprise-read`, and `github-enterprise-admin`; see the GitHub
 > secrets-engine guide for their mount and token boundaries.
+>
+> The `ci-resolver` AppRole mints short-lived GitHub tokens from its explicit
+> repository set and reads only the `apps/open-llm` service configuration bucket.
 
 ## Installation
 

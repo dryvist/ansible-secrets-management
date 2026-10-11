@@ -240,6 +240,22 @@
     - openbao_bootstrap_token is defined
     - openbao_github_engine_enabled | bool
 
+- name: Assert the CI resolver permission map is exactly its four write permissions
+  ansible.builtin.assert:
+    that:
+      - openbao_github_ci_resolver_permissions.keys() | list == ['actions', 'checks', 'contents', 'pull_requests']
+      - openbao_github_ci_resolver_permissions.actions == 'write'
+      - openbao_github_ci_resolver_permissions.checks == 'write'
+      - openbao_github_ci_resolver_permissions.contents == 'write'
+      - openbao_github_ci_resolver_permissions.pull_requests == 'write'
+    fail_msg: >-
+      openbao_github_ci_resolver_permissions must be exactly
+      {actions: write, checks: write, contents: write, pull_requests: write};
+      add a new tier instead of widening this one.
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_github_engine_enabled | bool
+
 - name: Assert the org-admin permission map is exactly organization_administration:write
   ansible.builtin.assert:
     that:

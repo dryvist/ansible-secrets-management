@@ -14,7 +14,7 @@ configuration, so each App's own grant caps every token its mount mints:
 | Mount | App | Permission sets |
 | --- | --- | --- |
 | `github` | everyday | read sets and the raw `github/token` write endpoint |
-| `github-admin` | admin | admin, repo-create, docs-publisher, runner, exporter |
+| `github-admin` | admin | admin, repo-create, docs-publisher, ci-resolver, runner, exporter |
 | `github-agents` | agents | none: `open-llm` mints from the raw `github-agents/token`, pinned to the App's installation |
 | `github-hermes` | hermes | `hermes-{review,author}-{public,private}`, split by repository visibility |
 | `github-work` | work | `work-read` and `work-write`, both pinned to the work installation; no administration |
@@ -60,6 +60,12 @@ Token access is tiered; the tier IS the privilege boundary:
   bound to one audience, one repository and one ref, with a 10m token. There
   is no AppRole and no secret_id for it: the workflow's own job identity is
   the credential, so the runner stores nothing.
+- **CI resolver (`ci-resolver`)** — `github-admin/token/ci-resolver-dryvist`:
+  `actions`, `checks`, `contents` and `pull_requests` write on the explicit
+  repository list from `OPENBAO_GITHUB_CI_RESOLVER_REPOS`; an unset list omits
+  the set and leaves the policy empty. Its machine-class AppRole reads the
+  `apps/open-llm` service configuration bucket and mints 15m tokens renewable
+  to 60m.
 - **admin (`github-admin`)** — `github-admin/token/dryvist-full-automation` and
   `github-admin/token/personal-full-automation`: installation-wide, full App
   ceiling. INERT AppRole — a human response-wraps a single-use secret_id per

@@ -235,6 +235,18 @@
     - openbao_bootstrap_token is defined
     - openbao_github_docs_publisher_repos | default([]) | length == 0
 
+- name: Warn when the CI resolver repo list is unset (its policy set drops out of the render)
+  ansible.builtin.debug:
+    msg: >-
+      OPENBAO_GITHUB_CI_RESOLVER_REPOS is unset -- the ci-resolver GitHub
+      permission set is omitted from openbao_github_permission_sets, so
+      github-ci-resolver-policy.hcl.j2 renders with no grants. Set the env var
+      to restore it, or leave it unset deliberately if the identity is not yet
+      meant to exist.
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_github_ci_resolver_repos | default([]) | length == 0
+
 # `bao policy write <name> -` REPLACES the whole stored ACL document; there is
 # no merge. A policy template whose only content is conditional on some other
 # input (a permission set, a workspace list, ...) renders as comment lines
