@@ -110,6 +110,7 @@ openbao_approle_secret_id_ttl_overrides:
   cribl-edge-mac-a: "{{ openbao_rotated_domain_secret_id_ttl }}"
   cribl-edge-mac-b: "{{ openbao_rotated_domain_secret_id_ttl }}"
   agent-ssh-sign: "{{ openbao_rotated_domain_secret_id_ttl }}"
+  agent-workstation: "{{ openbao_rotated_domain_secret_id_ttl }}"
   hermes: "{{ openbao_rotated_domain_secret_id_ttl }}"
   hermes-private-agent: "{{ openbao_rotated_domain_secret_id_ttl }}"
   ai-donna: "{{ openbao_rotated_domain_secret_id_ttl }}"
