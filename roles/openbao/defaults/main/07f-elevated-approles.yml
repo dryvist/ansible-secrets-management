@@ -134,8 +134,6 @@ openbao_base_approles_elevated:
          + openbao_read_write_all_policies + ['github-mint']
          + (['ssh-sign-automation-ai'] if openbao_ssh_engine_enabled else []))
          | unique }}
-    secret_id_ttl: "0s"
-    secret_id_num_uses: 0
   # ai-runner: standing, ambient READ identity like local-llm / hermes. The
   # openbao_secrets prefetch play in ansible-proxmox-ai logs in each converge
   # with AI_RUNNER_VAULT_ROLE_ID / _SECRET_ID and reads the dispatch-queue +
