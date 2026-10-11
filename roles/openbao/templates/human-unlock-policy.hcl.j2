@@ -17,10 +17,10 @@
 # lands on exactly one of them and cannot be forgotten by either. Together they
 # cover every role, and neither can mint the other's set.
 #
-# It grants NOTHING else. No KV, no policy writes, no mount or auth changes —
-# the operator's REACH comes from the tier they unlock and is bounded by that
-# tier's own TTL, not from this policy. That matters: this credential is used
-# routinely and interactively, so it must not itself be worth stealing.
+# It grants NOTHING else beyond a write-only grant to the stored enterprise
+# owner token. No token read, no other KV, no policy writes, no mount or auth
+# changes — the operator's REACH comes from the tier they unlock and is bounded
+# by that tier's own TTL, not from this policy.
 
 {% set unlockable = openbao_approles
      | selectattr('manage_secret_id', 'defined')
@@ -37,6 +37,11 @@ path "auth/approle/role/{{ approle_name }}/role-id" {
   capabilities = ["read"]
 }
 {% endfor %}
+
+# Store or replace the enterprise owner token; only the admin tiers read it.
+path "{{ openbao_github_enterprise_owner_mount }}/data/pat" {
+  capabilities = ["create", "update"]
+}
 
 # --- Response wrapping -----------------------------------------------------
 # The unlock is handed over WRAPPED (`-wrap-ttl=90s`), so the secret_id is

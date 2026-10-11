@@ -93,6 +93,7 @@ openbao_ai_apply_approles: >-
 openbao_ai_admin_policy_name: ai-admin
 openbao_ai_admin_approle_name: ai-admin
 openbao_ai_admin_session_approle_name: ai-admin-session
+openbao_ai_admin_guard_policy_name: ai-admin-guard
 openbao_ai_admin_session_token_ttl: 1h
 openbao_ai_admin_session_token_max_ttl: 8h
 openbao_ai_admin_session_token_explicit_max_ttl: 8h
