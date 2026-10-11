@@ -42,3 +42,5 @@ openbao_reconcile_excluded_policies:
   # a privileged run, which is the human checkpoint the non-expiring credential
   # is traded against.
   - "{{ openbao_semaphore_approle_name }}"
+  # Keep routine reconciliation from changing the full-grant human tier.
+  - "{{ openbao_github_enterprise_admin_policy_name }}"

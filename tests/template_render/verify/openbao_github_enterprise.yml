@@ -1,0 +1,190 @@
+---
+- name: Render and verify Enterprise GitHub mounts, policies and AppRoles
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    ansible_become: false
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    _fixture_dir: "{{ render_tmp }}"
+    _template_dir: ../../../roles/openbao/templates
+    ansible_managed: "test fixture"
+
+  tasks:
+    - name: Load the openbao role defaults
+      ansible.builtin.include_vars:
+        dir: ../../../roles/openbao/defaults/main
+
+    - name: Pin both Enterprise installations to the unconfigured case
+      ansible.builtin.set_fact:
+        openbao_github_enterprise_read_installation_id: ""
+        openbao_github_enterprise_installation_id: ""
+        openbao_terrakube_network_workspace: example-network
+        openbao_terrakube_aws_workspace: example-aws
+        _enterprise_policy_specs:
+          - policy: "{{ openbao_github_enterprise_read_policy_name }}"
+            approle: "{{ openbao_github_enterprise_read_approle_name }}"
+            mount: "{{ openbao_github_enterprise_read_mount }}"
+            template: github-enterprise-read-policy.hcl.j2
+            installation_id: "4242"
+          - policy: "{{ openbao_github_enterprise_admin_policy_name }}"
+            approle: "{{ openbao_github_enterprise_admin_approle_name }}"
+            mount: "{{ openbao_github_enterprise_mount }}"
+            template: github-enterprise-admin-policy.hcl.j2
+            installation_id: "4343"
+
+    - name: Assert only the AppRoles are declared without installation IDs
+      ansible.builtin.assert:
+        that:
+          - >-
+            (_enterprise_policy_specs | map(attribute='mount') | list
+             | select('in', openbao_github_app_mounts | map(attribute='mount') | list) | list) == []
+          - >-
+            (_enterprise_policy_specs | map(attribute='policy') | list
+             | select('in', openbao_policies | map(attribute='name') | list) | list) == []
+          - >-
+            (_enterprise_policy_specs | map(attribute='approle') | list
+             | reject('in', openbao_approles | map(attribute='name') | list) | list) == []
+        fail_msg: >-
+          With no installation IDs, neither Enterprise mount nor policy may be
+          declared (an empty policy must never be written); both AppRoles stay.
+        quiet: true
+
+    - name: Render both policies without installation IDs
+      ansible.builtin.template:
+        src: "{{ _template_dir }}/{{ item.template }}"
+        dest: "{{ _fixture_dir }}/unset-{{ item.policy }}.hcl"
+        mode: "0644"
+      loop: "{{ _enterprise_policy_specs }}"
+
+    - name: Read the policies rendered without installation IDs
+      ansible.builtin.slurp:
+        src: "{{ _fixture_dir }}/unset-{{ item.policy }}.hcl"
+      loop: "{{ _enterprise_policy_specs }}"
+      register: _enterprise_unset_policy_raw
+
+    - name: Assert unset installation IDs produce no token path
+      vars:
+        _unset_policy_texts: >-
+          {{ _enterprise_unset_policy_raw.results | map(attribute='content') | map('b64decode') | list }}
+      ansible.builtin.assert:
+        that:
+          - >-
+            _unset_policy_texts | map('regex_findall', '(?m)^path "([^"]+)"')
+            | flatten | list == []
+        quiet: true
+
+    - name: Pin both Enterprise installations to configured test IDs
+      ansible.builtin.set_fact:
+        openbao_github_enterprise_read_installation_id: "4242"
+        openbao_github_enterprise_installation_id: "4343"
+
+    - name: Assert configured installation IDs declare both mounts and policies
+      ansible.builtin.assert:
+        that:
+          - >-
+            (openbao_github_app_mounts
+             | selectattr('mount', 'in', _enterprise_policy_specs | map(attribute='mount') | list)
+             | map(attribute='permission_sets') | list) == [[], []]
+          - >-
+            (_enterprise_policy_specs | map(attribute='policy') | list
+             | reject('in', openbao_policies | map(attribute='name') | list) | list) == []
+        quiet: true
+
+    - name: Render both policies with installation IDs
+      ansible.builtin.template:
+        src: "{{ _template_dir }}/{{ item.template }}"
+        dest: "{{ _fixture_dir }}/configured-{{ item.policy }}.hcl"
+        mode: "0644"
+      loop: "{{ _enterprise_policy_specs }}"
+
+    - name: Read the policies rendered with installation IDs
+      ansible.builtin.slurp:
+        src: "{{ _fixture_dir }}/configured-{{ item.policy }}.hcl"
+      loop: "{{ _enterprise_policy_specs }}"
+      register: _enterprise_configured_policy_raw
+
+    - name: Assert each policy grants only its pinned raw token endpoint
+      vars:
+        _policy_texts: >-
+          {{ _enterprise_configured_policy_raw.results | map(attribute='content') | map('b64decode') | list }}
+        _policy_paths: >-
+          {{ _policy_texts | map('regex_findall', '(?m)^path "([^"]+)"') | list }}
+        _parameter_keys: >-
+          {{ _policy_texts | map('regex_findall', '"([^"]+)"\s*=') | list }}
+      ansible.builtin.assert:
+        that:
+          - >-
+            _policy_paths == [[_enterprise_policy_specs[0].mount ~ '/token'],
+                              [_enterprise_policy_specs[1].mount ~ '/token']]
+          - _policy_texts[0] is search('allowed_parameters = \{ "installation_id" = \["4242"\] \}')
+          - _policy_texts[1] is search('allowed_parameters = \{ "installation_id" = \["4343"\] \}')
+          - _parameter_keys == [['installation_id'], ['installation_id']]
+          - >-
+            _policy_texts | select('search', 'required_parameters = \["installation_id"\]')
+            | list | length == 2
+          - >-
+            _policy_texts | select('search', 'capabilities\s*=\s*\["create", "update"\]')
+            | list | length == 2
+        fail_msg: >-
+          Each Enterprise policy must allow create/update on its raw token path
+          with only its own installation ID as an allowed parameter.
+        quiet: true
+
+    - name: Assert both AppRoles are inert, single-use and workstation-bound
+      vars:
+        _role: "{{ openbao_approles | selectattr('name', 'equalto', item.approle) | first }}"
+      ansible.builtin.assert:
+        that:
+          - _role.policy == item.policy
+          - _role.token_ttl == openbao_ai_admin_token_ttl
+          - _role.token_max_ttl == openbao_ai_admin_token_ttl
+          - _role.manage_secret_id is defined and not _role.manage_secret_id
+          - _role.secret_id_ttl == openbao_ai_elevated_secret_id_ttl
+          - _role.secret_id_num_uses | int == 1
+          - openbao_approle_cidr_class_map[item.approle] == 'workstation'
+        quiet: true
+      loop: "{{ _enterprise_policy_specs }}"
+
+    - name: Assert reconciliation protects only the full-grant Enterprise policy
+      ansible.builtin.assert:
+        that:
+          - openbao_github_enterprise_admin_policy_name in openbao_reconcile_excluded_policies
+          - openbao_github_enterprise_read_policy_name not in openbao_reconcile_excluded_policies
+        quiet: true
+
+    - name: Render the human-unlock and approle-issuer policies
+      ansible.builtin.template:
+        src: "{{ _template_dir }}/{{ item }}.j2"
+        dest: "{{ _fixture_dir }}/enterprise-{{ item }}"
+        mode: "0644"
+      loop:
+        - human-unlock-policy.hcl
+        - approle-issuer-policy.hcl
+
+    - name: Read the human-unlock and approle-issuer policies
+      ansible.builtin.slurp:
+        src: "{{ _fixture_dir }}/enterprise-{{ item }}"
+      loop:
+        - human-unlock-policy.hcl
+        - approle-issuer-policy.hcl
+      register: _enterprise_unlock_issuer_raw
+
+    - name: Assert only human-unlock may mint the Enterprise secret IDs
+      vars:
+        _unlock_policy_text: "{{ _enterprise_unlock_issuer_raw.results[0].content | b64decode }}"
+        _issuer_policy_text: "{{ _enterprise_unlock_issuer_raw.results[1].content | b64decode }}"
+        _human_gated_paths:
+          - "auth/approle/role/{{ openbao_github_enterprise_read_approle_name }}/secret-id"
+          - "auth/approle/role/{{ openbao_github_enterprise_read_approle_name }}/role-id"
+          - "auth/approle/role/{{ openbao_github_enterprise_admin_approle_name }}/secret-id"
+          - "auth/approle/role/{{ openbao_github_enterprise_admin_approle_name }}/role-id"
+      ansible.builtin.assert:
+        that:
+          - _human_gated_paths | select('in', _unlock_policy_text) | list == _human_gated_paths
+          - _human_gated_paths | select('in', _issuer_policy_text) | list == []
+        fail_msg: >-
+          human-unlock must expose both Enterprise roles and approle-issuer
+          must expose neither.
+        quiet: true

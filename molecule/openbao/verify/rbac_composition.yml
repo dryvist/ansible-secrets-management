@@ -323,6 +323,27 @@
       The session role must be mintable through human-unlock only, never through
       approle-issuer.
 
+- name: Assert Enterprise GitHub roles are available only through human unlock
+  vars:
+    human_unlock_policy: >-
+      {{ lookup('template', playbook_dir ~ '/../../roles/openbao/templates/human-unlock-policy.hcl.j2') }}
+    approle_issuer_policy: >-
+      {{ lookup('template', playbook_dir ~ '/../../roles/openbao/templates/approle-issuer-policy.hcl.j2') }}
+    enterprise_secret_id_paths:
+      - "auth/approle/role/{{ openbao_github_enterprise_read_approle_name }}/secret-id"
+      - "auth/approle/role/{{ openbao_github_enterprise_admin_approle_name }}/secret-id"
+    enterprise_role_id_paths:
+      - "auth/approle/role/{{ openbao_github_enterprise_read_approle_name }}/role-id"
+      - "auth/approle/role/{{ openbao_github_enterprise_admin_approle_name }}/role-id"
+  ansible.builtin.assert:
+    that:
+      - enterprise_secret_id_paths | select('in', human_unlock_policy) | list == enterprise_secret_id_paths
+      - enterprise_role_id_paths | select('in', human_unlock_policy) | list == enterprise_role_id_paths
+      - (enterprise_secret_id_paths + enterprise_role_id_paths) | select('in', approle_issuer_policy) | list == []
+    fail_msg: >-
+      Enterprise AppRoles must be minted only by human-unlock and not by
+      approle-issuer.
+
 - name: Assert every committed exact-claim Terrakube JWT role is declared
   ansible.builtin.assert:
     that:

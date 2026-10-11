@@ -90,6 +90,10 @@ openbao_packer_approle_name: packer
 #                                              set only, no administration;
 #                                              workstation identity, each use
 #                                              sudo/Touch-ID gated
+#   github-enterprise-read -> github-enterprise-read/token  one pinned
+#                                              installation; human-gated
+#   github-enterprise-admin -> github-enterprise/token      one pinned
+#                                              installation; human-gated
 #
 # Deliberately NOT members of openbao_ai_domains: estate AI identities mint
 # via the `github-mint` capability policy (read-tier sets only) instead.
@@ -114,6 +118,10 @@ openbao_github_work_read_policy_name: github-work-read
 openbao_github_work_read_approle_name: github-work-read
 openbao_github_work_write_policy_name: github-work-write
 openbao_github_work_write_approle_name: github-work-write
+openbao_github_enterprise_read_policy_name: github-enterprise-read
+openbao_github_enterprise_read_approle_name: github-enterprise-read
+openbao_github_enterprise_admin_policy_name: github-enterprise-admin
+openbao_github_enterprise_admin_approle_name: github-enterprise-admin
 # docs-publisher: the documentation publisher's own identity. Mints exactly
 # one repository-scoped write set and nothing else — it holds no read set, no
 # raw token path and no lock subtree, so a leaked secret-zero can open a pull

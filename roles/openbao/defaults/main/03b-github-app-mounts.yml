@@ -10,6 +10,8 @@
 #   github-agents  untrusted-tier writes, scoped by the App's installation
 #   github-hermes  review and allowlisted authoring, split by repository visibility
 #   github-work    read and write over one installation, no administration
+#   github-enterprise-read  human-gated raw-token read tier
+#   github-enterprise       human-gated raw-token admin tier
 openbao_github_everyday_mount: github
 openbao_github_everyday_dryvist_installation_id: >-
   {{ openbao_platform_env['OPENBAO_GITHUB_DRYVIST_INSTALLATION_ID'] | default('', true) }}
@@ -131,6 +133,28 @@ openbao_github_work_permission_sets: >-
       | map('combine', {'installation_id': openbao_github_work_installation_id}) | list)
      if openbao_github_work_installation_id | length > 0 else [] }}
 
+# Enterprise Apps use their own installation as the token ceiling. They have
+# no permission sets; their policies pin the raw token endpoint to one
+# installation ID. Each mount, like github-work, is declared only once its
+# installation ID is set; its policy follows the same input (07c).
+openbao_github_enterprise_read_mount: github-enterprise-read
+openbao_github_enterprise_read_installation_id: >-
+  {{ openbao_platform_env['OPENBAO_GITHUB_ENTERPRISE_READ_INSTALLATION_ID'] | default('', true) }}
+openbao_github_enterprise_mount: github-enterprise
+openbao_github_enterprise_installation_id: >-
+  {{ openbao_platform_env['OPENBAO_GITHUB_ENTERPRISE_INSTALLATION_ID'] | default('', true) }}
+openbao_github_enterprise_app_mounts: >-
+  {{ ([{'mount': openbao_github_enterprise_read_mount,
+        'app_id': lookup('env', 'OPENBAO_GITHUB_ENTERPRISE_READ_APP_ID') | default('', true),
+        'private_key': lookup('env', 'OPENBAO_GITHUB_ENTERPRISE_READ_PRIVATE_KEY') | default('', true),
+        'permission_sets': []}]
+      if openbao_github_enterprise_read_installation_id | length > 0 else [])
+     + ([{'mount': openbao_github_enterprise_mount,
+          'app_id': lookup('env', 'OPENBAO_GITHUB_ENTERPRISE_APP_ID') | default('', true),
+          'private_key': lookup('env', 'OPENBAO_GITHUB_ENTERPRISE_PRIVATE_KEY') | default('', true),
+          'permission_sets': []}]
+        if openbao_github_enterprise_installation_id | length > 0 else []) }}
+
 openbao_github_app_mounts_base:
   - mount: "{{ openbao_github_everyday_mount }}"
     app_id: "{{ lookup('env', 'OPENBAO_GITHUB_EVERYDAY_APP_ID') | default('', true) }}"
@@ -151,7 +175,8 @@ openbao_github_app_mounts: >-
           'app_id': lookup('env', 'OPENBAO_GITHUB_WORK_APP_ID') | default('', true),
           'private_key': lookup('env', 'OPENBAO_GITHUB_WORK_PRIVATE_KEY') | default('', true),
           'permission_sets': openbao_github_work_permission_sets}]
-        if openbao_github_work_permission_sets | length > 0 else []) }}
+        if openbao_github_work_permission_sets | length > 0 else [])
+     + openbao_github_enterprise_app_mounts }}
 
 # Accounts any App may be installed on: a comma-separated list in the env
 # document (openbao_platform_env). The exposure check fails closed while it is
