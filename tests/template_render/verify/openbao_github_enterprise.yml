@@ -75,6 +75,38 @@
             | flatten | list == []
         quiet: true
 
+    - name: Pin both Enterprise installations to non-numeric values
+      ansible.builtin.set_fact:
+        openbao_github_enterprise_read_installation_id: "*"
+        openbao_github_enterprise_installation_id: '4343" }'
+
+    - name: Render both policies with non-numeric installation IDs
+      ansible.builtin.template:
+        src: "{{ _template_dir }}/{{ item.template }}"
+        dest: "{{ _fixture_dir }}/malformed-{{ item.policy }}.hcl"
+        mode: "0644"
+      loop: "{{ _enterprise_policy_specs }}"
+
+    - name: Read the policies rendered with non-numeric installation IDs
+      ansible.builtin.slurp:
+        src: "{{ _fixture_dir }}/malformed-{{ item.policy }}.hcl"
+      loop: "{{ _enterprise_policy_specs }}"
+      register: _enterprise_malformed_policy_raw
+
+    - name: Assert a glob or quoted installation ID produces no token path
+      vars:
+        _malformed_policy_texts: >-
+          {{ _enterprise_malformed_policy_raw.results | map(attribute='content') | map('b64decode') | list }}
+      ansible.builtin.assert:
+        that:
+          - >-
+            _malformed_policy_texts | map('regex_findall', '(?m)^path "([^"]+)"')
+            | flatten | list == []
+        fail_msg: >-
+          A non-numeric installation ID must render no path, so the converge's
+          empty-policy check fails instead of writing a glob or injected pin.
+        quiet: true
+
     - name: Pin both Enterprise installations to configured test IDs
       ansible.builtin.set_fact:
         openbao_github_enterprise_read_installation_id: "4242"

@@ -1,7 +1,8 @@
 {{ ansible_managed | comment }}
 # github-enterprise-read — mint a token from the raw endpoint, pinned to the
-# declared installation. No token path exists until the installation ID is set.
-{% if openbao_github_enterprise_read_installation_id | length > 0 %}
+# declared installation. No token path exists until the installation ID is set
+# to a number; any other value renders no path, which fails the converge.
+{% if openbao_github_enterprise_read_installation_id is match('^[0-9]+$') %}
 path "{{ openbao_github_enterprise_read_mount }}/token" {
   capabilities = ["create", "update"]
   required_parameters = ["installation_id"]
