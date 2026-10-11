@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.6.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.5.0...v0.6.0) (2026-10-11)
+
+
+### Features
+
+* **openbao:** add the ai-admin-guard deny overlay ([4b13726](https://github.com/dryvist/ansible-secrets-management/commit/4b137261d56e20bce67011145c75ffeae34aef06))
+* **openbao:** add the github-enterprise-owner mount and the ai-admin-guard overlay ([#48](https://github.com/dryvist/ansible-secrets-management/issues/48)) ([a1b7dc6](https://github.com/dryvist/ansible-secrets-management/commit/a1b7dc66bb398fde7408478b08ebd0be2c0db5e7))
+* **openbao:** add the github-enterprise-owner token mount ([e4f413b](https://github.com/dryvist/ansible-secrets-management/commit/e4f413b8c585926c9f8e37a77fb5af7c55ea7832))
+
+
+### Bug Fixes
+
+* **openbao:** attach ai-admin-guard to ai-admin-session only ([b5a8694](https://github.com/dryvist/ansible-secrets-management/commit/b5a86946a7b5da118eee8bce1272acd29932d837))
+
 ## [0.5.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.4.0...v0.5.0) (2026-10-11)
 
 
