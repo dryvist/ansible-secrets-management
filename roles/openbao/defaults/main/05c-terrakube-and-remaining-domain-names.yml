@@ -158,6 +158,7 @@ openbao_local_llm_policy_name: local-llm
 openbao_local_llm_approle_name: local-llm
 openbao_local_llm_workstation_policy_name: local-llm-workstation
 openbao_local_llm_workstation_approle_name: local-llm-workstation
+openbao_agent_workstation_approle_name: agent-workstation
 # Host secret-zero identities delivered through the env document. Seed mode
 # writes these; scheduled rotation follows the domain catalog below.
 openbao_host_secret_zero_approle_names:
@@ -180,7 +181,7 @@ openbao_secrets_domain_approle_names: >-
       openbao_local_llm_workstation_approle_name]
      + openbao_cribl_edge_mac_approle_names
      + [openbao_agent_ssh_sign_approle_name,
-      'agent-workstation',
+      openbao_agent_workstation_approle_name,
       openbao_hermes_approle_name,
       openbao_ai_donna_approle_name,
       openbao_open_llm_approle_name] }}
