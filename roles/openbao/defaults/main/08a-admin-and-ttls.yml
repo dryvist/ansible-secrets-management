@@ -78,8 +78,7 @@ openbao_approle_human_secret_id_ttl: 15m
 # run, never a single cycle.
 #
 # iac-platform tofu/semaphore/schedules.tf's openbao_rotate_scheduled
-# schedule (Semaphore project schedule id 5, template 40, resource
-# semaphoreui_project_schedule.openbao_rotate_scheduled) runs
+# schedule (resource semaphoreui_project_schedule.openbao_rotate_scheduled) runs
 # openbao-rotate-approles-scheduled on cron "13 3,15 * * *" -- every 12h,
 # declared once here as openbao_rotate_scheduled_interval.
 # 3x that interval is the margin for one missed run before a domain's
