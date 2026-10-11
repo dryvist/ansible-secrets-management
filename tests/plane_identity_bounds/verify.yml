@@ -96,6 +96,25 @@
           of the exclusion is that this role changes only under a privileged
           run — the human checkpoint the credential is traded against.
 
+    - name: It cannot rewrite any policy its own token carries
+      vars:
+        planes: >-
+          {{ openbao_approles
+             | selectattr('name', 'equalto', openbao_semaphore_approle_name) | list }}
+        # Same expression the converge writes (init/10-approles.yml).
+        reachable: >-
+          {{ (planes[0].token_policies | default([planes[0].policy | default('')]))
+             | reject('in', openbao_reconcile_excluded_policies) | list }}
+      ansible.builtin.assert:
+        that:
+          - planes | length == 1
+          - reachable | length == 0
+        fail_msg: >-
+          The execution plane's token carries {{ reachable }}, which routine
+          reconciliation may rewrite. A converge running as that token could
+          widen its own policy to reach any path. Add each name to
+          openbao_reconcile_excluded_policies.
+
     - name: The write realm keeps finite credential and token bounds
       vars:
         realms: >-
