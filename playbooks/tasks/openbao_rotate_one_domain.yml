@@ -47,6 +47,14 @@
       roles/openbao/defaults/main/08a-admin-and-ttls.yml) before rotating it.
     quiet: true
 
+# Doppler-only domains avoid the env document entirely; other domains retain
+# the existing env-document seed/read/write and destroy-lookup behavior.
+- name: Decide whether the current domain uses the env document ({{ rotate_domain_name }})
+  ansible.builtin.set_fact:
+    rotate_env_document_enabled: >-
+      {{ rotate_domain_name not in (openbao_rotate_doppler_only_domains | default([])) }}
+  no_log: false
+
 # A seed run writes each host identity once: an identity the env document
 # already carries is left alone, so re-running the seed mints nothing new.
 - name: Seed run, check whether the env document already carries {{ rotate_domain_name }}
@@ -59,13 +67,16 @@
   register: rotate_seed_probe
   changed_when: false
   no_log: true
-  when: bootstrap_seed_only | default(false) | bool
+  when:
+    - bootstrap_seed_only | default(false) | bool
+    - rotate_env_document_enabled | bool
 
 - name: Decide whether this run skips {{ rotate_domain_name }}
   ansible.builtin.set_fact:
     rotate_skip_identity: >-
       {{ (bootstrap_seed_only | default(false) | bool)
-         and ((rotate_new_prefix ~ '_SECRET_ID') in rotate_seed_probe.json.data.data) }}
+         and (rotate_env_document_enabled | bool)
+         and ((rotate_new_prefix ~ '_SECRET_ID') in (rotate_seed_probe.json.data.data | default({}))) }}
   no_log: false
 
 - name: Rotate {{ rotate_domain_name }}
@@ -110,6 +121,12 @@
       register: rotate_env_current
       changed_when: false
       no_log: true
+      when: rotate_env_document_enabled | bool
+
+    - name: Initialize the previous secret_id lookup input for {{ rotate_domain_name }}
+      ansible.builtin.set_fact:
+        rotate_old_secret_id: ""
+      no_log: true
 
     # Whichever of the new/legacy secret_id keys is currently populated for this
     # domain is the value the previous rotation (or the pre-migration seed) left
@@ -121,6 +138,7 @@
              | default(rotate_env_current.json.data.data[rotate_legacy_prefix ~ '_SECRET_ID'], true)
              | default('', true) }}
       no_log: true
+      when: rotate_env_document_enabled | bool
 
     - name: Build the env document with this domain's pair rotated
       ansible.builtin.set_fact:
@@ -134,6 +152,7 @@
              | rejectattr('key', 'in', [rotate_legacy_prefix ~ '_ROLE_ID', rotate_legacy_prefix ~ '_SECRET_ID'])
              | items2dict }}
       no_log: true
+      when: rotate_env_document_enabled | bool
 
     - name: Prove the new pair authenticates for {{ rotate_domain_name }}
       ansible.builtin.uri:
@@ -184,6 +203,7 @@
         status_code: 200
       changed_when: true
       no_log: true
+      when: rotate_env_document_enabled | bool
 
     # Only reached once the new pair has proven it authenticates -- never
     # publish an unproven credential. Only the workstation-consumed domains
