@@ -29,7 +29,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
-    uses: dryvist/.github/.github/workflows/_ansible-ci.yml@c4501ea67ce4469a5cc95216c9a989516da2adb8 # v1.10.0
+    uses: dryvist/.github/.github/workflows/_ansible-ci.yml@10af73f872e043e91ff6327d0ef2548881f61298 # v1.11.2
     with:
       # Molecule is owned locally (see header); the shared workflow runs lint only.
       molecule: false
@@ -44,7 +44,9 @@ jobs:
   molecule:
     name: Molecule
     needs: ci
-    if: ${{ needs.ci.outputs.molecule == 'true' }}
+    # v1.11 reports molecule=true with an empty scenario list when no
+    # scenario's files changed; an empty matrix would fail the job.
+    if: ${{ needs.ci.outputs.molecule == 'true' && needs.ci.outputs.molecule_scenarios != '[]' }}
     uses: ./.github/workflows/_molecule.yml
     with:
       scenarios: ${{ needs.ci.outputs.molecule_scenarios }}
