@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.4.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.3.1...v0.4.0) (2026-10-11)
+
+
+### Features
+
+* **authelia:** add OpenBao elevation device-code clients and elevate policy ([#24](https://github.com/dryvist/ansible-secrets-management/issues/24)) ([7fa9ed2](https://github.com/dryvist/ansible-secrets-management/commit/7fa9ed2df1dbe47c65fe3d70109bca3287a2a1c0))
+* **openbao:** add the Authelia JWT elevation roles and a 1h work-identity token ([#25](https://github.com/dryvist/ansible-secrets-management/issues/25)) ([7127d8b](https://github.com/dryvist/ansible-secrets-management/commit/7127d8b0dac6dbe1b7c458fb11569cbcec99c242))
+* **openbao:** attach the ai-apply-all policy set to agent-workstation ([#22](https://github.com/dryvist/ansible-secrets-management/issues/22)) ([b0c948c](https://github.com/dryvist/ansible-secrets-management/commit/b0c948c2c31f1e4a0dd547cb90d4cc34055ae6a1))
+* **scripts:** add a run wrapper for the controller-side playbooks ([#26](https://github.com/dryvist/ansible-secrets-management/issues/26)) ([f638da2](https://github.com/dryvist/ansible-secrets-management/commit/f638da2690b05571331a1c62e23235c1fb75afcb))
+
 ## [0.3.1](https://github.com/dryvist/ansible-secrets-management/compare/v0.3.0...v0.3.1) (2026-10-10)
 
 
