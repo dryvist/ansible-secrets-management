@@ -63,9 +63,8 @@ Token access is tiered; the tier IS the privilege boundary:
 - **CI resolver (`ci-resolver`)** — `github-admin/token/ci-resolver-dryvist`:
   `actions`, `checks`, `contents` and `pull_requests` write on the explicit
   repository list from `OPENBAO_GITHUB_CI_RESOLVER_REPOS`; an unset list omits
-  the set and leaves the policy empty. Its machine-class AppRole reads the
-  `apps/open-llm` service configuration bucket and mints 15m tokens renewable
-  to 60m.
+  the set and leaves the policy empty. Its machine-class AppRole reads only
+  its own `apps/ci-resolver` bucket and mints 15m tokens renewable to 60m.
 - **admin (`github-admin`)** — `github-admin/token/dryvist-full-automation` and
   `github-admin/token/personal-full-automation`: installation-wide, full App
   ceiling. INERT AppRole — a human response-wraps a single-use secret_id per

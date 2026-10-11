@@ -27,8 +27,8 @@
     _ci_resolver_path: >-
       {{ openbao_github_mount }}/token/{{ openbao_github_ci_resolver_set_name }}
     _ci_resolver_kv_paths:
-      - "{{ openbao_kv_mount }}/data/apps/open-llm"
-      - "{{ openbao_kv_mount }}/metadata/apps/open-llm"
+      - "{{ openbao_kv_mount }}/data/apps/ci-resolver"
+      - "{{ openbao_kv_mount }}/metadata/apps/ci-resolver"
     _repo_create_path: >-
       {{ openbao_github_mount }}/token/dryvist-repo-create
     _org_admin_path: >-

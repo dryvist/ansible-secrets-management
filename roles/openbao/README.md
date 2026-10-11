@@ -24,7 +24,7 @@ AppRole per resource-domain identity (see
 > secrets-engine guide for their mount and token boundaries.
 >
 > The `ci-resolver` AppRole mints short-lived GitHub tokens from its explicit
-> repository set and reads only the `apps/open-llm` service configuration bucket.
+> repository set and reads only its own `apps/ci-resolver` bucket.
 
 ## Installation
 

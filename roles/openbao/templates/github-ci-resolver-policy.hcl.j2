@@ -9,11 +9,11 @@ path "{{ permission_set.mount }}/token/{{ permission_set.name }}" {
 }
 
 {% endfor %}
-path "{{ openbao_kv_mount }}/data/apps/open-llm" {
+path "{{ openbao_kv_mount }}/data/apps/ci-resolver" {
   capabilities = ["read"]
 }
 
-path "{{ openbao_kv_mount }}/metadata/apps/open-llm" {
+path "{{ openbao_kv_mount }}/metadata/apps/ci-resolver" {
   capabilities = ["read"]
 }
 {% endif %}
