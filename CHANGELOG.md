@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.6.0...v0.7.0) (2026-10-11)
+
+
+### Features
+
+* **openbao:** add the ci-resolver GitHub identity ([#53](https://github.com/dryvist/ansible-secrets-management/issues/53)) ([7eca696](https://github.com/dryvist/ansible-secrets-management/commit/7eca69625ada89e662c8de7fe170921e69988ac3))
+
 ## [0.6.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.5.0...v0.6.0) (2026-10-11)
 
 
