@@ -24,6 +24,11 @@
     _publisher_kv_paths:
       - "{{ openbao_kv_mount }}/data/apps/{{ openbao_github_docs_publisher_kv_app }}"
       - "{{ openbao_kv_mount }}/metadata/apps/{{ openbao_github_docs_publisher_kv_app }}"
+    _ci_resolver_path: >-
+      {{ openbao_github_mount }}/token/{{ openbao_github_ci_resolver_set_name }}
+    _ci_resolver_kv_paths:
+      - "{{ openbao_kv_mount }}/data/apps/ci-resolver"
+      - "{{ openbao_kv_mount }}/metadata/apps/ci-resolver"
     _repo_create_path: >-
       {{ openbao_github_mount }}/token/dryvist-repo-create
     _org_admin_path: >-
@@ -37,6 +42,16 @@
     - name: Load the openbao role defaults
       ansible.builtin.include_vars:
         dir: ../../../roles/openbao/defaults/main
+
+    - name: Assert the CI resolver repository input is split, trimmed, and empty-safe
+      ansible.builtin.assert:
+        that:
+          - >-
+            openbao_github_ci_resolver_repos
+            == ((lookup('env', 'OPENBAO_GITHUB_CI_RESOLVER_REPOS')
+                 | default('', true)).split(',') | map('trim')
+                | reject('equalto', '') | list)
+        fail_msg: The CI resolver repository input must be comma-split, trimmed, and empty-safe.
 
     - name: Render the general write policy
       ansible.builtin.template:
@@ -94,9 +109,37 @@
           configured. An unbounded set would carry write over the whole
           installation.
 
-    - name: Pin the publisher repository list and agents installation to the configured case
+    - name: Pin the CI resolver repository list to the unconfigured case
+      ansible.builtin.set_fact:
+        openbao_github_ci_resolver_repos: []
+
+    - name: Render the CI resolver policy with no repository configured
+      ansible.builtin.template:
+        src: "{{ _template_dir }}/github-ci-resolver-policy.hcl.j2"
+        dest: "{{ _fixture_dir }}/unset-github-ci-resolver-policy.hcl"
+        mode: "0644"
+
+    - name: Read the policy rendered without a CI resolver repository
+      ansible.builtin.slurp:
+        src: "{{ _fixture_dir }}/unset-github-ci-resolver-policy.hcl"
+      register: _ci_resolver_unset_raw
+
+    - name: Assert an unconfigured CI resolver has no set and an empty policy
+      ansible.builtin.assert:
+        that:
+          - openbao_github_ci_resolver_permission_sets == []
+          - >-
+            openbao_github_admin_permission_sets
+            | selectattr('name', 'equalto', openbao_github_ci_resolver_set_name) | list == []
+          - >-
+            (_ci_resolver_unset_raw.content | b64decode)
+            | regex_findall('(?m)^path "([^"]+)"') | length == 0
+        fail_msg: An empty CI resolver repository list must omit its set and every policy grant.
+
+    - name: Pin the publisher and CI resolver repository lists to the configured case
       ansible.builtin.set_fact:
         openbao_github_docs_publisher_repos: [fixture-repo]
+        openbao_github_ci_resolver_repos: [fixture-repo]
         openbao_github_agents_installation_id: "4242"
 
     - name: Render the tier policies with a publisher repository configured
@@ -113,6 +156,8 @@
         - github-write-policy.hcl
         - open-llm-policy.hcl
         - ai-public-policy.hcl
+        - github-ci-resolver-policy.hcl
+        - ai-orchestrator-policy.hcl
 
     - name: Read the policies rendered with a publisher repository
       ansible.builtin.slurp:
@@ -131,6 +176,11 @@
         _open_llm_paths: "{{ _paths[6] }}"
         _open_llm_text: "{{ _tier_raw.results[6].content | b64decode }}"
         _ai_public_paths: "{{ _paths[7] }}"
+        _ci_resolver_paths: "{{ _paths[8] }}"
+        _ci_resolver_capabilities: >-
+          {{ _tier_raw.results[8].content | b64decode
+             | regex_findall('(?m)^  capabilities = (.*)$') }}
+        _ai_orchestrator_paths: "{{ _paths[9] }}"
       vars:
         _paths: >-
           {{ _tier_raw.results | map(attribute='content') | map('b64decode')
@@ -154,6 +204,34 @@
           A tier other than docs-publisher grants the publisher's set.
           github-mint selects by rejecting tiers, so a new write-bearing tier
           is included there unless it is rejected explicitly.
+
+    - name: Assert the CI resolver set is exact, repository-scoped, and the only token path
+      vars:
+        _ci_resolver_set: "{{ openbao_github_ci_resolver_permission_sets | first }}"
+      ansible.builtin.assert:
+        that:
+          - openbao_github_ci_resolver_permission_sets | length == 1
+          - _ci_resolver_set.name == openbao_github_ci_resolver_set_name
+          - _ci_resolver_set.tier == 'ci-resolver'
+          - _ci_resolver_set.installation_id == openbao_github_dryvist_installation_id
+          - _ci_resolver_set.repositories == ['fixture-repo']
+          - >-
+            _ci_resolver_set.permissions
+            == {'actions': 'write', 'checks': 'write', 'contents': 'write', 'pull_requests': 'write'}
+          - openbao_github_ci_resolver_permissions == _ci_resolver_set.permissions
+          - _ci_resolver_paths == [_ci_resolver_path] + _ci_resolver_kv_paths
+          - _ci_resolver_capabilities == ['["create", "read", "update"]', '["read"]', '["read"]']
+        fail_msg: >-
+          The CI resolver may mint only its stored set with the four write
+          permissions and read only its one service bucket.
+
+    - name: Assert no broad identity inherits the CI resolver write set
+      ansible.builtin.assert:
+        that:
+          - _ci_resolver_path not in _mint_paths
+          - _ci_resolver_path not in _ai_orchestrator_paths
+          - _ci_resolver_path not in _read_paths
+        fail_msg: The CI resolver's stored write set must remain exclusive to its own policy.
 
     - name: Assert the repo-create policy grants exactly its own set
       ansible.builtin.assert:
