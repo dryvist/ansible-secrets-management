@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.1](https://github.com/dryvist/ansible-secrets-management/compare/v0.7.0...v0.7.1) (2026-10-11)
+
+
+### Bug Fixes
+
+* **openbao:** count an empty JSON list as absent in the secret-age audit ([#60](https://github.com/dryvist/ansible-secrets-management/issues/60)) ([8c454be](https://github.com/dryvist/ansible-secrets-management/commit/8c454bedee94672ba097826d7cb29d08327bab7c))
+
 ## [0.7.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.6.0...v0.7.0) (2026-10-11)
 
 
