@@ -246,6 +246,22 @@ openbao_base_approles_core:
       {{ openbao_read_all_policies
          + (openbao_ai_readonly_extra_subtrees | map('regex_replace', '^(.+)$', 'read-\1') | list)
          + (['ssh-sign-automation-ai'] if openbao_ssh_engine_enabled else []) }}
+  # Enterprise GitHub tiers use raw token endpoints pinned by their policies.
+  # Both roles are inert: a human unlocks one single-use secret_id per elevation.
+  - name: "{{ openbao_github_enterprise_read_approle_name }}"
+    policy: "{{ openbao_github_enterprise_read_policy_name }}"
+    token_ttl: "{{ openbao_ai_admin_token_ttl }}"
+    token_max_ttl: "{{ openbao_ai_admin_token_ttl }}"
+    manage_secret_id: false
+    secret_id_ttl: "{{ openbao_ai_elevated_secret_id_ttl }}"
+    secret_id_num_uses: 1
+  - name: "{{ openbao_github_enterprise_admin_approle_name }}"
+    policy: "{{ openbao_github_enterprise_admin_policy_name }}"
+    token_ttl: "{{ openbao_ai_admin_token_ttl }}"
+    token_max_ttl: "{{ openbao_ai_admin_token_ttl }}"
+    manage_secret_id: false
+    secret_id_ttl: "{{ openbao_ai_elevated_secret_id_ttl }}"
+    secret_id_num_uses: 1
 # openbao_base_approles_elevated (iac-platform-deploy through slack-ops) lives
 # in 07f-elevated-approles.yml — split for the CI token-limits gate.
 openbao_base_approles: >-

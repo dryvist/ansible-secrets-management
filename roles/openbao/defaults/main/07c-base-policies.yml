@@ -4,10 +4,11 @@
 #
 # BEFORE ADDING A ROW, apply the plugins-first rule. A policy
 # granting KV read for a resource that has a secrets engine is manual credential
-# control and is rejected. GitHub has one (mount `github`) and AWS has one (mount
-# `aws`), both enabled by default. A GitHub token grant is ALWAYS the existing
-# `github-mint` capability policy attached via token_policies — never a new
-# template, never a secret/github/* path. AWS is always aws/sts/<role>.
+# control and is rejected. GitHub App mounts and AWS (`aws`) are enabled by
+# default. Estate identities use the existing `github-mint` capability policy
+# attached via token_policies; operator tiers may have a dedicated policy for
+# a parameter-pinned raw token endpoint. Neither uses a secret/github/* path.
+# AWS is always aws/sts/<role>.
 # Terrakube workspace policies: name = "terrakube-<workspace.name>", one row
 # per openbao_terrakube_workspaces entry, same order. This used to be nine
 # hand-written rows each referencing openbao_terrakube_workspaces[N] by
@@ -187,6 +188,11 @@ openbao_base_policies_static:
     template: rustfs-rotate-policy.hcl.j2
   - name: "{{ openbao_approle_secret_id_rotate_policy_name }}"
     template: approle-secret-id-rotate-policy.hcl.j2
+  # Enterprise App tokens use each raw endpoint, pinned by the dedicated tier policy.
+  - name: "{{ openbao_github_enterprise_read_policy_name }}"
+    template: github-enterprise-read-policy.hcl.j2
+  - name: "{{ openbao_github_enterprise_admin_policy_name }}"
+    template: github-enterprise-admin-policy.hcl.j2
 # Full policy set = the static base above + the base read-/write-/github-mint
 # capability leaves generated from openbao_ai_domains + the ssh-sign-<role>
 # leaves generated from openbao_ssh_roles. init.yml renders this list.
@@ -222,16 +228,20 @@ openbao_credential_publish_apps:
 
 # Policies whose template emits a `path` stanza only for a configured input.
 # With that input unset the mount they govern is not created either (see
-# openbao_github_hermes_permission_sets and openbao_github_work_permission_sets),
-# so the policies are not declared: `bao policy write` replaces the stored ACL,
-# and an empty render must never reach it. Setting the input brings the mount
-# and its policies back together.
+# openbao_github_hermes_permission_sets, openbao_github_work_permission_sets
+# and openbao_github_enterprise_app_mounts), so the policies are not declared:
+# `bao policy write` replaces the stored ACL, and an empty render must never
+# reach it. Setting the input brings the mount and its policies back together.
 openbao_policies_without_inputs: >-
   {{ ([openbao_github_hermes_public_policy_name,
        openbao_github_hermes_private_policy_name]
       if openbao_github_hermes_permission_sets | length == 0 else [])
      + ([openbao_github_work_read_policy_name, openbao_github_work_write_policy_name]
-        if openbao_github_work_permission_sets | length == 0 else []) }}
+        if openbao_github_work_permission_sets | length == 0 else [])
+     + ([openbao_github_enterprise_read_policy_name]
+        if openbao_github_enterprise_read_installation_id | length == 0 else [])
+     + ([openbao_github_enterprise_admin_policy_name]
+        if openbao_github_enterprise_installation_id | length == 0 else []) }}
 
 openbao_policies: >-
   {{ (openbao_base_policies
