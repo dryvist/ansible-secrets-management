@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.5.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.4.0...v0.5.0) (2026-10-11)
+
+
+### Features
+
+* **openbao:** add GitHub Enterprise App mounts and inert tiers ([#30](https://github.com/dryvist/ansible-secrets-management/issues/30)) ([278493a](https://github.com/dryvist/ansible-secrets-management/commit/278493a9e3732616fa41d0160465ac37b3830268))
+* **openbao:** rotate the agent-workstation secret_id on the domain schedule ([#41](https://github.com/dryvist/ansible-secrets-management/issues/41)) ([fa5bc47](https://github.com/dryvist/ansible-secrets-management/commit/fa5bc4772f05bb1a33d8abed9de81c8bed57371c))
+
+
+### Bug Fixes
+
+* **openbao:** exclude the plane token's policies from reconcile ([#43](https://github.com/dryvist/ansible-secrets-management/issues/43)) ([164aaff](https://github.com/dryvist/ansible-secrets-management/commit/164aaff0cdddf3fd233ec9d1b71eeabe90ba8468))
+
 ## [0.4.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.3.1...v0.4.0) (2026-10-11)
 
 
