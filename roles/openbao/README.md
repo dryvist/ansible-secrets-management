@@ -9,11 +9,17 @@ AppRole per resource-domain identity (see
 
 > **Before changing anything here, apply the plugins-first rule.**
 > Secrets engines are mandatory wherever one exists: GitHub tokens are minted
-> from `github/token/<permission_set>` (estate identities attach the existing
-> `github-mint` policy; the workstation tiers are `github-read` /
-> `github-write` / `github-admin`) and AWS credentials from `aws/sts/<role>`.
+> from a GitHub App mount (`github/token/<permission_set>` or a tier-scoped raw
+> `/token` endpoint). Estate identities attach the existing `github-mint`
+> policy; workstation tiers include `github-read`, `github-write`,
+> `github-admin`, `github-enterprise-read`, and `github-enterprise-admin`.
+> AWS credentials come from `aws/sts/<role>`.
 > A static PAT or access key stored in KV is manual credential control and is
 > rejected. KV is only for values no engine can mint.
+>
+> The human-gated GitHub tiers include `github-admin`,
+> `github-enterprise-read`, and `github-enterprise-admin`; see the GitHub
+> secrets-engine guide for their mount and token boundaries.
 
 ## Installation
 

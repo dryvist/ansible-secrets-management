@@ -20,6 +20,7 @@
   gather_facts: false
 
   vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
     role_defaults: "{{ playbook_dir }}/../../roles/openbao/defaults/main"
     openbao_management_cidrs: "192.0.2.0/24"
     openbao_workstation_cidrs: "198.51.100.0/24"
@@ -94,6 +95,25 @@
           secret_id and the grant that justifies it. The deliberate consequence
           of the exclusion is that this role changes only under a privileged
           run — the human checkpoint the credential is traded against.
+
+    - name: It cannot rewrite any policy its own token carries
+      vars:
+        planes: >-
+          {{ openbao_approles
+             | selectattr('name', 'equalto', openbao_semaphore_approle_name) | list }}
+        # Same expression the converge writes (init/10-approles.yml).
+        reachable: >-
+          {{ (planes[0].token_policies | default([planes[0].policy | default('')]))
+             | reject('in', openbao_reconcile_excluded_policies) | list }}
+      ansible.builtin.assert:
+        that:
+          - planes | length == 1
+          - reachable | length == 0
+        fail_msg: >-
+          The execution plane's token carries {{ reachable }}, which routine
+          reconciliation may rewrite. A converge running as that token could
+          widen its own policy to reach any path. Add each name to
+          openbao_reconcile_excluded_policies.
 
     - name: The write realm keeps finite credential and token bounds
       vars:
@@ -179,11 +199,11 @@
     # identities listed here keep a finite cap.
     - name: Every scheduled-rotation domain has unlimited uses unless listed as finite
       vars:
-        # Workstation reader and per-Mac Edge readers (workstation class), the
-        # workstation certificate signer (one login per signature), and the
-        # rotate identity (redeemed twice a day).
+        # Workstation readers, the certificate signer, and the rotate identity.
         _finite: >-
-          {{ [openbao_local_llm_workstation_approle_name, openbao_agent_ssh_sign_approle_name,
+          {{ [openbao_local_llm_workstation_approle_name,
+              openbao_agent_ssh_sign_approle_name,
+              openbao_agent_workstation_approle_name,
               openbao_approle_secret_id_rotate_scheduled_approle_name]
              + openbao_cribl_edge_mac_approle_names }}
         _declared: >-
@@ -247,6 +267,24 @@
           agent-ssh-sign must carry exactly ssh-sign-automation-ai, a finite
           rotated secret_id republished to Doppler, and a token no longer than
           the automation-ai certificate.
+
+    - name: The automation identity stays workstation-bound and scheduled
+      vars:
+        row: >-
+          {{ openbao_approles
+             | selectattr('name', 'equalto', openbao_agent_workstation_approle_name)
+             | first }}
+      ansible.builtin.assert:
+        that:
+          - row.name == openbao_agent_workstation_approle_name
+          - row.secret_id_num_uses | int == 100
+          - openbao_approle_cidr_class_map[openbao_agent_workstation_approle_name] == 'workstation'
+          - openbao_agent_workstation_approle_name in openbao_secrets_domain_approle_names
+          - openbao_agent_workstation_approle_name in openbao_rotate_doppler_sync_domains
+          - openbao_agent_workstation_approle_name in openbao_rotate_doppler_only_domains
+        fail_msg: >-
+          The automation workstation identity must stay in the workstation
+          address class and scheduled Doppler-only rotation set.
 
     # The general guard. Any future non-expiring secret_id must earn it the same
     # way, or this fails on the day it is added rather than the day it leaks.

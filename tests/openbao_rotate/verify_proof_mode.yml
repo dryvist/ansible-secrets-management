@@ -14,13 +14,23 @@
   gather_facts: false
 
   vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
     _tasks_dir: "{{ playbook_dir }}/../../playbooks/tasks"
+    _one_domain_tasks: >-
+      {{ lookup('ansible.builtin.file', _tasks_dir ~ '/openbao_rotate_one_domain.yml')
+         | from_yaml }}
     _block: >-
-      {{ (lookup('ansible.builtin.file', _tasks_dir ~ '/openbao_rotate_one_domain.yml')
-          | from_yaml | selectattr('block', 'defined') | first).block }}
+      {{ (_one_domain_tasks | selectattr('block', 'defined') | first).block }}
     _names: "{{ _block | map(attribute='name') | list }}"
     _login: "{{ _block | selectattr('name', 'search', '^Prove the new pair authenticates') | first }}"
     _lookup: "{{ _block | selectattr('name', 'search', '^Prove the new secret_id is live') | first }}"
+    _env_document_tasks: >-
+      {{ _block
+         | selectattr(
+             'name',
+             'search',
+             '^(Read the env document|Resolve this domain|Build the env document|Write the rotated env document)')
+         | list }}
 
   tasks:
     - name: Load the openbao role defaults
@@ -78,3 +88,30 @@
           - _names.index(_write) > _names.index(_login.name)
           - _names.index(_write) > _names.index(_lookup.name)
         fail_msg: The rotated pair is published before it is proven.
+
+    - name: Assert agent-workstation rotates through Doppler without reading the env document
+      vars:
+        _seed_probe: >-
+          {{ _one_domain_tasks | selectattr('name', 'search', '^Seed run, check') | first }}
+        _prior_id_init: >-
+          {{ _block | selectattr('name', 'search', '^Initialize the previous secret_id') | first }}
+        _prior_id_lookup: >-
+          {{ _block | selectattr('name', 'search', '^Look up the previous secret_id') | first }}
+      ansible.builtin.assert:
+        that:
+          - openbao_agent_workstation_approle_name in openbao_rotate_doppler_only_domains
+          - openbao_agent_workstation_approle_name in openbao_rotate_doppler_sync_domains
+          - _seed_probe.when | select('search', 'rotate_env_document_enabled') | list | length == 1
+          - _env_document_tasks | length == 4
+          - >-
+            _env_document_tasks
+            | selectattr('when', 'defined')
+            | map(attribute='when')
+            | select('search', 'rotate_env_document_enabled')
+            | list | length == 4
+          - _prior_id_init['ansible.builtin.set_fact'].rotate_old_secret_id == ''
+          - _prior_id_lookup.when is search('rotate_old_secret_id')
+        fail_msg: >-
+          agent-workstation pairs must be republished to Doppler only; the
+          workstation holder must not read or write the env document, and the
+          rotation must not look up an old secret_id from it.

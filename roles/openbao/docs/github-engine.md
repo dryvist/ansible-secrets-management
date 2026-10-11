@@ -18,6 +18,8 @@ configuration, so each App's own grant caps every token its mount mints:
 | `github-agents` | agents | none: `open-llm` mints from the raw `github-agents/token`, pinned to the App's installation |
 | `github-hermes` | hermes | `hermes-{review,author}-{public,private}`, split by repository visibility |
 | `github-work` | work | `work-read` and `work-write`, both pinned to the work installation; no administration |
+| `github-enterprise-read` | read-only Enterprise App | none: raw token endpoint, pinned to its installation |
+| `github-enterprise` | admin Enterprise App | none: raw token endpoint, pinned to its installation |
 
 A key is required only for first configuration or an explicit rotation; routine
 converges never rewrite it. Installation IDs come from the env document
@@ -103,13 +105,35 @@ Token access is tiered; the tier IS the privilege boundary:
   neither policy grants the other set or the raw `github-work/token` endpoint.
   Both AppRoles are workstation-class with a 30m token and human-minted
   secret_ids (`manage_secret_id: false`).
+- **Enterprise read (`github-enterprise-read`)** — the raw
+  `github-enterprise-read/token` endpoint, pinned to the one configured
+  installation ID. Its App has no permission sets; the App grant supplies the
+  read-only ceiling. The AppRole is inert, workstation-class and human-gated,
+  with a single-use secret_id and a 1h token.
+- **Enterprise admin (`github-enterprise-admin`)** — the raw
+  `github-enterprise/token` endpoint, pinned to the one configured installation
+  ID. Its App has no permission sets; the App grant supplies the token ceiling.
+  The AppRole is inert, workstation-class and human-gated, with a single-use
+  secret_id and a 1h token. While an installation ID is unset, its mount and
+  policy are not declared; both AppRoles stay declared. An installation ID must
+  be a number; any other value renders an empty policy, and the converge fails.
+  Clearing an ID later stops declaring the mount and policy but doesn't delete
+  them from the store. The break-glass `ai-admin` policy also reaches both
+  mounts.
+
+Enterprise App IDs and private keys come from `OPENBAO_GITHUB_ENTERPRISE_APP_ID`,
+`OPENBAO_GITHUB_ENTERPRISE_PRIVATE_KEY`, `OPENBAO_GITHUB_ENTERPRISE_READ_APP_ID`,
+and `OPENBAO_GITHUB_ENTERPRISE_READ_PRIVATE_KEY`. Their installation IDs come
+from the env document keys `OPENBAO_GITHUB_ENTERPRISE_INSTALLATION_ID` and
+`OPENBAO_GITHUB_ENTERPRISE_READ_INSTALLATION_ID`.
 
 Estate identities (`ai-apply-*`, `ai-orchestrator`) attach the `github-mint`
-capability policy, which grants the read-tier sets only. No policy except
-`github-write` touches raw `github/token`; nothing but the converge edits
-permission sets or engine configuration. AWS remains separately mounted and
-authorized: `terraform-apply` can mint `aws/sts/tf-proxmox`, but has no
-GitHub-engine grant.
+capability policy, which grants the read-tier sets only. Raw token endpoints
+are limited to `github-write`, `github-write-scoped`, `open-llm`, the two
+parameter-pinned Enterprise tier policies, and break-glass `ai-admin`. Nothing
+but the converge edits permission sets or
+engine configuration. AWS remains separately mounted and authorized:
+`terraform-apply` can mint `aws/sts/tf-proxmox`, but has no GitHub-engine grant.
 
 First configuration requires `OPENBAO_GITHUB_APP_ID`,
 `OPENBAO_GITHUB_APP_PRIVATE_KEY`, and the two account installation IDs. After

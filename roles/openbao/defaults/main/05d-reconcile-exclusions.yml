@@ -42,3 +42,13 @@ openbao_reconcile_excluded_policies:
   # a privileged run, which is the human checkpoint the non-expiring credential
   # is traded against.
   - "{{ openbao_semaphore_approle_name }}"
+  # Keep routine reconciliation from changing the full-grant human tier.
+  - "{{ openbao_github_enterprise_admin_policy_name }}"
+  # The POLICY half for the same identity: every policy on the plane's token.
+  # Reconcile could otherwise rewrite one attached to the token running it and
+  # widen its own reach. These change only under a privileged run. Because the
+  # list also filters AppRoles, the ansible-converge AppRole's bounds and its
+  # secret_id liveness re-mint leave routine reconcile too.
+  - "{{ openbao_semaphore_policy_name }}"
+  - "{{ openbao_ansible_converge_policy_name }}"
+  - ssh-sign-automation-semaphore
