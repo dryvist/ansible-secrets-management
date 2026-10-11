@@ -136,10 +136,6 @@ openbao_approle_secret_id_num_uses_overrides:
   # a use cap empties it between rotations. Bounded by the 24h ttl, the
   # scheduled 12h rotation and its single-host CIDR instead.
   open-llm: 0
-  # Every trusted agent session on the workstation logs in with it through
-  # openbao-run, so a use cap empties it between rotations. Bounded by the
-  # rotated ttl, the scheduled 12h rotation and its workstation CIDR class.
-  agent-workstation: 0
   # The standing, non-expiring identities above: each systemd timer, runner
   # agent or deploy redeems its one secret_id on every run, so a redemption
   # cap would strand it mid-schedule. Bounded by its 08b source class instead.
