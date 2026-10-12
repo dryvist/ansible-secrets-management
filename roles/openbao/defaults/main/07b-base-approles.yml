@@ -96,7 +96,9 @@ openbao_base_approles_core:
   # redeems it, so a use cap empties it between rotations.
   - name: "{{ openbao_local_llm_approle_name }}"
     token_policies: >-
-      {{ [openbao_local_llm_policy_name] + openbao_ai_api_key_policy_names }}
+      {{ [openbao_local_llm_policy_name] + openbao_ai_api_key_policy_names
+         + ([openbao_roster_owned_mcp_deny_policy_name]
+            if openbao_roster_owned_slug_names | length > 0 else []) }}
     secret_id_num_uses: 0
   # local-llm-workstation: workstation reads of secret/ai/llm. Separate from
   # local-llm so workstation logins cannot exhaust the plane's secret_id.
