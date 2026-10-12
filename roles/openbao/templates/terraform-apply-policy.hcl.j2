@@ -55,3 +55,8 @@ path "{{ openbao_aws_mount }}/sts/{{ openbao_aws_role_name }}" {
 path "{{ openbao_aws_mount }}/sts/{{ openbao_aws_iac_admin_role_name }}" {
   capabilities = ["read", "update"]
 }
+
+# Dynamic Azure client secrets for the same IaC/admin identity.
+path "{{ openbao_azure_mount }}/creds/{{ openbao_azure_iac_admin_role_name }}" {
+  capabilities = ["read"]
+}

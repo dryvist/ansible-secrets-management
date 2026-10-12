@@ -1,9 +1,18 @@
 ---
 openbao_azure_mount: azure
 openbao_azure_plugin_name: azure
-# The engine mounts with no roles. Its config and roles are written into
-# OpenBao by an operator, never declared here.
 openbao_azure_engine_enabled: true
+# Broker for the general OpenBao-brokered IaC/admin identity, mirroring the AWS
+# openbao-iac-admin role. Unset object id renders no role.
+openbao_azure_iac_admin_role_name: openbao-iac-admin
+openbao_azure_iac_admin_application_object_id: >-
+  {{ lookup('env', 'OPENBAO_AZURE_IAC_ADMIN_APPLICATION_OBJECT_ID') | default('', true) }}
+openbao_azure_iac_admin_ttl: 1h
+# The root service principal OpenBao uses to mint client secrets. Written to
+# azure/config ONLY on first configuration, like the AWS root key.
+openbao_azure_root_tenant_id: "{{ lookup('env', 'OPENBAO_AZURE_ROOT_TENANT_ID') | default('', true) }}"
+openbao_azure_root_client_id: "{{ lookup('env', 'OPENBAO_AZURE_ROOT_CLIENT_ID') | default('', true) }}"
+openbao_azure_root_client_secret: "{{ lookup('env', 'OPENBAO_AZURE_ROOT_CLIENT_SECRET') | default('', true) }}"
 
 # renovate: datasource=github-releases depName=openbao/openbao-plugins
 openbao_azure_plugin_version: "0.23.0"
