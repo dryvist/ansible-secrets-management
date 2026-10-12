@@ -128,9 +128,9 @@
       openbao_azure_plugin_tune is changed
       or (openbao_azure_plugin_install_task | default({})) is changed
 
-# Root config holds the service principal secret OpenBao uses to mint client
+# The engine config holds the service principal OpenBao uses to mint client
 # secrets.
-- name: Check whether the Azure engine root config already exists
+- name: Check whether the Azure engine config already exists
   ansible.builtin.command:
     cmd: "bao read -format=json {{ openbao_azure_mount }}/config"
   environment:
@@ -140,7 +140,7 @@
   become: "{{ openbao_cli_become }}"
   vars:
     ansible_become: "{{ openbao_cli_become }}"
-  register: openbao_azure_root_check
+  register: openbao_azure_config_check
   no_log: true
   changed_when: false
   check_mode: false
@@ -149,25 +149,25 @@
     - openbao_bootstrap_token is defined
     - openbao_azure_engine_enabled | bool
 
-- name: Refuse to leave the Azure engine mounted with no root config and no credentials supplied
+- name: Refuse to leave the Azure engine mounted with no config and no service principal supplied
   ansible.builtin.fail:
     msg: >-
-      The Azure secrets engine at {{ openbao_azure_mount }}/ has no root config
-      yet, and OPENBAO_AZURE_ROOT_TENANT_ID/OPENBAO_AZURE_ROOT_CLIENT_ID/
-      OPENBAO_AZURE_ROOT_CLIENT_SECRET are unset. Re-run with those env vars
+      The Azure secrets engine at {{ openbao_azure_mount }}/ has no config
+      yet, and OPENBAO_AZURE_TENANT_ID/OPENBAO_AZURE_CLIENT_ID/
+      OPENBAO_AZURE_CLIENT_SECRET are unset. Re-run with those env vars
       set, or set openbao_azure_engine_enabled: false to skip Azure entirely.
   when:
     - openbao_bootstrap_token is defined
     - openbao_azure_engine_enabled | bool
-    - (openbao_azure_root_check.rc | default(1)) != 0
+    - (openbao_azure_config_check.rc | default(1)) != 0
     - >-
-      (openbao_azure_root_tenant_id | length == 0)
-      or (openbao_azure_root_client_id | length == 0)
-      or (openbao_azure_root_client_secret | length == 0)
+      (openbao_azure_tenant_id | length == 0)
+      or (openbao_azure_client_id | length == 0)
+      or (openbao_azure_client_secret | length == 0)
 
-# Write-once: a routine converge never overwrites the root config; rotation is
+# Write-once: a routine converge never overwrites the engine config; rotation is
 # a deliberate, separate operator action.
-- name: Configure the Azure engine root credentials (first configuration only)
+- name: Configure the Azure engine service principal (first configuration only)
   ansible.builtin.uri:
     url: "{{ openbao_cli_addr }}/v1/{{ openbao_azure_mount }}/config"
     method: POST
@@ -175,9 +175,9 @@
       X-Vault-Token: "{{ openbao_bootstrap_token }}"
     body_format: json
     body:
-      tenant_id: "{{ openbao_azure_root_tenant_id }}"
-      client_id: "{{ openbao_azure_root_client_id }}"
-      client_secret: "{{ openbao_azure_root_client_secret }}"
+      tenant_id: "{{ openbao_azure_tenant_id }}"
+      client_id: "{{ openbao_azure_client_id }}"
+      client_secret: "{{ openbao_azure_client_secret }}"
     status_code:
       - 200
       - 204
@@ -190,10 +190,10 @@
   when:
     - openbao_bootstrap_token is defined
     - openbao_azure_engine_enabled | bool
-    - (openbao_azure_root_check.rc | default(1)) != 0
-    - openbao_azure_root_tenant_id | length > 0
-    - openbao_azure_root_client_id | length > 0
-    - openbao_azure_root_client_secret | length > 0
+    - (openbao_azure_config_check.rc | default(1)) != 0
+    - openbao_azure_tenant_id | length > 0
+    - openbao_azure_client_id | length > 0
+    - openbao_azure_client_secret | length > 0
 
 - name: Check whether the openbao-iac-admin Azure role already exists
   ansible.builtin.command:
