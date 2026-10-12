@@ -28,6 +28,16 @@ openbao_terrakube_base_policies: >-
   {%- endfor -%}
   {{ _entries }}
 
+openbao_roster_agent_policies: >-
+  {%- set _entries = [] -%}
+  {%- for agent in openbao_ai_agents -%}
+  {%- if (agent | string | regex_search(openbao_roster_agent_name_pattern)) is not none -%}
+  {%- set _ = _entries.append({'name': agent,
+      'template': 'roster-agent-policy.hcl.j2', 'agent': agent}) -%}
+  {%- endif -%}
+  {%- endfor -%}
+  {{ _entries }}
+
 openbao_base_policies: "{{ openbao_terrakube_base_policies + openbao_base_policies_static }}"
 
 openbao_base_policies_static:
@@ -253,5 +263,6 @@ openbao_policies: >-
       + openbao_ai_capability_policies + openbao_ssh_sign_policies
       + openbao_ai_api_key_policies
       + openbao_github_write_scope_policies
+      + openbao_roster_agent_policies
       + [{'name': 'proxman', 'template': 'proxman-policy.hcl.j2'}])
      | rejectattr('name', 'in', openbao_policies_without_inputs) | list }}
