@@ -1,0 +1,66 @@
+---
+- name: Verify the AppRole rotation roster guard without network access
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    ansible_become: false
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    _empty_inventory_path: "{{ playbook_dir }}/../../openbao_rotate/roster-empty-inventory.json"
+    _agent_inventory_path: "{{ playbook_dir }}/../../openbao_rotate/roster-one-agent-inventory.json"
+
+  tasks:
+    - name: Load the openbao role defaults
+      ansible.builtin.include_vars:
+        dir: ../../../roles/openbao/defaults/main
+
+    - name: Set the fixture inventory and stubbed live AppRole response
+      ansible.builtin.set_fact:
+        rotate_roster_guard_inventory_path: >-
+          {{ _agent_inventory_path if rotation_roster_guard_case == 'one_agent'
+             else _empty_inventory_path }}
+        rotate_roster_guard_list_response:
+          json:
+            data:
+              keys: >-
+                {{ [openbao_roster_router_key_reader_name]
+                   if rotation_roster_guard_case in ['empty_roster', 'one_agent']
+                   else [] }}
+
+    - name: Run the roster guard and capture an expected failure
+      block:
+        - name: Include the rotation roster guard tasks
+          ansible.builtin.include_tasks: ../../../playbooks/tasks/rotate-roster-guard.yml
+      rescue:
+        - name: Record the roster guard failure message
+          ansible.builtin.set_fact:
+            _rotation_roster_guard_failure: "{{ ansible_failed_result.msg | default('') }}"
+
+    - name: Assert the empty live reader list skips inventory loading
+      ansible.builtin.assert:
+        that:
+          - _rotation_roster_guard_failure | default('') | length == 0
+          - rotate_roster_guard_inventory_load.skipped | default(false)
+          - openbao_roster_agent_valid_names | length == 0
+        quiet: true
+      when: rotation_roster_guard_case == 'no_readers'
+
+    - name: Assert a live reader with an empty inventory fails closed
+      ansible.builtin.assert:
+        that:
+          - _rotation_roster_guard_failure is search('Live roster key readers')
+          - _rotation_roster_guard_failure is search('no valid agents')
+          - _rotation_roster_guard_failure is search('TOFU_INVENTORY_PATH')
+          - not (rotate_roster_guard_inventory_load.skipped | default(false))
+        quiet: true
+      when: rotation_roster_guard_case == 'empty_roster'
+
+    - name: Assert a live reader with one inventory agent passes
+      ansible.builtin.assert:
+        that:
+          - _rotation_roster_guard_failure | default('') | length == 0
+          - not (rotate_roster_guard_inventory_load.skipped | default(false))
+          - openbao_roster_agent_valid_names == ['example-agent']
+        quiet: true
+      when: rotation_roster_guard_case == 'one_agent'

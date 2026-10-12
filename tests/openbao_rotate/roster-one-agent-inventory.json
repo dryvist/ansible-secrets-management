@@ -1,0 +1,15 @@
+{
+  "domain": "example.com",
+  "ingress_vip": "192.0.2.10",
+  "constants": {},
+  "agents": {
+    "example-agent": {
+      "container": "example-agent",
+      "hostname": "agent.example.com",
+      "display": "Example Agent",
+      "purpose": "Rotation guard fixture",
+      "owns": [],
+      "router_key_class": "standard"
+    }
+  }
+}
