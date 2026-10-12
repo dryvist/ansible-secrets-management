@@ -48,6 +48,7 @@
   register: openbao_secrets_health
   failed_when: false
   changed_when: false
+  check_mode: false
   delegate_to: localhost
   connection: local
   become: false
