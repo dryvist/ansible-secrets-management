@@ -147,12 +147,14 @@
     - openbao_bootstrap_token is defined
     - openbao_azure_engine_enabled | bool
 
-- name: Refuse Azure role provisioning without root config
-  ansible.builtin.fail:
+# The mount must exist before an operator can write the root config, so a
+# missing config skips role writes instead of failing the converge.
+- name: Report that Azure roles wait for the root config
+  ansible.builtin.debug:
     msg: >-
-      The Azure engine root config is missing. An operator must write
-      {{ openbao_azure_mount }}/config and run bao write -f
-      {{ openbao_azure_mount }}/rotate-root before Azure roles can be provisioned.
+      The Azure engine root config is missing, so Azure roles were skipped. An
+      operator writes {{ openbao_azure_mount }}/config and runs bao write -f
+      {{ openbao_azure_mount }}/rotate-root; the next converge creates the roles.
   when:
     - openbao_bootstrap_token is defined
     - openbao_azure_engine_enabled | bool
@@ -179,6 +181,7 @@
   when:
     - openbao_bootstrap_token is defined
     - openbao_azure_engine_enabled | bool
+    - (openbao_azure_config_check.rc | default(1)) == 0
 
 - name: Create each missing Azure role
   ansible.builtin.command:
@@ -204,4 +207,5 @@
   when:
     - openbao_bootstrap_token is defined
     - openbao_azure_engine_enabled | bool
+    - (openbao_azure_config_check.rc | default(1)) == 0
     - (item.1.rc | default(1)) != 0
