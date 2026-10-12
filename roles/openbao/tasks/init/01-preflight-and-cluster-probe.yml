@@ -32,15 +32,42 @@
       deleting the file does not revoke the credential.
     quiet: true
 
-# A roster agent's AppRole and policy are named after the agent. A name that
-# matches an existing AppRole or policy would replace that identity's grants.
-- name: Refuse roster agent names that collide with an existing AppRole or policy
-  ansible.builtin.assert:
-    that: openbao_roster_agent_name_collisions | length == 0
-    fail_msg: >-
-      Roster agents {{ openbao_roster_agent_name_collisions | join(', ') }} reuse an
-      existing AppRole or policy name. Rename them in the roster.
-    quiet: true
+# Validate all roster RBAC inputs before any policy renders or writes.
+- name: Validate roster agent RBAC inputs before rendering
+  block:
+    - name: Refuse invalid roster agent names
+      ansible.builtin.assert:
+        that: openbao_roster_agent_invalid_names | length == 0
+        fail_msg: >-
+          Roster agent names must match ^[a-z]+-[a-z]+$; invalid agents:
+          {{ openbao_roster_agent_invalid_names | join(', ') }}.
+        quiet: true
+
+    - name: Refuse invalid roster agent owned slugs
+      ansible.builtin.assert:
+        that: openbao_roster_agent_invalid_slugs | length == 0
+        fail_msg: >-
+          Roster agent owns values must be lists of slugs matching
+          ^[a-z][a-z0-9-]*$; invalid agents or slugs:
+          {{ openbao_roster_agent_invalid_slugs | join(', ') }}.
+        quiet: true
+
+    - name: Refuse duplicate roster agent owned slugs
+      ansible.builtin.assert:
+        that: openbao_roster_agent_duplicate_slugs | length == 0
+        fail_msg: >-
+          Owned system slugs may appear only once across the roster; duplicates:
+          {{ openbao_roster_agent_duplicate_slugs | join(', ') }}.
+        quiet: true
+
+    - name: Refuse roster names that collide with identities or granted KV leaves
+      ansible.builtin.assert:
+        that: openbao_roster_agent_name_collisions | length == 0
+        fail_msg: >-
+          Roster agents {{ openbao_roster_agent_name_collisions | join(', ') }}
+          reuse an AppRole, policy, exception, built-in policy, or granted KV
+          leaf name. Rename them in the roster.
+        quiet: true
 
 # `bao status` exit codes: 0 = unsealed, 2 = sealed, 1 = error. For an
 # uninitialized node the command still exits 0/2 with "initialized": false in

@@ -20,7 +20,7 @@ path "{{ openbao_kv_mount }}/metadata/apps/{{ item.agent }}-gw" {
   capabilities = ["read", "list"]
 }
 
-{% for slug in openbao_ai_agents[item.agent].owns %}
+{% for slug in openbao_ai_agents[item.agent].get('owns', []) %}
 path "{{ openbao_kv_mount }}/data/ai/mcp/{{ slug }}" {
   capabilities = ["read"]
 }

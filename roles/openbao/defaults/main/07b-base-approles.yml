@@ -277,8 +277,10 @@ openbao_base_approles: >-
 openbao_roster_agent_approles: >-
   {%- set _entries = [] -%}
   {%- for agent in openbao_ai_agents -%}
+  {%- if (agent | string | regex_search('^[a-z]+-[a-z]+$')) is not none -%}
   {%- set _ = _entries.append({'name': agent, 'policy': agent,
       'secret_id_num_uses': 0}) -%}
+  {%- endif -%}
   {%- endfor -%}
   {{ _entries }}
 # Full AppRole set = the static base above + the per-service ai-apply-<svc> actor

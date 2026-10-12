@@ -6,6 +6,7 @@
 
   vars:
     ansible_become: false
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
     _fixture_dir: "{{ render_tmp }}"
     _template_dir: "../../../roles/openbao/templates"
     ansible_managed: "test fixture"
@@ -40,6 +41,9 @@
       ansible.builtin.assert:
         that:
           - openbao_ai_agents == {}
+          - openbao_roster_agent_invalid_names == []
+          - openbao_roster_agent_invalid_slugs == []
+          - openbao_roster_agent_duplicate_slugs == []
           - openbao_roster_agent_name_collisions == []
           - openbao_roster_agent_approles == []
           - openbao_roster_agent_policies == []
@@ -54,14 +58,16 @@
         openbao_ai_agents:
           splunk-heimdall:
             owns: [splunk]
-          cribl-bifrost:
-            owns: []
+          cribl-bifrost: {}
 
     - name: Assert the fixture produces exactly two roster AppRoles and policies
       ansible.builtin.assert:
         that:
           - openbao_roster_agent_approles | length == 2
           - openbao_roster_agent_policies | length == 2
+          - openbao_roster_agent_invalid_names == []
+          - openbao_roster_agent_invalid_slugs == []
+          - openbao_roster_agent_duplicate_slugs == []
           - openbao_roster_agent_name_collisions == []
           - openbao_approles | length == _roster_baseline_approles | length + 2
           - openbao_policies | length == _roster_baseline_policies | length + 2
@@ -143,4 +149,101 @@
     - name: Assert the name collision is reported
       ansible.builtin.assert:
         that: openbao_roster_agent_name_collisions == ['local-llm']
+        quiet: true
+
+    - name: Set a fixture roster with a plus sign in its name
+      ansible.builtin.set_fact:
+        openbao_ai_agents:
+          'a+b':
+            owns: []
+
+    - name: Assert the plus-sign name is invalid and excluded from RBAC rows
+      ansible.builtin.assert:
+        that:
+          - openbao_roster_agent_invalid_names == ['a+b']
+          - openbao_roster_agent_approles == []
+          - openbao_roster_agent_policies == []
+        quiet: true
+
+    - name: Set a fixture roster with a glob in its name
+      ansible.builtin.set_fact:
+        openbao_ai_agents:
+          'splunk-*':
+            owns: []
+
+    - name: Assert the glob name is invalid and excluded from RBAC rows
+      ansible.builtin.assert:
+        that:
+          - openbao_roster_agent_invalid_names == ['splunk-*']
+          - openbao_roster_agent_approles == []
+          - openbao_roster_agent_policies == []
+        quiet: true
+
+    - name: Set a fixture roster with an invalid owned slug
+      ansible.builtin.set_fact:
+        openbao_ai_agents:
+          splunk-heimdall:
+            owns: [Splunk]
+
+    - name: Assert uppercase owned slugs are reported
+      ansible.builtin.assert:
+        that: openbao_roster_agent_invalid_slugs == ['splunk-heimdall:Splunk']
+        quiet: true
+
+    - name: Set a fixture roster whose owns value is not a list
+      ansible.builtin.set_fact:
+        openbao_ai_agents:
+          splunk-heimdall:
+            owns: splunk
+
+    - name: Assert non-list owns values are reported
+      ansible.builtin.assert:
+        that: openbao_roster_agent_invalid_slugs == ['splunk-heimdall (owns must be a list)']
+        quiet: true
+
+    - name: Set a fixture roster with duplicate owned slugs
+      ansible.builtin.set_fact:
+        openbao_ai_agents:
+          splunk-heimdall:
+            owns: [splunk]
+          cribl-bifrost:
+            owns: [splunk]
+
+    - name: Assert an owned slug repeated across agents is reported
+      ansible.builtin.assert:
+        that: openbao_roster_agent_duplicate_slugs == ['splunk']
+        quiet: true
+
+    - name: Set a fixture roster whose name collides with a generated apps leaf
+      ansible.builtin.set_fact:
+        openbao_ai_agents:
+          qwen-code:
+            owns: []
+
+    - name: Assert the generated apps leaf collision is reported
+      ansible.builtin.assert:
+        that: openbao_roster_agent_name_collisions == ['qwen-code']
+        quiet: true
+
+    - name: Set a fixture roster whose name collides with an AI KV leaf
+      ansible.builtin.set_fact:
+        openbao_ai_agents:
+          llm-router:
+            owns: []
+
+    - name: Assert the AI KV leaf collision is reported
+      ansible.builtin.assert:
+        that: openbao_roster_agent_name_collisions == ['llm-router']
+        quiet: true
+
+    - name: Set a fixture roster whose gateway leaf collides with a declared apps leaf
+      ansible.builtin.set_fact:
+        openbao_ai_agents:
+          gateway-test:
+            owns: []
+        openbao_apps_read_published_apps: [gateway-test-gw]
+
+    - name: Assert the gateway apps leaf collision is reported
+      ansible.builtin.assert:
+        that: openbao_roster_agent_name_collisions == ['gateway-test']
         quiet: true
