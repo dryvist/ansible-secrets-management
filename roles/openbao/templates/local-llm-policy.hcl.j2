@@ -23,3 +23,12 @@ path "{{ openbao_kv_mount }}/data/ai/saas/*" {
 path "{{ openbao_kv_mount }}/metadata/ai/saas/*" {
   capabilities = ["deny"]
 }
+{%- for slug in openbao_roster_owned_slug_names | default([]) %}
+path "{{ openbao_kv_mount }}/data/ai/mcp/{{ slug }}" {
+  capabilities = ["deny"]
+}
+
+path "{{ openbao_kv_mount }}/metadata/ai/mcp/{{ slug }}" {
+  capabilities = ["deny"]
+}
+{%- endfor %}

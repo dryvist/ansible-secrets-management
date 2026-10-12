@@ -15,9 +15,11 @@ path "{{ openbao_kv_mount }}/metadata/platform/{{ sub }}/*" {
 {% endfor %}
 # The MCP connection belongs to a read-only Splunk search user. Keep this
 # cross-domain grant to its canonical KV-v2 data leaf; no metadata or siblings.
+{% if 'splunk' not in openbao_roster_owned_slug_names | default([]) -%}
 path "{{ openbao_kv_mount }}/data/ai/mcp/splunk" {
   capabilities = ["read"]
 }
+{%- endif %}
 
 # OpenRouter usage/management key for the Cribl Stream OpenRouter REST
 # collectors (third-party SaaS, so secrets-external). Exact path only; the
