@@ -9,6 +9,10 @@
 # and this wrapper's molecule job consumes the scenario filter exported by the
 # shared workflow, so there is one change-detection definition. The local
 # "Merge Gate" aggregates every job.
+#
+# Lint, Role tests and Molecule restore the Galaxy content cache under the key
+# ansible-galaxy-v2-<os>-<hash of requirements.yml>. Runs on pushes to develop
+# and main save it, and pull request runs restore it.
 
 name: CI Gate
 
