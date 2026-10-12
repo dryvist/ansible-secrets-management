@@ -27,6 +27,7 @@
   environment:
     BAO_ADDR: "{{ openbao_api_addr }}"
   register: openbao_leader_status_raw
+  check_mode: false
   changed_when: false
   failed_when: false
 
@@ -101,6 +102,7 @@
   vars:
     ansible_become: "{{ openbao_cli_become }}"
   register: openbao_policy_sync_caps
+  check_mode: false
   changed_when: false
   failed_when: false
   no_log: true

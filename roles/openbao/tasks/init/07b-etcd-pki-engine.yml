@@ -81,6 +81,7 @@
   register: openbao_pki_etcd_ca_check
   no_log: true
   changed_when: false
+  check_mode: false
   failed_when: false
   when:
     - not (openbao_reconcile_mode | default(false))
@@ -134,6 +135,7 @@
   register: openbao_pki_etcd_role_checks
   no_log: true
   changed_when: false
+  check_mode: false
   failed_when: false
   when:
     - openbao_bootstrap_token is defined
@@ -200,6 +202,7 @@
   register: openbao_pki_etcd_patroni_role_checks
   no_log: true
   changed_when: false
+  check_mode: false
   failed_when: false
   when:
     - openbao_bootstrap_token is defined

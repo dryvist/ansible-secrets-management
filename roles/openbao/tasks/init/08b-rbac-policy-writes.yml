@@ -21,6 +21,7 @@
   register: openbao_policies_raw
   no_log: true
   changed_when: false
+  check_mode: false
   when: openbao_bootstrap_token is defined
 
 - name: Read existing RBAC policy contents
@@ -39,6 +40,7 @@
   register: openbao_existing_policy_reads
   no_log: true
   changed_when: false
+  check_mode: false
   # Every other probe in this file tolerates a non-zero rc; this one did not, so
   # a single denied read aborted the whole block before any policy was written.
   # The map build below already guards on `rc == 0`, so a failed read is an
@@ -82,6 +84,47 @@
       {{ _pairs }}
   no_log: true
   when: openbao_bootstrap_token is defined
+
+- name: Resolve RBAC policies that are missing or changed
+  ansible.builtin.set_fact:
+    openbao_changed_policy_names: >-
+      {%- set _names = [] -%}
+      {%- for policy in openbao_reachable_policies -%}
+      {%- if policy.name not in (openbao_policies_raw.stdout | from_json)
+         or (openbao_existing_policy_map | default({})).get(policy.name, '')
+            != (openbao_rendered_policy_map | default({})).get(policy.name, '') -%}
+      {%- set _ = _names.append(policy.name) -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {{ _names }}
+  when:
+    - ansible_check_mode
+    - openbao_bootstrap_token is defined
+
+- name: Report RBAC policies that would be written in check mode
+  ansible.builtin.debug:
+    msg: >-
+      {{ ('Would write RBAC policies: ' ~ (openbao_changed_policy_names | join(', ')))
+         if openbao_changed_policy_names | length > 0
+         else 'No RBAC policy writes are needed.' }}
+  when:
+    - ansible_check_mode
+    - openbao_bootstrap_token is defined
+
+- name: Report retired RBAC policies that would be deleted in check mode
+  ansible.builtin.debug:
+    msg: >-
+      {{ ('Would delete retired RBAC policies: ' ~ (_retired | join(', ')))
+         if _retired | length > 0
+         else 'No retired RBAC policy deletes are needed.' }}
+  vars:
+    _retired: >-
+      {{ openbao_retired_policies
+         | select('in', openbao_policies_raw.stdout | default('[]', true) | from_json)
+         | list }}
+  when:
+    - ansible_check_mode
+    - openbao_bootstrap_token is defined
 
 - name: Write the RBAC policies that are missing or changed
   ansible.builtin.command:

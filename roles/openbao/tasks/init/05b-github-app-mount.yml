@@ -34,6 +34,7 @@
   register: openbao_github_app_mount_config
   no_log: true
   changed_when: false
+  check_mode: false
   failed_when: false
 
 - name: "Determine whether the App is configured on mount {{ gm.mount }}"
@@ -187,6 +188,7 @@
   register: openbao_github_app_mount_set_checks
   no_log: true
   changed_when: false
+  check_mode: false
   failed_when: false
 
 - name: "Reconcile the permission sets on mount {{ gm.mount }}"
@@ -236,6 +238,7 @@
   register: openbao_github_app_mount_set_list
   no_log: true
   changed_when: false
+  check_mode: false
   failed_when: false
 
 # A set left over from another App (this mount's previous backing App) would
