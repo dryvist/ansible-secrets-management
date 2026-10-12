@@ -87,12 +87,16 @@ def test_public_router_key_entries_remain_literal_and_allowlisted():
     generated = DEFAULTS_DATA["openbao_generated_app_secrets"]
     assert generated["agy"] == ["agy_llm_router_key"]
     assert generated["hermes-private"] == ["hermes_private_llm_router_key"]
+    assert generated["donna"] == ["donna_llm_router_key"]
     assert generated["zcode"] == ["zcode_llm_router_key"]
     assert generated["qwen-code"] == ["qwen_code_llm_router_key"]
     assert generated["opencode"] == ["opencode_llm_router_key"]
-    assert {"agy", "hermes-private", "zcode", "qwen-code", "opencode"}.issubset(
+    assert {"agy", "hermes-private", "donna", "zcode", "qwen-code", "opencode"}.issubset(
         _read_apps({})
     )
+    policy = _render_apps_policy({})
+    assert 'path "secret/data/apps/donna"' in policy
+    assert 'path "secret/metadata/apps/donna"' in policy
 
 
 def test_glance_tile_key_is_generated_and_readable_by_the_apps_reader():

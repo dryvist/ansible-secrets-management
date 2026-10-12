@@ -135,7 +135,9 @@
       ansible.builtin.assert:
         that:
           - openbao_generated_app_secrets['hermes-private'] == ['hermes_private_llm_router_key']
+          - openbao_generated_app_secrets['donna'] == ['donna_llm_router_key']
           - '"hermes-private" not in openbao_hermes_router_key_apps'
+          - '"donna" not in openbao_hermes_router_key_apps'
         quiet: true
 
     - name: Clear the CIDR input for the dormant-role case
