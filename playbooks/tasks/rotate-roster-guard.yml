@@ -1,24 +1,30 @@
 ---
-- name: List live AppRoles for the roster completeness guard
+# Exact reads of the two reader roles: 200 is live, 404 is absent, and any
+# other status fails the run.
+- name: Probe the roster key-reader AppRoles
   ansible.builtin.uri:
-    url: "{{ rotate_bao_addr }}/v1/auth/approle/role?list=true"
+    url: "{{ rotate_bao_addr }}/v1/auth/approle/role/{{ item }}/role-id"
     method: GET
     headers:
       X-Vault-Token: "{{ rotate_login.json.auth.client_token }}"
-    status_code: 200
-  register: _rotate_live_approle_list
+    status_code: [200, 404]
+  loop:
+    - "{{ openbao_roster_router_key_reader_name }}"
+    - "{{ openbao_roster_gateway_key_reader_name }}"
+  register: _rotate_roster_reader_probe
   changed_when: false
   no_log: true
   when:
     - not ansible_check_mode
     - rotate_roster_guard_list_response is not defined
 
-- name: Capture live AppRole names for the roster completeness guard
+- name: Capture live roster key-reader AppRoles
   ansible.builtin.set_fact:
     rotate_roster_guard_live_approle_names: >-
       {{ rotate_roster_guard_list_response.json.data['keys']
          if rotate_roster_guard_list_response is defined
-         else _rotate_live_approle_list.json.data['keys'] }}
+         else _rotate_roster_reader_probe.results
+              | selectattr('status', 'equalto', 200) | map(attribute='item') | list }}
   when: not ansible_check_mode
 
 # The shared key readers exist only while the roster has agents. When neither
