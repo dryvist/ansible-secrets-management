@@ -9,20 +9,14 @@ openbao_roster_agent_policy_marker: "# managed-by: openbao roster-agent "
 # Must match the tofu roster's cataloged systems.
 openbao_roster_agent_ownable_slugs: [splunk, cribl]
 
-# Existing non-roster policies that can read these MCP credentials. Broad
-# ai/* readers are included because they also cover ai/mcp/<slug>.
+openbao_mcp_credential_custodians:
+  splunk: [ansible-converge, splunk-mcp-rotate, ai-rotate]
+  cribl: [ai-rotate]
+
+# Non-custodian policies that still grant the slug once it is owned.
 openbao_mcp_credential_owners:
-  splunk:
-    - hermes
-    - hermes-private-agent
-    - ansible-converge
-    - splunk-mcp-rotate
-    - observability
-    - local-llm
-    - ai-rotate
-  cribl:
-    - local-llm
-    - ai-rotate
+  splunk: []
+  cribl: []
 
 # Check mode has no converge token (the issuer login is skipped), so the live
 # check runs only on a real converge. A real run without a token fails instead.
@@ -96,6 +90,10 @@ openbao_roster_agent_owned_slugs: >-
   {%- endif -%}
   {%- endfor -%}
   {{ _entries }}
+
+openbao_roster_owned_slug_names: >-
+  {{ openbao_roster_agent_owned_slugs | map(attribute='slug')
+     | select('in', openbao_roster_agent_ownable_slugs) | unique | sort | list }}
 
 openbao_roster_agent_invalid_slugs: >-
   {%- set _invalid = [] -%}
