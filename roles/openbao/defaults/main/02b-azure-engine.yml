@@ -7,6 +7,10 @@ openbao_azure_iac_admin_role_name: openbao-iac-admin
 openbao_azure_iac_admin_application_object_id: >-
   {{ lookup('env', 'OPENBAO_AZURE_IAC_ADMIN_APPLICATION_OBJECT_ID') | default('', true) }}
 openbao_azure_iac_admin_ttl: 1h
+# The only identity that may read that role's credentials. Workstation-held,
+# one-use secret_id minted per call by approle-issuer (07f).
+openbao_azure_iac_admin_policy_name: azure-iac-admin
+openbao_azure_iac_admin_approle_name: azure-iac-admin
 # The service principal OpenBao uses to mint client secrets. Written to
 # azure/config only on first configuration.
 openbao_azure_tenant_id: "{{ lookup('env', 'OPENBAO_AZURE_TENANT_ID') | default('', true) }}"

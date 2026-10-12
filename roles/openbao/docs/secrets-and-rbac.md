@@ -83,6 +83,7 @@ plans):
 | `terraform-apply` | `secret/infra/*`, `secret/platform/{dns,traefik}`, `secret/apps/nautobot/*`, `homelab/*` | (same) | Human-triggered IaC apply[^aws-sts] |
 | `apps-seed` | `secret/apps/*` | `secret/apps/*` create/update | Doppler-published writer; Terraform `vault-secrets` seeds `secret/apps/<app>` at source |
 | `flow-lock` | `secret/locks/global`, `secret/infra/*` | `secret/locks/global` | Cross-repo apply lock; releases the lock via metadata delete |
+| `azure-iac-admin` | `azure/creds/openbao-iac-admin` | — | Dynamic Azure client secret for the IaC admin application; per-call, workstation-only |
 | `terrakube-<workspace>` JWT | Only that workspace's native paths | Workspace-specific | Short-lived; exact organization/workspace subject and audience |
 | `ansible-converge` | Platform, apps, MCP secrets, `platform/ansible/env` per mount | Exact MCP secrets | Config pulls, MCP publishers; no broad AI access |
 | `observability` | `secret/platform/{splunk,cribl}`, `secret/ai/mcp/splunk` | — | Ingest pipeline and read-only Splunk MCP queries |
@@ -184,8 +185,8 @@ in `defaults/main/08-admin-and-ttls.yml`), with per-role overrides and a
 documented reason required for any remaining `0`.
 
 The workstation per-call path uses `approle-issuer` for `flow-lock`,
-`openbao-reconcile`, and five workstation-only aliases for the domain prefetch
-roles. Each target secret_id is limited to 15 minutes and one use; the shared
+`openbao-reconcile`, `azure-iac-admin`, and five workstation-only aliases for
+the domain prefetch roles. Each target secret_id is limited to 15 minutes and one use; the shared
 `flow-lock approle-token ROLE` command logs in, destroys that secret_id by its
 accessor, and prints only the client token. Issuer grants are generated only
 for roles explicitly marked `secret_id_issuance: per_call`; stored and
