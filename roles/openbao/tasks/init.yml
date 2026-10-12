@@ -63,12 +63,14 @@
   ansible.builtin.import_tasks: init/04-aws-engine.yml
   tags:
     - openbao_engines
+    - aws
   when: not (openbao_reconcile_mode | default(false))
 
 - name: Register and configure the Azure secrets engine
   ansible.builtin.import_tasks: init/04b-azure-engine.yml
   tags:
     - openbao_engines
+    - azure
   when:
     - not (openbao_reconcile_mode | default(false))
     - openbao_azure_engine_enabled | bool
@@ -77,12 +79,14 @@
   ansible.builtin.import_tasks: init/05-github-engine.yml
   tags:
     - openbao_engines
+    - github
   when: not (openbao_reconcile_mode | default(false))
 
 - name: Register and configure the OAuthapp secrets engine
   ansible.builtin.import_tasks: init/06-oauth-engine.yml
   tags:
     - openbao_engines
+    - oauth
   when: not (openbao_reconcile_mode | default(false))
 
 - name: Configure the SSH CA and its signing roles
@@ -94,7 +98,13 @@
 # no-op on every existing converge until a Patroni-mode cluster cutover adds
 # an entry.
 - name: Configure etcd PKI engines for Patroni HA clusters
-  ansible.builtin.include_tasks: init/07b-etcd-pki-engine.yml
+  ansible.builtin.include_tasks:
+    file: init/07b-etcd-pki-engine.yml
+    apply:
+      tags:
+        - etcd_pki
+  tags:
+    - etcd_pki
 
 - name: Render and reconcile the RBAC policies
   ansible.builtin.import_tasks: init/08-rbac-policies.yml
@@ -112,8 +122,10 @@
     apply:
       tags:
         - openbao_github_mounts
+        - github
   tags:
     - openbao_github_mounts
+    - github
   loop: "{{ openbao_github_app_mounts }}"
   loop_control:
     loop_var: gm
@@ -136,8 +148,10 @@
         ansible_become: false
       tags:
         - openbao_github_mounts
+        - github
   tags:
     - openbao_github_mounts
+    - github
   loop: "{{ openbao_github_app_exposure_targets }}"
   loop_control:
     loop_var: ga
