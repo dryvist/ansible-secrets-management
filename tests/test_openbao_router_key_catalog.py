@@ -88,8 +88,9 @@ def test_public_router_key_entries_remain_literal_and_allowlisted():
     assert generated["agy"] == ["agy_llm_router_key"]
     assert generated["hermes-private"] == ["hermes_private_llm_router_key"]
     assert generated["zcode"] == ["zcode_llm_router_key"]
+    assert generated["qwen-code"] == ["qwen_code_llm_router_key"]
     assert generated["opencode"] == ["opencode_llm_router_key"]
-    assert {"agy", "hermes-private", "zcode", "opencode"}.issubset(
+    assert {"agy", "hermes-private", "zcode", "qwen-code", "opencode"}.issubset(
         _read_apps({})
     )
 
@@ -128,6 +129,7 @@ def test_open_llm_fields_mirror_the_generated_router_fields():
     assert source["loop"] == [
         {"app": "zcode", "field": "zcode_llm_router_key"},
         {"app": "opencode", "field": "opencode_llm_router_key"},
+        {"app": "qwen-code", "field": "qwen_code_llm_router_key"},
     ]
     assert source["no_log"] is True
 
@@ -136,11 +138,13 @@ def test_open_llm_fields_mirror_the_generated_router_fields():
     assert capture["ansible.builtin.set_fact"] == {
         "openbao_zcode_router_key_source": "{{ openbao_open_llm_router_key_sources.results[0].stdout }}",
         "openbao_opencode_router_key_source": "{{ openbao_open_llm_router_key_sources.results[1].stdout }}",
+        "openbao_qwen_code_router_key_source": "{{ openbao_open_llm_router_key_sources.results[2].stdout }}",
     }
     merge = _find_task(tasks, "Merge generated router keys into open-llm")
     assert merge["vars"]["openbao_promote_fields"] == {
         "ZCODE_ROUTER_KEY": "openbao_zcode_router_key_source",
         "OPENCODE_ROUTER_KEY": "openbao_opencode_router_key_source",
+        "QWEN_CODE_ROUTER_KEY": "openbao_qwen_code_router_key_source",
     }
 
 
