@@ -155,7 +155,7 @@
       ansible.builtin.set_fact:
         _scenario: read-only
 
-    - name: Render both write policies for input {{ _scenario }}
+    - name: Render both write policies for the read-only input {{ _scenario }}
       ansible.builtin.template:
         src: "{{ _template_dir }}/{{ item.template }}.j2"
         dest: "{{ _fixture_dir }}/{{ _scenario }}-{{ item.template }}"
@@ -164,7 +164,7 @@
       loop_control:
         label: "{{ item.template }}"
 
-    - name: Read both write policies for input {{ _scenario }}
+    - name: Read both write policies for the read-only input {{ _scenario }}
       ansible.builtin.slurp:
         src: "{{ _fixture_dir }}/{{ _scenario }}-{{ item.template }}"
       loop: "{{ _write_templates }}"

@@ -96,7 +96,9 @@ openbao_base_approles_core:
   # redeems it, so a use cap empties it between rotations.
   - name: "{{ openbao_local_llm_approle_name }}"
     token_policies: >-
-      {{ [openbao_local_llm_policy_name] + openbao_ai_api_key_policy_names }}
+      {{ [openbao_local_llm_policy_name] + openbao_ai_api_key_policy_names
+         + ([openbao_roster_owned_mcp_deny_policy_name]
+            if openbao_roster_owned_slug_names | length > 0 else []) }}
     secret_id_num_uses: 0
   # local-llm-workstation: workstation reads of secret/ai/llm. Separate from
   # local-llm so workstation logins cannot exhaust the plane's secret_id.
@@ -272,11 +274,20 @@ openbao_base_approles_core:
 # openbao_base_approles_elevated (iac-platform-deploy through slack-ops) lives
 # in 07f-elevated-approles.yml — split for the CI token-limits gate.
 openbao_base_approles: >-
-  {{ openbao_base_approles_core + openbao_base_approles_elevated
+  {{ openbao_base_approles_core + openbao_azure_workload_approles
+     + openbao_base_approles_elevated
      + openbao_hermes_private_agent_approles }}
+openbao_roster_agent_approles: >-
+  {%- set _entries = [] -%}
+  {%- for agent in openbao_roster_agent_valid_names -%}
+  {%- set _ = _entries.append({'name': agent, 'policy': agent,
+      'secret_id_num_uses': 0}) -%}
+  {%- endfor -%}
+  {{ _entries }}
 # Full AppRole set = the static base above + the per-service ai-apply-<svc> actor
 # roles generated from openbao_ai_domains. init.yml loops this combined list.
 openbao_approles: >-
   {{ openbao_base_approles + openbao_live_only_approles + openbao_rotation_approles
      + openbao_workstation_approles
-     + openbao_ai_apply_approles + openbao_github_write_scope_approles }}
+     + openbao_ai_apply_approles + openbao_github_write_scope_approles
+     + openbao_roster_agent_approles + openbao_roster_key_reader_approles }}

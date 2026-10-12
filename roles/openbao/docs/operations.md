@@ -34,7 +34,7 @@ shred -u <playbook_dir>/.openbao-approle-*-<host>.json
 
 ## Idempotency
 
-- The `.deb` is checksum-verified against the upstream `checksums-linux.txt`;
+- The `.deb` is checksum-verified against the upstream `checksums.txt`;
   `apt` skips re-install when the version is present.
 - `tasks/init.yml` runs **only on the bootstrap host**. The very first
   `bao operator init` happens once (`initialized == false`); the KV mount,

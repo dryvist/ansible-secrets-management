@@ -4,7 +4,7 @@
 # pinning convention (Renovate keeps the .deb/checksums pin fresh; see
 # renovate.json and AGENTS.md "Version management"). Do NOT scatter the
 # version across multiple files — change it here only.
-openbao_version: "2.5.5"
+openbao_version: "2.7.1"
 
 # --- Download (checksum-verified .deb from GitHub releases) ------------------
 # The controller stages the .deb + the release checksums file, verifies the
@@ -16,8 +16,8 @@ openbao_release_base_url: "https://github.com/openbao/openbao/releases/download"
 openbao_deb_filename: "openbao_{{ openbao_version }}_linux_amd64.deb"
 openbao_deb_url: >-
   {{ openbao_release_base_url }}/v{{ openbao_version }}/{{ openbao_deb_filename }}
-# SHA256SUMS-format file ("<digest>  <filename>" per line) for the linux build.
-openbao_checksums_filename: "checksums-linux.txt"
+# SHA256SUMS-format file ("<digest>  <filename>" per line); named checksums.txt since v2.6.0.
+openbao_checksums_filename: "checksums.txt"
 openbao_checksums_url: >-
   {{ openbao_release_base_url }}/v{{ openbao_version }}/{{ openbao_checksums_filename }}
 

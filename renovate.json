@@ -15,6 +15,20 @@
       ],
       "datasourceTemplate": "github-releases",
       "depNameTemplate": "openbao/openbao"
+    },
+    {
+      "customType": "regex",
+      "description": "Track the Azure plugin release pin in the openbao role defaults.",
+      "managerFilePatterns": [
+        "/^roles/openbao/defaults/main/02b-azure-engine\\.ya?ml$/"
+      ],
+      "matchStrings": [
+        "# renovate: datasource=github-releases depName=openbao/openbao-plugins\\s+openbao_azure_plugin_version:\\s*\\\"(?<currentValue>[0-9.]+)\\\""
+      ],
+      "datasourceTemplate": "github-releases",
+      "depNameTemplate": "openbao/openbao-plugins",
+      "extractVersionTemplate": "^secrets-azure-v(?<version>.*)$",
+      "versioningTemplate": "semver"
     }
   ]
 }

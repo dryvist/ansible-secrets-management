@@ -1,0 +1,117 @@
+---
+- name: Verify roster-derived AppRole rotation contracts
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    ansible_become: false
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+
+  tasks:
+    - name: Inject an empty published inventory fixture
+      ansible.builtin.set_fact:
+        tofu_data:
+          agents: {}
+
+    - name: Load the openbao role defaults
+      ansible.builtin.include_vars:
+        dir: ../../../roles/openbao/defaults/main
+
+    - name: Capture empty-roster rotation values
+      ansible.builtin.set_fact:
+        _empty_rotation_names: "{{ openbao_secrets_domain_approle_names }}"
+        _empty_ttl_overrides: "{{ openbao_approle_secret_id_ttl_overrides }}"
+        _empty_cidr_class_map: "{{ openbao_approle_cidr_class_map }}"
+
+    - name: Assert an empty roster preserves the develop rotation values
+      vars:
+        _develop_rotation_names:
+          - observability
+          - local-cloud
+          - monitoring
+          - media
+          - ntfy
+          - apps
+          - local-llm
+          - local-llm-workstation
+          - cribl-edge-mac-a
+          - cribl-edge-mac-b
+          - agent-ssh-sign
+          - agent-workstation
+          - hermes
+          - ai-donna
+          - open-llm
+          - ci-resolver
+        _develop_cidr_class_map: >-
+          {{ dict(openbao_approles | map(attribute='name') | list
+                  | zip(openbao_approles | map(attribute='name')
+                        | map('regex_replace', '^.*$', openbao_approle_default_cidr_class)
+                        | list))
+             | combine(openbao_approle_cidr_class_overrides)
+             | combine(openbao_github_write_scope_cidr_classes)
+             | combine(openbao_roster_key_reader_cidr_classes) }}
+      ansible.builtin.assert:
+        that:
+          - openbao_ai_agents == {}
+          - _empty_rotation_names == _develop_rotation_names
+          - _empty_ttl_overrides == openbao_approle_secret_id_ttl_overrides_base
+          - _empty_cidr_class_map == _develop_cidr_class_map
+          - openbao_roster_agent_cidr_classes == {}
+          - openbao_roster_key_reader_cidr_classes == {}
+        fail_msg: An empty roster must preserve the scheduled rotation inputs from develop.
+        quiet: true
+
+    - name: Inject one roster agent into the published inventory fixture
+      ansible.builtin.set_fact:
+        tofu_data:
+          agents:
+            example-agent:
+              container: example-agent
+              hostname: example.com
+              display: Example Agent
+              purpose: Rotation contract fixture
+              owns: []
+              router_key_class: standard
+
+    - name: Reload role defaults against the roster fixture
+      ansible.builtin.include_vars:
+        dir: ../../../roles/openbao/defaults/main
+
+    - name: Assert the agent and both shared readers use the scheduled rotation contract
+      vars:
+        _roster_rotation_names: >-
+          {{ openbao_roster_agent_valid_names + openbao_roster_key_reader_approle_names }}
+      ansible.builtin.assert:
+        that:
+          - openbao_ai_agents.keys() | list == ['example-agent']
+          - openbao_roster_agent_approles | length == 1
+          - openbao_roster_agent_approles[0].secret_id_num_uses | int == 0
+          - openbao_roster_key_reader_approles | length == 2
+          - openbao_roster_key_reader_approles | map(attribute='secret_id_num_uses') | map('int') | list == [0, 0]
+          - >-
+            openbao_secrets_domain_approle_names
+            == _empty_rotation_names[:10] + _roster_rotation_names + _empty_rotation_names[10:]
+          - >-
+            _roster_rotation_names
+            | reject('in', openbao_secrets_domain_approle_names) | list == []
+          - >-
+            _roster_rotation_names
+            | reject('in', openbao_approle_secret_id_ttl_overrides) | list == []
+          - >-
+            _roster_rotation_names
+            | reject('in', openbao_approle_cidr_class_map) | list == []
+        fail_msg: The roster agent and shared readers must all be rotated with finite TTLs and workstation CIDR classes.
+        quiet: true
+
+    - name: Assert every roster-derived role has the 36h TTL and workstation class
+      vars:
+        _roster_rotation_names: >-
+          {{ openbao_roster_agent_valid_names + openbao_roster_key_reader_approle_names }}
+      ansible.builtin.assert:
+        that:
+          - item in openbao_secrets_domain_approle_names
+          - openbao_approle_secret_id_ttl_overrides[item] == openbao_rotated_domain_secret_id_ttl
+          - openbao_approle_cidr_class_map[item] == 'machine_or_workstation'
+        quiet: true
+      loop: "{{ _roster_rotation_names }}"

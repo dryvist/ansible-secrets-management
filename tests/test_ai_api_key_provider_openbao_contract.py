@@ -82,7 +82,8 @@ def test_legacy_internal_provider_area_remains_denied():
 
     assert 'path "{{ openbao_kv_mount }}/data/ai/saas/*"' in local_policy
     assert 'path "{{ openbao_kv_mount }}/metadata/ai/saas/*"' in local_policy
-    assert local_policy.count('capabilities = ["deny"]') == 2
+    assert 'path "{{ openbao_kv_mount }}/data/ai/saas/*" {\n  capabilities = ["deny"]\n}' in local_policy
+    assert 'path "{{ openbao_kv_mount }}/metadata/ai/saas/*" {\n  capabilities = ["deny"]\n}' in local_policy
     assert "externally configured leaves" in local_policy
 
 

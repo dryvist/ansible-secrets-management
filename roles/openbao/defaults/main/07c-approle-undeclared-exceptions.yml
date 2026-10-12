@@ -32,19 +32,15 @@ openbao_approle_undeclared_exceptions: >-
 # Retired identities: the converge deletes each one that is still live
 # (init/10d-approle-undeclared-live.yml) before the assert above runs. A name
 # may leave this list once no store holds it.
-openbao_retired_approles:
-  - open-llm-workstation
-  - github-agents
-  - github-admin-claude
-  - claude-identity
-  - github-work
-  - github-write-work
+openbao_retired_approles: >-
+  {{ ['open-llm-workstation', 'github-agents', 'github-admin-claude',
+      'claude-identity', 'github-work', 'github-write-work']
+     + openbao_roster_key_reader_retired_names }}
 # Retired policies, deleted the same way (init/08b-rbac-policy-writes.yml).
-openbao_retired_policies:
-  - github-agents
-  - github-admin-claude-issuer
-  - github-work
-  - github-write-work
+openbao_retired_policies: >-
+  {{ ['github-agents', 'github-admin-claude-issuer', 'github-work', 'github-write-work']
+     + openbao_roster_key_reader_retired_names
+     + openbao_roster_owned_mcp_deny_retired_names }}
 # Example shape (do not add speculatively):
 #   - name: some-vendor-managed-role
 #     reason: provisioned by <tool>, out of this repo's control

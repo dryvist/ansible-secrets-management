@@ -14,6 +14,7 @@ OPENBAO_META = ROOT / "roles/openbao/meta/main.yml"
 READ_DEFAULTS = ROOT / "roles/openbao/defaults/main/05c-terrakube-and-remaining-domain-names.yml"
 EXCLUDED_DEFAULTS = ROOT / "roles/openbao/defaults/main/05h-cribl-edge-readers.yml"
 GENERATION = ROOT / "roles/openbao/tasks/init/03-kv-mounts-and-seed-secrets.yml"
+ROSTER_DEFAULTS = ROOT / "roles/openbao/defaults/main/05k-roster-agents.yml"
 OPEN_LLM_POLICY = ROOT / "roles/openbao/templates/open-llm-policy.hcl.j2"
 APPS_POLICY = ROOT / "roles/openbao/templates/apps-policy.hcl.j2"
 
@@ -21,6 +22,7 @@ DEFAULTS_DATA = yaml.safe_load(DEFAULTS.read_text(encoding="utf-8"))
 READ_DATA = yaml.safe_load(READ_DEFAULTS.read_text(encoding="utf-8"))
 EXCLUDED_DATA = yaml.safe_load(EXCLUDED_DEFAULTS.read_text(encoding="utf-8"))
 OPENBAO_META_DATA = yaml.safe_load(OPENBAO_META.read_text(encoding="utf-8"))
+ROSTER_DATA = yaml.safe_load(ROSTER_DEFAULTS.read_text(encoding="utf-8"))
 
 
 def _render(value, variables):
@@ -87,7 +89,7 @@ def test_public_router_key_entries_remain_literal_and_allowlisted():
     generated = DEFAULTS_DATA["openbao_generated_app_secrets"]
     assert generated["agy"] == ["agy_llm_router_key"]
     assert generated["hermes-private"] == ["hermes_private_llm_router_key"]
-    assert generated["donna"] == ["donna_llm_router_key"]
+    assert generated["donna"] == ["donna_llm_router_key", "donna_a2a_token"]
     assert generated["zcode"] == ["zcode_llm_router_key"]
     assert generated["qwen-code"] == ["qwen_code_llm_router_key"]
     assert generated["opencode"] == ["opencode_llm_router_key"]
@@ -108,13 +110,14 @@ def test_glance_tile_key_is_generated_and_readable_by_the_apps_reader():
 
 def test_router_catalog_entries_feed_generation_and_the_apps_read_paths():
     catalog = {"contract-fixture": ["contract_fixture_llm_router_key"]}
-    generated = _render(
-        _generation_loop(),
+    seeded = _render(
+        ROSTER_DATA["openbao_seeded_generated_app_secrets"],
         {
             "openbao_generated_app_secrets": DEFAULTS_DATA["openbao_generated_app_secrets"],
             "openbao_router_key_catalog": catalog,
         },
     )
+    generated = _render(_generation_loop(), {"openbao_seeded_generated_app_secrets": seeded})
     assert {entry["key"]: entry["value"] for entry in generated}["contract-fixture"] == catalog[
         "contract-fixture"
     ]

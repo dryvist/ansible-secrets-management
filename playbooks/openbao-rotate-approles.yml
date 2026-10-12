@@ -178,28 +178,6 @@
         quiet: true
       when: not (bootstrap_seed_only | bool)
 
-    - name: Resolve the domains to rotate this run
-      ansible.builtin.set_fact:
-        rotate_domain_names: >-
-          {{ openbao_host_secret_zero_approle_names if (bootstrap_seed_only | bool) else
-             (openbao_rotate_domains | trim | length > 0)
-             | ternary(
-                 openbao_rotate_domains.split(',') | map('trim') | reject('equalto', '') | list,
-                 openbao_secrets_domain_approle_names
-               ) }}
-
-    - name: Refuse an unknown domain name
-      when: not (bootstrap_seed_only | bool)
-      vars:
-        _unknown: "{{ rotate_domain_names | reject('in', openbao_secrets_domain_approle_names) | list }}"
-      ansible.builtin.assert:
-        that:
-          - _unknown | length == 0
-        fail_msg: >-
-          openbao_rotate_domains named a domain that is not in
-          openbao_secrets_domain_approle_names: {{ _unknown }}.
-        quiet: true
-
     - name: Unwrap the single-use secret_id (human mode)
       ansible.builtin.uri:
         url: "{{ rotate_bao_addr }}/v1/sys/wrapping/unwrap"
@@ -266,6 +244,31 @@
               client_token: "{{ rotate_preissued_token }}"
       no_log: true
       when: rotate_preissued_mode | bool
+
+    - name: Guard the roster against live AppRole readers
+      ansible.builtin.include_tasks: tasks/rotate-roster-guard.yml
+
+    - name: Resolve the domains to rotate this run
+      ansible.builtin.set_fact:
+        rotate_domain_names: >-
+          {{ openbao_host_secret_zero_approle_names if (bootstrap_seed_only | bool) else
+             (openbao_rotate_domains | trim | length > 0)
+             | ternary(
+                 openbao_rotate_domains.split(',') | map('trim') | reject('equalto', '') | list,
+                 openbao_secrets_domain_approle_names
+               ) }}
+
+    - name: Refuse an unknown domain name
+      when: not (bootstrap_seed_only | bool)
+      vars:
+        _unknown: "{{ rotate_domain_names | reject('in', openbao_secrets_domain_approle_names) | list }}"
+      ansible.builtin.assert:
+        that:
+          - _unknown | length == 0
+        fail_msg: >-
+          openbao_rotate_domains named a domain that is not in
+          openbao_secrets_domain_approle_names: {{ _unknown }}.
+        quiet: true
 
     # One read, reused by every domain's Doppler-republish task below --
     # never ambient env, never stored in Doppler itself (see

@@ -1,0 +1,270 @@
+---
+# Optional AI agents from the tofu inventory artifact.
+openbao_ai_agents: "{{ (tofu_data | default({})).agents | default({}) }}"
+
+openbao_roster_agent_name_pattern: '^[a-z]+-[a-z]+\Z'
+openbao_roster_agent_slug_pattern: '^[a-z][a-z0-9-]*\Z'
+openbao_roster_agent_policy_marker: "# managed-by: openbao roster-agent "
+
+# Must match the tofu roster's cataloged systems.
+openbao_roster_agent_ownable_slugs: [splunk, cribl]
+openbao_roster_owned_mcp_deny_policy_name: roster-owned-mcp-deny
+
+# Break-glass administration and the converge identity's policies keep access
+# by design.
+openbao_mcp_credential_custodians:
+  splunk: [ai-admin, ansible-converge, openbao-reconcile, splunk-mcp-rotate, ai-rotate]
+  cribl: [ai-admin, ai-rotate, openbao-reconcile]
+
+# Workstation and AI-session identities that keep owned MCP credential access.
+openbao_mcp_credential_session_holders:
+  splunk: [operator-workstation, ai-readonly, ai-elevated, ai-apply-ai, ai-apply-all]
+  cribl: [operator-workstation, agent-workstation, ai-readonly, ai-elevated, ai-apply-ai, ai-apply-all]
+
+# Non-custodian policies that still grant the slug once it is owned.
+openbao_mcp_credential_owners:
+  splunk: []
+  cribl: []
+
+# Check mode has no converge token (the issuer login is skipped), so the live
+# check runs only on a real converge. A real run without a token fails instead.
+openbao_roster_live_check_mode: "{{ ansible_check_mode }}"
+openbao_roster_live_check_enabled: >-
+  {{ openbao_ai_agents | length > 0 and not (openbao_roster_live_check_mode | bool) }}
+
+openbao_roster_live_approle_names: []
+openbao_roster_live_policy_names: []
+openbao_roster_live_policy_bodies: {}
+openbao_roster_live_approle_configs: {}
+openbao_roster_live_kv_metadata: {}
+
+openbao_roster_agent_invalid_names: >-
+  {%- set _invalid = [] -%}
+  {%- for agent in openbao_ai_agents -%}
+  {%- if (agent | string | regex_search(openbao_roster_agent_name_pattern)) is none -%}
+  {%- set _ = _invalid.append(agent) -%}
+  {%- endif -%}
+  {%- endfor -%}
+  {{ _invalid }}
+
+openbao_roster_agent_valid_names: >-
+  {{ openbao_ai_agents.keys() | list | reject('in', openbao_roster_agent_invalid_names) | list }}
+
+# Dedicated shared key-family readers for all valid roster agents.
+openbao_roster_router_key_reader_name: llm-router-agent-keys
+openbao_roster_gateway_key_reader_name: agentgateway-agent-keys
+openbao_roster_key_reader_approle_names: >-
+  {{ ([openbao_roster_router_key_reader_name, openbao_roster_gateway_key_reader_name]
+      if openbao_roster_agent_valid_names | length > 0 else []) }}
+# With no valid agent both readers are retired, so a roster that shrinks to
+# zero deletes them (init/10d, 08b) instead of failing on undeclared-live roles.
+openbao_roster_key_reader_retired_names: >-
+  {{ [] if openbao_roster_agent_valid_names | length > 0
+     else [openbao_roster_router_key_reader_name, openbao_roster_gateway_key_reader_name] }}
+openbao_roster_owned_mcp_deny_retired_names: >-
+  {{ [] if openbao_roster_owned_slug_names | length > 0
+     else [openbao_roster_owned_mcp_deny_policy_name] }}
+# Both are openbao_secrets prefetch domains, redeemed by the converge controller,
+# which may be the workstation (tests/test_openbao_prefetch_domain_workstation_class.py).
+openbao_roster_key_reader_cidr_classes: >-
+  {{ dict(openbao_roster_key_reader_approle_names
+          | zip(['machine_or_workstation'] * (openbao_roster_key_reader_approle_names | length))) }}
+
+# Each valid roster agent's two generated keys: apps/<agent> (router key) and
+# apps/<agent>-gw (gateway key). Seeded beside openbao_generated_app_secrets
+# but kept out of it, so the shared `apps` read grant never covers them.
+openbao_roster_agent_generated_app_secrets: >-
+  {%- set _secrets = {} -%}
+  {%- for agent in openbao_roster_agent_valid_names -%}
+  {%- set _field = agent | replace('-', '_') -%}
+  {%- set _ = _secrets.update({agent: [_field ~ '_llm_router_key'],
+                               agent ~ '-gw': [_field ~ '_agentgateway_key']}) -%}
+  {%- endfor -%}
+  {{ _secrets }}
+
+# KV custom metadata the seed writes on each roster leaf. The live check in
+# 08a-roster-live-collisions.yml accepts an existing leaf only with this value.
+openbao_roster_agent_leaf_metadata: >-
+  {%- set _metadata = {} -%}
+  {%- for agent in openbao_roster_agent_valid_names -%}
+  {%- set _ = _metadata.update({agent: {'managed-by': 'roster-agent:' ~ agent},
+                                agent ~ '-gw': {'managed-by': 'roster-agent:' ~ agent}}) -%}
+  {%- endfor -%}
+  {{ _metadata }}
+
+# Every non-roster app leaf the seed task generates. Roster leaves go through
+# seed_roster_agent_leaf.yml, which checks the leaf's owner before writing.
+openbao_seeded_generated_app_secrets: >-
+  {{ openbao_generated_app_secrets | combine(openbao_router_key_catalog) }}
+
+# Owner decision for one roster leaf, from the registered metadata read in
+# seed_roster_agent_leaf.yml and the leaf's expected openbao_seed_owner_metadata.
+openbao_seed_leaf_metadata: {}
+openbao_seed_owner_metadata: {}
+openbao_seed_leaf_exists: "{{ (openbao_seed_leaf_metadata.rc | default(1)) == 0 }}"
+openbao_seed_leaf_stored_metadata: >-
+  {{ ((openbao_seed_leaf_metadata.stdout | default('{}', true) | from_json).data.custom_metadata
+      | default({}, true))
+     if openbao_seed_leaf_exists | bool else {} }}
+openbao_seed_leaf_owner_conflict: >-
+  {{ (openbao_seed_leaf_exists | bool)
+     and openbao_seed_leaf_stored_metadata != openbao_seed_owner_metadata }}
+
+openbao_roster_agent_owned_slugs: >-
+  {%- set _entries = [] -%}
+  {%- for agent, definition in openbao_ai_agents.items() -%}
+  {%- set _owns = definition.get('owns', []) if definition is mapping else none -%}
+  {%- if _owns is sequence and _owns is not string and _owns is not mapping -%}
+  {%- for slug in _owns -%}
+  {%- set _ = _entries.append({'agent': agent, 'slug': slug}) -%}
+  {%- endfor -%}
+  {%- endif -%}
+  {%- endfor -%}
+  {{ _entries }}
+
+openbao_roster_owned_slug_names: >-
+  {{ openbao_roster_agent_owned_slugs | map(attribute='slug')
+     | select('in', openbao_roster_agent_ownable_slugs) | unique | sort | list }}
+
+openbao_roster_agent_invalid_slugs: >-
+  {%- set _invalid = [] -%}
+  {%- for agent, definition in openbao_ai_agents.items() -%}
+  {%- set _owns = definition.get('owns', []) if definition is mapping else none -%}
+  {%- if _owns is not sequence or _owns is string or _owns is mapping -%}
+  {%- set _ = _invalid.append((agent | string) ~ ' (owns must be a list)') -%}
+  {%- else -%}
+  {%- for slug in _owns -%}
+  {%- if slug is not string or (slug | regex_search(openbao_roster_agent_slug_pattern)) is none -%}
+  {%- set _ = _invalid.append((agent | string) ~ ':' ~ (slug | string)) -%}
+  {%- endif -%}
+  {%- endfor -%}
+  {%- endif -%}
+  {%- endfor -%}
+  {{ _invalid }}
+
+openbao_roster_agent_unknown_slugs: >-
+  {%- set _unknown = [] -%}
+  {%- for entry in openbao_roster_agent_owned_slugs -%}
+  {%- if entry.slug is string and entry.slug not in openbao_roster_agent_ownable_slugs -%}
+  {%- set _ = _unknown.append(entry.agent ~ ':' ~ entry.slug) -%}
+  {%- endif -%}
+  {%- endfor -%}
+  {{ _unknown }}
+
+openbao_roster_agent_mcp_credential_conflicts: >-
+  {%- set _conflicts = [] -%}
+  {%- for entry in openbao_roster_agent_owned_slugs -%}
+  {%- set _owners = openbao_mcp_credential_owners.get(entry.slug, []) -%}
+  {%- if _owners | length > 0 -%}
+  {%- set _ = _conflicts.append(entry.agent ~ ':' ~ entry.slug ~ ' (existing policies: '
+      ~ (_owners | join(', ')) ~ ')') -%}
+  {%- endif -%}
+  {%- endfor -%}
+  {{ _conflicts }}
+
+openbao_roster_agent_duplicate_slugs: >-
+  {%- set _all = openbao_roster_agent_owned_slugs | map(attribute='slug') | list -%}
+  {%- set _duplicates = [] -%}
+  {%- for slug in _all -%}
+  {%- if _all | select('equalto', slug) | list | length > 1 and slug not in _duplicates -%}
+  {%- set _ = _duplicates.append(slug) -%}
+  {%- endif -%}
+  {%- endfor -%}
+  {{ _duplicates }}
+
+openbao_roster_agent_apps_leaf_names: >-
+  {{ (((openbao_generated_app_secrets | default({})).keys() | list)
+      + ((openbao_promoted_app_secrets | default({})).keys() | list)
+      + ((openbao_router_key_catalog | default({})).keys() | list)
+      + (openbao_apps_read_published_apps | default([]))
+      + (openbao_apps_read_excluded_generated_apps | default([])))
+     | unique | list }}
+
+# These are direct ai/<leaf> grants and reserved prefixes declared by AI
+# policies. The mcp and agents names hold nested credentials and identities.
+openbao_roster_agent_ai_leaf_names: >-
+  {{ [openbao_hermes_approle_name,
+      openbao_hermes_private_agent_policy_name | regex_replace('-agent$', ''),
+      openbao_llm_router_write_approle_name | regex_replace('-write$', ''),
+      openbao_ai_donna_approle_name | regex_replace('^ai-', ''),
+      openbao_ai_public_approle_name | regex_replace('^ai-', ''),
+      openbao_llm_gate_approle_name | regex_replace('-gate$', ''),
+      openbao_vikunja_approle_name,
+      'mcp', 'agents'] | unique | list }}
+
+# init/10d requires live AppRoles to equal declared roles plus these exceptions;
+# checking them covers live names without a token in preflight. Dead secret IDs
+# are already declared roles and remain covered by openbao_approles.
+openbao_roster_agent_live_name_exceptions: >-
+  {{ ((openbao_live_only_approles | default([]) | map(attribute='name') | list)
+      + (openbao_approle_undeclared_exceptions | default([]) | map(attribute='name') | list)
+      + (openbao_approle_dead_names | default([]))
+      + (openbao_retired_policies | default([]))
+      + ['default', 'root']) | unique | list }}
+
+# The candidate name and its gateway leaf must not reuse a declared identity,
+# an exception name, or a KV leaf that the resulting policy would read.
+openbao_roster_agent_name_collisions: >-
+  {%- set _hits = [] -%}
+  {%- for agent in openbao_ai_agents -%}
+  {%- for candidate in [agent, (agent | string) ~ '-gw'] -%}
+  {%- set _expected = 1 if candidate == agent and agent in openbao_roster_agent_valid_names else 0 -%}
+  {%- if (openbao_approles | selectattr('name', 'equalto', candidate) | list | length > _expected)
+        or (openbao_policies | selectattr('name', 'equalto', candidate) | list | length > _expected)
+        or candidate in openbao_roster_agent_live_name_exceptions
+        or candidate in openbao_roster_agent_apps_leaf_names
+        or candidate in openbao_roster_agent_ai_leaf_names -%}
+  {%- set _ = _hits.append(agent) -%}
+  {%- endif -%}
+  {%- endfor -%}
+  {%- endfor -%}
+  {{ _hits | unique | list }}
+
+# A copied marker or same-name role needs sys/policy or auth admin rights, which
+# this guard does not defend against.
+openbao_roster_live_policy_conflicts: >-
+  {%- set _conflicts = [] -%}
+  {%- for agent in openbao_ai_agents -%}
+  {%- if agent in openbao_roster_live_policy_names
+        and (openbao_roster_agent_policy_marker ~ agent)
+            not in (openbao_roster_live_policy_bodies.get(agent, '') | string).splitlines() -%}
+  {%- set _ = _conflicts.append(agent) -%}
+  {%- endif -%}
+  {%- endfor -%}
+  {{ _conflicts }}
+
+openbao_roster_live_kv_metadata_conflicts: >-
+  {%- set _conflicts = [] -%}
+  {%- for agent in openbao_ai_agents -%}
+  {%- if (agent | string | regex_search(openbao_roster_agent_name_pattern)) is not none -%}
+  {%- for path in ['ai/' ~ agent, 'apps/' ~ agent, 'apps/' ~ agent ~ '-gw'] -%}
+  {%- set _metadata = openbao_roster_live_kv_metadata.get(path, none) -%}
+  {%- if _metadata is not none
+        and (_metadata | default({}, true)).get('managed-by') != ('roster-agent:' ~ agent) -%}
+  {%- set _ = _conflicts.append(agent ~ ' (' ~ path ~ ')') -%}
+  {%- endif -%}
+  {%- endfor -%}
+  {%- endif -%}
+  {%- endfor -%}
+  {{ _conflicts }}
+
+openbao_roster_live_approle_conflicts: >-
+  {%- set _conflicts = [] -%}
+  {%- for agent in openbao_ai_agents -%}
+  {%- if agent in openbao_roster_live_approle_names -%}
+  {%- if agent not in openbao_roster_live_policy_names
+        or agent in openbao_roster_live_policy_conflicts -%}
+  {%- set _ = _conflicts.append(agent ~ ' (no live marked roster policy)') -%}
+  {%- else -%}
+  {%- set _config = openbao_roster_live_approle_configs.get(agent, {}) -%}
+  {%- set _data = _config.get('data', {}) -%}
+  {%- set _policies = _data.get('token_policies', _data.get('policies',
+      _config.get('token_policies', _config.get('policies', [])))) -%}
+  {%- if _policies != [agent] -%}
+  {%- set _ = _conflicts.append(agent ~ ' (token_policies/policies=' ~ (_policies | to_json)
+      ~ '; expected ' ~ ([agent] | to_json) ~ ')') -%}
+  {%- endif -%}
+  {%- endif -%}
+  {%- endif -%}
+  {%- endfor -%}
+  {{ _conflicts }}

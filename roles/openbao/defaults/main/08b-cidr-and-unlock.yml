@@ -152,6 +152,12 @@ openbao_approle_cidr_class_overrides:
   # Enterprise GitHub AppRoles are redeemed by the workstation human-unlock flow.
   github-enterprise-read: workstation
   github-enterprise-admin: workstation
+# Roster agent AppRoles are redeemed by their host and may be rotated from the
+# workstation, like the shared roster key readers.
+openbao_roster_agent_cidr_classes: >-
+  {{ dict(openbao_roster_agent_valid_names
+          | zip(['machine_or_workstation']
+               * (openbao_roster_agent_valid_names | length))) }}
 # Every declared role's class, defaults filled in and then overridden — so a
 # lookup never has to cope with a missing key. (`map('extract', dict, default)`
 # does NOT take a default: it raises on the first name absent from the override
@@ -162,7 +168,9 @@ openbao_approle_cidr_class_map: >-
                 | map('regex_replace', '^.*$', openbao_approle_default_cidr_class)
                 | list))
      | combine(openbao_approle_cidr_class_overrides)
-     | combine(openbao_github_write_scope_cidr_classes) }}
+     | combine(openbao_github_write_scope_cidr_classes)
+     | combine(openbao_roster_agent_cidr_classes)
+     | combine(openbao_roster_key_reader_cidr_classes) }}
 # The classes that actually carry a role, so the assert in init/10-approles.yml
 # demands only the CIDRs this declaration set really needs. `unbound` is
 # excluded by definition — it is the documented opt-out, not a missing value.

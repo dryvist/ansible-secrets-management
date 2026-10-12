@@ -32,6 +32,61 @@
       deleting the file does not revoke the credential.
     quiet: true
 
+# Validate all roster RBAC inputs before any policy renders or writes.
+- name: Validate roster agent RBAC inputs before rendering
+  block:
+    - name: Refuse invalid roster agent names
+      ansible.builtin.assert:
+        that: openbao_roster_agent_invalid_names | length == 0
+        fail_msg: >-
+          Roster agent names must match ^[a-z]+-[a-z]+\Z; invalid agents:
+          {{ openbao_roster_agent_invalid_names | join(', ') }}.
+        quiet: true
+
+    - name: Refuse invalid roster agent owned slugs
+      ansible.builtin.assert:
+        that: openbao_roster_agent_invalid_slugs | length == 0
+        fail_msg: >-
+          Roster agent owns values must be lists of slugs matching
+          ^[a-z][a-z0-9-]*\Z; invalid agents or slugs:
+          {{ openbao_roster_agent_invalid_slugs | join(', ') }}.
+        quiet: true
+
+    - name: Refuse roster agents that own unknown systems
+      ansible.builtin.assert:
+        that: openbao_roster_agent_unknown_slugs | length == 0
+        fail_msg: >-
+          Roster agent owns values must be cataloged tofu systems from
+          openbao_roster_agent_ownable_slugs; unknown agents or slugs:
+          {{ openbao_roster_agent_unknown_slugs | join(', ') }}.
+        quiet: true
+
+    - name: Refuse roster ownership while non-roster policies read MCP credentials
+      ansible.builtin.assert:
+        that: openbao_roster_agent_mcp_credential_conflicts | length == 0
+        fail_msg: >-
+          Roster agents cannot own MCP credentials while existing non-roster
+          policies read them; remove these legacy grants first:
+          {{ openbao_roster_agent_mcp_credential_conflicts | join('; ') }}.
+        quiet: true
+
+    - name: Refuse duplicate roster agent owned slugs
+      ansible.builtin.assert:
+        that: openbao_roster_agent_duplicate_slugs | length == 0
+        fail_msg: >-
+          Owned system slugs may appear only once across the roster; duplicates:
+          {{ openbao_roster_agent_duplicate_slugs | join(', ') }}.
+        quiet: true
+
+    - name: Refuse roster names that collide with identities or granted KV leaves
+      ansible.builtin.assert:
+        that: openbao_roster_agent_name_collisions | length == 0
+        fail_msg: >-
+          Roster agents {{ openbao_roster_agent_name_collisions | join(', ') }}
+          reuse an AppRole, policy, exception, built-in policy, or granted KV
+          leaf name. Rename them in the roster.
+        quiet: true
+
 # `bao status` exit codes: 0 = unsealed, 2 = sealed, 1 = error. For an
 # uninitialized node the command still exits 0/2 with "initialized": false in
 # the JSON body, so we parse the body rather than trust the exit code alone.

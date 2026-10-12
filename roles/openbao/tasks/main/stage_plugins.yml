@@ -59,7 +59,7 @@
     ansible_become: false
   run_once: true
   changed_when: false
-  when: openbao_aws_engine_enabled | bool
+  when: openbao_aws_engine_enabled | bool or openbao_azure_engine_enabled | bool
   check_mode: false
 
 - name: Read the expected SHA256 values for the AWS plugin release
@@ -159,7 +159,112 @@
   register: openbao_aws_plugin_install_task
   when: openbao_aws_engine_enabled | bool
 
-# --- Phase 5d: stage the GitHub secrets engine plugin (external, all nodes) --
+# --- Phase 5d: stage the Azure secrets engine plugin (external, all nodes) --
+- name: Stage the Azure plugin detached signature on controller
+  ansible.builtin.get_url:
+    url: "{{ openbao_azure_plugin_signature_url }}"
+    dest: "/tmp/{{ openbao_azure_plugin_tarball }}.sig"
+    mode: "0644"
+    force: true
+  delegate_to: localhost
+  connection: local
+  become: false
+  vars:
+    ansible_become: false
+  run_once: true
+  when: openbao_azure_engine_enabled | bool
+  check_mode: false
+
+- name: Stage the Azure plugin tarball on controller (checksum-verified)
+  ansible.builtin.get_url:
+    url: "{{ openbao_azure_plugin_tarball_url }}"
+    dest: "/tmp/{{ openbao_azure_plugin_tarball }}"
+    checksum: "sha256:{{ openbao_azure_plugin_tarball_sha256 }}"
+    mode: "0644"
+  delegate_to: localhost
+  connection: local
+  become: false
+  vars:
+    ansible_become: false
+  run_once: true
+  when: openbao_azure_engine_enabled | bool
+  check_mode: false
+
+- name: Verify the Azure plugin release signature
+  ansible.builtin.command:
+    argv:
+      - gpgv
+      - --keyring
+      - /tmp/openbao-release.gpg
+      - "/tmp/{{ openbao_azure_plugin_tarball }}.sig"
+      - "/tmp/{{ openbao_azure_plugin_tarball }}"
+  delegate_to: localhost
+  connection: local
+  become: false
+  vars:
+    ansible_become: false
+  run_once: true
+  changed_when: false
+  when: openbao_azure_engine_enabled | bool
+  check_mode: false
+
+- name: Check whether the declared Azure plugin binary is installed
+  ansible.builtin.stat:
+    path: "{{ openbao_plugin_dir }}/{{ openbao_azure_plugin_command }}"
+  register: openbao_azure_versioned_plugin_stat
+  when: openbao_azure_engine_enabled | bool
+
+- name: Remove the extracted Azure binary when its version is stale
+  ansible.builtin.file:
+    path: "{{ openbao_plugin_dir }}/{{ openbao_azure_plugin_binary }}"
+    state: absent
+  when:
+    - openbao_azure_engine_enabled | bool
+    - not openbao_azure_versioned_plugin_stat.stat.exists
+
+- name: Extract the Azure plugin binary into the plugin directory
+  ansible.builtin.unarchive:
+    src: "/tmp/{{ openbao_azure_plugin_tarball }}"
+    dest: "{{ openbao_plugin_dir }}"
+    include:
+      - "{{ openbao_azure_plugin_binary }}"
+    owner: root
+    group: "{{ openbao_group }}"
+    mode: "0750"
+    creates: "{{ openbao_plugin_dir }}/{{ openbao_azure_plugin_binary }}"
+  when: openbao_azure_engine_enabled | bool
+
+- name: Verify the extracted Azure plugin binary
+  ansible.builtin.stat:
+    path: "{{ openbao_plugin_dir }}/{{ openbao_azure_plugin_binary }}"
+    checksum_algorithm: sha256
+  register: openbao_azure_extracted_plugin
+  when: openbao_azure_engine_enabled | bool
+
+- name: Assert the extracted Azure plugin binary and checksum are available
+  ansible.builtin.assert:
+    that:
+      - openbao_azure_extracted_plugin.stat.exists
+      - openbao_azure_extracted_plugin.stat.checksum is match('^[0-9a-f]{64}$')
+    fail_msg: "The extracted Azure plugin binary or its SHA256 is unavailable."
+  when:
+    - openbao_azure_engine_enabled | bool
+    - not ansible_check_mode or openbao_azure_extracted_plugin.stat.exists
+
+- name: Install the immutable Azure plugin command
+  ansible.builtin.copy:
+    src: "{{ openbao_plugin_dir }}/{{ openbao_azure_plugin_binary }}"
+    dest: "{{ openbao_plugin_dir }}/{{ openbao_azure_plugin_command }}"
+    remote_src: true
+    owner: root
+    group: "{{ openbao_group }}"
+    mode: "0750"
+  register: openbao_azure_plugin_install_task
+  when:
+    - openbao_azure_engine_enabled | bool
+    - not ansible_check_mode or openbao_azure_extracted_plugin.stat.exists
+
+# --- Phase 5e: stage the GitHub secrets engine plugin (external, all nodes) --
 - name: Stage the GitHub plugin checksum manifest on controller
   ansible.builtin.get_url:
     url: "{{ openbao_github_plugin_checksums_url }}"
@@ -274,7 +379,7 @@
   register: openbao_github_plugin_install_task
   when: openbao_github_engine_enabled | bool
 
-# --- Phase 5e: stage OAuthapp (external, all voters) -----------------------
+# --- Phase 5f: stage OAuthapp (external, all voters) -----------------------
 # The release publishes an unsigned checksum only. Its pinned hash is an
 # integrity control (see defaults); it is not signature
 # verification. The archive is staged on the controller and copied to every

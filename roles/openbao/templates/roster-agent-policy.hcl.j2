@@ -1,0 +1,31 @@
+{{ ansible_managed | comment }}
+{{ openbao_roster_agent_policy_marker }}{{ item.agent }}
+# OpenBao policy for roster agent {{ item.agent }}.
+path "{{ openbao_kv_mount }}/data/ai/{{ item.agent }}" {
+  capabilities = ["read"]
+}
+path "{{ openbao_kv_mount }}/metadata/ai/{{ item.agent }}" {
+  capabilities = ["read", "list"]
+}
+
+path "{{ openbao_kv_mount }}/data/apps/{{ item.agent }}" {
+  capabilities = ["read"]
+}
+path "{{ openbao_kv_mount }}/metadata/apps/{{ item.agent }}" {
+  capabilities = ["read", "list"]
+}
+path "{{ openbao_kv_mount }}/data/apps/{{ item.agent }}-gw" {
+  capabilities = ["read"]
+}
+path "{{ openbao_kv_mount }}/metadata/apps/{{ item.agent }}-gw" {
+  capabilities = ["read", "list"]
+}
+
+{% for slug in openbao_ai_agents[item.agent].get('owns', []) %}
+path "{{ openbao_kv_mount }}/data/ai/mcp/{{ slug }}" {
+  capabilities = ["read"]
+}
+path "{{ openbao_kv_mount }}/metadata/ai/mcp/{{ slug }}" {
+  capabilities = ["read", "list"]
+}
+{% endfor %}
