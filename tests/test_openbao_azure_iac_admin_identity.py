@@ -56,6 +56,17 @@ class TestAzureIacAdminIdentity(unittest.TestCase):
         self.assertEqual(capabilities, ['["read"]'])
         self.assertNotIn("*", "".join(paths))
 
+    def test_no_other_policy_template_reads_the_azure_credentials(self):
+        # ai-admin holds the whole mount for engine administration; every other
+        # template stays out of it so the credential has one reader.
+        allowed = {"azure-iac-admin-policy.hcl.j2", "ai-admin-policy.hcl.j2"}
+        readers = [
+            t.name
+            for t in TEMPLATE.parent.glob("*.hcl.j2")
+            if "openbao_azure_mount" in t.read_text(encoding="utf-8") and t.name not in allowed
+        ]
+        self.assertEqual(readers, [])
+
     def test_source_class_is_workstation_only(self):
         overrides = _yaml("08b-cidr-and-unlock.yml")["openbao_approle_cidr_class_overrides"]
         self.assertEqual(overrides["azure-iac-admin"], "workstation")
