@@ -1,14 +1,17 @@
 ---
 openbao_azure_mount: azure
 openbao_azure_plugin_name: azure
-openbao_azure_tenant_id: >-
-  {{ lookup('env', 'OPENBAO_AZURE_TENANT_ID') | default('', true) }}
-openbao_azure_roles_json: >-
-  {{ lookup('env', 'OPENBAO_AZURE_ROLES') | default('', true) }}
-openbao_azure_roles: >-
-  {{ openbao_azure_roles_json | trim | default('[]', true) | from_json }}
-openbao_azure_engine_enabled: >-
-  {{ openbao_azure_roles_json | regex_replace('\\s+', '') not in ['', '[]'] }}
+openbao_azure_engine_enabled: true
+# Azure role for the IaC/admin identity. An unset object id renders no role.
+openbao_azure_iac_admin_role_name: openbao-iac-admin
+openbao_azure_iac_admin_application_object_id: >-
+  {{ lookup('env', 'OPENBAO_AZURE_IAC_ADMIN_APPLICATION_OBJECT_ID') | default('', true) }}
+openbao_azure_iac_admin_ttl: 1h
+# The service principal OpenBao uses to mint client secrets. Written to
+# azure/config only on first configuration.
+openbao_azure_tenant_id: "{{ lookup('env', 'OPENBAO_AZURE_TENANT_ID') | default('', true) }}"
+openbao_azure_client_id: "{{ lookup('env', 'OPENBAO_AZURE_CLIENT_ID') | default('', true) }}"
+openbao_azure_client_secret: "{{ lookup('env', 'OPENBAO_AZURE_CLIENT_SECRET') | default('', true) }}"
 
 # renovate: datasource=github-releases depName=openbao/openbao-plugins
 openbao_azure_plugin_version: "0.23.0"
@@ -24,36 +27,3 @@ openbao_azure_plugin_tarball_url: >-
   {{ openbao_azure_plugin_release_base_url }}/{{ openbao_azure_plugin_release_tag
   }}/{{ openbao_azure_plugin_tarball }}
 openbao_azure_plugin_signature_url: "{{ openbao_azure_plugin_tarball_url }}.sig"
-
-openbao_azure_role_policies: >-
-  {%- set _entries = [] -%}
-  {%- for role in (openbao_azure_roles | default([], true))
-      if role is mapping and role.get('name') is string -%}
-  {%- set _ = _entries.append({'name': 'azure-' ~ role.name,
-      'template': 'azure-creds-policy.hcl.j2', 'azure_role_name': role.name}) -%}
-  {%- endfor -%}
-  {{ _entries }}
-
-openbao_azure_workload_approles: >-
-  {%- set _entries = [] -%}
-  {%- for role in (openbao_azure_roles | default([], true))
-      if role is mapping and role.get('name') is string
-      and not role.get('gated', false) -%}
-  {%- set _ = _entries.append({'name': role.name, 'policy': 'azure-' ~ role.name}) -%}
-  {%- endfor -%}
-  {{ _entries }}
-
-openbao_azure_gated_approles: >-
-  {%- set _entries = [] -%}
-  {%- for role in (openbao_azure_roles | default([], true))
-      if role is mapping and role.get('name') is string
-      and role.get('gated', false) -%}
-  {%- set _ = _entries.append({'name': role.name, 'policy': 'azure-' ~ role.name,
-      'manage_secret_id': false,
-      'secret_id_ttl': openbao_approle_human_secret_id_ttl,
-      'secret_id_num_uses': 1}) -%}
-  {%- endfor -%}
-  {{ _entries }}
-
-openbao_azure_gated_policy_names: >-
-  {{ openbao_azure_gated_approles | map(attribute='policy') | list }}

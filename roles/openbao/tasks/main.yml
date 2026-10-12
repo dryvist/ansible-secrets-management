@@ -30,11 +30,6 @@
 # phase tag used anywhere below -- so --tags can decide whether to enter it
 # at all; once entered, the loaded tasks are filtered individually by their
 # own tags exactly as documented above.
-- name: Validate Azure role input before dependent phases
-  ansible.builtin.import_tasks: validate-azure-roles.yml
-  tags:
-    - always
-
 - name: Phases 1-4 -- prerequisites, system user/group, and the OpenBao package install
   ansible.builtin.import_tasks: main/install.yml
   tags:

@@ -274,8 +274,7 @@ openbao_base_approles_core:
 # openbao_base_approles_elevated (iac-platform-deploy through slack-ops) lives
 # in 07f-elevated-approles.yml — split for the CI token-limits gate.
 openbao_base_approles: >-
-  {{ openbao_base_approles_core + openbao_azure_workload_approles
-     + openbao_base_approles_elevated
+  {{ openbao_base_approles_core + openbao_base_approles_elevated
      + openbao_hermes_private_agent_approles }}
 openbao_roster_agent_approles: >-
   {%- set _entries = [] -%}
