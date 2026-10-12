@@ -21,6 +21,9 @@
       - name: ntfy
         expect_new: OPENBAO_APPROLE_NTFY
         expect_legacy: NTFY_VAULT
+      - name: clickhouse
+        expect_new: OPENBAO_APPROLE_CLICKHOUSE
+        expect_legacy: CLICKHOUSE_VAULT
   tasks:
     - name: Assert the derived prefixes match the estate-wide convention
       vars:
