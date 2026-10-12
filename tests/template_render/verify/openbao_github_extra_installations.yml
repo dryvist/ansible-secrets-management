@@ -262,6 +262,27 @@
                 'OPENBAO_GITHUB_EXTRA_WRITE_INSTALLATION_IDS'
                 in ansible_failed_result.msg
 
+    - name: Confirm an owner whose set name collides with a base set fails
+      block:
+        - name: Set a read entry whose generated name equals a base set
+          ansible.builtin.set_fact:
+            openbao_platform_env:
+              OPENBAO_GITHUB_EXTRA_READ_INSTALLATION_IDS: dryvist=12345678
+
+        - name: Expect validation to reject a colliding read set name
+          ansible.builtin.include_tasks: "{{ _set_checks }}"
+
+        - name: Fail if the colliding read entry was accepted
+          ansible.builtin.fail:
+            msg: Expected OPENBAO_GITHUB_EXTRA_READ_INSTALLATION_IDS validation to fail.
+      rescue:
+        - name: Check the collision error names its env key
+          ansible.builtin.assert:
+            that:
+              - >-
+                'OPENBAO_GITHUB_EXTRA_READ_INSTALLATION_IDS'
+                in ansible_failed_result.msg
+
     - name: Confirm a non-numeric ID fails with its read env key in the message
       block:
         - name: Set a read entry with a non-numeric ID

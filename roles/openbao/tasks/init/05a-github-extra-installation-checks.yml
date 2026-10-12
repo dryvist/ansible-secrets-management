@@ -22,10 +22,19 @@
          | select('in', [openbao_github_everyday_dryvist_installation_id | int,
                         openbao_github_everyday_personal_installation_id | int])
          | list | length) == 0
+      # The everyday mount reconciles sets by name, so a generated name equal
+      # to a base set name would repoint that base set.
+      - >-
+        (openbao_github_everyday_extra_read_installations_parsed
+         | map(attribute='permission_set.name')
+         | intersect(openbao_github_everyday_base_read_permission_sets
+                     | map(attribute='name') | list)
+         | list | length) == 0
     fail_msg: >-
       OPENBAO_GITHUB_EXTRA_READ_INSTALLATION_IDS must be empty or a
       comma-separated list of unique owner=id entries with an owner matching
-      ^[A-Za-z0-9-]+$ and a numeric ID distinct from the base installations.
+      ^[A-Za-z0-9-]+$, a numeric ID distinct from the base installations, and
+      a generated read-<owner>-all name distinct from the base read sets.
     quiet: true
 
 - name: "Validate extra write installations"

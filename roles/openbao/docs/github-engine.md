@@ -34,7 +34,9 @@ The everyday App accepts extra installations through
 `OPENBAO_GITHUB_EXTRA_WRITE_INSTALLATION_IDS`, each as a comma-separated list
 of `owner=id` entries. Read entries add named read sets; only write entries
 extend the write-policy installation allowlists, so a read entry never grants
-write access.
+write access. Scoped write policies pin `repositories` by name, so a scoped
+identity can also mint for a same-named repository in an extra write
+installation.
 
 Token access is tiered; the tier IS the privilege boundary:
 
