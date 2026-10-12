@@ -127,3 +127,34 @@
     - >-
       openbao_azure_plugin_tune is changed
       or (openbao_azure_plugin_install_task | default({})) is changed
+
+- name: Check whether the Azure engine root config exists
+  ansible.builtin.command:
+    cmd: "bao read -format=json {{ openbao_azure_mount }}/config"
+  environment:
+    BAO_ADDR: "{{ openbao_cli_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
+  register: openbao_azure_config_check
+  no_log: true
+  changed_when: false
+  check_mode: false
+  failed_when: false
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_azure_engine_enabled | bool
+
+# The mount must exist before an operator can write the root config.
+- name: Report that the Azure engine has no root config
+  ansible.builtin.debug:
+    msg: >-
+      The Azure engine root config is missing. An operator writes
+      {{ openbao_azure_mount }}/config and runs bao write -f
+      {{ openbao_azure_mount }}/rotate-root.
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_azure_engine_enabled | bool
+    - (openbao_azure_config_check.rc | default(1)) != 0
