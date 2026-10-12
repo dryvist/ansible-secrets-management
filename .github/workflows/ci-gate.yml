@@ -126,6 +126,9 @@ jobs:
       - name: Verify the Azure engine config-missing decision
         run: python3 -m pytest -v tests/test_openbao_azure_config_missing.py
 
+      - name: Verify the Azure IaC admin identity is narrow and per-call
+        run: python3 -m pytest -v tests/test_openbao_azure_iac_admin_identity.py
+
       - name: Verify the AppRole rotation roster guard and check mode
         run: python3 -m pytest -v tests/test_openbao_rotation_roster.py
 
