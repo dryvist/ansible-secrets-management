@@ -1,4 +1,5 @@
 {{ ansible_managed | comment }}
+{{ openbao_roster_agent_policy_marker }}{{ item.agent }}
 # OpenBao policy for roster agent {{ item.agent }}.
 path "{{ openbao_kv_mount }}/data/ai/{{ item.agent }}" {
   capabilities = ["read"]

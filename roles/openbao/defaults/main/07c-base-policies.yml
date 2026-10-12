@@ -31,7 +31,7 @@ openbao_terrakube_base_policies: >-
 openbao_roster_agent_policies: >-
   {%- set _entries = [] -%}
   {%- for agent in openbao_ai_agents -%}
-  {%- if (agent | string | regex_search('^[a-z]+-[a-z]+$')) is not none -%}
+  {%- if (agent | string | regex_search(openbao_roster_agent_name_pattern)) is not none -%}
   {%- set _ = _entries.append({'name': agent,
       'template': 'roster-agent-policy.hcl.j2', 'agent': agent}) -%}
   {%- endif -%}

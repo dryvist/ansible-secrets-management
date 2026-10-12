@@ -1,0 +1,142 @@
+---
+- name: Skip the live roster collision check without a converge token
+  ansible.builtin.debug:
+    msg: "Roster live-collision check skipped: it needs the converge token and runs only on a real converge."
+  when: not openbao_roster_live_check_enabled
+
+- name: Check live roster AppRoles and policies before policy writes
+  when: openbao_roster_live_check_enabled
+  block:
+    - name: List live AppRoles for roster collision checks
+      ansible.builtin.command:
+        cmd: bao list -format=json auth/approle/role
+      environment:
+        BAO_ADDR: "{{ openbao_cli_addr }}"
+        BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+      delegate_to: "{{ openbao_cli_host }}"
+      become: "{{ openbao_cli_become }}"
+      vars:
+        ansible_become: "{{ openbao_cli_become }}"
+      register: openbao_roster_live_approle_list
+      no_log: true
+      changed_when: false
+      check_mode: false
+      failed_when: >-
+        openbao_roster_live_approle_list.rc != 0
+        and not (((openbao_roster_live_approle_list.stdout | default(''))
+                  ~ (openbao_roster_live_approle_list.stderr | default('')))
+                 | lower is search('no entries|no value found|404'))
+
+    - name: Resolve live AppRole names for roster collision checks
+      ansible.builtin.set_fact:
+        openbao_roster_live_approle_names: >-
+          {{ (openbao_roster_live_approle_list.stdout | default('[]', true) | from_json)
+             if (openbao_roster_live_approle_list.rc | default(1)) == 0 else [] }}
+
+    - name: List live policies for roster collision checks
+      ansible.builtin.command:
+        cmd: bao policy list -format=json
+      environment:
+        BAO_ADDR: "{{ openbao_cli_addr }}"
+        BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+      delegate_to: "{{ openbao_cli_host }}"
+      become: "{{ openbao_cli_become }}"
+      vars:
+        ansible_become: "{{ openbao_cli_become }}"
+      register: openbao_roster_live_policy_list
+      no_log: true
+      changed_when: false
+      check_mode: false
+      failed_when: >-
+        openbao_roster_live_policy_list.rc != 0
+        and not (((openbao_roster_live_policy_list.stdout | default(''))
+                  ~ (openbao_roster_live_policy_list.stderr | default('')))
+                 | lower is search('no entries|no value found|404'))
+
+    - name: Resolve live policy names for roster collision checks
+      ansible.builtin.set_fact:
+        openbao_roster_live_policy_names: >-
+          {{ (openbao_roster_live_policy_list.stdout | default('[]', true) | from_json)
+             if (openbao_roster_live_policy_list.rc | default(1)) == 0 else [] }}
+
+    - name: Read live policies whose names match roster agents
+      ansible.builtin.command:
+        cmd: "bao policy read -format=json {{ item }}"
+      environment:
+        BAO_ADDR: "{{ openbao_cli_addr }}"
+        BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+      delegate_to: "{{ openbao_cli_host }}"
+      become: "{{ openbao_cli_become }}"
+      vars:
+        ansible_become: "{{ openbao_cli_become }}"
+      loop: "{{ openbao_ai_agents.keys() | list }}"
+      loop_control:
+        label: "{{ item }}"
+      register: openbao_roster_live_policy_reads
+      no_log: true
+      changed_when: false
+      check_mode: false
+      when: item in openbao_roster_live_policy_names
+
+    - name: Resolve live roster policy bodies
+      ansible.builtin.set_fact:
+        openbao_roster_live_policy_bodies: "{{ _policy_pairs | items2dict }}"
+      vars:
+        _policy_pairs: >-
+          {%- set _pairs = [] -%}
+          {%- for result in (openbao_roster_live_policy_reads.results | default([])) -%}
+          {%- if not (result.skipped | default(false)) and (result.rc | default(1)) == 0 -%}
+          {%- set _ = _pairs.append({'key': result.item,
+              'value': ((result.stdout | from_json).policy | default(''))}) -%}
+          {%- endif -%}
+          {%- endfor -%}
+          {{ _pairs }}
+      no_log: true
+
+    - name: Read live AppRoles with a marked roster policy
+      ansible.builtin.command:
+        cmd: "bao read -format=json auth/approle/role/{{ item }}"
+      environment:
+        BAO_ADDR: "{{ openbao_cli_addr }}"
+        BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+      delegate_to: "{{ openbao_cli_host }}"
+      become: "{{ openbao_cli_become }}"
+      vars:
+        ansible_become: "{{ openbao_cli_become }}"
+      loop: "{{ openbao_ai_agents.keys() | list }}"
+      loop_control:
+        label: "{{ item }}"
+      register: openbao_roster_live_approle_reads
+      no_log: true
+      changed_when: false
+      check_mode: false
+      when:
+        - item in openbao_roster_live_approle_names
+        - item in openbao_roster_live_policy_names
+        - item not in openbao_roster_live_policy_conflicts
+
+    - name: Resolve live roster AppRole configurations
+      ansible.builtin.set_fact:
+        openbao_roster_live_approle_configs: "{{ _approle_pairs | items2dict }}"
+      vars:
+        _approle_pairs: >-
+          {%- set _pairs = [] -%}
+          {%- for result in (openbao_roster_live_approle_reads.results | default([])) -%}
+          {%- if not (result.skipped | default(false)) and (result.rc | default(1)) == 0 -%}
+          {%- set _ = _pairs.append({'key': result.item, 'value': result.stdout | from_json}) -%}
+          {%- endif -%}
+          {%- endfor -%}
+          {{ _pairs }}
+      no_log: true
+
+    - name: Assert no live roster AppRole or policy conflicts exist
+      ansible.builtin.assert:
+        that:
+          - openbao_roster_live_policy_conflicts | length == 0
+          - openbao_roster_live_approle_conflicts | length == 0
+        fail_msg: >-
+          Live roster policy marker conflicts (the policy lacks the exact
+          managed-by marker): {{ openbao_roster_live_policy_conflicts }}.
+          Live roster AppRole conflicts (missing a marked policy or carrying
+          policies other than its own): {{ openbao_roster_live_approle_conflicts }}.
+          Remove or rename the out-of-band object or rename the agent.

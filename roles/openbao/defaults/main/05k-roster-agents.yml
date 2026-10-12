@@ -2,10 +2,23 @@
 # Optional AI agents from the tofu inventory artifact.
 openbao_ai_agents: "{{ (tofu_data | default({})).agents | default({}) }}"
 
+openbao_roster_agent_name_pattern: '^[a-z]+-[a-z]+$'
+openbao_roster_agent_slug_pattern: '^[a-z][a-z0-9-]*$'
+openbao_roster_agent_policy_marker: "# managed-by: openbao roster-agent "
+
+openbao_roster_live_check_enabled: >-
+  {{ openbao_ai_agents | length > 0
+     and openbao_bootstrap_token | default('', true) | length > 0 }}
+
+openbao_roster_live_approle_names: []
+openbao_roster_live_policy_names: []
+openbao_roster_live_policy_bodies: {}
+openbao_roster_live_approle_configs: {}
+
 openbao_roster_agent_invalid_names: >-
   {%- set _invalid = [] -%}
   {%- for agent in openbao_ai_agents -%}
-  {%- if (agent | string | regex_search('^[a-z]+-[a-z]+$')) is none -%}
+  {%- if (agent | string | regex_search(openbao_roster_agent_name_pattern)) is none -%}
   {%- set _ = _invalid.append(agent) -%}
   {%- endif -%}
   {%- endfor -%}
@@ -31,7 +44,7 @@ openbao_roster_agent_invalid_slugs: >-
   {%- set _ = _invalid.append((agent | string) ~ ' (owns must be a list)') -%}
   {%- else -%}
   {%- for slug in _owns -%}
-  {%- if slug is not string or (slug | regex_search('^[a-z][a-z0-9-]*$')) is none -%}
+  {%- if slug is not string or (slug | regex_search(openbao_roster_agent_slug_pattern)) is none -%}
   {%- set _ = _invalid.append((agent | string) ~ ':' ~ (slug | string)) -%}
   {%- endif -%}
   {%- endfor -%}
@@ -85,7 +98,7 @@ openbao_roster_agent_name_collisions: >-
   {%- set _hits = [] -%}
   {%- set _valid_agents = [] -%}
   {%- for agent in openbao_ai_agents -%}
-  {%- if (agent | string | regex_search('^[a-z]+-[a-z]+$')) is not none -%}
+  {%- if (agent | string | regex_search(openbao_roster_agent_name_pattern)) is not none -%}
   {%- set _ = _valid_agents.append(agent) -%}
   {%- endif -%}
   {%- endfor -%}
@@ -102,3 +115,35 @@ openbao_roster_agent_name_collisions: >-
   {%- endfor -%}
   {%- endfor -%}
   {{ _hits | unique | list }}
+
+openbao_roster_live_policy_conflicts: >-
+  {%- set _conflicts = [] -%}
+  {%- for agent in openbao_ai_agents -%}
+  {%- if agent in openbao_roster_live_policy_names
+        and (openbao_roster_agent_policy_marker ~ agent)
+            not in (openbao_roster_live_policy_bodies.get(agent, '') | string).splitlines() -%}
+  {%- set _ = _conflicts.append(agent) -%}
+  {%- endif -%}
+  {%- endfor -%}
+  {{ _conflicts }}
+
+openbao_roster_live_approle_conflicts: >-
+  {%- set _conflicts = [] -%}
+  {%- for agent in openbao_ai_agents -%}
+  {%- if agent in openbao_roster_live_approle_names -%}
+  {%- if agent not in openbao_roster_live_policy_names
+        or agent in openbao_roster_live_policy_conflicts -%}
+  {%- set _ = _conflicts.append(agent ~ ' (no live marked roster policy)') -%}
+  {%- else -%}
+  {%- set _config = openbao_roster_live_approle_configs.get(agent, {}) -%}
+  {%- set _data = _config.get('data', {}) -%}
+  {%- set _policies = _data.get('token_policies', _data.get('policies',
+      _config.get('token_policies', _config.get('policies', [])))) -%}
+  {%- if _policies != [agent] -%}
+  {%- set _ = _conflicts.append(agent ~ ' (token_policies/policies=' ~ (_policies | to_json)
+      ~ '; expected ' ~ ([agent] | to_json) ~ ')') -%}
+  {%- endif -%}
+  {%- endif -%}
+  {%- endif -%}
+  {%- endfor -%}
+  {{ _conflicts }}
