@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.9.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.8.0...v0.9.0) (2026-10-12)
+
+
+### Features
+
+* **openbao:** configure the Azure secrets engine ([#93](https://github.com/dryvist/ansible-secrets-management/issues/93)) ([3eb1f05](https://github.com/dryvist/ansible-secrets-management/commit/3eb1f05abf60cb5564c4bab44df3216d455eb888))
+
+
+### Bug Fixes
+
+* **openbao:** end AppRole rotation before credential use in check mode ([#89](https://github.com/dryvist/ansible-secrets-management/issues/89)) ([6a84836](https://github.com/dryvist/ansible-secrets-management/commit/6a848366c67eb2eaf36b5f4b50583cccba903110))
+
 ## [0.8.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.7.1...v0.8.0) (2026-10-12)
 
 
