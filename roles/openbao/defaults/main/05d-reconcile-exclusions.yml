@@ -13,7 +13,7 @@
 # inert openbao-policy-sync AppRole (07f), never by the execution plane's
 # identity, so a plane converge cannot rewrite the reconcile policy.
 openbao_policy_sync_policy_name: policy-sync
-openbao_reconcile_excluded_policies_base:
+openbao_reconcile_excluded_policies:
   - "{{ openbao_approle_issuer_policy_name }}"
   # Anything that can rewrite this policy can grant itself the break-glass
   # unlock, so the unattended identity must not reach it.
@@ -54,6 +54,3 @@ openbao_reconcile_excluded_policies_base:
   - "{{ openbao_semaphore_policy_name }}"
   - "{{ openbao_ansible_converge_policy_name }}"
   - ssh-sign-automation-semaphore
-
-openbao_reconcile_excluded_policies: >-
-  {{ openbao_reconcile_excluded_policies_base + openbao_azure_gated_policy_names }}

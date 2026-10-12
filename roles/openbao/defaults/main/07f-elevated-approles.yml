@@ -1,5 +1,5 @@
 ---
-openbao_base_approles_elevated_static:
+openbao_base_approles_elevated:
   # iac-platform-deploy: the deploy of the IaC platform compose stack reads its
   # runtime credentials from secret/platform/* and the two OIDC client secrets
   # it must hand its services from secret/apps/*. It chains both reads under a
@@ -158,6 +158,3 @@ openbao_base_approles_elevated_static:
     token_ttl: "{{ openbao_slack_ops_token_ttl }}"
     token_max_ttl: "{{ openbao_slack_ops_token_ttl }}"
     secret_id_ttl: "{{ openbao_slack_ops_secret_id_ttl }}"
-
-openbao_base_approles_elevated: >-
-  {{ openbao_base_approles_elevated_static + openbao_azure_gated_approles }}
