@@ -10,6 +10,8 @@ path "{{ openbao_kv_mount }}/metadata/ai/hermes" {
   capabilities = ["read", "list"]
 }
 
+{%- if 'splunk' not in openbao_roster_owned_slug_names | default([]) %}
+
 path "{{ openbao_kv_mount }}/data/ai/mcp/splunk" {
   capabilities = ["read"]
 }
@@ -17,6 +19,9 @@ path "{{ openbao_kv_mount }}/metadata/ai/mcp/splunk" {
   capabilities = ["read", "list"]
 }
 
+{% else %}
+
+{% endif -%}
 path "{{ openbao_kv_mount }}/data/ai/mcp/zammad" {
   capabilities = ["read"]
 }

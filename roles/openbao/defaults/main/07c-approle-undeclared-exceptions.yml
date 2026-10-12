@@ -39,7 +39,8 @@ openbao_retired_approles: >-
 # Retired policies, deleted the same way (init/08b-rbac-policy-writes.yml).
 openbao_retired_policies: >-
   {{ ['github-agents', 'github-admin-claude-issuer', 'github-work', 'github-write-work']
-     + openbao_roster_key_reader_retired_names }}
+     + openbao_roster_key_reader_retired_names
+     + openbao_roster_owned_mcp_deny_retired_names }}
 # Example shape (do not add speculatively):
 #   - name: some-vendor-managed-role
 #     reason: provisioned by <tool>, out of this repo's control

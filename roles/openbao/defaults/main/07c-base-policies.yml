@@ -34,6 +34,12 @@ openbao_roster_key_reader_policies: >-
        {'name': openbao_roster_gateway_key_reader_name, 'template': 'agentgateway-agent-keys-policy.hcl.j2'}]
       if openbao_roster_agent_valid_names | length > 0 else []) }}
 
+# Only roster-owned MCP credentials need the owner-only deny overlay.
+openbao_roster_owned_mcp_deny_policies: >-
+  {{ ([{'name': openbao_roster_owned_mcp_deny_policy_name,
+        'template': 'roster-owned-mcp-deny-policy.hcl.j2'}]
+      if openbao_roster_owned_slug_names | length > 0 else []) }}
+
 openbao_roster_agent_policies: >-
   {%- set _entries = [] -%}
   {%- for agent in openbao_roster_agent_valid_names -%}
@@ -42,7 +48,9 @@ openbao_roster_agent_policies: >-
   {%- endfor -%}
   {{ _entries }}
 
-openbao_base_policies: "{{ openbao_terrakube_base_policies + openbao_base_policies_static }}"
+openbao_base_policies: >-
+  {{ openbao_terrakube_base_policies + openbao_base_policies_static
+     + openbao_roster_owned_mcp_deny_policies }}
 
 openbao_base_policies_static:
   - name: "{{ openbao_terraform_apply_policy_name }}"

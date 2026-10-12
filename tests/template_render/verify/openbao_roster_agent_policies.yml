@@ -91,7 +91,6 @@
           splunk-heimdall:
             owns: [splunk]
           cribl-bifrost: {}
-        openbao_mcp_credential_owners: {}
 
     - name: Assert the fixture produces exactly two roster AppRoles and policies
       ansible.builtin.assert:
@@ -102,11 +101,14 @@
           - openbao_roster_agent_invalid_names == []
           - openbao_roster_agent_invalid_slugs == []
           - openbao_roster_agent_unknown_slugs == []
+          - openbao_roster_owned_slug_names == ['splunk']
           - openbao_roster_agent_mcp_credential_conflicts == []
           - openbao_roster_agent_duplicate_slugs == []
           - openbao_roster_agent_name_collisions == []
           - openbao_approles | length == _roster_baseline_approles | length + 4
-          - openbao_policies | length == _roster_baseline_policies | length + 4
+          # Two agent policies, two key readers and the owned-MCP deny overlay.
+          - openbao_policies | length == _roster_baseline_policies | length + 5
+          - openbao_roster_owned_mcp_deny_policies | map(attribute='name') | list == ['roster-owned-mcp-deny']
           - openbao_roster_key_reader_approle_names == ['llm-router-agent-keys', 'agentgateway-agent-keys']
           - >-
             openbao_roster_key_reader_approles ==
@@ -168,20 +170,30 @@
           - _undeclared_after_delete | select('in', openbao_roster_key_reader_retired_names) | list == []
         quiet: true
 
-    - name: Set a fixture roster with an owned MCP slug that still has legacy readers
+    - name: Assert the default credential-owner map allows splunk ownership
+      ansible.builtin.assert:
+        that:
+          - openbao_mcp_credential_owners.splunk == []
+          - openbao_mcp_credential_owners.cribl == []
+          - openbao_mcp_credential_owners == _roster_mcp_credential_owners
+          - openbao_roster_agent_mcp_credential_conflicts == []
+        quiet: true
+
+    - name: Set a fixture roster with an owned MCP slug that has a remaining reader
       ansible.builtin.set_fact:
         openbao_ai_agents:
           splunk-heimdall:
             owns: [splunk]
-        openbao_mcp_credential_owners: "{{ _roster_mcp_credential_owners }}"
+        openbao_mcp_credential_owners:
+          splunk: [example-legacy-reader]
+          cribl: []
 
-    - name: Assert the preflight reports the remaining non-roster MCP readers
+    - name: Assert the preflight reports a remaining non-roster MCP reader
       ansible.builtin.assert:
         that:
           - >-
             openbao_roster_agent_mcp_credential_conflicts ==
-            ['splunk-heimdall:splunk (existing policies: hermes, hermes-private-agent, ansible-converge,
-            splunk-mcp-rotate, observability, local-llm, ai-rotate)']
+            ['splunk-heimdall:splunk (existing policies: example-legacy-reader)']
         fail_msg: The roster owner conflict must be reported before it can render a policy.
         quiet: true
 
@@ -191,7 +203,7 @@
           splunk-heimdall:
             owns: [splunk]
           cribl-bifrost: {}
-        openbao_mcp_credential_owners: {}
+        openbao_mcp_credential_owners: "{{ _roster_mcp_credential_owners }}"
 
     - name: Assert each roster agent gets its two generated keys outside the apps read grant
       vars:
@@ -342,6 +354,42 @@
       loop: "{{ openbao_roster_agent_policies }}"
       loop_control:
         label: "{{ item.agent }}"
+
+    - name: Render the hermes and owned-MCP deny policies with the owned fixture
+      ansible.builtin.template:
+        src: "{{ _template_dir }}/{{ item }}-policy.hcl.j2"
+        dest: "{{ _fixture_dir }}/{{ item }}.hcl"
+        mode: "0644"
+      loop: [hermes, roster-owned-mcp-deny]
+
+    - name: Read the hermes and owned-MCP deny policies
+      ansible.builtin.slurp:
+        src: "{{ _fixture_dir }}/{{ item }}.hcl"
+      register: _owned_consumer_policies_raw
+      loop: [hermes, roster-owned-mcp-deny]
+
+    - name: Assert owner-scoped consumer MCP grants are denied
+      vars:
+        _hermes_hcl: "{{ _owned_consumer_policies_raw.results[0].content | b64decode }}"
+        _deny_hcl: "{{ _owned_consumer_policies_raw.results[1].content | b64decode }}"
+        _local_llm_policies: >-
+          {{ (openbao_approles | selectattr('name', 'equalto', openbao_local_llm_approle_name)
+              | first).token_policies }}
+        _hermes_owned_slug_paths: >-
+          {{ _hermes_hcl | regex_findall(
+             '(?m)^path "' ~ openbao_kv_mount ~ '/(?:data|metadata)/ai/mcp/splunk"$') }}
+      ansible.builtin.assert:
+        that:
+          - _hermes_owned_slug_paths == []
+          - "'roster-owned-mcp-deny' in _local_llm_policies"
+          - >-
+            _deny_hcl is search(
+              '(?s)path "' ~ openbao_kv_mount ~ '/data/ai/mcp/splunk" \{\s*capabilities = \["deny"\]')
+          - >-
+            _deny_hcl is search(
+              '(?s)path "' ~ openbao_kv_mount ~ '/metadata/ai/mcp/splunk" \{\s*capabilities = \["deny"\]')
+        fail_msg: Consumer policies must not retain access to an owned MCP credential.
+        quiet: true
 
     - name: Read the splunk-heimdall policy
       ansible.builtin.slurp:

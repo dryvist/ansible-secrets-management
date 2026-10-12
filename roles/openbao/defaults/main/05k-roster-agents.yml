@@ -8,21 +8,23 @@ openbao_roster_agent_policy_marker: "# managed-by: openbao roster-agent "
 
 # Must match the tofu roster's cataloged systems.
 openbao_roster_agent_ownable_slugs: [splunk, cribl]
+openbao_roster_owned_mcp_deny_policy_name: roster-owned-mcp-deny
 
-# Existing non-roster policies that can read these MCP credentials. Broad
-# ai/* readers are included because they also cover ai/mcp/<slug>.
+# Break-glass administration and the converge identity's policies keep access
+# by design.
+openbao_mcp_credential_custodians:
+  splunk: [ai-admin, ansible-converge, openbao-reconcile, splunk-mcp-rotate, ai-rotate]
+  cribl: [ai-admin, ai-rotate, openbao-reconcile]
+
+# Workstation and AI-session identities that keep owned MCP credential access.
+openbao_mcp_credential_session_holders:
+  splunk: [operator-workstation, ai-readonly, ai-elevated, ai-apply-ai, ai-apply-all]
+  cribl: [operator-workstation, agent-workstation, ai-readonly, ai-elevated, ai-apply-ai, ai-apply-all]
+
+# Non-custodian policies that still grant the slug once it is owned.
 openbao_mcp_credential_owners:
-  splunk:
-    - hermes
-    - hermes-private-agent
-    - ansible-converge
-    - splunk-mcp-rotate
-    - observability
-    - local-llm
-    - ai-rotate
-  cribl:
-    - local-llm
-    - ai-rotate
+  splunk: []
+  cribl: []
 
 # Check mode has no converge token (the issuer login is skipped), so the live
 # check runs only on a real converge. A real run without a token fails instead.
@@ -59,6 +61,9 @@ openbao_roster_key_reader_approle_names: >-
 openbao_roster_key_reader_retired_names: >-
   {{ [] if openbao_roster_agent_valid_names | length > 0
      else [openbao_roster_router_key_reader_name, openbao_roster_gateway_key_reader_name] }}
+openbao_roster_owned_mcp_deny_retired_names: >-
+  {{ [] if openbao_roster_owned_slug_names | length > 0
+     else [openbao_roster_owned_mcp_deny_policy_name] }}
 # Both are openbao_secrets prefetch domains, redeemed by the converge controller,
 # which may be the workstation (tests/test_openbao_prefetch_domain_workstation_class.py).
 openbao_roster_key_reader_cidr_classes: >-
@@ -116,6 +121,10 @@ openbao_roster_agent_owned_slugs: >-
   {%- endif -%}
   {%- endfor -%}
   {{ _entries }}
+
+openbao_roster_owned_slug_names: >-
+  {{ openbao_roster_agent_owned_slugs | map(attribute='slug')
+     | select('in', openbao_roster_agent_ownable_slugs) | unique | sort | list }}
 
 openbao_roster_agent_invalid_slugs: >-
   {%- set _invalid = [] -%}
