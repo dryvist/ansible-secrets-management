@@ -40,6 +40,7 @@
       ansible.builtin.assert:
         that:
           - openbao_ai_agents == {}
+          - openbao_roster_agent_name_collisions == []
           - openbao_roster_agent_approles == []
           - openbao_roster_agent_policies == []
           - openbao_approles == _expected_approles
@@ -61,6 +62,7 @@
         that:
           - openbao_roster_agent_approles | length == 2
           - openbao_roster_agent_policies | length == 2
+          - openbao_roster_agent_name_collisions == []
           - openbao_approles | length == _roster_baseline_approles | length + 2
           - openbao_policies | length == _roster_baseline_policies | length + 2
           - >-
@@ -126,4 +128,15 @@
         fail_msg: >-
           The roster-agent policies do not match their expected path families
           and capabilities.
+        quiet: true
+
+    - name: Set a fixture roster whose agent reuses an existing AppRole and policy name
+      ansible.builtin.set_fact:
+        openbao_ai_agents:
+          local-llm:
+            owns: []
+
+    - name: Assert the name collision is reported
+      ansible.builtin.assert:
+        that: openbao_roster_agent_name_collisions == ['local-llm']
         quiet: true

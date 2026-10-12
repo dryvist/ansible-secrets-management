@@ -32,6 +32,16 @@
       deleting the file does not revoke the credential.
     quiet: true
 
+# A roster agent's AppRole and policy are named after the agent. A name that
+# matches an existing AppRole or policy would replace that identity's grants.
+- name: Refuse roster agent names that collide with an existing AppRole or policy
+  ansible.builtin.assert:
+    that: openbao_roster_agent_name_collisions | length == 0
+    fail_msg: >-
+      Roster agents {{ openbao_roster_agent_name_collisions | join(', ') }} reuse an
+      existing AppRole or policy name. Rename them in the roster.
+    quiet: true
+
 # `bao status` exit codes: 0 = unsealed, 2 = sealed, 1 = error. For an
 # uninitialized node the command still exits 0/2 with "initialized": false in
 # the JSON body, so we parse the body rather than trust the exit code alone.

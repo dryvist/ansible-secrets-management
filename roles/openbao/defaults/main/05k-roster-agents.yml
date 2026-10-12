@@ -1,3 +1,14 @@
 ---
 # Optional AI agents from the tofu inventory artifact.
 openbao_ai_agents: "{{ (tofu_data | default({})).agents | default({}) }}"
+# Roster agents whose name is also used by another AppRole or policy. The
+# preflight assert keeps this empty.
+openbao_roster_agent_name_collisions: >-
+  {%- set _hits = [] -%}
+  {%- for agent in openbao_ai_agents -%}
+  {%- if openbao_approles | selectattr('name', 'equalto', agent) | list | length > 1
+        or openbao_policies | selectattr('name', 'equalto', agent) | list | length > 1 -%}
+  {%- set _ = _hits.append(agent) -%}
+  {%- endif -%}
+  {%- endfor -%}
+  {{ _hits }}
