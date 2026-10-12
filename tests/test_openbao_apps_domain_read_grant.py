@@ -21,6 +21,7 @@ ROOT = Path(__file__).resolve().parents[1]
 DEFAULTS = ROOT / "roles" / "openbao" / "defaults" / "main"
 NAMES_FILE = DEFAULTS / "05c-terrakube-and-remaining-domain-names.yml"
 GENERATED_FILE = DEFAULTS / "01c-app-secrets-generated.yml"
+GENERATED_PATHS_FILE = DEFAULTS / "01d-app-secret-paths.yml"
 PROMOTED_FILE = DEFAULTS / "01b-app-secrets.yml"
 CRIBL_EDGE_FILE = DEFAULTS / "05h-cribl-edge-readers.yml"
 DOMAINS_FILE = ROOT / "roles" / "openbao_secrets" / "defaults" / "main" / "01-domains.yml"
@@ -36,6 +37,7 @@ def _read_apps(names: dict) -> set[str]:
     templar = Templar(loader=DataLoader())
     templar.available_variables = {
         "openbao_generated_app_secrets": _yaml(GENERATED_FILE)["openbao_generated_app_secrets"],
+        "openbao_generated_app_secret_paths": _yaml(GENERATED_PATHS_FILE)["openbao_generated_app_secret_paths"],
         "openbao_promoted_app_secrets": _yaml(PROMOTED_FILE)["openbao_promoted_app_secrets"],
         "openbao_router_key_catalog": names.get("openbao_router_key_catalog", {}),
         "openbao_apps_read_published_apps": names.get("openbao_apps_read_published_apps", []),

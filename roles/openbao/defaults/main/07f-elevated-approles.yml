@@ -148,6 +148,12 @@ openbao_base_approles_elevated:
   - name: "{{ openbao_ai_runner_approle_name }}"
     policy: "{{ openbao_ai_runner_policy_name }}"
     secret_id_bound_cidrs: "{{ openbao_ai_runner_secret_id_cidr }}"
+  # clickhouse: controller-side domain prefetch, with the shared rotated
+  # secret_id TTL and machine_or_workstation CIDR class from 08a/08b.
+  # Unlimited redemptions within that TTL, like the local-llm domain.
+  - name: "{{ openbao_clickhouse_approle_name }}"
+    policy: "{{ openbao_clickhouse_policy_name }}"
+    secret_id_num_uses: 0
   - name: "{{ openbao_slack_admin_approle_name }}"
     policy: "{{ openbao_slack_admin_policy_name }}"
     token_ttl: "{{ openbao_slack_admin_token_ttl }}"
