@@ -77,3 +77,13 @@
     fail_msg: "Azure role input conflicts with an existing OpenBao declaration."
   when: openbao_azure_roles | length > 0
   no_log: true
+
+- name: Validate required-gated Azure roles are declared gated
+  ansible.builtin.assert:
+    that:
+      - >-
+        openbao_azure_roles | selectattr('name', 'in', openbao_azure_required_gated_roles)
+        | rejectattr('gated') | list | length == 0
+    fail_msg: "An Azure role that must be gated is declared ungated."
+  when: openbao_azure_required_gated_roles | length > 0
+  no_log: true

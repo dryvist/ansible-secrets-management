@@ -7,6 +7,11 @@ openbao_azure_roles_json: >-
   {{ lookup('env', 'OPENBAO_AZURE_ROLES') | default('', true) }}
 openbao_azure_roles: >-
   {{ openbao_azure_roles_json | trim | default('[]', true) | from_json }}
+# Comma-separated role names that must always be gated, from a separate
+# variable so one edit to the role list cannot ungate them.
+openbao_azure_required_gated_roles: >-
+  {{ lookup('env', 'OPENBAO_AZURE_GATED_ROLES') | default('', true)
+     | split(',') | map('trim') | select | list }}
 openbao_azure_engine_enabled: >-
   {{ openbao_azure_roles_json | regex_replace('\\s+', '') not in ['', '[]'] }}
 
