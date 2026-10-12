@@ -102,6 +102,9 @@ jobs:
       - name: Verify the run wrapper's inventory and recap verdict
         run: python3 -m pytest -v tests/test_run_ansible_wrapper.py
 
+      - name: Verify the AppRole rotation roster guard and check mode
+        run: python3 -m pytest -v tests/test_openbao_rotation_roster.py
+
   gate:
     name: Merge Gate
     needs: [ci, molecule, tests]

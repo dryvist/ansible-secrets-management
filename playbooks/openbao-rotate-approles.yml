@@ -178,6 +178,15 @@
         quiet: true
       when: not (bootstrap_seed_only | bool)
 
+    - name: Explain that AppRole rotation has no check-mode dry run
+      ansible.builtin.debug:
+        msg: AppRole rotation has no dry run because it consumes single-use credentials.
+      when: ansible_check_mode
+
+    - name: End AppRole rotation in check mode before using credentials
+      ansible.builtin.meta: end_play
+      when: ansible_check_mode
+
     - name: Unwrap the single-use secret_id (human mode)
       ansible.builtin.uri:
         url: "{{ rotate_bao_addr }}/v1/sys/wrapping/unwrap"
@@ -244,6 +253,9 @@
               client_token: "{{ rotate_preissued_token }}"
       no_log: true
       when: rotate_preissued_mode | bool
+
+    - name: Probe the roster key-reader AppRoles
+      ansible.builtin.include_tasks: tasks/rotate-roster-probe.yml
 
     - name: Guard the roster against live AppRole readers
       ansible.builtin.include_tasks: tasks/rotate-roster-guard.yml
