@@ -54,6 +54,16 @@ openbao_roster_gateway_key_reader_name: agentgateway-agent-keys
 openbao_roster_key_reader_approle_names: >-
   {{ ([openbao_roster_router_key_reader_name, openbao_roster_gateway_key_reader_name]
       if openbao_roster_agent_valid_names | length > 0 else []) }}
+# With no valid agent both readers are retired, so a roster that shrinks to
+# zero deletes them (init/10d, 08b) instead of failing on undeclared-live roles.
+openbao_roster_key_reader_retired_names: >-
+  {{ [] if openbao_roster_agent_valid_names | length > 0
+     else [openbao_roster_router_key_reader_name, openbao_roster_gateway_key_reader_name] }}
+# Both are openbao_secrets prefetch domains, redeemed by the converge controller,
+# which may be the workstation (tests/test_openbao_prefetch_domain_workstation_class.py).
+openbao_roster_key_reader_cidr_classes: >-
+  {{ dict(openbao_roster_key_reader_approle_names
+          | zip(['machine_or_workstation'] * (openbao_roster_key_reader_approle_names | length))) }}
 
 # Each valid roster agent's two generated keys: apps/<agent> (router key) and
 # apps/<agent>-gw (gateway key). Seeded beside openbao_generated_app_secrets

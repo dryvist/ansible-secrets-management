@@ -28,6 +28,12 @@ openbao_terrakube_base_policies: >-
   {%- endfor -%}
   {{ _entries }}
 
+# Declared only with a valid roster agent, like the reader AppRoles (07f).
+openbao_roster_key_reader_policies: >-
+  {{ ([{'name': openbao_roster_router_key_reader_name, 'template': 'llm-router-agent-keys-policy.hcl.j2'},
+       {'name': openbao_roster_gateway_key_reader_name, 'template': 'agentgateway-agent-keys-policy.hcl.j2'}]
+      if openbao_roster_agent_valid_names | length > 0 else []) }}
+
 openbao_roster_agent_policies: >-
   {%- set _entries = [] -%}
   {%- for agent in openbao_roster_agent_valid_names -%}
@@ -78,10 +84,6 @@ openbao_base_policies_static:
   - name: "{{ openbao_cribl_edge_mac_b_policy_name }}"
     template: cribl-edge-reader-policy.hcl.j2
     bucket: cribl-edge-mac-studio
-  - name: "{{ openbao_roster_router_key_reader_name }}"
-    template: llm-router-agent-keys-policy.hcl.j2
-  - name: "{{ openbao_roster_gateway_key_reader_name }}"
-    template: agentgateway-agent-keys-policy.hcl.j2
   - name: "{{ openbao_local_llm_policy_name }}"
     template: local-llm-policy.hcl.j2
   - name: "{{ openbao_local_llm_workstation_policy_name }}"
@@ -258,15 +260,13 @@ openbao_policies_without_inputs: >-
      + ([openbao_github_enterprise_read_policy_name]
         if openbao_github_enterprise_read_installation_id | length == 0 else [])
      + ([openbao_github_enterprise_admin_policy_name]
-        if openbao_github_enterprise_installation_id | length == 0 else [])
-     + ([openbao_roster_router_key_reader_name, openbao_roster_gateway_key_reader_name]
-        if openbao_roster_agent_valid_names | length == 0 else []) }}
+        if openbao_github_enterprise_installation_id | length == 0 else []) }}
 
 openbao_policies: >-
   {{ (openbao_base_policies
       + openbao_ai_capability_policies + openbao_ssh_sign_policies
       + openbao_ai_api_key_policies
       + openbao_github_write_scope_policies
-      + openbao_roster_agent_policies
+      + openbao_roster_agent_policies + openbao_roster_key_reader_policies
       + [{'name': 'proxman', 'template': 'proxman-policy.hcl.j2'}])
      | rejectattr('name', 'in', openbao_policies_without_inputs) | list }}

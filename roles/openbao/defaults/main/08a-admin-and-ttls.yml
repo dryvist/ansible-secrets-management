@@ -116,6 +116,8 @@ openbao_approle_secret_id_ttl_overrides:
   ai-donna: "{{ openbao_rotated_domain_secret_id_ttl }}"
   open-llm: "{{ openbao_rotated_domain_secret_id_ttl }}"
   ci-resolver: "{{ openbao_rotated_domain_secret_id_ttl }}"
+  llm-router-agent-keys: "{{ openbao_rotated_domain_secret_id_ttl }}"
+  agentgateway-agent-keys: "{{ openbao_rotated_domain_secret_id_ttl }}"
   approle-secret-id-rotate-scheduled: "{{ openbao_rotated_domain_secret_id_ttl }}"
   # Standing identities outside the scheduled rotation: their secret_id is
   # rendered onto the host (or held by the operator's deploy) at converge

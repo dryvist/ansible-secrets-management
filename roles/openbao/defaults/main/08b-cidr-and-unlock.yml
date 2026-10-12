@@ -162,7 +162,8 @@ openbao_approle_cidr_class_map: >-
                 | map('regex_replace', '^.*$', openbao_approle_default_cidr_class)
                 | list))
      | combine(openbao_approle_cidr_class_overrides)
-     | combine(openbao_github_write_scope_cidr_classes) }}
+     | combine(openbao_github_write_scope_cidr_classes)
+     | combine(openbao_roster_key_reader_cidr_classes) }}
 # The classes that actually carry a role, so the assert in init/10-approles.yml
 # demands only the CIDRs this declaration set really needs. `unbound` is
 # excluded by definition — it is the documented opt-out, not a missing value.

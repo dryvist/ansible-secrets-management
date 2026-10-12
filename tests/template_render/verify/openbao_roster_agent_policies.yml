@@ -110,8 +110,15 @@
           - openbao_roster_key_reader_approle_names == ['llm-router-agent-keys', 'agentgateway-agent-keys']
           - >-
             openbao_roster_key_reader_approles ==
-            [{'name': 'llm-router-agent-keys', 'policy': 'llm-router-agent-keys', 'secret_id_num_uses': 100},
-             {'name': 'agentgateway-agent-keys', 'policy': 'agentgateway-agent-keys', 'secret_id_num_uses': 100}]
+            [{'name': 'llm-router-agent-keys', 'policy': 'llm-router-agent-keys', 'secret_id_num_uses': 0},
+             {'name': 'agentgateway-agent-keys', 'policy': 'agentgateway-agent-keys', 'secret_id_num_uses': 0}]
+          - openbao_roster_key_reader_retired_names == []
+          - openbao_retired_approles | select('in', openbao_roster_key_reader_approle_names) | list == []
+          - openbao_retired_policies | select('in', openbao_roster_key_reader_approle_names) | list == []
+          - openbao_approle_cidr_class_map['llm-router-agent-keys'] == 'machine_or_workstation'
+          - openbao_approle_cidr_class_map['agentgateway-agent-keys'] == 'machine_or_workstation'
+          - openbao_approle_secret_id_ttl_overrides['llm-router-agent-keys'] == openbao_rotated_domain_secret_id_ttl
+          - openbao_approle_secret_id_ttl_overrides['agentgateway-agent-keys'] == openbao_rotated_domain_secret_id_ttl
           - >-
             openbao_policies
             | selectattr('name', 'in', openbao_roster_key_reader_approle_names)
@@ -130,6 +137,35 @@
             openbao_roster_agent_policies | sort(attribute='name')
             == [{'name': 'cribl-bifrost', 'template': 'roster-agent-policy.hcl.j2', 'agent': 'cribl-bifrost'},
                 {'name': 'splunk-heimdall', 'template': 'roster-agent-policy.hcl.j2', 'agent': 'splunk-heimdall'}]
+        quiet: true
+
+    - name: Capture the live AppRole and policy names a one-agent roster leaves behind
+      ansible.builtin.set_fact:
+        openbao_ai_agents:
+          splunk-heimdall:
+            owns: []
+        _shrink_live_approles: "{{ openbao_approles | map(attribute='name') | list }}"
+        _shrink_live_policies: "{{ openbao_policies | map(attribute='name') | list }}"
+
+    - name: Shrink the fixture roster to zero agents
+      ansible.builtin.set_fact:
+        openbao_ai_agents: {}
+
+    - name: Assert a roster shrink to zero retires both readers instead of failing on them
+      vars:
+        _undeclared_after_delete: >-
+          {{ _shrink_live_approles
+             | difference(openbao_retired_approles)
+             | difference(openbao_approles | map(attribute='name') | list) }}
+      ansible.builtin.assert:
+        that:
+          - "'llm-router-agent-keys' in _shrink_live_approles"
+          - "'agentgateway-agent-keys' in _shrink_live_policies"
+          - openbao_roster_key_reader_approle_names == []
+          - openbao_roster_key_reader_retired_names == ['llm-router-agent-keys', 'agentgateway-agent-keys']
+          - openbao_retired_approles | select('in', openbao_roster_key_reader_retired_names) | list | length == 2
+          - openbao_retired_policies | select('in', openbao_roster_key_reader_retired_names) | list | length == 2
+          - _undeclared_after_delete | select('in', openbao_roster_key_reader_retired_names) | list == []
         quiet: true
 
     - name: Set a fixture roster with an owned MCP slug that still has legacy readers
