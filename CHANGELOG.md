@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.10.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.9.1...v0.10.0) (2026-10-12)
+
+
+### Features
+
+* **openbao:** add per-engine component tags ([#105](https://github.com/dryvist/ansible-secrets-management/issues/105)) ([a883ff2](https://github.com/dryvist/ansible-secrets-management/commit/a883ff2eba591796c68c28ac23bdb4555478acf2))
+* **openbao:** keep plugin staging tasks unchanged ([446d55d](https://github.com/dryvist/ansible-secrets-management/commit/446d55d3461eb12313d47aaa3af9e03542cfe487))
+
+
+### Bug Fixes
+
+* **openbao:** treat an empty Azure engine client_id as missing config ([04f63ec](https://github.com/dryvist/ansible-secrets-management/commit/04f63ecf5291bc3dd8b2f36bba6ef094b9787bd0))
+* **openbao:** treat an empty Azure engine client_id as missing config ([#107](https://github.com/dryvist/ansible-secrets-management/issues/107)) ([a85ff41](https://github.com/dryvist/ansible-secrets-management/commit/a85ff412ad5b4cbf86ac36dc76feb925485e273e))
+
 ## [0.9.1](https://github.com/dryvist/ansible-secrets-management/compare/v0.9.0...v0.9.1) (2026-10-12)
 
 
