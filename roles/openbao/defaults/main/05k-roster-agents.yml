@@ -67,10 +67,23 @@ openbao_roster_agent_leaf_metadata: >-
   {%- endfor -%}
   {{ _metadata }}
 
-# Every app leaf the seed task generates.
+# Every non-roster app leaf the seed task generates. Roster leaves go through
+# seed_roster_agent_leaf.yml, which checks the leaf's owner before writing.
 openbao_seeded_generated_app_secrets: >-
-  {{ openbao_generated_app_secrets
-     | combine(openbao_router_key_catalog, openbao_roster_agent_generated_app_secrets) }}
+  {{ openbao_generated_app_secrets | combine(openbao_router_key_catalog) }}
+
+# Owner decision for one roster leaf, from the registered metadata read in
+# seed_roster_agent_leaf.yml and the leaf's expected openbao_seed_owner_metadata.
+openbao_seed_leaf_metadata: {}
+openbao_seed_owner_metadata: {}
+openbao_seed_leaf_exists: "{{ (openbao_seed_leaf_metadata.rc | default(1)) == 0 }}"
+openbao_seed_leaf_stored_metadata: >-
+  {{ ((openbao_seed_leaf_metadata.stdout | default('{}', true) | from_json).data.custom_metadata
+      | default({}, true))
+     if openbao_seed_leaf_exists | bool else {} }}
+openbao_seed_leaf_owner_conflict: >-
+  {{ (openbao_seed_leaf_exists | bool)
+     and openbao_seed_leaf_stored_metadata != openbao_seed_owner_metadata }}
 
 openbao_roster_agent_owned_slugs: >-
   {%- set _entries = [] -%}

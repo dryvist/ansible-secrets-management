@@ -115,7 +115,6 @@ def test_router_catalog_entries_feed_generation_and_the_apps_read_paths():
         {
             "openbao_generated_app_secrets": DEFAULTS_DATA["openbao_generated_app_secrets"],
             "openbao_router_key_catalog": catalog,
-            "openbao_roster_agent_generated_app_secrets": {},
         },
     )
     generated = _render(_generation_loop(), {"openbao_seeded_generated_app_secrets": seeded})

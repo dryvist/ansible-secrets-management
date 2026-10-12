@@ -7,13 +7,9 @@
 - name: Check live roster AppRoles and policies before policy writes
   when: openbao_roster_live_check_enabled
   block:
-    - name: Refuse to write roster policies without a converge token
-      ansible.builtin.assert:
-        that: openbao_bootstrap_token | default('', true) | length > 0
-        fail_msg: >-
-          The roster live-collision check needs the converge token, and none is
-          set on this real run. Refusing to continue to the policy writes.
-        quiet: true
+    - name: Refuse roster writes without a converge token
+      ansible.builtin.include_tasks:
+        file: ../roster_converge_token_assert.yml
 
     - name: List live AppRoles for roster collision checks
       ansible.builtin.command:
