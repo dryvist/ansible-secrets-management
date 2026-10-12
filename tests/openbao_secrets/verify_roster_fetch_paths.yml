@@ -1,0 +1,46 @@
+---
+# Proves roster-owned MCP credentials are removed from the centrally scoped
+# fetch domains while an empty roster preserves the declared domains.
+
+- name: Verify roster-owned MCP fetch paths
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - ../../roles/openbao_secrets/defaults/main/01-domains.yml
+  tasks:
+    - name: Set an empty roster
+      ansible.builtin.set_fact:
+        tofu_data:
+          agents: {}
+
+    - name: Apply the production domain narrowing task with an empty roster
+      ansible.builtin.include_tasks: ../../roles/openbao_secrets/tasks/narrow_domains.yml
+
+    - name: Assert an empty roster preserves every declared fetch domain
+      ansible.builtin.assert:
+        that:
+          - openbao_secrets_roster_owned_slug_names == []
+          - openbao_secrets_domains_to_fetch == openbao_secrets_domains
+        quiet: true
+
+    - name: Set a roster agent that owns Splunk
+      ansible.builtin.set_fact:
+        tofu_data:
+          agents:
+            splunk-heimdall:
+              owns: [splunk]
+
+    - name: Apply the production domain narrowing task with a Splunk owner
+      ansible.builtin.include_tasks: ../../roles/openbao_secrets/tasks/narrow_domains.yml
+
+    - name: Assert no fetch domain contains the owned Splunk MCP path
+      ansible.builtin.assert:
+        that:
+          - openbao_secrets_roster_owned_slug_names == ['splunk']
+          - >-
+            openbao_secrets_domains_to_fetch | map(attribute='name') | list
+            == openbao_secrets_domains | map(attribute='name') | list
+          - >-
+            (openbao_secrets_domains_to_fetch | map(attribute='paths') | flatten
+             | select('equalto', 'ai/mcp/splunk') | list) == []
+        quiet: true

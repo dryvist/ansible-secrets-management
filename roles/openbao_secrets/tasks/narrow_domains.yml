@@ -28,8 +28,17 @@
 - name: Narrow the domain list to what this run's hosts actually need
   ansible.builtin.set_fact:
     openbao_secrets_domains_to_fetch: >-
+      {%- set _owned_mcp_paths = openbao_secrets_roster_owned_slug_names
+          | map('regex_replace', '^', 'ai/mcp/') | list -%}
+      {%- set _paths = [] -%}
+      {%- for path in item.paths -%}
+      {%- set _path = path.get('path', '') if path is mapping else path -%}
+      {%- if _path not in _owned_mcp_paths -%}
+      {%- set _ = _paths.append(path) -%}
+      {%- endif -%}
+      {%- endfor -%}
       {{ openbao_secrets_domains_to_fetch
-         + ([item] if (
+         + ([item | combine({'paths': _paths})] if (
               (openbao_secrets_domain_groups[item.name] | default([])) | length == 0
               or ((openbao_secrets_domain_groups[item.name] | default([]))
                   | intersect(openbao_secrets_active_groups) | length > 0)
