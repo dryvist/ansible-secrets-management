@@ -252,29 +252,49 @@
         that: openbao_roster_agent_name_collisions == ['gateway-test']
         quiet: true
 
-    - name: Set a fixture roster with an empty converge token
+    - name: Set a fixture roster in check mode without a converge token
       ansible.builtin.set_fact:
         openbao_ai_agents:
           splunk-heimdall: {}
         openbao_bootstrap_token: ""
+        openbao_roster_live_check_mode: true
 
-    - name: Assert the live collision check is disabled without a converge token
+    - name: Assert the live collision check is disabled in check mode
       ansible.builtin.assert:
         that: not openbao_roster_live_check_enabled
         quiet: true
 
-    - name: Exercise the tokenless live-check skip path
+    - name: Exercise the check-mode skip path
       ansible.builtin.include_tasks:
         file: ../../../roles/openbao/tasks/init/08a-roster-live-collisions.yml
+
+    - name: Switch the fixture to a real run without a converge token
+      ansible.builtin.set_fact:
+        openbao_roster_live_check_mode: false
+
+    - name: Assert the live collision check is enabled on a real run
+      ansible.builtin.assert:
+        that: openbao_roster_live_check_enabled
+        quiet: true
+
+    - name: Exercise the real-run path without a converge token
+      block:
+        - name: Run the live collision check without a converge token
+          ansible.builtin.include_tasks:
+            file: ../../../roles/openbao/tasks/init/08a-roster-live-collisions.yml
+
+        - name: Fail if the tokenless real run was not refused
+          ansible.builtin.fail:
+            msg: The live collision check continued without a converge token.
+      rescue:
+        - name: Assert the tokenless real run was refused by the token assert
+          ansible.builtin.assert:
+            that: ansible_failed_task.name == 'Refuse to write roster policies without a converge token'
+            quiet: true
 
     - name: Set a fixture converge token for a non-empty roster
       ansible.builtin.set_fact:
         openbao_bootstrap_token: fixture-token
-
-    - name: Assert the live collision check is enabled with a token and roster
-      ansible.builtin.assert:
-        that: openbao_roster_live_check_enabled
-        quiet: true
 
     - name: Inject an unmarked live policy with a roster name
       ansible.builtin.set_fact:

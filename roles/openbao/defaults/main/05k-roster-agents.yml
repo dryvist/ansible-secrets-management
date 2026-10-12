@@ -6,9 +6,11 @@ openbao_roster_agent_name_pattern: '^[a-z]+-[a-z]+$'
 openbao_roster_agent_slug_pattern: '^[a-z][a-z0-9-]*$'
 openbao_roster_agent_policy_marker: "# managed-by: openbao roster-agent "
 
+# Check mode has no converge token (the issuer login is skipped), so the live
+# check runs only on a real converge. A real run without a token fails instead.
+openbao_roster_live_check_mode: "{{ ansible_check_mode }}"
 openbao_roster_live_check_enabled: >-
-  {{ openbao_ai_agents | length > 0
-     and openbao_bootstrap_token | default('', true) | length > 0 }}
+  {{ openbao_ai_agents | length > 0 and not (openbao_roster_live_check_mode | bool) }}
 
 openbao_roster_live_approle_names: []
 openbao_roster_live_policy_names: []
