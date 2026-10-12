@@ -9,9 +9,10 @@ openbao_roster_agent_policy_marker: "# managed-by: openbao roster-agent "
 # Must match the tofu roster's cataloged systems.
 openbao_roster_agent_ownable_slugs: [splunk, cribl]
 
+# Break-glass administration keeps access to owned MCP credentials by design.
 openbao_mcp_credential_custodians:
-  splunk: [ansible-converge, splunk-mcp-rotate, ai-rotate]
-  cribl: [ai-rotate]
+  splunk: [ai-admin, ansible-converge, splunk-mcp-rotate, ai-rotate]
+  cribl: [ai-admin, ai-rotate]
 
 # Non-custodian policies that still grant the slug once it is owned.
 openbao_mcp_credential_owners:
