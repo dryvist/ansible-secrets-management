@@ -89,7 +89,7 @@ def test_public_router_key_entries_remain_literal_and_allowlisted():
     generated = DEFAULTS_DATA["openbao_generated_app_secrets"]
     assert generated["agy"] == ["agy_llm_router_key"]
     assert generated["hermes-private"] == ["hermes_private_llm_router_key"]
-    assert generated["donna"] == ["donna_llm_router_key"]
+    assert generated["donna"] == ["donna_llm_router_key", "donna_a2a_token"]
     assert generated["zcode"] == ["zcode_llm_router_key"]
     assert generated["qwen-code"] == ["qwen_code_llm_router_key"]
     assert generated["opencode"] == ["opencode_llm_router_key"]
