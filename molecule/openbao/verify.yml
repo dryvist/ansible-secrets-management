@@ -39,8 +39,6 @@
     - name: Verify staged plugin binaries and specific policy grants (terraform-apply, ai-orchestrator)
       ansible.builtin.include_tasks: verify/plugins_and_policies.yml
 
-    - name: Verify Azure role input validation
-      ansible.builtin.include_tasks: verify/azure_role_validation.yml
 
     - name: Verify the SSH CA signing-role table and actor attachments match the ADR
       ansible.builtin.include_tasks: verify/ssh_signing.yml

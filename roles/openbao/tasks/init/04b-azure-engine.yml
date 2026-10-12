@@ -128,7 +128,9 @@
       openbao_azure_plugin_tune is changed
       or (openbao_azure_plugin_install_task | default({})) is changed
 
-- name: Check whether the Azure engine root config exists
+# The engine config holds the service principal OpenBao uses to mint client
+# secrets.
+- name: Check whether the Azure engine config already exists
   ansible.builtin.command:
     cmd: "bao read -format=json {{ openbao_azure_mount }}/config"
   environment:
@@ -147,22 +149,55 @@
     - openbao_bootstrap_token is defined
     - openbao_azure_engine_enabled | bool
 
-# The mount must exist before an operator can write the root config, so a
-# missing config skips role writes instead of failing the converge.
-- name: Report that Azure roles wait for the root config
-  ansible.builtin.debug:
+- name: Refuse to leave the Azure engine mounted with no config and no service principal supplied
+  ansible.builtin.fail:
     msg: >-
-      The Azure engine root config is missing, so Azure roles were skipped. An
-      operator writes {{ openbao_azure_mount }}/config and runs bao write -f
-      {{ openbao_azure_mount }}/rotate-root; the next converge creates the roles.
+      The Azure secrets engine at {{ openbao_azure_mount }}/ has no config
+      yet, and OPENBAO_AZURE_TENANT_ID/OPENBAO_AZURE_CLIENT_ID/
+      OPENBAO_AZURE_CLIENT_SECRET are unset. Re-run with those env vars
+      set, or set openbao_azure_engine_enabled: false to skip Azure entirely.
   when:
     - openbao_bootstrap_token is defined
     - openbao_azure_engine_enabled | bool
     - (openbao_azure_config_check.rc | default(1)) != 0
+    - >-
+      (openbao_azure_tenant_id | length == 0)
+      or (openbao_azure_client_id | length == 0)
+      or (openbao_azure_client_secret | length == 0)
 
-- name: Check whether each Azure role already exists
+# Write-once: a routine converge never overwrites the engine config; rotation is
+# a deliberate, separate operator action.
+- name: Configure the Azure engine service principal (first configuration only)
+  ansible.builtin.uri:
+    url: "{{ openbao_cli_addr }}/v1/{{ openbao_azure_mount }}/config"
+    method: POST
+    headers:
+      X-Vault-Token: "{{ openbao_bootstrap_token }}"
+    body_format: json
+    body:
+      tenant_id: "{{ openbao_azure_tenant_id }}"
+      client_id: "{{ openbao_azure_client_id }}"
+      client_secret: "{{ openbao_azure_client_secret }}"
+    status_code:
+      - 200
+      - 204
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
+  no_log: true
+  changed_when: true
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_azure_engine_enabled | bool
+    - (openbao_azure_config_check.rc | default(1)) != 0
+    - openbao_azure_tenant_id | length > 0
+    - openbao_azure_client_id | length > 0
+    - openbao_azure_client_secret | length > 0
+
+- name: Check whether the openbao-iac-admin Azure role already exists
   ansible.builtin.command:
-    cmd: "bao read -format=json {{ openbao_azure_mount }}/roles/{{ item.name }}"
+    cmd: "bao read -format=json {{ openbao_azure_mount }}/roles/{{ openbao_azure_iac_admin_role_name }}"
   environment:
     BAO_ADDR: "{{ openbao_cli_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
@@ -170,10 +205,7 @@
   become: "{{ openbao_cli_become }}"
   vars:
     ansible_become: "{{ openbao_cli_become }}"
-  loop: "{{ openbao_azure_roles }}"
-  loop_control:
-    label: role
-  register: openbao_azure_role_checks
+  register: openbao_azure_iac_admin_role_check
   no_log: true
   changed_when: false
   check_mode: false
@@ -181,17 +213,15 @@
   when:
     - openbao_bootstrap_token is defined
     - openbao_azure_engine_enabled | bool
-    - (openbao_azure_config_check.rc | default(1)) == 0
+    - openbao_azure_iac_admin_application_object_id | length > 0
 
-- name: Create each missing Azure role
+- name: Create the openbao-iac-admin Azure role (existing application, add-if-missing)
   ansible.builtin.command:
-    argv:
-      - bao
-      - write
-      - "{{ openbao_azure_mount }}/roles/{{ item.0.name }}"
-      - "application_object_id={{ item.0.application_object_id }}"
-      - "ttl={{ item.0.ttl }}"
-      - "max_ttl={{ item.0.max_ttl }}"
+    cmd: >-
+      bao write {{ openbao_azure_mount }}/roles/{{ openbao_azure_iac_admin_role_name }}
+      application_object_id={{ openbao_azure_iac_admin_application_object_id }}
+      ttl={{ openbao_azure_iac_admin_ttl }}
+      max_ttl={{ openbao_azure_iac_admin_ttl }}
   environment:
     BAO_ADDR: "{{ openbao_cli_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
@@ -199,13 +229,10 @@
   become: "{{ openbao_cli_become }}"
   vars:
     ansible_become: "{{ openbao_cli_become }}"
-  loop: "{{ openbao_azure_roles | zip(openbao_azure_role_checks.results | default([])) | list }}"
-  loop_control:
-    label: role
   no_log: true
   changed_when: true
   when:
     - openbao_bootstrap_token is defined
     - openbao_azure_engine_enabled | bool
-    - (openbao_azure_config_check.rc | default(1)) == 0
-    - (item.1.rc | default(1)) != 0
+    - openbao_azure_iac_admin_application_object_id | length > 0
+    - (openbao_azure_iac_admin_role_check.rc | default(1)) != 0
