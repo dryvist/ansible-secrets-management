@@ -29,14 +29,10 @@ A key is required only for first configuration or an explicit rotation; routine
 converges never rewrite it. Installation IDs come from the env document
 (`secret/platform/ansible/env`).
 
-The everyday App accepts extra installations through
-`OPENBAO_GITHUB_EXTRA_READ_INSTALLATION_IDS` and
-`OPENBAO_GITHUB_EXTRA_WRITE_INSTALLATION_IDS`, each as a comma-separated list
-of `owner=id` entries. Read entries add named read sets; only write entries
-extend the write-policy installation allowlists, so a read entry never grants
-write access. Scoped write policies pin `repositories` by name, so a scoped
-identity can also mint for a same-named repository in an extra write
-installation.
+The everyday App accepts extra read installations through
+`OPENBAO_GITHUB_EXTRA_READ_INSTALLATION_IDS`, as a comma-separated list of
+`owner=id` entries. Read entries add named read sets and never grant write
+access.
 
 Token access is tiered; the tier IS the privilege boundary:
 
@@ -48,10 +44,9 @@ Token access is tiered; the tier IS the privilege boundary:
   unattended Ansible execution plane can check out the repositories it runs,
   including one with a private submodule, without holding a stored token. Read
   only: a checkout can never write a repository.
-- **write (`github-write`)** — the raw `github/token` endpoint, limited to
-  the configured App installations. The policy requires `installation_id` +
-  `repositories`, pins the installation IDs and accepts any repository
-  selector; GitHub's installation repository selection is the scope
+- **write (`github-write`)** — the raw `github/token` endpoint; the policy
+  requires `installation_id` and `repositories`, does not pin the
+  installation, and GitHub's installation repository selection is the scope
   authority. `permissions` remains a narrowing map because GitHub only
   narrows a token below the App grant. The policy denies `org_name` and
   `repository_ids` outright. Standing ambient AppRole, plus the
@@ -59,7 +54,9 @@ Token access is tiered; the tier IS the privilege boundary:
   `secret/locks/github-write/` (KV-v2 CAS acquire, `delete_version_after`
   deadman).
   The helper requests one repository, but the policy also permits multiple repositories and full-installation
-  selectors. Realm policies restrict their own identities only.
+  selectors. Realm policies pin their own repository lists by name, not the
+  installation, so a scoped identity can also mint for a same-named repository
+  in any installation of the App.
 - **publish (`docs-publisher`)** — `github-admin/token/docs-publisher`: one
   repository, `contents: write` + `pull_requests: write`, all three stored in
   the set. The repository list comes from the iac secret store; with none
