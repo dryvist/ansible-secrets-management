@@ -1,0 +1,119 @@
+---
+# Offline contract for the ClickHouse reader and generated credential path.
+# Included by the AppRole class check and Molecule's RBAC verification.
+- name: Load the domain catalog for the ClickHouse contract
+  ansible.builtin.include_vars:
+    file: "{{ playbook_dir }}/../../roles/openbao_secrets/defaults/main/01-domains.yml"
+    name: clickhouse_domain_defaults
+
+- name: Assert the ClickHouse domain, policy registration and standing AppRole agree
+  vars:
+    clickhouse_roles: >-
+      {{ openbao_approles | selectattr('name', 'equalto', 'clickhouse') | list }}
+    clickhouse_policies: >-
+      {{ openbao_base_policies_static | selectattr('name', 'equalto', 'clickhouse') | list }}
+    clickhouse_domains: >-
+      {{ clickhouse_domain_defaults.openbao_secrets_domains
+         | selectattr('name', 'equalto', 'clickhouse') | list }}
+  ansible.builtin.assert:
+    that:
+      - openbao_clickhouse_policy_name == 'clickhouse'
+      - openbao_clickhouse_approle_name == 'clickhouse'
+      - clickhouse_roles | length == 1
+      - clickhouse_policies | length == 1
+      - clickhouse_domains | length == 1
+      - clickhouse_domains[0].paths == ['ai/clickhouse']
+      - clickhouse_policies[0].template == 'clickhouse-policy.hcl.j2'
+      - clickhouse_roles[0].policy == openbao_clickhouse_policy_name
+      - clickhouse_roles[0].token_policies is not defined
+      - clickhouse_roles[0].manage_secret_id | default(true) | bool
+      - clickhouse_roles[0].secret_id_num_uses == 0
+      - clickhouse_roles[0].secret_id_bound_cidrs is not defined
+      - clickhouse_roles[0].token_ttl | default(openbao_approle_token_ttl) == openbao_approle_token_ttl
+      - clickhouse_roles[0].token_max_ttl | default(openbao_approle_token_max_ttl) == openbao_approle_token_max_ttl
+    fail_msg: >-
+      ClickHouse must have one required ai/clickhouse domain and one standing
+      AppRole attached only to the registered clickhouse policy.
+
+- name: Assert ClickHouse uses the local-llm prefetch rotation and source class
+  ansible.builtin.assert:
+    that:
+      - openbao_clickhouse_approle_name in openbao_secrets_domain_approle_names
+      - openbao_approle_secret_id_ttl_overrides[openbao_clickhouse_approle_name] == openbao_rotated_domain_secret_id_ttl
+      - >-
+        openbao_approle_secret_id_ttl_overrides[openbao_clickhouse_approle_name]
+        == openbao_approle_secret_id_ttl_overrides[openbao_local_llm_approle_name]
+      - openbao_approle_cidr_class_map[openbao_clickhouse_approle_name] == 'machine_or_workstation'
+      - >-
+        openbao_approle_cidr_class_map[openbao_clickhouse_approle_name]
+        == openbao_approle_cidr_class_map[openbao_local_llm_approle_name]
+      - openbao_clickhouse_approle_name in clickhouse_domain_defaults.openbao_secrets_operator_domains
+    fail_msg: >-
+      ClickHouse must use the shared rotated SecretID TTL, the prefetch CIDR
+      class and the operator fallback catalog.
+
+- name: Assert the ClickHouse policy is read-only on exactly its data and metadata
+  vars:
+    ansible_managed: test fixture
+    clickhouse_policy: >-
+      {{ lookup('template', playbook_dir ~ '/../../roles/openbao/templates/clickhouse-policy.hcl.j2')
+         | regex_replace('(?m)^\s*#.*$', '') | regex_replace('\s+', '') }}
+    clickhouse_expected_policy: |
+      path "{{ openbao_kv_mount }}/data/ai/clickhouse" {
+        capabilities = ["read"]
+      }
+      path "{{ openbao_kv_mount }}/metadata/ai/clickhouse" {
+        capabilities = ["read"]
+      }
+  ansible.builtin.assert:
+    that:
+      - clickhouse_policy == (clickhouse_expected_policy | regex_replace('\s+', ''))
+    fail_msg: >-
+      The ClickHouse policy must grant only read on the exact ai/clickhouse
+      data and metadata paths, with no listing or additional stanzas.
+
+- name: Assert the broad local-llm read grant cannot reach the ClickHouse leaf
+  vars:
+    ansible_managed: test fixture
+    local_llm_policy: >-
+      {{ lookup('template', playbook_dir ~ '/../../roles/openbao/templates/local-llm-policy.hcl.j2')
+         | regex_replace('(?m)^\s*#.*$', '') | regex_replace('\s+', '') }}
+  ansible.builtin.assert:
+    that:
+      - >-
+        ('path"' ~ openbao_kv_mount ~ '/data/ai/clickhouse"{capabilities=["deny"]}')
+        in local_llm_policy
+      - >-
+        ('path"' ~ openbao_kv_mount ~ '/metadata/ai/clickhouse"{capabilities=["deny"]}')
+        in local_llm_policy
+    fail_msg: >-
+      The local-llm policy must deny the exact ai/clickhouse data and metadata
+      paths so only the clickhouse AppRole reads them.
+
+- name: Assert ClickHouse passwords use the existing generator at their internal path
+  vars:
+    openbao_seed_app: clickhouse
+    llm_router_key_catalog_facts:
+      openbao_router_key_catalog: {}
+    clickhouse_fields: [APP_PASSWORD, GRAFANA_PASSWORD, HYPERDX_PASSWORD, SPLUNK_PASSWORD]
+    clickhouse_seed_source: >-
+      {{ lookup('file', playbook_dir ~ '/../../roles/openbao/tasks/seed_generated_app_secret.yml') }}
+    clickhouse_seed_read: "{{ clickhouse_seed_source | regex_search('(?m)^    cmd:.*$') }}"
+    clickhouse_seed_write: "{{ clickhouse_seed_source | regex_search('(?m)^    url:.*$') }}"
+  ansible.builtin.assert:
+    that:
+      - openbao_generated_app_secrets.clickhouse == clickhouse_fields
+      - openbao_seeded_generated_app_secrets.clickhouse == clickhouse_fields
+      - openbao_generated_app_secret_paths.clickhouse == 'ai/clickhouse'
+      - openbao_seed_app_path == 'ai/clickhouse'
+      - "'openbao_seed_app_path' in clickhouse_seed_read"
+      - "'openbao_seed_app_path' in clickhouse_seed_write"
+      - "'clickhouse' not in openbao_apps_read_apps"
+      - "'clickhouse' not in openbao_roster_agent_apps_leaf_names"
+      - "'clickhouse' in openbao_roster_agent_ai_leaf_names"
+      - clickhouse_fields | select('equalto', 'secret_key') | list == []
+      - clickhouse_fields | select('search', openbao_app_secret_username_suffix ~ '$') | list == []
+      - clickhouse_fields | select('search', openbao_app_secret_router_key_suffix ~ '$') | list == []
+    fail_msg: >-
+      ClickHouse must generate the four normal password fields at ai/clickhouse,
+      with no apps/clickhouse grant or duplicate apps leaf.

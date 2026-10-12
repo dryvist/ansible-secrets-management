@@ -74,6 +74,9 @@ def _read_apps() -> set[str]:
     promoted = _yaml(DEFAULTS / "01b-app-secrets.yml")["openbao_promoted_app_secrets"]
     values = {
         "openbao_generated_app_secrets": generated,
+        "openbao_generated_app_secret_paths": _yaml(DEFAULTS / "01d-app-secret-paths.yml")[
+            "openbao_generated_app_secret_paths"
+        ],
         "openbao_promoted_app_secrets": promoted,
         # The generated catalog is loaded by openbao's role dependency; this
         # contract isolates Cribl's existing grants from that integration.
@@ -232,6 +235,7 @@ class CriblEdgeReaderContract(unittest.TestCase):
             "05b-domain-policy-approle-names.yml",
             "05c-terrakube-and-remaining-domain-names.yml",
             "05c-ai-agent-names.yml",
+            "07a-derived-rollups-and-ttls.yml",
             "05-ssh-ca-engine.yml",
         ):
             rotation_values.update(_yaml(DEFAULTS / defaults_file))

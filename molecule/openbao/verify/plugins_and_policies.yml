@@ -126,3 +126,6 @@
     fail_msg: >-
       The maintenance-window grant must be an exact read-only path; an
       agent reads window state and never writes it.
+
+- name: Verify the ClickHouse reader and generated credential contract
+  ansible.builtin.include_tasks: ../../../tests/approle_cidr_class/clickhouse.yml

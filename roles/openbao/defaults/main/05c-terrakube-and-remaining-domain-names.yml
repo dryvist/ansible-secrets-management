@@ -148,7 +148,8 @@ openbao_apps_approle_name: apps
 openbao_apps_read_published_apps:
   - pve-exporter
 openbao_apps_read_apps: >-
-  {{ ((openbao_generated_app_secrets.keys() | list)
+  {{ ((openbao_generated_app_secrets.keys()
+       | reject('in', openbao_generated_app_secret_paths | default({})) | list)
       + (openbao_promoted_app_secrets.keys() | list)
       + (openbao_router_key_catalog.keys() | list)
       + openbao_apps_read_published_apps)
@@ -178,6 +179,7 @@ openbao_secrets_domain_approle_names: >-
       openbao_ntfy_approle_name,
       openbao_apps_approle_name,
       openbao_local_llm_approle_name,
+      openbao_clickhouse_approle_name,
       openbao_local_llm_workstation_approle_name]
      + openbao_cribl_edge_mac_approle_names
      + openbao_roster_agent_valid_names

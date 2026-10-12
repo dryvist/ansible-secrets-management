@@ -149,6 +149,19 @@
     - openbao_bootstrap_token is defined
     - openbao_azure_engine_enabled | bool
 
+# An unconfigured Azure mount still answers the config read, with an empty
+# client_id, so the read result alone does not prove the config exists.
+- name: Decide whether the Azure engine config is missing
+  ansible.builtin.set_fact:
+    openbao_azure_config_missing: >-
+      {{ (openbao_azure_config_check.rc | default(1)) != 0
+         or ((((openbao_azure_config_check.stdout | default('', true)) or '{}')
+               | from_json).get('data') or {}).get('client_id', '') | length == 0 }}
+  no_log: true
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_azure_engine_enabled | bool
+
 - name: Refuse to leave the Azure engine mounted with no config and no service principal supplied
   ansible.builtin.fail:
     msg: >-
@@ -159,7 +172,7 @@
   when:
     - openbao_bootstrap_token is defined
     - openbao_azure_engine_enabled | bool
-    - (openbao_azure_config_check.rc | default(1)) != 0
+    - openbao_azure_config_missing | bool
     - >-
       (openbao_azure_tenant_id | length == 0)
       or (openbao_azure_client_id | length == 0)
@@ -190,7 +203,7 @@
   when:
     - openbao_bootstrap_token is defined
     - openbao_azure_engine_enabled | bool
-    - (openbao_azure_config_check.rc | default(1)) != 0
+    - openbao_azure_config_missing | bool
     - openbao_azure_tenant_id | length > 0
     - openbao_azure_client_id | length > 0
     - openbao_azure_client_secret | length > 0
