@@ -9,7 +9,8 @@
 #
 #   * required_parameters makes an unconstrained (full-installation) request
 #     impossible.
-#   * allowed_parameters pins installation_id and repositories to exact string
+#   * installation_id is not pinned; GitHub's App installation selects the
+#     repositories. The repositories parameter is pinned to exact string
 #     literals. NEVER a glob — the ACL cannot element-match list-valued
 #     parameters, so the wrapper sends a comma-capable STRING, and a prefix
 #     glob would let "<allowed>,<not-allowed>" ride through the plugin's comma
@@ -21,13 +22,7 @@ path "{{ openbao_github_everyday_mount }}/token" {
   capabilities = ["create", "update"]
   required_parameters = ["installation_id", "repositories"]
   allowed_parameters = {
-    "installation_id" = [
-      "{{ openbao_github_everyday_dryvist_installation_id }}",
-      "{{ openbao_github_everyday_personal_installation_id }}"{{ "," if openbao_github_everyday_extra_write_installations_parsed | length > 0 }}
-{% for installation in openbao_github_everyday_extra_write_installations_parsed %}
-      "{{ installation.installation_id }}"{{ "," if not loop.last }}
-{% endfor %}
-    ]
+    "installation_id" = []
     "repositories" = [
 {% for repo in item.repos %}
       "{{ repo }}"{{ "," if not loop.last }}
