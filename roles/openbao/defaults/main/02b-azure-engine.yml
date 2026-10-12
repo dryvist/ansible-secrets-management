@@ -6,21 +6,20 @@ openbao_azure_tenant_id: >-
 openbao_azure_roles_json: >-
   {{ lookup('env', 'OPENBAO_AZURE_ROLES') | default('', true) }}
 openbao_azure_roles: >-
-  {{ openbao_azure_roles_json | default('[]', true) | from_json }}
-openbao_azure_engine_enabled: "{{ openbao_azure_roles_json | length > 0 }}"
+  {{ openbao_azure_roles_json | trim | default('[]', true) | from_json }}
+openbao_azure_engine_enabled: >-
+  {{ openbao_azure_roles_json | regex_replace('\\s+', '') not in ['', '[]'] }}
 
 # renovate: datasource=github-releases depName=openbao/openbao-plugins
 openbao_azure_plugin_version: "0.23.0"
+# Refresh this digest with the version above when Renovate proposes an update.
+openbao_azure_plugin_tarball_sha256: 016eb4ee00843d0fb95837572930c34f9f2827f4bce313d632a75013c1b78b56
 openbao_azure_plugin_catalog_version: "v{{ openbao_azure_plugin_version }}"
 openbao_azure_plugin_release_base_url: "https://github.com/openbao/openbao-plugins/releases/download"
 openbao_azure_plugin_release_tag: "secrets-azure-v{{ openbao_azure_plugin_version }}"
 openbao_azure_plugin_tarball: "openbao-plugin-secrets-azure_linux_amd64_v1.tar.gz"
 openbao_azure_plugin_binary: "openbao-plugin-secrets-azure_linux_amd64_v1"
 openbao_azure_plugin_command: "{{ openbao_azure_plugin_binary }}-v{{ openbao_azure_plugin_version }}"
-openbao_azure_plugin_checksums_filename: "checksums-secrets-azure.txt"
-openbao_azure_plugin_checksums_url: >-
-  {{ openbao_azure_plugin_release_base_url }}/{{ openbao_azure_plugin_release_tag
-  }}/{{ openbao_azure_plugin_checksums_filename }}
 openbao_azure_plugin_tarball_url: >-
   {{ openbao_azure_plugin_release_base_url }}/{{ openbao_azure_plugin_release_tag
   }}/{{ openbao_azure_plugin_tarball }}

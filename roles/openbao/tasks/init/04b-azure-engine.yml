@@ -20,6 +20,7 @@
   when:
     - openbao_bootstrap_token is defined
     - openbao_azure_engine_enabled | bool
+    - not ansible_check_mode or openbao_azure_plugin_stat.stat.exists
 
 - name: Check whether the Azure plugin is already registered
   ansible.builtin.command:
@@ -107,6 +108,25 @@
     - >-
       ((openbao_mounts_raw.stdout | from_json)[openbao_azure_mount ~ '/'].plugin_version
        | default('')) != openbao_azure_plugin_catalog_version
+
+- name: Reload the Azure plugin across the Raft cluster after an upgrade
+  ansible.builtin.command:
+    cmd: "bao plugin reload -plugin={{ openbao_azure_plugin_name }} -scope=global"
+  environment:
+    BAO_ADDR: "{{ openbao_cli_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
+  no_log: true
+  changed_when: true
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_azure_engine_enabled | bool
+    - >-
+      openbao_azure_plugin_tune is changed
+      or openbao_azure_plugin_install_task is changed
 
 - name: Check whether the Azure engine root config exists
   ansible.builtin.command:
