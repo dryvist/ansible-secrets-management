@@ -71,7 +71,7 @@
 - name: Stage OpenBao release checksums on controller
   ansible.builtin.get_url:
     url: "{{ openbao_checksums_url }}"
-    dest: "/tmp/openbao-{{ openbao_version }}-checksums-linux.txt"
+    dest: "/tmp/openbao-{{ openbao_version }}-{{ openbao_checksums_filename }}"
     mode: "0644"
     force: true
   delegate_to: localhost
@@ -90,7 +90,7 @@
 - name: Read the expected SHA256 for the amd64 .deb
   ansible.builtin.set_fact:
     openbao_deb_sha256: >-
-      {{ (lookup('file', '/tmp/openbao-' ~ openbao_version ~ '-checksums-linux.txt')
+      {{ (lookup('file', '/tmp/openbao-' ~ openbao_version ~ '-' ~ openbao_checksums_filename)
           | regex_search('([0-9a-f]{64})\s+' ~ (openbao_deb_filename | regex_escape), '\1')
           | first) }}
   run_once: true
