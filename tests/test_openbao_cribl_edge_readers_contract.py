@@ -243,6 +243,7 @@ class CriblEdgeReaderContract(unittest.TestCase):
         ]
         rotation_values.update(
             openbao_cribl_edge_mac_approle_names=rotated_cribl_roles,
+            openbao_roster_agent_valid_names=[],
             openbao_roster_key_reader_approle_names=[],
             openbao_hermes_private_agent_secret_id_cidr="",
         )
@@ -267,7 +268,7 @@ class CriblEdgeReaderContract(unittest.TestCase):
                 )
                 self.assertEqual(row["secret_id_num_uses"], 100)
                 self.assertEqual(
-                    ttl_defaults["openbao_approle_secret_id_ttl_overrides"][role_name],
+                    ttl_defaults["openbao_approle_secret_id_ttl_overrides_base"][role_name],
                     "{{ openbao_rotated_domain_secret_id_ttl }}",
                 )
                 self.assertEqual(_seconds(ttl_defaults["openbao_rotated_domain_secret_id_ttl"]), 129600)
