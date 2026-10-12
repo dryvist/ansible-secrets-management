@@ -13,6 +13,12 @@ path "{{ openbao_kv_mount }}/data/apps/{{ item.agent }}" {
 path "{{ openbao_kv_mount }}/metadata/apps/{{ item.agent }}" {
   capabilities = ["read", "list"]
 }
+path "{{ openbao_kv_mount }}/data/apps/{{ item.agent }}-gw" {
+  capabilities = ["read"]
+}
+path "{{ openbao_kv_mount }}/metadata/apps/{{ item.agent }}-gw" {
+  capabilities = ["read", "list"]
+}
 
 {% for slug in openbao_ai_agents[item.agent].owns %}
 path "{{ openbao_kv_mount }}/data/ai/mcp/{{ slug }}" {

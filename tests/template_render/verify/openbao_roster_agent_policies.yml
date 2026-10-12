@@ -114,6 +114,8 @@
              openbao_kv_mount ~ '/metadata/ai/splunk-heimdall',
              openbao_kv_mount ~ '/data/apps/splunk-heimdall',
              openbao_kv_mount ~ '/metadata/apps/splunk-heimdall',
+             openbao_kv_mount ~ '/data/apps/splunk-heimdall-gw',
+             openbao_kv_mount ~ '/metadata/apps/splunk-heimdall-gw',
              openbao_kv_mount ~ '/data/ai/mcp/splunk',
              openbao_kv_mount ~ '/metadata/ai/mcp/splunk'] | sort
           - >-
@@ -121,9 +123,11 @@
             [openbao_kv_mount ~ '/data/ai/cribl-bifrost',
              openbao_kv_mount ~ '/metadata/ai/cribl-bifrost',
              openbao_kv_mount ~ '/data/apps/cribl-bifrost',
-             openbao_kv_mount ~ '/metadata/apps/cribl-bifrost'] | sort
-          - _heimdall_capabilities == ['"read"', '"read", "list"'] * 3
-          - _bifrost_capabilities == ['"read"', '"read", "list"'] * 2
+             openbao_kv_mount ~ '/metadata/apps/cribl-bifrost',
+             openbao_kv_mount ~ '/data/apps/cribl-bifrost-gw',
+             openbao_kv_mount ~ '/metadata/apps/cribl-bifrost-gw'] | sort
+          - _heimdall_capabilities == ['"read"', '"read", "list"'] * 4
+          - _bifrost_capabilities == ['"read"', '"read", "list"'] * 3
           - _bifrost_hcl is not search('/ai/mcp/')
         fail_msg: >-
           The roster-agent policies do not match their expected path families
