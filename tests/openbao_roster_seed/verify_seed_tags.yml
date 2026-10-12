@@ -1,0 +1,51 @@
+---
+# Run by tests/test_openbao_roster_seed_tags.py with `--tags openbao_kv_seed`
+# and a stub `bao` on PATH that reports a leaf held by another owner.
+- name: Verify the roster leaf seed under a seed-only tag filter
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+
+  tasks:
+    - name: Load the openbao role defaults
+      ansible.builtin.include_vars:
+        dir: ../../roles/openbao/defaults/main
+      tags:
+        - always
+
+    - name: Set a real run with a converge token for one roster leaf
+      ansible.builtin.set_fact:
+        openbao_roster_live_check_mode: false
+        openbao_bootstrap_token: fixture-token
+        openbao_cli_host: localhost
+        openbao_cli_become: false
+        openbao_cli_addr: http://127.0.0.1:9
+        openbao_seed_app: splunk-heimdall
+        openbao_seed_fields: [splunk_heimdall_llm_router_key]
+        openbao_seed_owner_metadata:
+          managed-by: roster-agent:splunk-heimdall
+      tags:
+        - always
+
+    - name: Exercise the roster leaf seed through a tagged dynamic include
+      tags:
+        - openbao_kv_seed
+      block:
+        - name: Seed the roster leaf as the KV seed step does
+          ansible.builtin.include_tasks:
+            file: ../../roles/openbao/tasks/seed_roster_agent_leaf.yml
+            apply:
+              tags:
+                - openbao_kv_seed
+
+        - name: Fail if the owner check did not stop the seed
+          ansible.builtin.fail:
+            msg: The roster leaf seed continued past a foreign owner.
+      rescue:
+        - name: Assert the owner check refused the foreign leaf
+          ansible.builtin.assert:
+            that: ansible_failed_task.name == 'Refuse a roster key leaf that another owner holds'
+            quiet: true

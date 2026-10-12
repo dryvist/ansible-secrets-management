@@ -1,0 +1,42 @@
+---
+# An existing leaf must already carry exactly this agent's marker. The marker is
+# written only after this run created the leaf, so an existing unmarked leaf is
+# never claimed.
+- name: Refuse a roster key leaf that another owner holds
+  ansible.builtin.assert:
+    that: not (openbao_seed_leaf_owner_conflict | bool)
+    fail_msg: >-
+      secret apps/{{ openbao_seed_app }} already exists without the
+      {{ openbao_seed_owner_metadata }} custom metadata. Refusing to write it.
+    quiet: true
+
+# For an absent leaf the data write carries cas=0, so it fails if anything
+# created the leaf after the metadata read; the marker follows only on success.
+- name: Generate and seed the roster key leaf
+  ansible.builtin.include_tasks:
+    file: seed_generated_app_secret.yml
+    apply:
+      tags:
+        - openbao_kv_seed
+  vars:
+    openbao_seed_create_only: "{{ not (openbao_seed_leaf_exists | bool) }}"
+  tags:
+    - openbao_kv_seed
+
+- name: Mark the absent roster key leaf with its owner
+  ansible.builtin.uri:
+    url: "{{ openbao_cli_addr }}/v1/{{ openbao_kv_mount }}/metadata/apps/{{ openbao_seed_app }}"
+    method: POST
+    headers:
+      X-Vault-Token: "{{ openbao_bootstrap_token }}"
+    body_format: json
+    body:
+      custom_metadata: "{{ openbao_seed_owner_metadata }}"
+    status_code: [200, 204]
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
+  changed_when: true
+  no_log: true
+  when: not (openbao_seed_leaf_exists | bool)

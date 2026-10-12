@@ -1,0 +1,14 @@
+---
+# Shared by every roster write path (08a live check, roster leaf seed). Callers
+# skip in check mode, so reaching this on a real run without a token fails.
+- name: Refuse roster writes without a converge token
+  ansible.builtin.assert:
+    that: openbao_bootstrap_token | default('', true) | length > 0
+    fail_msg: >-
+      Roster writes need the converge token, and none is set on this real run.
+      Refusing to continue.
+    quiet: true
+  # A dynamic include drops its caller's tags; `always` keeps a tag-scoped run
+  # (openbao_rbac, openbao_kv_seed) from skipping this check.
+  tags:
+    - always

@@ -45,6 +45,46 @@ openbao_roster_agent_invalid_names: >-
   {%- endfor -%}
   {{ _invalid }}
 
+# Each valid roster agent's two generated keys: apps/<agent> (router key) and
+# apps/<agent>-gw (gateway key). Seeded beside openbao_generated_app_secrets
+# but kept out of it, so the shared `apps` read grant never covers them.
+openbao_roster_agent_generated_app_secrets: >-
+  {%- set _secrets = {} -%}
+  {%- for agent in openbao_ai_agents | reject('in', openbao_roster_agent_invalid_names) -%}
+  {%- set _field = agent | replace('-', '_') -%}
+  {%- set _ = _secrets.update({agent: [_field ~ '_llm_router_key'],
+                               agent ~ '-gw': [_field ~ '_agentgateway_key']}) -%}
+  {%- endfor -%}
+  {{ _secrets }}
+
+# KV custom metadata the seed writes on each roster leaf. The live check in
+# 08a-roster-live-collisions.yml accepts an existing leaf only with this value.
+openbao_roster_agent_leaf_metadata: >-
+  {%- set _metadata = {} -%}
+  {%- for agent in openbao_ai_agents | reject('in', openbao_roster_agent_invalid_names) -%}
+  {%- set _ = _metadata.update({agent: {'managed-by': 'roster-agent:' ~ agent},
+                                agent ~ '-gw': {'managed-by': 'roster-agent:' ~ agent}}) -%}
+  {%- endfor -%}
+  {{ _metadata }}
+
+# Every non-roster app leaf the seed task generates. Roster leaves go through
+# seed_roster_agent_leaf.yml, which checks the leaf's owner before writing.
+openbao_seeded_generated_app_secrets: >-
+  {{ openbao_generated_app_secrets | combine(openbao_router_key_catalog) }}
+
+# Owner decision for one roster leaf, from the registered metadata read in
+# seed_roster_agent_leaf.yml and the leaf's expected openbao_seed_owner_metadata.
+openbao_seed_leaf_metadata: {}
+openbao_seed_owner_metadata: {}
+openbao_seed_leaf_exists: "{{ (openbao_seed_leaf_metadata.rc | default(1)) == 0 }}"
+openbao_seed_leaf_stored_metadata: >-
+  {{ ((openbao_seed_leaf_metadata.stdout | default('{}', true) | from_json).data.custom_metadata
+      | default({}, true))
+     if openbao_seed_leaf_exists | bool else {} }}
+openbao_seed_leaf_owner_conflict: >-
+  {{ (openbao_seed_leaf_exists | bool)
+     and openbao_seed_leaf_stored_metadata != openbao_seed_owner_metadata }}
+
 openbao_roster_agent_owned_slugs: >-
   {%- set _entries = [] -%}
   {%- for agent, definition in openbao_ai_agents.items() -%}

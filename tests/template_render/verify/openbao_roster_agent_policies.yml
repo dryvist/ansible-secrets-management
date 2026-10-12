@@ -112,6 +112,147 @@
           cribl-bifrost: {}
         openbao_mcp_credential_owners: {}
 
+    - name: Assert each roster agent gets its two generated keys outside the apps read grant
+      vars:
+        llm_router_key_catalog_facts:
+          openbao_router_key_catalog: {}
+      ansible.builtin.assert:
+        that:
+          - >-
+            openbao_roster_agent_generated_app_secrets
+            == {'splunk-heimdall': ['splunk_heimdall_llm_router_key'],
+                'splunk-heimdall-gw': ['splunk_heimdall_agentgateway_key'],
+                'cribl-bifrost': ['cribl_bifrost_llm_router_key'],
+                'cribl-bifrost-gw': ['cribl_bifrost_agentgateway_key']}
+          - >-
+            openbao_roster_agent_generated_app_secrets.keys()
+            | select('in', openbao_apps_read_apps) | list == []
+          - >-
+            openbao_roster_agent_generated_app_secrets.keys()
+            | select('in', openbao_generated_app_secrets) | list == []
+          - >-
+            openbao_roster_agent_generated_app_secrets.keys()
+            | select('in', openbao_seeded_generated_app_secrets) | list == []
+          - >-
+            openbao_roster_agent_leaf_metadata
+            == {'splunk-heimdall': {'managed-by': 'roster-agent:splunk-heimdall'},
+                'splunk-heimdall-gw': {'managed-by': 'roster-agent:splunk-heimdall'},
+                'cribl-bifrost': {'managed-by': 'roster-agent:cribl-bifrost'},
+                'cribl-bifrost-gw': {'managed-by': 'roster-agent:cribl-bifrost'}}
+        quiet: true
+
+    - name: Inject the seeded leaf metadata as live KV metadata
+      ansible.builtin.set_fact:
+        openbao_roster_live_kv_metadata: >-
+          {%- set _paths = {} -%}
+          {%- for leaf, metadata in openbao_roster_agent_leaf_metadata.items() -%}
+          {%- set _ = _paths.update({'apps/' ~ leaf: metadata}) -%}
+          {%- endfor -%}
+          {{ _paths }}
+
+    - name: Assert the seeded leaf metadata passes the live KV metadata check
+      ansible.builtin.assert:
+        that:
+          - openbao_roster_live_kv_metadata | length == 4
+          - openbao_roster_live_kv_metadata_conflicts == []
+        quiet: true
+
+    - name: Clear the injected live KV metadata
+      ansible.builtin.set_fact:
+        openbao_roster_live_kv_metadata: {}
+
+    - name: Set a roster leaf held by another owner
+      ansible.builtin.set_fact:
+        openbao_seed_app: splunk-heimdall
+        openbao_seed_owner_metadata:
+          managed-by: roster-agent:splunk-heimdall
+        openbao_seed_leaf_metadata:
+          rc: 0
+          stdout: '{"data": {"custom_metadata": {"managed-by": "example-other-owner"}}}'
+
+    - name: Exercise the owner check on a foreign leaf
+      block:
+        - name: Run the roster leaf owner step on a foreign leaf
+          ansible.builtin.include_tasks:
+            file: ../../../roles/openbao/tasks/seed_roster_agent_leaf_owner.yml
+
+        - name: Fail if the foreign leaf was not refused
+          ansible.builtin.fail:
+            msg: The roster leaf seed continued past a foreign owner.
+      rescue:
+        - name: Assert the foreign leaf was refused before any write
+          ansible.builtin.assert:
+            that: ansible_failed_task.name == 'Refuse a roster key leaf that another owner holds'
+            quiet: true
+
+    - name: Set an existing roster leaf with no custom metadata
+      ansible.builtin.set_fact:
+        openbao_seed_leaf_metadata:
+          rc: 0
+          stdout: '{"data": {"custom_metadata": null}}'
+
+    - name: Assert an existing unmarked leaf is a conflict
+      ansible.builtin.assert:
+        that:
+          - openbao_seed_leaf_exists | bool
+          - openbao_seed_leaf_owner_conflict | bool
+        quiet: true
+
+    - name: Set a roster leaf already marked for this agent
+      ansible.builtin.set_fact:
+        openbao_seed_leaf_metadata:
+          rc: 0
+          stdout: '{"data": {"custom_metadata": {"managed-by": "roster-agent:splunk-heimdall"}}}'
+
+    - name: Assert a leaf marked for this agent passes without a new marker
+      ansible.builtin.assert:
+        that:
+          - openbao_seed_leaf_exists | bool
+          - not (openbao_seed_leaf_owner_conflict | bool)
+        quiet: true
+
+    - name: Set an absent roster leaf
+      ansible.builtin.set_fact:
+        openbao_seed_leaf_metadata:
+          rc: 2
+          stdout: ""
+          stderr: No value found at secret/metadata/apps/splunk-heimdall
+
+    - name: Assert an absent leaf passes and is marked on creation
+      ansible.builtin.assert:
+        that:
+          - not (openbao_seed_leaf_exists | bool)
+          - not (openbao_seed_leaf_owner_conflict | bool)
+        quiet: true
+
+    - name: Set the roster leaf seed to check mode without a converge token
+      ansible.builtin.set_fact:
+        openbao_bootstrap_token: ""
+        openbao_roster_live_check_mode: true
+
+    - name: Exercise the seed-only check-mode skip path
+      ansible.builtin.include_tasks:
+        file: ../../../roles/openbao/tasks/seed_roster_agent_leaf.yml
+
+    - name: Switch the roster leaf seed to a real run without a converge token
+      ansible.builtin.set_fact:
+        openbao_roster_live_check_mode: false
+
+    - name: Exercise the seed-only real run without a converge token
+      block:
+        - name: Run the roster leaf seed without a converge token
+          ansible.builtin.include_tasks:
+            file: ../../../roles/openbao/tasks/seed_roster_agent_leaf.yml
+
+        - name: Fail if the tokenless roster leaf seed was not refused
+          ansible.builtin.fail:
+            msg: The roster leaf seed continued without a converge token.
+      rescue:
+        - name: Assert the tokenless roster leaf seed was refused
+          ansible.builtin.assert:
+            that: ansible_failed_task.name == 'Refuse roster writes without a converge token'
+            quiet: true
+
     - name: Render each roster policy
       ansible.builtin.template:
         src: "{{ _template_dir }}/roster-agent-policy.hcl.j2"
@@ -196,6 +337,7 @@
       ansible.builtin.assert:
         that:
           - openbao_roster_agent_invalid_names == ['a+b']
+          - openbao_roster_agent_generated_app_secrets == {}
           - openbao_roster_agent_approles == []
           - openbao_roster_agent_policies == []
         quiet: true
@@ -358,7 +500,7 @@
       rescue:
         - name: Assert the tokenless real run was refused by the token assert
           ansible.builtin.assert:
-            that: ansible_failed_task.name == 'Refuse to write roster policies without a converge token'
+            that: ansible_failed_task.name == 'Refuse roster writes without a converge token'
             quiet: true
 
     - name: Set a fixture converge token for a non-empty roster
