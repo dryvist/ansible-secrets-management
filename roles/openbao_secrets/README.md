@@ -95,6 +95,7 @@ server-side quorum HA needs a fourth node and is out of scope.
 | `monitoring` | `OPENBAO_APPROLE_MONITORING_ROLE_ID` / `_SECRET_ID` | `apps/monitoring` | netmon, unifi_metrics, prometheus_stack |
 | `media` | `OPENBAO_APPROLE_MEDIA_ROLE_ID` / `_SECRET_ID` | `apps/media` | *arr/qBittorrent/Plex roles |
 | `local-llm` | `OPENBAO_APPROLE_LOCAL_LLM_ROLE_ID` / `_SECRET_ID` | `ai/*` (router/llm-large/qdrant/open-webui/hermes) | LLM serving roles |
+| `clickhouse` | `OPENBAO_APPROLE_CLICKHOUSE_ROLE_ID` / `_SECRET_ID` | `ai/clickhouse` | clickhouse_docker |
 
 Each pair is derived from the domain name (upper-cased, non-alphanumerics ->
 `_`) -- the same formula every other AppRole credential helper in this
