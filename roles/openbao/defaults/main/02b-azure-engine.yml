@@ -12,6 +12,7 @@ openbao_azure_iac_admin_ttl: 1h
 openbao_azure_tenant_id: "{{ lookup('env', 'OPENBAO_AZURE_TENANT_ID') | default('', true) }}"
 openbao_azure_client_id: "{{ lookup('env', 'OPENBAO_AZURE_CLIENT_ID') | default('', true) }}"
 openbao_azure_client_secret: "{{ lookup('env', 'OPENBAO_AZURE_CLIENT_SECRET') | default('', true) }}"
+openbao_azure_subscription_id: "{{ lookup('env', 'OPENBAO_AZURE_SUBSCRIPTION_ID') | default('', true) }}"
 
 # renovate: datasource=github-releases depName=openbao/openbao-plugins
 openbao_azure_plugin_version: "0.23.0"
