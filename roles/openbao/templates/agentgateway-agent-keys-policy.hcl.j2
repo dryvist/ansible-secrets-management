@@ -1,0 +1,11 @@
+{{ ansible_managed | comment }}
+# Read each roster agent's agent gateway key.
+{% for agent in openbao_roster_agent_valid_names %}
+path "{{ openbao_kv_mount }}/data/apps/{{ agent }}-gw" {
+  capabilities = ["read"]
+}
+
+path "{{ openbao_kv_mount }}/metadata/apps/{{ agent }}-gw" {
+  capabilities = ["read", "list"]
+}
+{% endfor %}

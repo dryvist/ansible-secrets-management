@@ -1,0 +1,11 @@
+{{ ansible_managed | comment }}
+# Read each roster agent's LLM router key.
+{% for agent in openbao_roster_agent_valid_names %}
+path "{{ openbao_kv_mount }}/data/apps/{{ agent }}" {
+  capabilities = ["read"]
+}
+
+path "{{ openbao_kv_mount }}/metadata/apps/{{ agent }}" {
+  capabilities = ["read", "list"]
+}
+{% endfor %}
