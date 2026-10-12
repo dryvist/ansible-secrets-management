@@ -18,7 +18,44 @@ openbao_github_everyday_dryvist_installation_id: >-
   {{ openbao_platform_env['OPENBAO_GITHUB_DRYVIST_INSTALLATION_ID'] | default('', true) }}
 openbao_github_everyday_personal_installation_id: >-
   {{ openbao_platform_env['OPENBAO_GITHUB_PERSONAL_INSTALLATION_ID'] | default('', true) }}
-openbao_github_read_permission_sets:
+openbao_github_everyday_extra_read_installations: >-
+  {{ openbao_platform_env['OPENBAO_GITHUB_EXTRA_READ_INSTALLATION_IDS'] | default('', true) }}
+openbao_github_everyday_extra_read_installations_parsed: >-
+  {%- set parsed = namespace(entries=[]) -%}
+  {%- if openbao_github_everyday_extra_read_installations | trim | length > 0 -%}
+  {%- for entry in openbao_github_everyday_extra_read_installations.split(',') | map('trim') -%}
+  {%- set parts = entry.split('=', 1) -%}
+  {%- set installation_id = parts[1] if parts | length > 1 else '' -%}
+  {%- set parsed.entries = parsed.entries + [{
+      'entry': entry,
+      'owner': parts[0],
+      'installation_id': installation_id,
+      'permission_set': {
+        'name': 'read-' ~ (parts[0] | lower) ~ '-all',
+        'tier': 'read',
+        'installation_id': installation_id,
+        'permissions': openbao_github_read_permissions
+      }
+    }] -%}
+  {%- endfor -%}
+  {%- endif -%}
+  {{ parsed.entries }}
+openbao_github_everyday_extra_write_installations: >-
+  {{ openbao_platform_env['OPENBAO_GITHUB_EXTRA_WRITE_INSTALLATION_IDS'] | default('', true) }}
+openbao_github_everyday_extra_write_installations_parsed: >-
+  {%- set parsed = namespace(entries=[]) -%}
+  {%- if openbao_github_everyday_extra_write_installations | trim | length > 0 -%}
+  {%- for entry in openbao_github_everyday_extra_write_installations.split(',') | map('trim') -%}
+  {%- set parts = entry.split('=', 1) -%}
+  {%- set parsed.entries = parsed.entries + [{
+      'entry': entry,
+      'owner': parts[0],
+      'installation_id': parts[1] if parts | length > 1 else ''
+    }] -%}
+  {%- endfor -%}
+  {%- endif -%}
+  {{ parsed.entries }}
+openbao_github_everyday_base_read_permission_sets:
   - name: read-dryvist-all
     tier: read
     installation_id: "{{ openbao_github_everyday_dryvist_installation_id }}"
@@ -27,6 +64,10 @@ openbao_github_read_permission_sets:
     tier: read
     installation_id: "{{ openbao_github_everyday_personal_installation_id }}"
     permissions: "{{ openbao_github_read_permissions }}"
+openbao_github_read_permission_sets: >-
+  {{ openbao_github_everyday_base_read_permission_sets
+     + (openbao_github_everyday_extra_read_installations_parsed
+        | map(attribute='permission_set') | list) }}
 
 # No permission sets: the App's own installation is the repository scope, and
 # the open-llm policy mints from the raw token endpoint pinned to this one
