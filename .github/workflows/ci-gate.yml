@@ -9,16 +9,25 @@
 # and this wrapper's molecule job consumes the scenario filter exported by the
 # shared workflow, so there is one change-detection definition. The local
 # "Merge Gate" aggregates every job.
+#
+# Lint, Role tests and Molecule restore the Galaxy content cache under the key
+# ansible-galaxy-v2-<os>-<hash of requirements.yml>. Runs on pushes to develop
+# and main save it, and pull request runs restore it.
 
 name: CI Gate
 
 on:
   pull_request:
     types: [opened, synchronize, reopened]
+  # Runs on develop and main save the dependency caches that pull request runs
+  # restore; a cache saved from a pull request ref is readable by that pull
+  # request only.
+  push:
+    branches: [develop, main]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -75,7 +84,19 @@ jobs:
       - name: Install Ansible, pytest and PyYAML
         run: uv pip install --system 'ansible-core>=2.16' pytest pyyaml
 
+      # Same path and key as the shared Ansible CI and _molecule.yml, so one
+      # saved cache serves every job.
+      - name: Cache Ansible Galaxy content
+        id: galaxy-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: |
+            ~/.ansible/collections
+            ~/.ansible/roles
+          key: ansible-galaxy-v2-${{ runner.os }}-${{ hashFiles('requirements.yml') }}
+
       - name: Install the collection's dependencies
+        if: steps.galaxy-cache.outputs.cache-hit != 'true'
         run: ansible-galaxy collection install -r requirements.yml
 
       - name: Verify the AppRole source-address class map
