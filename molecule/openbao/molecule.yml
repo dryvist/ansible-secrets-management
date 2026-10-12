@@ -25,6 +25,7 @@ provisioner:
   # Placeholder values for the environment-specific Terrakube workspace names
   # the role reads from the runtime environment.
   env:
+    OPENBAO_AZURE_ROLES: ""
     OPENBAO_TERRAKUBE_NETWORK_WORKSPACE: example-network
     OPENBAO_TERRAKUBE_AWS_WORKSPACE: example-aws
   inventory:

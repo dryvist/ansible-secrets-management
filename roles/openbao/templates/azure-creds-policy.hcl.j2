@@ -1,0 +1,4 @@
+{{ ansible_managed | comment }}
+path "{{ openbao_azure_mount }}/creds/{{ item.azure_role_name }}" {
+  capabilities = ["read"]
+}

@@ -1,0 +1,79 @@
+---
+- name: Validate the Azure role list shape
+  ansible.builtin.assert:
+    that:
+      - openbao_azure_roles is sequence
+      - openbao_azure_roles is not string
+      - >-
+        (openbao_azure_roles | default([], true) | select('mapping') | list | length) ==
+        (openbao_azure_roles | default([], true) | length)
+      - >-
+        (openbao_azure_roles | default([], true) | length) == 0 or
+        openbao_azure_tenant_id | default('') | length > 0
+    fail_msg: >-
+      Azure role input must be a JSON list of role objects, with a tenant
+      value when roles are declared.
+  no_log: true
+
+- name: Validate each Azure role object
+  ansible.builtin.assert:
+    that:
+      - item.get('name', '') is string
+      - item.get('name', '') is match('^[a-z0-9-]+$')
+      - item.get('application_object_id', '') is string
+      - >-
+        item.get('application_object_id', '') is match(
+        '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$')
+      - item.gated is defined
+      - item.gated is boolean
+      - item.get('ttl', '') is string
+      - item.get('max_ttl', '') is string
+    fail_msg: "An Azure role object has invalid fields."
+  loop: "{{ openbao_azure_roles }}"
+  loop_control:
+    label: role
+  no_log: true
+
+- name: Validate the Azure role duration formats
+  ansible.builtin.assert:
+    that:
+      - item.ttl is match('^[0-9]+[smh]$')
+      - item.max_ttl is match('^[0-9]+[smh]$')
+    fail_msg: "Azure TTL values must be durations in seconds, minutes, or hours."
+  loop: "{{ openbao_azure_roles }}"
+  loop_control:
+    label: role
+  no_log: true
+
+- name: Validate the Azure role TTL bounds
+  ansible.builtin.assert:
+    that:
+      - _ttl | int > 0
+      - _ttl | int <= _max_ttl | int
+      - _max_ttl | int <= (900 if item.gated else 3600)
+    fail_msg: "Azure TTL values exceed their permitted bounds."
+  vars:
+    _unit: {"s": 1, "m": 60, "h": 3600}
+    _ttl: "{{ (item.ttl[:-1] | int) * _unit[item.ttl[-1]] }}"
+    _max_ttl: "{{ (item.max_ttl[:-1] | int) * _unit[item.max_ttl[-1]] }}"
+  loop: "{{ openbao_azure_roles }}"
+  loop_control:
+    label: role
+  no_log: true
+
+- name: Validate Azure role names are unique
+  ansible.builtin.assert:
+    that:
+      - openbao_azure_roles | map(attribute='name') | unique | list | length == openbao_azure_roles | length
+    fail_msg: "Azure role names must be unique."
+  when: openbao_azure_roles | length > 0
+  no_log: true
+
+- name: Validate Azure roles do not duplicate declared names
+  ansible.builtin.assert:
+    that:
+      - openbao_approles | map(attribute='name') | unique | list | length == openbao_approles | length
+      - openbao_policies | map(attribute='name') | unique | list | length == openbao_policies | length
+    fail_msg: "Azure role input conflicts with an existing OpenBao declaration."
+  when: openbao_azure_roles | length > 0
+  no_log: true

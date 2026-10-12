@@ -49,7 +49,8 @@ openbao_roster_agent_policies: >-
   {{ _entries }}
 
 openbao_base_policies: >-
-  {{ openbao_terrakube_base_policies + openbao_base_policies_static
+  {{ openbao_terrakube_base_policies + openbao_azure_role_policies
+     + openbao_base_policies_static
      + openbao_roster_owned_mcp_deny_policies }}
 
 openbao_base_policies_static:
