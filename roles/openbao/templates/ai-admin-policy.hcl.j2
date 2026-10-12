@@ -139,6 +139,9 @@ path "{{ _github_mount }}/*" {
 path "{{ openbao_aws_mount | default('aws') }}/*" {
   capabilities = ["create", "read", "update", "delete", "list"]
 }
+path "{{ openbao_azure_mount | default('azure') }}/*" {
+  capabilities = ["create", "read", "update", "delete", "list"]
+}
 path "{{ openbao_ssh_mount | default('ssh-client-ca') }}/*" {
   capabilities = ["create", "read", "update", "delete", "list"]
 }
