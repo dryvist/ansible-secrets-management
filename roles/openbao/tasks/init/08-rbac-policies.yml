@@ -88,6 +88,7 @@
   vars:
     ansible_become: "{{ openbao_cli_become }}"
   register: openbao_policy_capabilities
+  check_mode: false
   changed_when: false
   failed_when: false
   no_log: true

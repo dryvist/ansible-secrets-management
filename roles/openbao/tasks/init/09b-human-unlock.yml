@@ -44,6 +44,7 @@
   vars:
     ansible_become: "{{ openbao_cli_become }}"
   register: openbao_human_unlock_user_check
+  check_mode: false
   no_log: true
   changed_when: false
   failed_when: false
@@ -102,6 +103,7 @@
   vars:
     ansible_become: "{{ openbao_cli_become }}"
   register: openbao_mfa_totp_list
+  check_mode: false
   no_log: true
   changed_when: false
   failed_when: false
@@ -128,6 +130,7 @@
   vars:
     ansible_become: "{{ openbao_cli_become }}"
   register: openbao_mfa_capabilities
+  check_mode: false
   changed_when: false
   failed_when: false
   no_log: true
@@ -185,6 +188,7 @@
     {{ (openbao_mfa_totp_list.stdout | default('[]') | from_json)
        if (openbao_mfa_totp_list.rc | default(1)) == 0 else [] }}
   register: openbao_mfa_totp_reads
+  check_mode: false
   no_log: true
   changed_when: false
   when:
@@ -261,6 +265,7 @@
   vars:
     ansible_become: "{{ openbao_cli_become }}"
   register: openbao_auth_raw_after
+  check_mode: false
   no_log: true
   changed_when: false
   when:
