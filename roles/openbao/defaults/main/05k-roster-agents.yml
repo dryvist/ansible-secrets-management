@@ -1,0 +1,3 @@
+---
+# Optional AI agents from the tofu inventory artifact.
+openbao_ai_agents: "{{ (tofu_data | default({})).agents | default({}) }}"

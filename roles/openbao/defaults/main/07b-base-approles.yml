@@ -274,9 +274,17 @@ openbao_base_approles_core:
 openbao_base_approles: >-
   {{ openbao_base_approles_core + openbao_base_approles_elevated
      + openbao_hermes_private_agent_approles }}
+openbao_roster_agent_approles: >-
+  {%- set _entries = [] -%}
+  {%- for agent in openbao_ai_agents -%}
+  {%- set _ = _entries.append({'name': agent, 'policy': agent,
+      'secret_id_num_uses': 0}) -%}
+  {%- endfor -%}
+  {{ _entries }}
 # Full AppRole set = the static base above + the per-service ai-apply-<svc> actor
 # roles generated from openbao_ai_domains. init.yml loops this combined list.
 openbao_approles: >-
   {{ openbao_base_approles + openbao_live_only_approles + openbao_rotation_approles
      + openbao_workstation_approles
-     + openbao_ai_apply_approles + openbao_github_write_scope_approles }}
+     + openbao_ai_apply_approles + openbao_github_write_scope_approles
+     + openbao_roster_agent_approles }}

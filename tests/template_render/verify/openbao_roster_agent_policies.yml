@@ -1,0 +1,129 @@
+---
+- name: Verify roster-agent AppRoles and policy paths
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    ansible_become: false
+    _fixture_dir: "{{ render_tmp }}"
+    _template_dir: "../../../roles/openbao/templates"
+    ansible_managed: "test fixture"
+
+  tasks:
+    - name: Load the openbao role defaults
+      ansible.builtin.include_vars:
+        dir: ../../../roles/openbao/defaults/main
+
+    - name: Set public example workspace names for the policy baseline
+      ansible.builtin.set_fact:
+        openbao_terrakube_network_workspace: example-network
+        openbao_terrakube_aws_workspace: example-aws
+
+    - name: Capture baseline RBAC lists with the default empty roster
+      ansible.builtin.set_fact:
+        _roster_baseline_approles: "{{ openbao_approles }}"
+        _roster_baseline_policies: "{{ openbao_policies }}"
+
+    - name: Assert an empty roster preserves the baseline RBAC lists
+      vars:
+        _expected_approles: >-
+          {{ openbao_base_approles + openbao_live_only_approles
+             + openbao_rotation_approles + openbao_workstation_approles
+             + openbao_ai_apply_approles + openbao_github_write_scope_approles }}
+        _expected_policies: >-
+          {{ (openbao_base_policies + openbao_ai_capability_policies
+              + openbao_ssh_sign_policies + openbao_ai_api_key_policies
+              + openbao_github_write_scope_policies
+              + [{'name': 'proxman', 'template': 'proxman-policy.hcl.j2'}])
+             | rejectattr('name', 'in', openbao_policies_without_inputs) | list }}
+      ansible.builtin.assert:
+        that:
+          - openbao_ai_agents == {}
+          - openbao_roster_agent_approles == []
+          - openbao_roster_agent_policies == []
+          - openbao_approles == _expected_approles
+          - openbao_policies == _expected_policies
+          - _roster_baseline_approles == _expected_approles
+          - _roster_baseline_policies == _expected_policies
+        quiet: true
+
+    - name: Set a fixture roster with one owner and one agent without owned systems
+      ansible.builtin.set_fact:
+        openbao_ai_agents:
+          splunk-heimdall:
+            owns: [splunk]
+          cribl-bifrost:
+            owns: []
+
+    - name: Assert the fixture produces exactly two roster AppRoles and policies
+      ansible.builtin.assert:
+        that:
+          - openbao_roster_agent_approles | length == 2
+          - openbao_roster_agent_policies | length == 2
+          - openbao_approles | length == _roster_baseline_approles | length + 2
+          - openbao_policies | length == _roster_baseline_policies | length + 2
+          - >-
+            openbao_roster_agent_approles | sort(attribute='name')
+            == [{'name': 'cribl-bifrost', 'policy': 'cribl-bifrost', 'secret_id_num_uses': 0},
+                {'name': 'splunk-heimdall', 'policy': 'splunk-heimdall', 'secret_id_num_uses': 0}]
+          - >-
+            openbao_roster_agent_policies | sort(attribute='name')
+            == [{'name': 'cribl-bifrost', 'template': 'roster-agent-policy.hcl.j2', 'agent': 'cribl-bifrost'},
+                {'name': 'splunk-heimdall', 'template': 'roster-agent-policy.hcl.j2', 'agent': 'splunk-heimdall'}]
+        quiet: true
+
+    - name: Render each roster policy
+      ansible.builtin.template:
+        src: "{{ _template_dir }}/roster-agent-policy.hcl.j2"
+        dest: "{{ _fixture_dir }}/{{ item.agent }}.hcl"
+        mode: "0644"
+      loop: "{{ openbao_roster_agent_policies }}"
+      loop_control:
+        label: "{{ item.agent }}"
+
+    - name: Read the splunk-heimdall policy
+      ansible.builtin.slurp:
+        src: "{{ _fixture_dir }}/splunk-heimdall.hcl"
+      register: _heimdall_policy_raw
+
+    - name: Read the cribl-bifrost policy
+      ansible.builtin.slurp:
+        src: "{{ _fixture_dir }}/cribl-bifrost.hcl"
+      register: _bifrost_policy_raw
+
+    - name: Assert the rendered policies grant exactly their roster path families
+      vars:
+        _heimdall_hcl: "{{ _heimdall_policy_raw.content | b64decode }}"
+        _bifrost_hcl: "{{ _bifrost_policy_raw.content | b64decode }}"
+        _heimdall_paths: >-
+          {{ _heimdall_hcl | regex_findall('(?m)^path "([^"]+)"') | sort }}
+        _bifrost_paths: >-
+          {{ _bifrost_hcl | regex_findall('(?m)^path "([^"]+)"') | sort }}
+        _heimdall_capabilities: >-
+          {{ _heimdall_hcl | regex_findall('(?m)^  capabilities = \[(.*)\]$') }}
+        _bifrost_capabilities: >-
+          {{ _bifrost_hcl | regex_findall('(?m)^  capabilities = \[(.*)\]$') }}
+      ansible.builtin.assert:
+        that:
+          - >-
+            _heimdall_paths ==
+            [openbao_kv_mount ~ '/data/ai/splunk-heimdall',
+             openbao_kv_mount ~ '/metadata/ai/splunk-heimdall',
+             openbao_kv_mount ~ '/data/apps/splunk-heimdall',
+             openbao_kv_mount ~ '/metadata/apps/splunk-heimdall',
+             openbao_kv_mount ~ '/data/ai/mcp/splunk',
+             openbao_kv_mount ~ '/metadata/ai/mcp/splunk'] | sort
+          - >-
+            _bifrost_paths ==
+            [openbao_kv_mount ~ '/data/ai/cribl-bifrost',
+             openbao_kv_mount ~ '/metadata/ai/cribl-bifrost',
+             openbao_kv_mount ~ '/data/apps/cribl-bifrost',
+             openbao_kv_mount ~ '/metadata/apps/cribl-bifrost'] | sort
+          - _heimdall_capabilities == ['"read"', '"read", "list"'] * 3
+          - _bifrost_capabilities == ['"read"', '"read", "list"'] * 2
+          - _bifrost_hcl is not search('/ai/mcp/')
+        fail_msg: >-
+          The roster-agent policies do not match their expected path families
+          and capabilities.
+        quiet: true
