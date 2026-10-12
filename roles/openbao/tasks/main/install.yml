@@ -148,6 +148,19 @@
     - not openbao_already_installed
     - openbao_installed_version.rc == 0
 
+- name: Require the snapshot unit before an upgrade
+  ansible.builtin.assert:
+    that: openbao_snapshot_unit.stat.exists
+    fail_msg: >-
+      Upgrading OpenBao needs a pre-upgrade raft snapshot, but
+      {{ openbao_snapshot_service_name }}.service is not installed. Enable
+      snapshots (openbao_snapshot_enabled and the snapshot AppRole) first.
+    quiet: true
+  when:
+    - not openbao_already_installed
+    - openbao_installed_version.rc == 0
+    - ansible_virtualization_type | default('') != 'docker'
+
 - name: Snapshot raft before upgrading OpenBao
   ansible.builtin.systemd:
     name: "{{ openbao_snapshot_service_name }}.service"
@@ -155,7 +168,6 @@
   when:
     - not openbao_already_installed
     - openbao_installed_version.rc == 0
-    - openbao_snapshot_unit.stat.exists | default(false)
     - ansible_virtualization_type | default('') != 'docker'
 
 - name: Install OpenBao package
@@ -175,6 +187,8 @@
   when:
     - not openbao_already_installed
     - openbao_installed_version.rc == 0
+    - not ansible_check_mode
+    - ansible_virtualization_type | default('') != 'docker'
 
 - name: Remove the staged .deb from the target
   ansible.builtin.file:
