@@ -23,6 +23,8 @@ class RotationRosterGuard(unittest.TestCase):
             "one_agent",
             "forbidden_reader",
             "unresolvable_inventory",
+            "preset_probe_results",
+            "unreachable_probe",
         ):
             with self.subTest(case=case):
                 result = subprocess.run(

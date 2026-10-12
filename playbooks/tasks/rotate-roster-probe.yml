@@ -1,4 +1,12 @@
 ---
+# Extra vars outrank set_fact, so a preset result list would replace the live probe.
+- name: Refuse preset roster key-reader probe results
+  ansible.builtin.assert:
+    that:
+      - rotate_roster_guard_probe_results is not defined
+    fail_msg: rotate_roster_guard_probe_results is set by the probe and must not be preset.
+    quiet: true
+
 - name: Probe the roster key-reader AppRoles
   ansible.builtin.uri:
     url: "{{ rotate_bao_addr }}/v1/auth/approle/role/{{ item }}/role-id"

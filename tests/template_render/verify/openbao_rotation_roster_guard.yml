@@ -15,20 +15,31 @@
       ansible.builtin.include_vars:
         dir: ../../../roles/openbao/defaults/main
 
-    - name: Set the fixture inventory and probe results
+    - name: Set the fixture inventory path
       ansible.builtin.set_fact:
         rotate_roster_guard_inventory_path: >-
           {{ (playbook_dir ~ '/../../openbao_rotate/roster-unresolvable-inventory.json')
              if rotation_roster_guard_case == 'unresolvable_inventory' else
              (_agent_inventory_path if rotation_roster_guard_case == 'one_agent'
               else _empty_inventory_path) }}
+
+    - name: Set the fixture probe results
+      ansible.builtin.set_fact:
         rotate_roster_guard_probe_results: >-
           {{ [{'name': openbao_roster_router_key_reader_name,
                'status': 403 if rotation_roster_guard_case == 'forbidden_reader' else 200}]
              if rotation_roster_guard_case != 'no_readers' else [] }}
+      when: rotation_roster_guard_case != 'unreachable_probe'
 
     - name: Run the roster guard and capture an expected failure
       block:
+        - name: Include the rotation roster probe tasks
+          ansible.builtin.include_tasks: ../../../playbooks/tasks/rotate-roster-probe.yml
+          vars:
+            rotate_bao_addr: http://127.0.0.1:9
+            rotate_login: {json: {auth: {client_token: example-token}}}
+          when: rotation_roster_guard_case in ['preset_probe_results', 'unreachable_probe']
+
         - name: Include the rotation roster guard tasks
           ansible.builtin.include_tasks: ../../../playbooks/tasks/rotate-roster-guard.yml
       rescue:
@@ -79,3 +90,18 @@
           - _rotation_roster_guard_failure is search('inventory')
         quiet: true
       when: rotation_roster_guard_case == 'unresolvable_inventory'
+
+    - name: Assert preset probe results are refused
+      ansible.builtin.assert:
+        that:
+          - _rotation_roster_guard_failure is search('must not be preset')
+        quiet: true
+      when: rotation_roster_guard_case == 'preset_probe_results'
+
+    - name: Assert an unreachable reader probe records status -1 and fails
+      ansible.builtin.assert:
+        that:
+          - _rotation_roster_guard_failure is search(openbao_roster_router_key_reader_name)
+          - _rotation_roster_guard_failure is search('status -1')
+        quiet: true
+      when: rotation_roster_guard_case == 'unreachable_probe'
