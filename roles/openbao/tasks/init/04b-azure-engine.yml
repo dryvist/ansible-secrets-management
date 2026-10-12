@@ -167,7 +167,8 @@
     msg: >-
       The Azure secrets engine at {{ openbao_azure_mount }}/ has no config
       yet, and OPENBAO_AZURE_TENANT_ID/OPENBAO_AZURE_CLIENT_ID/
-      OPENBAO_AZURE_CLIENT_SECRET are unset. Re-run with those env vars
+      OPENBAO_AZURE_CLIENT_SECRET/OPENBAO_AZURE_SUBSCRIPTION_ID are unset.
+      Re-run with those env vars
       set, or set openbao_azure_engine_enabled: false to skip Azure entirely.
   when:
     - openbao_bootstrap_token is defined
@@ -177,6 +178,7 @@
       (openbao_azure_tenant_id | length == 0)
       or (openbao_azure_client_id | length == 0)
       or (openbao_azure_client_secret | length == 0)
+      or (openbao_azure_subscription_id | length == 0)
 
 # Write-once: a routine converge never overwrites the engine config; rotation is
 # a deliberate, separate operator action.
@@ -191,6 +193,7 @@
       tenant_id: "{{ openbao_azure_tenant_id }}"
       client_id: "{{ openbao_azure_client_id }}"
       client_secret: "{{ openbao_azure_client_secret }}"
+      subscription_id: "{{ openbao_azure_subscription_id }}"
     status_code:
       - 200
       - 204
@@ -207,6 +210,7 @@
     - openbao_azure_tenant_id | length > 0
     - openbao_azure_client_id | length > 0
     - openbao_azure_client_secret | length > 0
+    - openbao_azure_subscription_id | length > 0
 
 - name: Check whether the openbao-iac-admin Azure role already exists
   ansible.builtin.command:
