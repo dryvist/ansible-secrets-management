@@ -173,7 +173,8 @@ openbao_roster_agent_duplicate_slugs: >-
   {{ _duplicates }}
 
 openbao_roster_agent_apps_leaf_names: >-
-  {{ (((openbao_generated_app_secrets | default({})).keys() | list)
+  {{ (((openbao_generated_app_secrets | default({})).keys()
+       | reject('in', openbao_generated_app_secret_paths | default({})) | list)
       + ((openbao_promoted_app_secrets | default({})).keys() | list)
       + ((openbao_router_key_catalog | default({})).keys() | list)
       + (openbao_apps_read_published_apps | default([]))
@@ -184,6 +185,7 @@ openbao_roster_agent_apps_leaf_names: >-
 # policies. The mcp and agents names hold nested credentials and identities.
 openbao_roster_agent_ai_leaf_names: >-
   {{ [openbao_hermes_approle_name,
+      openbao_clickhouse_approle_name,
       openbao_hermes_private_agent_policy_name | regex_replace('-agent$', ''),
       openbao_llm_router_write_approle_name | regex_replace('-write$', ''),
       openbao_ai_donna_approle_name | regex_replace('^ai-', ''),

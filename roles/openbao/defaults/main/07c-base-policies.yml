@@ -197,6 +197,8 @@ openbao_base_policies_static:
     template: vikunja-mcp-policy.hcl.j2
   - name: "{{ openbao_ai_runner_policy_name }}"
     template: ai-runner-policy.hcl.j2
+  - name: "{{ openbao_clickhouse_policy_name }}"
+    template: clickhouse-policy.hcl.j2
   - name: "{{ openbao_slack_admin_policy_name }}"
     template: slack-admin-policy.hcl.j2
   - name: "{{ openbao_slack_ops_policy_name }}"
