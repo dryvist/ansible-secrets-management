@@ -1,0 +1,11 @@
+{{ ansible_managed | comment }}
+# OpenBao policy for the azure-iac-admin AppRole.
+#
+# One read, one exact path: the dynamic client secret for the Azure IaC admin
+# application. The lease it creates is revoked when the token is revoked, which
+# the caller does on exit. Nothing else: no engine config, no other Azure role,
+# no list, no write, no key-value access.
+
+path "{{ openbao_azure_mount }}/creds/{{ openbao_azure_iac_admin_role_name }}" {
+  capabilities = ["read"]
+}
