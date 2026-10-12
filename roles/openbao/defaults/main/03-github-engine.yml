@@ -115,6 +115,12 @@ openbao_github_ci_resolver_permission_sets: >-
        'repositories': openbao_github_ci_resolver_repos,
        'permissions': openbao_github_ci_resolver_permissions}]
      if openbao_github_ci_resolver_repos | length > 0 else [] }}
+# While that repository list is empty the ci-resolver policy renders no grants,
+# so it is not scheduled for writing: a stored policy is never replaced by an
+# empty document, and the empty-policy check has nothing to refuse.
+openbao_unscheduled_empty_policy_names: >-
+  {{ [] if openbao_github_ci_resolver_repos | length > 0
+     else [openbao_github_ci_resolver_policy_name] }}
 # The docs site's router snapshot workflow opens its pull request in the docs
 # SOURCE repository, so its set names that repository and nothing else. Same
 # rule as the publisher set: an unset repository yields no set. Tier `agents`
