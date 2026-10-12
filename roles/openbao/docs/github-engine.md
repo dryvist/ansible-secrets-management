@@ -29,6 +29,13 @@ A key is required only for first configuration or an explicit rotation; routine
 converges never rewrite it. Installation IDs come from the env document
 (`secret/platform/ansible/env`).
 
+The everyday App accepts extra installations through
+`OPENBAO_GITHUB_EXTRA_READ_INSTALLATION_IDS` and
+`OPENBAO_GITHUB_EXTRA_WRITE_INSTALLATION_IDS`, each as a comma-separated list
+of `owner=id` entries. Read entries add named read sets; only write entries
+extend the write-policy installation allowlists, so a read entry never grants
+write access.
+
 Token access is tiered; the tier IS the privilege boundary:
 
 - **read (`github-read`)** — `github/token/read-dryvist-all` and

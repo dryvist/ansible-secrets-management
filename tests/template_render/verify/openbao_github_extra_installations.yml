@@ -1,0 +1,284 @@
+---
+- name: Render and verify extra everyday GitHub installations
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    ansible_become: false
+    _fixture_dir: "{{ render_tmp }}"
+    _template_dir: ../../../roles/openbao/templates
+    _set_checks: ../../../roles/openbao/tasks/init/05a-github-extra-installation-checks.yml
+    ansible_managed: test fixture
+    _write_templates:
+      - template: github-write-policy.hcl
+        repos: []
+      - template: github-write-scoped-policy.hcl
+        name: example-realm
+        repos: []
+
+  tasks:
+    - name: Load the openbao role defaults
+      ansible.builtin.include_vars:
+        dir: ../../../roles/openbao/defaults/main
+
+    - name: Set fake base installation IDs and an empty private env document
+      ansible.builtin.set_fact:
+        openbao_github_everyday_dryvist_installation_id: "11111111"
+        openbao_github_everyday_personal_installation_id: "22222222"
+        openbao_platform_env: {}
+
+    - name: Exercise validation with both extra lists unset
+      ansible.builtin.include_tasks: "{{ _set_checks }}"
+
+    - name: Assert the unset input preserves the two base read sets
+      ansible.builtin.assert:
+        that:
+          - openbao_github_read_permission_sets | length == 2
+          - openbao_github_everyday_base_read_permission_sets | length == 2
+          - >-
+            openbao_github_read_permission_sets[:2]
+            == openbao_github_everyday_base_read_permission_sets
+          - >-
+            openbao_github_read_permission_sets | map(attribute='installation_id') | list
+            == [openbao_github_everyday_dryvist_installation_id,
+                openbao_github_everyday_personal_installation_id]
+          - >-
+            openbao_github_read_permission_sets | map(attribute='permissions') | list
+            == [openbao_github_read_permissions, openbao_github_read_permissions]
+        fail_msg: Unset extra installation inputs must leave exactly the base read sets.
+
+    - name: Select the empty-input rendering case
+      ansible.builtin.set_fact:
+        _scenario: empty
+
+    - name: Render both write policies for input {{ _scenario }}
+      ansible.builtin.template:
+        src: "{{ _template_dir }}/{{ item.template }}.j2"
+        dest: "{{ _fixture_dir }}/{{ _scenario }}-{{ item.template }}"
+        mode: "0644"
+      loop: "{{ _write_templates }}"
+      loop_control:
+        label: "{{ item.template }}"
+
+    - name: Read both write policies for input {{ _scenario }}
+      ansible.builtin.slurp:
+        src: "{{ _fixture_dir }}/{{ _scenario }}-{{ item.template }}"
+      loop: "{{ _write_templates }}"
+      loop_control:
+        label: "{{ item.template }}"
+      register: _write_policy_render
+
+    - name: Extract the allowed installation IDs from each write policy
+      ansible.builtin.set_fact:
+        _write_policy_ids: >-
+          {{ _write_policy_render.results | map(attribute='content') | map('b64decode')
+             | map('regex_findall', '"([0-9]+)"') | list }}
+        _write_policy_texts: >-
+          {{ _write_policy_render.results | map(attribute='content') | map('b64decode') | list }}
+        _expected_base_ids: >-
+          {{ [openbao_github_everyday_dryvist_installation_id | string,
+              openbao_github_everyday_personal_installation_id | string] }}
+
+    - name: Assert empty input renders exactly the two base IDs without malformed HCL lists
+      ansible.builtin.assert:
+        that:
+          - _write_policy_ids == [_expected_base_ids, _expected_base_ids]
+          - "'\"\"' not in (_write_policy_texts | join(' '))"
+          - _write_policy_texts | select('search', ',\\s*\\]') | list == []
+        fail_msg: Empty extra input must render only the two base installation IDs.
+
+    - name: Set the read-list-only fake installation
+      ansible.builtin.set_fact:
+        openbao_platform_env:
+          OPENBAO_GITHUB_EXTRA_READ_INSTALLATION_IDS: example-owner=12345678
+
+    - name: Assert the extra read set uses the shared read permissions
+      ansible.builtin.assert:
+        that:
+          - >-
+            (openbao_github_read_permission_sets
+             | selectattr('name', 'equalto', 'read-example-owner-all') | list | length) == 1
+          - >-
+            (openbao_github_read_permission_sets
+             | selectattr('name', 'equalto', 'read-example-owner-all') | first).installation_id
+            == '12345678'
+          - >-
+            (openbao_github_read_permission_sets
+             | selectattr('name', 'equalto', 'read-example-owner-all') | first).permissions
+            == openbao_github_read_permissions
+        fail_msg: The read list must create one named set with the shared read permission map.
+
+    - name: Render the general read policy for the extra read set
+      ansible.builtin.template:
+        src: "{{ _template_dir }}/github-read-policy.hcl.j2"
+        dest: "{{ _fixture_dir }}/read-extra-policy.hcl"
+        mode: "0644"
+
+    - name: Read the general read policy for the extra read set
+      ansible.builtin.slurp:
+        src: "{{ _fixture_dir }}/read-extra-policy.hcl"
+      register: _read_extra_policy
+
+    - name: Assert the read policy grants the exact extra set path
+      ansible.builtin.assert:
+        that:
+          - >-
+            (openbao_github_everyday_mount ~ '/token/read-example-owner-all') in
+            (_read_extra_policy.content | b64decode)
+        fail_msg: The general read policy must render the new named read-set path.
+
+    - name: Render the Semaphore policy with an extra read set
+      ansible.builtin.template:
+        src: "{{ _template_dir }}/semaphore-policy.hcl.j2"
+        dest: "{{ _fixture_dir }}/semaphore-extra-read-policy.hcl"
+        mode: "0644"
+
+    - name: Read the Semaphore policy with an extra read set
+      ansible.builtin.slurp:
+        src: "{{ _fixture_dir }}/semaphore-extra-read-policy.hcl"
+      register: _semaphore_extra_read_policy
+
+    - name: Assert the read list does not widen the Semaphore policy
+      vars:
+        _semaphore_github_read_paths: >-
+          {{ _semaphore_extra_read_policy.content | b64decode
+             | regex_findall('(?m)^path "([^\"]+)"')
+             | select('match', '^' ~ openbao_github_everyday_mount ~ '/token/read-') | list }}
+      ansible.builtin.assert:
+        that:
+          - _semaphore_github_read_paths == [openbao_github_everyday_mount ~ '/token/read-dryvist-all']
+        fail_msg: The Semaphore policy must keep only its one exact read path.
+
+    - name: Select the read-only rendering case
+      ansible.builtin.set_fact:
+        _scenario: read-only
+
+    - name: Render both write policies for input {{ _scenario }}
+      ansible.builtin.template:
+        src: "{{ _template_dir }}/{{ item.template }}.j2"
+        dest: "{{ _fixture_dir }}/{{ _scenario }}-{{ item.template }}"
+        mode: "0644"
+      loop: "{{ _write_templates }}"
+      loop_control:
+        label: "{{ item.template }}"
+
+    - name: Read both write policies for input {{ _scenario }}
+      ansible.builtin.slurp:
+        src: "{{ _fixture_dir }}/{{ _scenario }}-{{ item.template }}"
+      loop: "{{ _write_templates }}"
+      loop_control:
+        label: "{{ item.template }}"
+      register: _write_policy_render
+
+    - name: Assert the read list never widens either write policy
+      ansible.builtin.assert:
+        that:
+          - >-
+            _write_policy_render.results
+            | map(attribute='content') | map('b64decode')
+            | select('search', '12345678') | list == []
+        fail_msg: A read-only installation must not appear in either write policy.
+
+    - name: Set the write-list-only fake installation
+      ansible.builtin.set_fact:
+        openbao_platform_env:
+          OPENBAO_GITHUB_EXTRA_WRITE_INSTALLATION_IDS: example-owner=12345678
+
+    - name: Select the write-list-only rendering case
+      ansible.builtin.set_fact:
+        _scenario: write-only
+
+    - name: Render both write policies for input {{ _scenario }}
+      ansible.builtin.template:
+        src: "{{ _template_dir }}/{{ item.template }}.j2"
+        dest: "{{ _fixture_dir }}/{{ _scenario }}-{{ item.template }}"
+        mode: "0644"
+      loop: "{{ _write_templates }}"
+      loop_control:
+        label: "{{ item.template }}"
+
+    - name: Read both write policies for input {{ _scenario }}
+      ansible.builtin.slurp:
+        src: "{{ _fixture_dir }}/{{ _scenario }}-{{ item.template }}"
+      loop: "{{ _write_templates }}"
+      loop_control:
+        label: "{{ item.template }}"
+      register: _write_policy_render
+
+    - name: Extract the allowed installation IDs from each write policy
+      ansible.builtin.set_fact:
+        _write_policy_ids: >-
+          {{ _write_policy_render.results | map(attribute='content') | map('b64decode')
+             | map('regex_findall', '"([0-9]+)"') | list }}
+
+    - name: Assert only the write list appends its ID to both policies
+      ansible.builtin.assert:
+        that:
+          - >-
+            _write_policy_ids
+            == [_expected_base_ids + ['12345678'], _expected_base_ids + ['12345678']]
+        fail_msg: The write list must append its ID after the two base IDs in both policies.
+
+    - name: Confirm malformed entries fail with their read env key in the message
+      block:
+        - name: Set a read entry without an equals sign
+          ansible.builtin.set_fact:
+            openbao_platform_env:
+              OPENBAO_GITHUB_EXTRA_READ_INSTALLATION_IDS: example-owner12345678
+
+        - name: Expect validation to reject a read entry without an equals sign
+          ansible.builtin.include_tasks: "{{ _set_checks }}"
+
+        - name: Fail if the malformed read entry was accepted
+          ansible.builtin.fail:
+            msg: Expected OPENBAO_GITHUB_EXTRA_READ_INSTALLATION_IDS validation to fail.
+      rescue:
+        - name: Check the read validation error names its env key
+          ansible.builtin.assert:
+            that:
+              - >-
+                'OPENBAO_GITHUB_EXTRA_READ_INSTALLATION_IDS'
+                in ansible_failed_result.msg
+
+    - name: Confirm an empty ID fails with its write env key in the message
+      block:
+        - name: Set a write entry with an empty ID
+          ansible.builtin.set_fact:
+            openbao_platform_env:
+              OPENBAO_GITHUB_EXTRA_WRITE_INSTALLATION_IDS: example-owner=
+
+        - name: Expect validation to reject a write entry with an empty ID
+          ansible.builtin.include_tasks: "{{ _set_checks }}"
+
+        - name: Fail if the malformed write entry was accepted
+          ansible.builtin.fail:
+            msg: Expected OPENBAO_GITHUB_EXTRA_WRITE_INSTALLATION_IDS validation to fail.
+      rescue:
+        - name: Check the write validation error names its env key
+          ansible.builtin.assert:
+            that:
+              - >-
+                'OPENBAO_GITHUB_EXTRA_WRITE_INSTALLATION_IDS'
+                in ansible_failed_result.msg
+
+    - name: Confirm a non-numeric ID fails with its read env key in the message
+      block:
+        - name: Set a read entry with a non-numeric ID
+          ansible.builtin.set_fact:
+            openbao_platform_env:
+              OPENBAO_GITHUB_EXTRA_READ_INSTALLATION_IDS: example-owner=not-numeric
+
+        - name: Expect validation to reject a read entry with a non-numeric ID
+          ansible.builtin.include_tasks: "{{ _set_checks }}"
+
+        - name: Fail if the malformed read entry was accepted
+          ansible.builtin.fail:
+            msg: Expected OPENBAO_GITHUB_EXTRA_READ_INSTALLATION_IDS validation to fail.
+      rescue:
+        - name: Check the read validation error names its env key
+          ansible.builtin.assert:
+            that:
+              - >-
+                'OPENBAO_GITHUB_EXTRA_READ_INSTALLATION_IDS'
+                in ansible_failed_result.msg

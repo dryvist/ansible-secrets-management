@@ -1,0 +1,54 @@
+---
+# The everyday mount's extra installations come from the env document as
+# comma-separated owner=id lists. Imported before the read sets are created
+# (05) and before the write policies render (08), so a malformed entry fails
+# the converge before anything uses it.
+- name: "Validate extra read installations"
+  ansible.builtin.assert:
+    that:
+      - >-
+        (openbao_github_everyday_extra_read_installations_parsed
+         | selectattr('entry', 'match', '^[A-Za-z0-9-]+=[0-9]+$')
+         | list | length)
+        == (openbao_github_everyday_extra_read_installations_parsed | length)
+      - >-
+        (openbao_github_everyday_extra_read_installations_parsed
+         | map(attribute='owner') | map('lower') | unique | list | length)
+        == (openbao_github_everyday_extra_read_installations_parsed | length)
+      - >-
+        (openbao_github_everyday_extra_read_installations_parsed
+         | map(attribute='installation_id') | select('match', '^[0-9]+$')
+         | map('int')
+         | select('in', [openbao_github_everyday_dryvist_installation_id | int,
+                        openbao_github_everyday_personal_installation_id | int])
+         | list | length) == 0
+    fail_msg: >-
+      OPENBAO_GITHUB_EXTRA_READ_INSTALLATION_IDS must be empty or a
+      comma-separated list of unique owner=id entries with an owner matching
+      ^[A-Za-z0-9-]+$ and a numeric ID distinct from the base installations.
+    quiet: true
+
+- name: "Validate extra write installations"
+  ansible.builtin.assert:
+    that:
+      - >-
+        (openbao_github_everyday_extra_write_installations_parsed
+         | selectattr('entry', 'match', '^[A-Za-z0-9-]+=[0-9]+$')
+         | list | length)
+        == (openbao_github_everyday_extra_write_installations_parsed | length)
+      - >-
+        (openbao_github_everyday_extra_write_installations_parsed
+         | map(attribute='owner') | map('lower') | unique | list | length)
+        == (openbao_github_everyday_extra_write_installations_parsed | length)
+      - >-
+        (openbao_github_everyday_extra_write_installations_parsed
+         | map(attribute='installation_id') | select('match', '^[0-9]+$')
+         | map('int')
+         | select('in', [openbao_github_everyday_dryvist_installation_id | int,
+                        openbao_github_everyday_personal_installation_id | int])
+         | list | length) == 0
+    fail_msg: >-
+      OPENBAO_GITHUB_EXTRA_WRITE_INSTALLATION_IDS must be empty or a
+      comma-separated list of unique owner=id entries with an owner matching
+      ^[A-Za-z0-9-]+$ and a numeric ID distinct from the base installations.
+    quiet: true
