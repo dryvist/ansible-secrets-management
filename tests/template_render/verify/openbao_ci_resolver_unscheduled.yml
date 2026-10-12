@@ -1,0 +1,33 @@
+---
+- name: Verify the ci-resolver policy is unscheduled while its repository list is empty
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    ansible_become: false
+
+  tasks:
+    - name: Load the openbao role defaults
+      ansible.builtin.include_vars:
+        dir: ../../../roles/openbao/defaults/main
+
+    - name: Set an empty repository list
+      ansible.builtin.set_fact:
+        openbao_github_ci_resolver_repos: []
+
+    - name: Assert the empty list leaves only the ci-resolver policy unscheduled
+      ansible.builtin.assert:
+        that:
+          - openbao_unscheduled_empty_policy_names == [openbao_github_ci_resolver_policy_name]
+        fail_msg: An empty repository list must leave only the ci-resolver policy unscheduled.
+
+    - name: Set a repository list
+      ansible.builtin.set_fact:
+        openbao_github_ci_resolver_repos: [example-repo]
+
+    - name: Assert a repository list schedules every policy
+      ansible.builtin.assert:
+        that:
+          - openbao_unscheduled_empty_policy_names == []
+        fail_msg: A repository list must leave no policy unscheduled.
