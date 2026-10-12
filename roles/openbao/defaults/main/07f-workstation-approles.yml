@@ -45,6 +45,16 @@ openbao_workstation_approles:
     secret_id_num_uses: "{{ openbao_approle_per_call_secret_id_num_uses }}"
     token_ttl: 15m
     token_max_ttl: 15m
+  # azure-iac-admin: reads dynamic client secrets for the Azure IaC admin
+  # application and nothing else. Its own identity, not a grant on a shared one:
+  # an Azure credential is high risk, and no standing secret_id exists for it.
+  - name: "{{ openbao_azure_iac_admin_approle_name }}"
+    policy: "{{ openbao_azure_iac_admin_policy_name }}"
+    secret_id_issuance: per_call
+    secret_id_ttl: "{{ openbao_approle_per_call_secret_id_ttl }}"
+    secret_id_num_uses: "{{ openbao_approle_per_call_secret_id_num_uses }}"
+    token_ttl: 15m
+    token_max_ttl: 15m
   # openbao-node-converge: the converge identity for the OpenBao-node play
   # (`--tags openbao` on `openbao_group`) — the single converge still run from
   # a workstation, because its inputs are the seal key and the provisioning
