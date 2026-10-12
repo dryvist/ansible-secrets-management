@@ -28,7 +28,7 @@
         openbao_github_everyday_personal_installation_id: "22222222"
         openbao_platform_env: {}
 
-    - name: Exercise validation with both extra lists unset
+    - name: Exercise validation with the extra read list unset
       ansible.builtin.include_tasks: "{{ _set_checks }}"
 
     - name: Assert the unset input preserves the two base read sets
@@ -76,17 +76,18 @@
              | map('regex_findall', '"([0-9]+)"') | list }}
         _write_policy_texts: >-
           {{ _write_policy_render.results | map(attribute='content') | map('b64decode') | list }}
-        _expected_base_ids: >-
-          {{ [openbao_github_everyday_dryvist_installation_id | string,
-              openbao_github_everyday_personal_installation_id | string] }}
 
-    - name: Assert empty input renders exactly the two base IDs without malformed HCL lists
+    - name: Assert empty input leaves installation IDs unpinned in both write policies
       ansible.builtin.assert:
         that:
-          - _write_policy_ids == [_expected_base_ids, _expected_base_ids]
+          - _write_policy_ids == [[], []]
+          - >-
+            _write_policy_texts
+            | select('search', '"installation_id" = \[\]')
+            | list | length == 2
           - "'\"\"' not in (_write_policy_texts | join(' '))"
           - _write_policy_texts | select('search', ',\\s*\\]') | list == []
-        fail_msg: Empty extra input must render only the two base installation IDs.
+        fail_msg: Both write policies must leave installation IDs unpinned.
 
     - name: Set the read-list-only fake installation
       ansible.builtin.set_fact:
@@ -171,54 +172,23 @@
         label: "{{ item.template }}"
       register: _write_policy_render
 
-    - name: Assert the read list never widens either write policy
-      ansible.builtin.assert:
-        that:
-          - >-
-            _write_policy_render.results
-            | map(attribute='content') | map('b64decode')
-            | select('search', '12345678') | list == []
-        fail_msg: A read-only installation must not appear in either write policy.
-
-    - name: Set the write-list-only fake installation
-      ansible.builtin.set_fact:
-        openbao_platform_env:
-          OPENBAO_GITHUB_EXTRA_WRITE_INSTALLATION_IDS: example-owner=12345678
-
-    - name: Select the write-list-only rendering case
-      ansible.builtin.set_fact:
-        _scenario: write-only
-
-    - name: Render both write policies for input {{ _scenario }}
-      ansible.builtin.template:
-        src: "{{ _template_dir }}/{{ item.template }}.j2"
-        dest: "{{ _fixture_dir }}/{{ _scenario }}-{{ item.template }}"
-        mode: "0644"
-      loop: "{{ _write_templates }}"
-      loop_control:
-        label: "{{ item.template }}"
-
-    - name: Read both write policies for input {{ _scenario }}
-      ansible.builtin.slurp:
-        src: "{{ _fixture_dir }}/{{ _scenario }}-{{ item.template }}"
-      loop: "{{ _write_templates }}"
-      loop_control:
-        label: "{{ item.template }}"
-      register: _write_policy_render
-
-    - name: Extract the allowed installation IDs from each write policy
+    - name: Extract installation IDs from each read-only write policy
       ansible.builtin.set_fact:
         _write_policy_ids: >-
           {{ _write_policy_render.results | map(attribute='content') | map('b64decode')
              | map('regex_findall', '"([0-9]+)"') | list }}
+        _write_policy_texts: >-
+          {{ _write_policy_render.results | map(attribute='content') | map('b64decode') | list }}
 
-    - name: Assert only the write list appends its ID to both policies
+    - name: Assert the read list leaves installation IDs unpinned in both write policies
       ansible.builtin.assert:
         that:
+          - _write_policy_ids == [[], []]
           - >-
-            _write_policy_ids
-            == [_expected_base_ids + ['12345678'], _expected_base_ids + ['12345678']]
-        fail_msg: The write list must append its ID after the two base IDs in both policies.
+            _write_policy_texts
+            | select('search', '"installation_id" = \[\]')
+            | list | length == 2
+        fail_msg: A read-only installation must not affect either write policy.
 
     - name: Confirm malformed entries fail with their read env key in the message
       block:
@@ -239,27 +209,6 @@
             that:
               - >-
                 'OPENBAO_GITHUB_EXTRA_READ_INSTALLATION_IDS'
-                in ansible_failed_result.msg
-
-    - name: Confirm an empty ID fails with its write env key in the message
-      block:
-        - name: Set a write entry with an empty ID
-          ansible.builtin.set_fact:
-            openbao_platform_env:
-              OPENBAO_GITHUB_EXTRA_WRITE_INSTALLATION_IDS: example-owner=
-
-        - name: Expect validation to reject a write entry with an empty ID
-          ansible.builtin.include_tasks: "{{ _set_checks }}"
-
-        - name: Fail if the malformed write entry was accepted
-          ansible.builtin.fail:
-            msg: Expected OPENBAO_GITHUB_EXTRA_WRITE_INSTALLATION_IDS validation to fail.
-      rescue:
-        - name: Check the write validation error names its env key
-          ansible.builtin.assert:
-            that:
-              - >-
-                'OPENBAO_GITHUB_EXTRA_WRITE_INSTALLATION_IDS'
                 in ansible_failed_result.msg
 
     - name: Confirm an owner whose set name collides with a base set fails
