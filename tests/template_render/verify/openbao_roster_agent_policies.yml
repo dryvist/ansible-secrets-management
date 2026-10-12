@@ -20,6 +20,7 @@
       ansible.builtin.set_fact:
         openbao_terrakube_network_workspace: example-network
         openbao_terrakube_aws_workspace: example-aws
+        _roster_mcp_credential_owners: "{{ openbao_mcp_credential_owners }}"
 
     - name: Capture baseline RBAC lists with the default empty roster
       ansible.builtin.set_fact:
@@ -43,6 +44,8 @@
           - openbao_ai_agents == {}
           - openbao_roster_agent_invalid_names == []
           - openbao_roster_agent_invalid_slugs == []
+          - openbao_roster_agent_unknown_slugs == []
+          - openbao_roster_agent_mcp_credential_conflicts == []
           - openbao_roster_agent_duplicate_slugs == []
           - openbao_roster_agent_name_collisions == []
           - openbao_roster_agent_approles == []
@@ -59,6 +62,7 @@
           splunk-heimdall:
             owns: [splunk]
           cribl-bifrost: {}
+        openbao_mcp_credential_owners: {}
 
     - name: Assert the fixture produces exactly two roster AppRoles and policies
       ansible.builtin.assert:
@@ -67,6 +71,8 @@
           - openbao_roster_agent_policies | length == 2
           - openbao_roster_agent_invalid_names == []
           - openbao_roster_agent_invalid_slugs == []
+          - openbao_roster_agent_unknown_slugs == []
+          - openbao_roster_agent_mcp_credential_conflicts == []
           - openbao_roster_agent_duplicate_slugs == []
           - openbao_roster_agent_name_collisions == []
           - openbao_approles | length == _roster_baseline_approles | length + 2
@@ -80,6 +86,31 @@
             == [{'name': 'cribl-bifrost', 'template': 'roster-agent-policy.hcl.j2', 'agent': 'cribl-bifrost'},
                 {'name': 'splunk-heimdall', 'template': 'roster-agent-policy.hcl.j2', 'agent': 'splunk-heimdall'}]
         quiet: true
+
+    - name: Set a fixture roster with an owned MCP slug that still has legacy readers
+      ansible.builtin.set_fact:
+        openbao_ai_agents:
+          splunk-heimdall:
+            owns: [splunk]
+        openbao_mcp_credential_owners: "{{ _roster_mcp_credential_owners }}"
+
+    - name: Assert the preflight reports the remaining non-roster MCP readers
+      ansible.builtin.assert:
+        that:
+          - >-
+            openbao_roster_agent_mcp_credential_conflicts ==
+            ['splunk-heimdall:splunk (existing policies: hermes, hermes-private-agent, ansible-converge,
+            splunk-mcp-rotate, observability, local-llm, ai-rotate)']
+        fail_msg: The roster owner conflict must be reported before it can render a policy.
+        quiet: true
+
+    - name: Restore the passing roster fixture without non-roster credential owners
+      ansible.builtin.set_fact:
+        openbao_ai_agents:
+          splunk-heimdall:
+            owns: [splunk]
+          cribl-bifrost: {}
+        openbao_mcp_credential_owners: {}
 
     - name: Render each roster policy
       ansible.builtin.template:
@@ -183,6 +214,20 @@
           - openbao_roster_agent_policies == []
         quiet: true
 
+    - name: Set a fixture roster with a trailing newline in its name
+      ansible.builtin.set_fact:
+        openbao_ai_agents:
+          "splunk-heimdall\n":
+            owns: []
+
+    - name: Assert a trailing newline makes the roster name invalid
+      ansible.builtin.assert:
+        that:
+          - openbao_roster_agent_invalid_names == ["splunk-heimdall\n"]
+          - openbao_roster_agent_approles == []
+          - openbao_roster_agent_policies == []
+        quiet: true
+
     - name: Set a fixture roster with an invalid owned slug
       ansible.builtin.set_fact:
         openbao_ai_agents:
@@ -192,6 +237,30 @@
     - name: Assert uppercase owned slugs are reported
       ansible.builtin.assert:
         that: openbao_roster_agent_invalid_slugs == ['splunk-heimdall:Splunk']
+        quiet: true
+
+    - name: Set a fixture roster with a trailing newline in its owned slug
+      ansible.builtin.set_fact:
+        openbao_ai_agents:
+          splunk-heimdall:
+            owns: ["splunk\n"]
+
+    - name: Assert a trailing newline makes the owned slug invalid
+      ansible.builtin.assert:
+        that: openbao_roster_agent_invalid_slugs == ["splunk-heimdall:splunk\n"]
+        quiet: true
+
+    - name: Set a fixture roster with an uncataloged owned slug
+      ansible.builtin.set_fact:
+        openbao_ai_agents:
+          splunk-heimdall:
+            owns: [example-system]
+
+    - name: Assert a valid-shaped but uncataloged slug is reported
+      ansible.builtin.assert:
+        that:
+          - openbao_roster_agent_invalid_slugs == []
+          - openbao_roster_agent_unknown_slugs == ['splunk-heimdall:example-system']
         quiet: true
 
     - name: Set a fixture roster whose owns value is not a list
@@ -354,6 +423,50 @@
         that:
           - openbao_roster_live_policy_conflicts == []
           - openbao_roster_live_approle_conflicts == []
+        quiet: true
+
+    - name: Inject absent live roster KV paths
+      ansible.builtin.set_fact:
+        openbao_roster_live_kv_metadata:
+          ai/splunk-heimdall: null
+          apps/splunk-heimdall: null
+          apps/splunk-heimdall-gw: null
+
+    - name: Assert absent live roster KV paths do not conflict
+      ansible.builtin.assert:
+        that: openbao_roster_live_kv_metadata_conflicts == []
+        quiet: true
+
+    - name: Inject live roster KV paths carrying the exact managed-by marker
+      ansible.builtin.set_fact:
+        openbao_roster_live_kv_metadata:
+          ai/splunk-heimdall:
+            managed-by: roster-agent:splunk-heimdall
+          apps/splunk-heimdall:
+            managed-by: roster-agent:splunk-heimdall
+          apps/splunk-heimdall-gw:
+            managed-by: roster-agent:splunk-heimdall
+
+    - name: Assert marked live roster KV paths are accepted
+      ansible.builtin.assert:
+        that: openbao_roster_live_kv_metadata_conflicts == []
+        quiet: true
+
+    - name: Inject a live roster KV path without its managed-by marker
+      ansible.builtin.set_fact:
+        openbao_roster_live_kv_metadata:
+          ai/splunk-heimdall: {}
+          apps/splunk-heimdall:
+            managed-by: roster-agent:splunk-heimdall
+          apps/splunk-heimdall-gw:
+            managed-by: other-controller
+
+    - name: Assert unmanaged live roster KV paths report agent and path
+      ansible.builtin.assert:
+        that:
+          - openbao_roster_live_kv_metadata_conflicts | length == 2
+          - "'splunk-heimdall (ai/splunk-heimdall)' in openbao_roster_live_kv_metadata_conflicts"
+          - "'splunk-heimdall (apps/splunk-heimdall-gw)' in openbao_roster_live_kv_metadata_conflicts"
         quiet: true
 
     - name: Inject a live AppRole with an additional policy

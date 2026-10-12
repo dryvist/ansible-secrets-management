@@ -2,9 +2,27 @@
 # Optional AI agents from the tofu inventory artifact.
 openbao_ai_agents: "{{ (tofu_data | default({})).agents | default({}) }}"
 
-openbao_roster_agent_name_pattern: '^[a-z]+-[a-z]+$'
-openbao_roster_agent_slug_pattern: '^[a-z][a-z0-9-]*$'
+openbao_roster_agent_name_pattern: '^[a-z]+-[a-z]+\Z'
+openbao_roster_agent_slug_pattern: '^[a-z][a-z0-9-]*\Z'
 openbao_roster_agent_policy_marker: "# managed-by: openbao roster-agent "
+
+# Must match the tofu roster's cataloged systems.
+openbao_roster_agent_ownable_slugs: [splunk, cribl]
+
+# Existing non-roster policies that can read these MCP credentials. Broad
+# ai/* readers are included because they also cover ai/mcp/<slug>.
+openbao_mcp_credential_owners:
+  splunk:
+    - hermes
+    - hermes-private-agent
+    - ansible-converge
+    - splunk-mcp-rotate
+    - observability
+    - local-llm
+    - ai-rotate
+  cribl:
+    - local-llm
+    - ai-rotate
 
 # Check mode has no converge token (the issuer login is skipped), so the live
 # check runs only on a real converge. A real run without a token fails instead.
@@ -16,6 +34,7 @@ openbao_roster_live_approle_names: []
 openbao_roster_live_policy_names: []
 openbao_roster_live_policy_bodies: {}
 openbao_roster_live_approle_configs: {}
+openbao_roster_live_kv_metadata: {}
 
 openbao_roster_agent_invalid_names: >-
   {%- set _invalid = [] -%}
@@ -53,6 +72,26 @@ openbao_roster_agent_invalid_slugs: >-
   {%- endif -%}
   {%- endfor -%}
   {{ _invalid }}
+
+openbao_roster_agent_unknown_slugs: >-
+  {%- set _unknown = [] -%}
+  {%- for entry in openbao_roster_agent_owned_slugs -%}
+  {%- if entry.slug is string and entry.slug not in openbao_roster_agent_ownable_slugs -%}
+  {%- set _ = _unknown.append(entry.agent ~ ':' ~ entry.slug) -%}
+  {%- endif -%}
+  {%- endfor -%}
+  {{ _unknown }}
+
+openbao_roster_agent_mcp_credential_conflicts: >-
+  {%- set _conflicts = [] -%}
+  {%- for entry in openbao_roster_agent_owned_slugs -%}
+  {%- set _owners = openbao_mcp_credential_owners.get(entry.slug, []) -%}
+  {%- if _owners | length > 0 -%}
+  {%- set _ = _conflicts.append(entry.agent ~ ':' ~ entry.slug ~ ' (existing policies: '
+      ~ (_owners | join(', ')) ~ ')') -%}
+  {%- endif -%}
+  {%- endfor -%}
+  {{ _conflicts }}
 
 openbao_roster_agent_duplicate_slugs: >-
   {%- set _all = openbao_roster_agent_owned_slugs | map(attribute='slug') | list -%}
@@ -118,6 +157,8 @@ openbao_roster_agent_name_collisions: >-
   {%- endfor -%}
   {{ _hits | unique | list }}
 
+# A copied marker or same-name role needs sys/policy or auth admin rights, which
+# this guard does not defend against.
 openbao_roster_live_policy_conflicts: >-
   {%- set _conflicts = [] -%}
   {%- for agent in openbao_ai_agents -%}
@@ -125,6 +166,21 @@ openbao_roster_live_policy_conflicts: >-
         and (openbao_roster_agent_policy_marker ~ agent)
             not in (openbao_roster_live_policy_bodies.get(agent, '') | string).splitlines() -%}
   {%- set _ = _conflicts.append(agent) -%}
+  {%- endif -%}
+  {%- endfor -%}
+  {{ _conflicts }}
+
+openbao_roster_live_kv_metadata_conflicts: >-
+  {%- set _conflicts = [] -%}
+  {%- for agent in openbao_ai_agents -%}
+  {%- if (agent | string | regex_search(openbao_roster_agent_name_pattern)) is not none -%}
+  {%- for path in ['ai/' ~ agent, 'apps/' ~ agent, 'apps/' ~ agent ~ '-gw'] -%}
+  {%- set _metadata = openbao_roster_live_kv_metadata.get(path, none) -%}
+  {%- if _metadata is not none
+        and (_metadata | default({}, true)).get('managed-by') != ('roster-agent:' ~ agent) -%}
+  {%- set _ = _conflicts.append(agent ~ ' (' ~ path ~ ')') -%}
+  {%- endif -%}
+  {%- endfor -%}
   {%- endif -%}
   {%- endfor -%}
   {{ _conflicts }}

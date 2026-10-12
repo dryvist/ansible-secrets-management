@@ -39,7 +39,7 @@
       ansible.builtin.assert:
         that: openbao_roster_agent_invalid_names | length == 0
         fail_msg: >-
-          Roster agent names must match ^[a-z]+-[a-z]+$; invalid agents:
+          Roster agent names must match ^[a-z]+-[a-z]+\Z; invalid agents:
           {{ openbao_roster_agent_invalid_names | join(', ') }}.
         quiet: true
 
@@ -48,8 +48,26 @@
         that: openbao_roster_agent_invalid_slugs | length == 0
         fail_msg: >-
           Roster agent owns values must be lists of slugs matching
-          ^[a-z][a-z0-9-]*$; invalid agents or slugs:
+          ^[a-z][a-z0-9-]*\Z; invalid agents or slugs:
           {{ openbao_roster_agent_invalid_slugs | join(', ') }}.
+        quiet: true
+
+    - name: Refuse roster agents that own unknown systems
+      ansible.builtin.assert:
+        that: openbao_roster_agent_unknown_slugs | length == 0
+        fail_msg: >-
+          Roster agent owns values must be cataloged tofu systems from
+          openbao_roster_agent_ownable_slugs; unknown agents or slugs:
+          {{ openbao_roster_agent_unknown_slugs | join(', ') }}.
+        quiet: true
+
+    - name: Refuse roster ownership while non-roster policies read MCP credentials
+      ansible.builtin.assert:
+        that: openbao_roster_agent_mcp_credential_conflicts | length == 0
+        fail_msg: >-
+          Roster agents cannot own MCP credentials while existing non-roster
+          policies read them; remove these legacy grants first:
+          {{ openbao_roster_agent_mcp_credential_conflicts | join('; ') }}.
         quiet: true
 
     - name: Refuse duplicate roster agent owned slugs

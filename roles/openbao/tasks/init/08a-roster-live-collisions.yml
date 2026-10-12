@@ -101,6 +101,52 @@
           {{ _pairs }}
       no_log: true
 
+    - name: Read live metadata for roster agent KV paths
+      ansible.builtin.command:
+        cmd: "bao kv metadata get -mount={{ openbao_kv_mount }} -format=json {{ item.path }}"
+      environment:
+        BAO_ADDR: "{{ openbao_cli_addr }}"
+        BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+      delegate_to: "{{ openbao_cli_host }}"
+      become: "{{ openbao_cli_become }}"
+      vars:
+        ansible_become: "{{ openbao_cli_become }}"
+      loop: >-
+        {%- set _paths = [] -%}
+        {%- for agent in openbao_ai_agents -%}
+        {%- if (agent | string | regex_search(openbao_roster_agent_name_pattern)) is not none -%}
+        {%- for path in ['ai/' ~ agent, 'apps/' ~ agent, 'apps/' ~ agent ~ '-gw'] -%}
+        {%- set _ = _paths.append({'agent': agent, 'path': path}) -%}
+        {%- endfor -%}
+        {%- endif -%}
+        {%- endfor -%}
+        {{ _paths }}
+      loop_control:
+        label: "{{ item.path }}"
+      register: openbao_roster_live_kv_metadata_reads
+      no_log: true
+      changed_when: false
+      check_mode: false
+      failed_when: >-
+        openbao_roster_live_kv_metadata_reads.rc != 0
+        and not (((openbao_roster_live_kv_metadata_reads.stdout | default(''))
+                  ~ (openbao_roster_live_kv_metadata_reads.stderr | default('')))
+                 | lower is search('no entries|no value found|404'))
+
+    - name: Resolve live roster KV custom metadata
+      ansible.builtin.set_fact:
+        openbao_roster_live_kv_metadata: "{{ _metadata_pairs | items2dict }}"
+      vars:
+        _metadata_pairs: >-
+          {%- set _pairs = [] -%}
+          {%- for result in (openbao_roster_live_kv_metadata_reads.results | default([])) -%}
+          {%- set _metadata = ((result.stdout | from_json).data.custom_metadata | default({}, true))
+              if (result.rc | default(1)) == 0 else none -%}
+          {%- set _ = _pairs.append({'key': result.item.path, 'value': _metadata}) -%}
+          {%- endfor -%}
+          {{ _pairs }}
+      no_log: true
+
     - name: Read live AppRoles with a marked roster policy
       ansible.builtin.command:
         cmd: "bao read -format=json auth/approle/role/{{ item }}"
@@ -142,9 +188,12 @@
         that:
           - openbao_roster_live_policy_conflicts | length == 0
           - openbao_roster_live_approle_conflicts | length == 0
+          - openbao_roster_live_kv_metadata_conflicts | length == 0
         fail_msg: >-
           Live roster policy marker conflicts (the policy lacks the exact
           managed-by marker): {{ openbao_roster_live_policy_conflicts }}.
           Live roster AppRole conflicts (missing a marked policy or carrying
           policies other than its own): {{ openbao_roster_live_approle_conflicts }}.
+          Live roster KV metadata conflicts (the path is already managed by
+          another owner): {{ openbao_roster_live_kv_metadata_conflicts }}.
           Remove or rename the out-of-band object or rename the agent.
