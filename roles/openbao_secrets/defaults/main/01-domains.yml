@@ -231,3 +231,9 @@ openbao_secrets_operator_domains:
 # relies on.
 openbao_secrets_domain_groups: {}
 openbao_secrets_active_groups: []
+
+# Mirrors openbao_roster_agent_owned_slugs in roles/openbao/defaults/main/05k-roster-agents.yml.
+openbao_secrets_roster_owned_slug_names: >-
+  {{ (tofu_data | default({})).agents | default({})
+     | dict2items | map(attribute='value.owns', default=[])
+     | flatten | unique | list }}
