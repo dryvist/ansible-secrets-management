@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.9.1](https://github.com/dryvist/ansible-secrets-management/compare/v0.9.0...v0.9.1) (2026-10-12)
+
+
+### Bug Fixes
+
+* **openbao:** add the Azure engine path to ai-admin-policy.hcl.j2 ([#101](https://github.com/dryvist/ansible-secrets-management/issues/101)) ([9c839cb](https://github.com/dryvist/ansible-secrets-management/commit/9c839cba7da149b7498b7af6e174179e298952af))
+* **openbao:** grant the admin policy the Azure engine mount ([0ee360c](https://github.com/dryvist/ansible-secrets-management/commit/0ee360c28e8b3f4c638c6e53a69030818b84850d))
+
 ## [0.9.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.8.0...v0.9.0) (2026-10-12)
 
 
