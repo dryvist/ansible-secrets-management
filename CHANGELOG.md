@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.10.1...v0.11.0) (2026-10-12)
+
+
+### Features
+
+* **openbao:** add the azure-iac-admin AppRole and policy ([#119](https://github.com/dryvist/ansible-secrets-management/issues/119)) ([e2e5065](https://github.com/dryvist/ansible-secrets-management/commit/e2e5065a388f861d480ff9a2a0d7a6f499808a32))
+
 ## [0.10.1](https://github.com/dryvist/ansible-secrets-management/compare/v0.10.0...v0.10.1) (2026-10-12)
 
 
