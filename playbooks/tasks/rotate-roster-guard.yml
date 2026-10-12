@@ -1,0 +1,67 @@
+---
+# Exact reads of the two reader roles: 200 is live, 404 is absent, and any
+# other status fails the run.
+- name: Probe the roster key-reader AppRoles
+  ansible.builtin.uri:
+    url: "{{ rotate_bao_addr }}/v1/auth/approle/role/{{ item }}/role-id"
+    method: GET
+    headers:
+      X-Vault-Token: "{{ rotate_login.json.auth.client_token }}"
+    status_code: [200, 404]
+  loop:
+    - "{{ openbao_roster_router_key_reader_name }}"
+    - "{{ openbao_roster_gateway_key_reader_name }}"
+  register: _rotate_roster_reader_probe
+  changed_when: false
+  no_log: true
+  when:
+    - not ansible_check_mode
+    - rotate_roster_guard_list_response is not defined
+
+- name: Capture live roster key-reader AppRoles
+  ansible.builtin.set_fact:
+    rotate_roster_guard_live_approle_names: >-
+      {{ rotate_roster_guard_list_response.json.data['keys']
+         if rotate_roster_guard_list_response is defined
+         else _rotate_roster_reader_probe.results
+              | selectattr('status', 'equalto', 200) | map(attribute='item') | list }}
+  when: not ansible_check_mode
+
+# The shared key readers exist only while the roster has agents. When neither
+# reader is live, the empty roster remains the default and rotation continues.
+- name: Load the agent roster when a shared key reader is live
+  ansible.builtin.include_role:
+    name: dryvist.homelab.inventory_resolve
+  vars:
+    inventory_resolve_openbao_token: >-
+      {{ (((rotate_login | default({})).json | default({})).auth | default({})).client_token
+         | default(lookup('env', 'BAO_TOKEN'), true) }}
+    inventory_resolve_path: >-
+      {{ rotate_roster_guard_inventory_path
+         | default(lookup('env', 'TOFU_INVENTORY_PATH'), true) }}
+  register: rotate_roster_guard_inventory_load
+  when:
+    - not ansible_check_mode
+    - >-
+      rotate_roster_guard_live_approle_names
+      | select('in', [openbao_roster_router_key_reader_name,
+                      openbao_roster_gateway_key_reader_name])
+      | list | length > 0
+
+- name: Refuse to rotate when live roster AppRoles are absent from inventory
+  vars:
+    _live_reader_approle_names: >-
+      {{ rotate_roster_guard_live_approle_names
+         | select('in', [openbao_roster_router_key_reader_name,
+                         openbao_roster_gateway_key_reader_name]) | list }}
+  ansible.builtin.assert:
+    that:
+      - _live_reader_approle_names | length == 0
+        or openbao_roster_agent_valid_names | length > 0
+    fail_msg: >-
+      Live roster key readers {{ _live_reader_approle_names }} exist, but the
+      published inventory could not be loaded or has no valid agents. Supply
+      TOFU_INVENTORY_PATH pointing at the published inventory. Refusing to
+      rotate a partial set.
+    quiet: true
+  when: not ansible_check_mode

@@ -178,28 +178,6 @@
         quiet: true
       when: not (bootstrap_seed_only | bool)
 
-    - name: Resolve the domains to rotate this run
-      ansible.builtin.set_fact:
-        rotate_domain_names: >-
-          {{ openbao_host_secret_zero_approle_names if (bootstrap_seed_only | bool) else
-             (openbao_rotate_domains | trim | length > 0)
-             | ternary(
-                 openbao_rotate_domains.split(',') | map('trim') | reject('equalto', '') | list,
-                 openbao_secrets_domain_approle_names
-               ) }}
-
-    - name: Refuse an unknown domain name
-      when: not (bootstrap_seed_only | bool)
-      vars:
-        _unknown: "{{ rotate_domain_names | reject('in', openbao_secrets_domain_approle_names) | list }}"
-      ansible.builtin.assert:
-        that:
-          - _unknown | length == 0
-        fail_msg: >-
-          openbao_rotate_domains named a domain that is not in
-          openbao_secrets_domain_approle_names: {{ _unknown }}.
-        quiet: true
-
     - name: Unwrap the single-use secret_id (human mode)
       ansible.builtin.uri:
         url: "{{ rotate_bao_addr }}/v1/sys/wrapping/unwrap"
@@ -267,43 +245,29 @@
       no_log: true
       when: rotate_preissued_mode | bool
 
-    # Resolve the same published inventory that the regular converge consumes.
-    # Scheduled mode supplies an AppRole pair, so reuse its authenticated token
-    # for inventory_resolve's OpenBao credential read.
-    - name: Load the agent roster
-      ansible.builtin.include_role:
-        name: dryvist.homelab.inventory_resolve
-      vars:
-        inventory_resolve_openbao_token: >-
-          {{ (((rotate_login | default({})).json | default({})).auth | default({})).client_token
-             | default(lookup('env', 'BAO_TOKEN'), true) }}
+    - name: Guard the roster against live AppRole readers
+      ansible.builtin.include_tasks: tasks/rotate-roster-guard.yml
 
-    - name: List live AppRoles for the roster completeness guard
-      ansible.builtin.uri:
-        url: "{{ rotate_bao_addr }}/v1/auth/approle/role?list=true"
-        method: GET
-        headers:
-          X-Vault-Token: "{{ rotate_login.json.auth.client_token }}"
-        status_code: 200
-      register: rotate_live_approle_list
-      changed_when: false
-      no_log: true
+    - name: Resolve the domains to rotate this run
+      ansible.builtin.set_fact:
+        rotate_domain_names: >-
+          {{ openbao_host_secret_zero_approle_names if (bootstrap_seed_only | bool) else
+             (openbao_rotate_domains | trim | length > 0)
+             | ternary(
+                 openbao_rotate_domains.split(',') | map('trim') | reject('equalto', '') | list,
+                 openbao_secrets_domain_approle_names
+               ) }}
 
-    # The shared key readers exist only while the roster has agents, so a live
-    # reader with an empty loaded roster means the roster did not load.
-    - name: Refuse to rotate when live roster AppRoles are absent from inventory
+    - name: Refuse an unknown domain name
+      when: not (bootstrap_seed_only | bool)
       vars:
-        _live_reader_approle_names: >-
-          {{ rotate_live_approle_list.json.data.keys
-             | select('in', [openbao_roster_router_key_reader_name,
-                             openbao_roster_gateway_key_reader_name]) | list }}
+        _unknown: "{{ rotate_domain_names | reject('in', openbao_secrets_domain_approle_names) | list }}"
       ansible.builtin.assert:
         that:
-          - _live_reader_approle_names | length == 0
-            or openbao_roster_agent_valid_names | length > 0
+          - _unknown | length == 0
         fail_msg: >-
-          Live roster key readers {{ _live_reader_approle_names }} exist but the
-          loaded roster has no agents. Refusing to rotate a partial set.
+          openbao_rotate_domains named a domain that is not in
+          openbao_secrets_domain_approle_names: {{ _unknown }}.
         quiet: true
 
     # One read, reused by every domain's Doppler-republish task below --
