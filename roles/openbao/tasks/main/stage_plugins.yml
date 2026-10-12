@@ -181,7 +181,6 @@
     dest: "/tmp/{{ openbao_azure_plugin_tarball }}"
     checksum: "sha256:{{ openbao_azure_plugin_tarball_sha256 }}"
     mode: "0644"
-    force: true
   delegate_to: localhost
   connection: local
   become: false
