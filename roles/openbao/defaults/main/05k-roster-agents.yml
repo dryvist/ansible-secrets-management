@@ -45,6 +45,33 @@ openbao_roster_agent_invalid_names: >-
   {%- endfor -%}
   {{ _invalid }}
 
+# Each valid roster agent's two generated keys: apps/<agent> (router key) and
+# apps/<agent>-gw (gateway key). Seeded beside openbao_generated_app_secrets
+# but kept out of it, so the shared `apps` read grant never covers them.
+openbao_roster_agent_generated_app_secrets: >-
+  {%- set _secrets = {} -%}
+  {%- for agent in openbao_ai_agents | reject('in', openbao_roster_agent_invalid_names) -%}
+  {%- set _field = agent | replace('-', '_') -%}
+  {%- set _ = _secrets.update({agent: [_field ~ '_llm_router_key'],
+                               agent ~ '-gw': [_field ~ '_agentgateway_key']}) -%}
+  {%- endfor -%}
+  {{ _secrets }}
+
+# KV custom metadata the seed writes on each roster leaf. The live check in
+# 08a-roster-live-collisions.yml accepts an existing leaf only with this value.
+openbao_roster_agent_leaf_metadata: >-
+  {%- set _metadata = {} -%}
+  {%- for agent in openbao_ai_agents | reject('in', openbao_roster_agent_invalid_names) -%}
+  {%- set _ = _metadata.update({agent: {'managed-by': 'roster-agent:' ~ agent},
+                                agent ~ '-gw': {'managed-by': 'roster-agent:' ~ agent}}) -%}
+  {%- endfor -%}
+  {{ _metadata }}
+
+# Every app leaf the seed task generates.
+openbao_seeded_generated_app_secrets: >-
+  {{ openbao_generated_app_secrets
+     | combine(openbao_router_key_catalog, openbao_roster_agent_generated_app_secrets) }}
+
 openbao_roster_agent_owned_slugs: >-
   {%- set _entries = [] -%}
   {%- for agent, definition in openbao_ai_agents.items() -%}
