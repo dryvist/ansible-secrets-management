@@ -172,12 +172,14 @@
 # only what this identity may actually write -- one ungranted name (e.g. a
 # newly declared policy the live openbao-reconcile grant hasn't caught up
 # with yet) no longer blocks the content update of every OTHER declared
-# policy. Derived from the same ungranted list above, never a second filter.
+# policy. Derived from the same ungranted list above, plus the policies that
+# render no grants until their gating input is set (openbao_unscheduled_empty_policy_names).
 - name: Resolve the RBAC policies this identity may actually write
   ansible.builtin.set_fact:
     openbao_reachable_policies: >-
       {{ openbao_manageable_policies
-         | rejectattr('name', 'in', openbao_ungranted_policy_names | default([]))
+         | rejectattr('name', 'in', (openbao_ungranted_policy_names | default([]))
+                                    + (openbao_unscheduled_empty_policy_names | default([])))
          | list }}
   when: openbao_bootstrap_token is defined
 
@@ -244,9 +246,9 @@
     msg: >-
       OPENBAO_GITHUB_CI_RESOLVER_REPOS is unset -- the ci-resolver GitHub
       permission set is omitted from openbao_github_permission_sets, so
-      github-ci-resolver-policy.hcl.j2 renders with no grants. Set the env var
-      to restore it, or leave it unset deliberately if the identity is not yet
-      meant to exist.
+      github-ci-resolver-policy.hcl.j2 renders with no grants and the policy is
+      not written. Set the env var to restore it, or leave it unset
+      deliberately if the identity is not yet meant to exist.
   when:
     - openbao_bootstrap_token is defined
     - openbao_github_ci_resolver_repos | default([]) | length == 0

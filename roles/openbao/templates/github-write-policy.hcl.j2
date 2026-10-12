@@ -6,8 +6,7 @@
 #   * required_parameters forces every request to name an installation AND a
 #     repositories value. The selector may cover any installed repositories,
 #     including multiple repositories or the full installation.
-#   * allowed_parameters restricts installation_id to the base installations
-#     and explicitly configured extra write installations. GitHub's App
+#   * allowed_parameters does not pin installation_id; GitHub's App
 #     installation selects the repositories.
 #     Listing any key denies all unlisted parameters, so org_name and
 #     repository_ids are denied by construction.
@@ -32,13 +31,7 @@ path "{{ openbao_github_everyday_mount }}/token" {
     # String forms only: the JSON-number form matches neither a quoted nor an
     # unquoted policy value, so listing numbers is dead weight that reads as
     # a live grant.
-    "installation_id" = [
-      "{{ openbao_github_everyday_dryvist_installation_id }}",
-      "{{ openbao_github_everyday_personal_installation_id }}"{{ "," if openbao_github_everyday_extra_write_installations_parsed | length > 0 }}
-{% for installation in openbao_github_everyday_extra_write_installations_parsed %}
-      "{{ installation.installation_id }}"{{ "," if not loop.last }}
-{% endfor %}
-    ]
+    "installation_id" = []
     "repositories" = []
     "permissions" = []
   }

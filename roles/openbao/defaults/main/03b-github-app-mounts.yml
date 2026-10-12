@@ -40,21 +40,6 @@ openbao_github_everyday_extra_read_installations_parsed: >-
   {%- endfor -%}
   {%- endif -%}
   {{ parsed.entries }}
-openbao_github_everyday_extra_write_installations: >-
-  {{ openbao_platform_env['OPENBAO_GITHUB_EXTRA_WRITE_INSTALLATION_IDS'] | default('', true) }}
-openbao_github_everyday_extra_write_installations_parsed: >-
-  {%- set parsed = namespace(entries=[]) -%}
-  {%- if openbao_github_everyday_extra_write_installations | trim | length > 0 -%}
-  {%- for entry in openbao_github_everyday_extra_write_installations.split(',') | map('trim') -%}
-  {%- set parts = entry.split('=', 1) -%}
-  {%- set parsed.entries = parsed.entries + [{
-      'entry': entry,
-      'owner': parts[0],
-      'installation_id': parts[1] if parts | length > 1 else ''
-    }] -%}
-  {%- endfor -%}
-  {%- endif -%}
-  {{ parsed.entries }}
 openbao_github_everyday_base_read_permission_sets:
   - name: read-dryvist-all
     tier: read
