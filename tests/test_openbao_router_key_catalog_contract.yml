@@ -18,6 +18,10 @@
       ansible.builtin.include_vars:
         file: "{{ _openbao_role }}/defaults/main/05c-terrakube-and-remaining-domain-names.yml"
 
+    - name: Load the generated-secret path defaults
+      ansible.builtin.include_vars:
+        file: "{{ _openbao_role }}/defaults/main/01d-app-secret-paths.yml"
+
     - name: Load the generated-app exclusions
       ansible.builtin.include_vars:
         file: "{{ _openbao_role }}/defaults/main/05h-cribl-edge-readers.yml"

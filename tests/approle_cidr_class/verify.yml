@@ -48,6 +48,9 @@
           openbao-reconcile is not in the declared AppRole set, so the class map
           below cannot contain it and every assertion here would pass vacuously.
 
+    - name: Verify the ClickHouse reader and generated credential contract
+      ansible.builtin.include_tasks: clickhouse.yml
+
     - name: It must reach both the execution plane and the workstation
       vars:
         cls: "{{ openbao_approle_cidr_class_map['openbao-reconcile'] }}"

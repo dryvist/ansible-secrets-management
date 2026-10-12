@@ -6,9 +6,9 @@
 # OpenBao, no real inventory needed.
 #
 # Covers, for a fixed fixture map of {apps, local-llm, media, ntfy,
-# monitoring} -> consumer groups (observability, local-cloud intentionally
-# left unmapped, matching the real map's treatment of domains with no
-# traced consumer in this repo):
+# monitoring, clickhouse} -> consumer groups (observability, local-cloud,
+# clickhouse intentionally left unmapped, matching the real map's treatment
+# of domains with no traced consumer in this repo):
 #   - a scoped run activating only ONE domain's consumer group fetches
 #     exactly that domain plus the always-fetched unmapped domains, never
 #     the others
@@ -32,6 +32,7 @@
       - name: monitoring
       - name: observability
       - name: local-cloud
+      - name: clickhouse
     _domain_groups:
       apps:
         - zammad_group
@@ -48,7 +49,7 @@
         - media_group
         - status_group
         - docker_vms
-      # observability, local-cloud: no consumer group -- always fetched.
+      # observability, local-cloud, clickhouse: no consumer group -- always fetched.
     _every_referenced_group:
       - zammad_group
       - vikunja_group
@@ -65,19 +66,19 @@
           domains: "{{ _domains }}"
           domain_groups: "{{ _domain_groups }}"
           active_groups: [zammad_group]
-          expected_names: [apps, local-llm, observability, local-cloud]
+          expected_names: [apps, local-llm, observability, local-cloud, clickhouse]
 
         - name: only media_group active fetches media, monitoring, and the unmapped domains
           domains: "{{ _domains }}"
           domain_groups: "{{ _domain_groups }}"
           active_groups: [media_group]
-          expected_names: [media, monitoring, observability, local-cloud]
+          expected_names: [media, monitoring, observability, local-cloud, clickhouse]
 
         - name: only ntfy_group active fetches ntfy, monitoring, and the unmapped domains
           domains: "{{ _domains }}"
           domain_groups: "{{ _domain_groups }}"
           active_groups: [ntfy_group]
-          expected_names: [ntfy, monitoring, observability, local-cloud]
+          expected_names: [ntfy, monitoring, observability, local-cloud, clickhouse]
 
         # status_stack (hosts: status_group) reads bao_monitoring_secrets.GATUS_EXTERNAL_TOKEN
         # via `mandatory()` -- a run limited to status_group must still fetch
@@ -86,19 +87,19 @@
           domains: "{{ _domains }}"
           domain_groups: "{{ _domain_groups }}"
           active_groups: [status_group]
-          expected_names: [monitoring, observability, local-cloud]
+          expected_names: [monitoring, observability, local-cloud, clickhouse]
 
         - name: no groups active at all fetches only the unmapped domains
           domains: "{{ _domains }}"
           domain_groups: "{{ _domain_groups }}"
           active_groups: []
-          expected_names: [observability, local-cloud]
+          expected_names: [observability, local-cloud, clickhouse]
 
         - name: every referenced group active (the --limit all shape) fetches every domain
           domains: "{{ _domains }}"
           domain_groups: "{{ _domain_groups }}"
           active_groups: "{{ _every_referenced_group }}"
-          expected_names: [apps, local-llm, media, ntfy, monitoring, observability, local-cloud]
+          expected_names: [apps, local-llm, media, ntfy, monitoring, observability, local-cloud, clickhouse]
       loop_control:
         loop_var: domain_scoping_fixture
         label: "{{ domain_scoping_fixture.name }}"

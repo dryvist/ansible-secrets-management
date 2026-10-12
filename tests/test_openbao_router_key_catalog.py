@@ -10,6 +10,7 @@ from ansible.template import Templar, trust_as_template
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULTS = ROOT / "roles/openbao/defaults/main/01c-app-secrets-generated.yml"
+PATH_DEFAULTS = ROOT / "roles/openbao/defaults/main/01d-app-secret-paths.yml"
 OPENBAO_META = ROOT / "roles/openbao/meta/main.yml"
 READ_DEFAULTS = ROOT / "roles/openbao/defaults/main/05c-terrakube-and-remaining-domain-names.yml"
 EXCLUDED_DEFAULTS = ROOT / "roles/openbao/defaults/main/05h-cribl-edge-readers.yml"
@@ -19,6 +20,7 @@ OPEN_LLM_POLICY = ROOT / "roles/openbao/templates/open-llm-policy.hcl.j2"
 APPS_POLICY = ROOT / "roles/openbao/templates/apps-policy.hcl.j2"
 
 DEFAULTS_DATA = yaml.safe_load(DEFAULTS.read_text(encoding="utf-8"))
+PATH_DEFAULTS_DATA = yaml.safe_load(PATH_DEFAULTS.read_text(encoding="utf-8"))
 READ_DATA = yaml.safe_load(READ_DEFAULTS.read_text(encoding="utf-8"))
 EXCLUDED_DATA = yaml.safe_load(EXCLUDED_DEFAULTS.read_text(encoding="utf-8"))
 OPENBAO_META_DATA = yaml.safe_load(OPENBAO_META.read_text(encoding="utf-8"))
@@ -36,6 +38,7 @@ def _read_apps(router_catalog):
         READ_DATA["openbao_apps_read_apps"],
         {
             "openbao_generated_app_secrets": DEFAULTS_DATA["openbao_generated_app_secrets"],
+            "openbao_generated_app_secret_paths": PATH_DEFAULTS_DATA["openbao_generated_app_secret_paths"],
             "openbao_promoted_app_secrets": {},
             "openbao_router_key_catalog": router_catalog,
             "openbao_apps_read_published_apps": READ_DATA["openbao_apps_read_published_apps"],
