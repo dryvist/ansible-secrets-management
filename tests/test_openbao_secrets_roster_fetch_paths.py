@@ -17,6 +17,7 @@ class OpenbaoSecretsRosterFetchPaths(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout[-4000:] + result.stderr[-2000:])
         self.assertIn("Assert an empty roster preserves every declared fetch domain", result.stdout)
         self.assertIn("Assert no fetch domain contains the owned Splunk MCP path", result.stdout)
+        self.assertIn("Assert the owner domain keeps its Splunk MCP path", result.stdout)
 
 
 if __name__ == "__main__":

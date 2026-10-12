@@ -30,10 +30,14 @@
     openbao_secrets_domains_to_fetch: >-
       {%- set _owned_mcp_paths = openbao_secrets_roster_owned_slug_names
           | map('regex_replace', '^', 'ai/mcp/') | list -%}
+      {%- set _agents = (tofu_data | default({})).agents | default({}) -%}
+      {%- set _owner_slugs = _agents.get(item.name, {}).get('owns', []) -%}
+      {%- set _owner_mcp_paths = _owner_slugs
+          | map('regex_replace', '^', 'ai/mcp/') | list -%}
       {%- set _paths = [] -%}
       {%- for path in item.paths -%}
       {%- set _path = path.get('path', '') if path is mapping else path -%}
-      {%- if _path not in _owned_mcp_paths -%}
+      {%- if _path not in _owned_mcp_paths or _path in _owner_mcp_paths -%}
       {%- set _ = _paths.append(path) -%}
       {%- endif -%}
       {%- endfor -%}

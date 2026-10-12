@@ -44,3 +44,28 @@
             (openbao_secrets_domains_to_fetch | map(attribute='paths') | flatten
              | select('equalto', 'ai/mcp/splunk') | list) == []
         quiet: true
+
+    - name: Append an owner domain with its own Splunk MCP path
+      ansible.builtin.set_fact:
+        openbao_secrets_domains: >-
+          {{ openbao_secrets_domains + [{'name': 'splunk-heimdall', 'paths':
+             ['ai/splunk-heimdall', 'ai/mcp/splunk']}] }}
+
+    - name: Apply the production domain narrowing task with an owner domain
+      ansible.builtin.include_tasks: ../../roles/openbao_secrets/tasks/narrow_domains.yml
+
+    - name: Assert the owner domain keeps its Splunk MCP path
+      ansible.builtin.assert:
+        that:
+          - >-
+            (openbao_secrets_domains_to_fetch
+             | selectattr('name', 'equalto', 'splunk-heimdall')
+             | map(attribute='paths') | flatten
+             | select('equalto', 'ai/mcp/splunk') | list)
+            == ['ai/mcp/splunk']
+          - >-
+            (openbao_secrets_domains_to_fetch
+             | rejectattr('name', 'equalto', 'splunk-heimdall')
+             | map(attribute='paths') | flatten
+             | select('equalto', 'ai/mcp/splunk') | list) == []
+        quiet: true
