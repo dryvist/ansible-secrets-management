@@ -45,12 +45,22 @@ openbao_roster_agent_invalid_names: >-
   {%- endfor -%}
   {{ _invalid }}
 
+openbao_roster_agent_valid_names: >-
+  {{ openbao_ai_agents.keys() | list | reject('in', openbao_roster_agent_invalid_names) | list }}
+
+# Dedicated shared key-family readers for all valid roster agents.
+openbao_roster_router_key_reader_name: llm-router-agent-keys
+openbao_roster_gateway_key_reader_name: agentgateway-agent-keys
+openbao_roster_key_reader_approle_names: >-
+  {{ ([openbao_roster_router_key_reader_name, openbao_roster_gateway_key_reader_name]
+      if openbao_roster_agent_valid_names | length > 0 else []) }}
+
 # Each valid roster agent's two generated keys: apps/<agent> (router key) and
 # apps/<agent>-gw (gateway key). Seeded beside openbao_generated_app_secrets
 # but kept out of it, so the shared `apps` read grant never covers them.
 openbao_roster_agent_generated_app_secrets: >-
   {%- set _secrets = {} -%}
-  {%- for agent in openbao_ai_agents | reject('in', openbao_roster_agent_invalid_names) -%}
+  {%- for agent in openbao_roster_agent_valid_names -%}
   {%- set _field = agent | replace('-', '_') -%}
   {%- set _ = _secrets.update({agent: [_field ~ '_llm_router_key'],
                                agent ~ '-gw': [_field ~ '_agentgateway_key']}) -%}
@@ -61,7 +71,7 @@ openbao_roster_agent_generated_app_secrets: >-
 # 08a-roster-live-collisions.yml accepts an existing leaf only with this value.
 openbao_roster_agent_leaf_metadata: >-
   {%- set _metadata = {} -%}
-  {%- for agent in openbao_ai_agents | reject('in', openbao_roster_agent_invalid_names) -%}
+  {%- for agent in openbao_roster_agent_valid_names -%}
   {%- set _ = _metadata.update({agent: {'managed-by': 'roster-agent:' ~ agent},
                                 agent ~ '-gw': {'managed-by': 'roster-agent:' ~ agent}}) -%}
   {%- endfor -%}
@@ -177,15 +187,9 @@ openbao_roster_agent_live_name_exceptions: >-
 # an exception name, or a KV leaf that the resulting policy would read.
 openbao_roster_agent_name_collisions: >-
   {%- set _hits = [] -%}
-  {%- set _valid_agents = [] -%}
-  {%- for agent in openbao_ai_agents -%}
-  {%- if (agent | string | regex_search(openbao_roster_agent_name_pattern)) is not none -%}
-  {%- set _ = _valid_agents.append(agent) -%}
-  {%- endif -%}
-  {%- endfor -%}
   {%- for agent in openbao_ai_agents -%}
   {%- for candidate in [agent, (agent | string) ~ '-gw'] -%}
-  {%- set _expected = 1 if candidate == agent and agent in _valid_agents else 0 -%}
+  {%- set _expected = 1 if candidate == agent and agent in openbao_roster_agent_valid_names else 0 -%}
   {%- if (openbao_approles | selectattr('name', 'equalto', candidate) | list | length > _expected)
         or (openbao_policies | selectattr('name', 'equalto', candidate) | list | length > _expected)
         or candidate in openbao_roster_agent_live_name_exceptions

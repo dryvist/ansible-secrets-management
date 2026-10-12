@@ -162,3 +162,9 @@ openbao_workstation_approles:
   - name: "{{ openbao_cribl_edge_mac_b_approle_name }}"
     policy: "{{ openbao_cribl_edge_mac_b_policy_name }}"
     secret_id_num_uses: 100
+openbao_roster_key_reader_approles: >-
+  {{ ([{'name': openbao_roster_router_key_reader_name,
+        'policy': openbao_roster_router_key_reader_name, 'secret_id_num_uses': 100},
+       {'name': openbao_roster_gateway_key_reader_name,
+        'policy': openbao_roster_gateway_key_reader_name, 'secret_id_num_uses': 100}]
+      if openbao_roster_agent_valid_names | length > 0 else []) }}

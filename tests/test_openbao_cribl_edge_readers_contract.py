@@ -243,6 +243,7 @@ class CriblEdgeReaderContract(unittest.TestCase):
         ]
         rotation_values.update(
             openbao_cribl_edge_mac_approle_names=rotated_cribl_roles,
+            openbao_roster_key_reader_approle_names=[],
             openbao_hermes_private_agent_secret_id_cidr="",
         )
         rotated_roles = _render(rotation_names_expression, rotation_values)

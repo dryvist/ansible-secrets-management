@@ -210,7 +210,8 @@
               openbao_agent_ssh_sign_approle_name,
               openbao_agent_workstation_approle_name,
               openbao_approle_secret_id_rotate_scheduled_approle_name]
-             + openbao_cribl_edge_mac_approle_names }}
+             + openbao_cribl_edge_mac_approle_names
+             + openbao_roster_key_reader_approle_names }}
         _declared: >-
           {{ openbao_approle_secret_id_num_uses_overrides.get(item, openbao_approle_secret_id_num_uses) }}
         _uses: >-

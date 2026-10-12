@@ -43,6 +43,7 @@
         that:
           - openbao_ai_agents == {}
           - openbao_roster_agent_invalid_names == []
+          - openbao_roster_agent_valid_names == []
           - openbao_roster_agent_invalid_slugs == []
           - openbao_roster_agent_unknown_slugs == []
           - openbao_roster_agent_mcp_credential_conflicts == []
@@ -50,11 +51,39 @@
           - openbao_roster_agent_name_collisions == []
           - openbao_roster_agent_approles == []
           - openbao_roster_agent_policies == []
+          - openbao_roster_key_reader_approle_names == []
+          - openbao_roster_key_reader_approles == []
           - openbao_approles == _expected_approles
           - openbao_policies == _expected_policies
           - _roster_baseline_approles == _expected_approles
           - _roster_baseline_policies == _expected_policies
         quiet: true
+
+    - name: Render both empty-roster key reader policies
+      ansible.builtin.template:
+        src: "{{ _template_dir }}/{{ item }}-policy.hcl.j2"
+        dest: "{{ _fixture_dir }}/{{ item }}-empty.hcl"
+        mode: "0644"
+      loop:
+        - llm-router-agent-keys
+        - agentgateway-agent-keys
+
+    - name: Read both empty-roster key reader policies
+      ansible.builtin.slurp:
+        src: "{{ _fixture_dir }}/{{ item }}-empty.hcl"
+      loop:
+        - llm-router-agent-keys
+        - agentgateway-agent-keys
+      register: _empty_key_reader_policies
+
+    - name: Assert empty-roster key reader policies have no paths
+      vars:
+        _empty_hcl: "{{ item.content | b64decode }}"
+      ansible.builtin.assert:
+        that:
+          - _empty_hcl | regex_findall('(?m)^path ') | length == 0
+        quiet: true
+      loop: "{{ _empty_key_reader_policies.results }}"
 
     - name: Set a fixture roster with one owner and one agent without owned systems
       ansible.builtin.set_fact:
@@ -69,14 +98,30 @@
         that:
           - openbao_roster_agent_approles | length == 2
           - openbao_roster_agent_policies | length == 2
+          - openbao_roster_agent_valid_names == ['splunk-heimdall', 'cribl-bifrost']
           - openbao_roster_agent_invalid_names == []
           - openbao_roster_agent_invalid_slugs == []
           - openbao_roster_agent_unknown_slugs == []
           - openbao_roster_agent_mcp_credential_conflicts == []
           - openbao_roster_agent_duplicate_slugs == []
           - openbao_roster_agent_name_collisions == []
-          - openbao_approles | length == _roster_baseline_approles | length + 2
-          - openbao_policies | length == _roster_baseline_policies | length + 2
+          - openbao_approles | length == _roster_baseline_approles | length + 4
+          - openbao_policies | length == _roster_baseline_policies | length + 4
+          - openbao_roster_key_reader_approle_names == ['llm-router-agent-keys', 'agentgateway-agent-keys']
+          - >-
+            openbao_roster_key_reader_approles ==
+            [{'name': 'llm-router-agent-keys', 'policy': 'llm-router-agent-keys', 'secret_id_num_uses': 100},
+             {'name': 'agentgateway-agent-keys', 'policy': 'agentgateway-agent-keys', 'secret_id_num_uses': 100}]
+          - >-
+            openbao_policies
+            | selectattr('name', 'in', openbao_roster_key_reader_approle_names)
+            | sort(attribute='name')
+            == [{'name': 'agentgateway-agent-keys', 'template': 'agentgateway-agent-keys-policy.hcl.j2'},
+                {'name': 'llm-router-agent-keys', 'template': 'llm-router-agent-keys-policy.hcl.j2'}]
+          - >-
+            openbao_secrets_domain_approle_names
+            | select('in', openbao_roster_key_reader_approle_names)
+            | list == openbao_roster_key_reader_approle_names
           - >-
             openbao_roster_agent_approles | sort(attribute='name')
             == [{'name': 'cribl-bifrost', 'policy': 'cribl-bifrost', 'secret_id_num_uses': 0},
@@ -316,6 +361,54 @@
           and capabilities.
         quiet: true
 
+    - name: Render both roster key reader policies
+      ansible.builtin.template:
+        src: "{{ _template_dir }}/{{ item }}-policy.hcl.j2"
+        dest: "{{ _fixture_dir }}/{{ item }}.hcl"
+        mode: "0644"
+      loop:
+        - llm-router-agent-keys
+        - agentgateway-agent-keys
+
+    - name: Read both roster key reader policies
+      ansible.builtin.slurp:
+        src: "{{ _fixture_dir }}/{{ item }}.hcl"
+      loop:
+        - llm-router-agent-keys
+        - agentgateway-agent-keys
+      register: _key_reader_policies
+
+    - name: Assert each key reader grants only its key family
+      vars:
+        _router_hcl: "{{ _key_reader_policies.results[0].content | b64decode }}"
+        _gateway_hcl: "{{ _key_reader_policies.results[1].content | b64decode }}"
+        _router_paths: "{{ _router_hcl | regex_findall('(?m)^path \"([^\"]+)\"') | sort }}"
+        _gateway_paths: "{{ _gateway_hcl | regex_findall('(?m)^path \"([^\"]+)\"') | sort }}"
+        _router_capabilities: "{{ _router_hcl | regex_findall('(?m)^  capabilities = \\[(.*)\\]$') }}"
+        _gateway_capabilities: "{{ _gateway_hcl | regex_findall('(?m)^  capabilities = \\[(.*)\\]$') }}"
+      ansible.builtin.assert:
+        that:
+          - >-
+            _router_paths ==
+            [openbao_kv_mount ~ '/data/apps/cribl-bifrost',
+             openbao_kv_mount ~ '/metadata/apps/cribl-bifrost',
+             openbao_kv_mount ~ '/data/apps/splunk-heimdall',
+             openbao_kv_mount ~ '/metadata/apps/splunk-heimdall'] | sort
+          - >-
+            _gateway_paths ==
+            [openbao_kv_mount ~ '/data/apps/cribl-bifrost-gw',
+             openbao_kv_mount ~ '/metadata/apps/cribl-bifrost-gw',
+             openbao_kv_mount ~ '/data/apps/splunk-heimdall-gw',
+             openbao_kv_mount ~ '/metadata/apps/splunk-heimdall-gw'] | sort
+          - _router_paths | select('search', '-gw') | list == []
+          - _gateway_paths | select('search', '-gw') | list | length == 4
+          - _router_capabilities == ['"read"', '"read", "list"'] * 2
+          - _gateway_capabilities == ['"read"', '"read", "list"'] * 2
+          - _router_hcl is not search('/ai/')
+          - _gateway_hcl is not search('/ai/')
+        fail_msg: The roster key reader policies contain paths outside their assigned key family.
+        quiet: true
+
     - name: Set a fixture roster whose agent reuses an existing AppRole and policy name
       ansible.builtin.set_fact:
         openbao_ai_agents:
@@ -368,6 +461,22 @@
           - openbao_roster_agent_invalid_names == ["splunk-heimdall\n"]
           - openbao_roster_agent_approles == []
           - openbao_roster_agent_policies == []
+        quiet: true
+
+    - name: Set roster names that match the dedicated key reader identities
+      ansible.builtin.set_fact:
+        openbao_ai_agents:
+          llm-router-agent-keys: {}
+          agentgateway-agent-keys: {}
+
+    - name: Assert dedicated key reader names are invalid roster names
+      ansible.builtin.assert:
+        that:
+          - openbao_roster_agent_invalid_names | sort == ['agentgateway-agent-keys', 'llm-router-agent-keys']
+          - openbao_roster_agent_valid_names == []
+          - openbao_roster_agent_approles == []
+          - openbao_roster_agent_policies == []
+          - openbao_roster_key_reader_approles == []
         quiet: true
 
     - name: Set a fixture roster with an invalid owned slug
