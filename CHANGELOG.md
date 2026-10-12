@@ -1,5 +1,41 @@
 # Changelog
 
+## [0.8.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.7.1...v0.8.0) (2026-10-12)
+
+
+### Features
+
+* **openbao_secrets:** drop owned MCP paths from non-owner fetch domains ([#78](https://github.com/dryvist/ansible-secrets-management/issues/78)) ([499d28d](https://github.com/dryvist/ansible-secrets-management/commit/499d28dedcc3b6c27a994cb0f24209ca324ca1aa))
+* **openbao:** add azure secrets engine with roles from environment ([#88](https://github.com/dryvist/ansible-secrets-management/issues/88)) ([1242bf2](https://github.com/dryvist/ansible-secrets-management/commit/1242bf2bd980218d54200e6d467d4432c5e1177c))
+* **openbao:** add router and gateway reader roles for roster agent keys ([#75](https://github.com/dryvist/ansible-secrets-management/issues/75)) ([39f1a6e](https://github.com/dryvist/ansible-secrets-management/commit/39f1a6ede05ea360d6db6b64684b3242e23a79fd))
+* **openbao:** derive roster agent AppRoles and policies ([#73](https://github.com/dryvist/ansible-secrets-management/issues/73)) ([deaaf89](https://github.com/dryvist/ansible-secrets-management/commit/deaaf898e1d8ecae6a21bc0aaaf7ff487c038699))
+* **openbao:** drop consumer MCP grants once a roster agent owns the system ([#77](https://github.com/dryvist/ansible-secrets-management/issues/77)) ([5322ffb](https://github.com/dryvist/ansible-secrets-management/commit/5322ffb6e4b681c389d173e0d3c918bf61b47c3d))
+* **openbao:** generate an A2A bearer token for the assistant guest ([eab9d97](https://github.com/dryvist/ansible-secrets-management/commit/eab9d97c8ad795574ae23c8883a7cf44d709bd85))
+* **openbao:** generate an A2A bearer token for the assistant guest ([#70](https://github.com/dryvist/ansible-secrets-management/issues/70)) ([1539774](https://github.com/dryvist/ansible-secrets-management/commit/1539774706d7f0fb6cb2edb7ff739ceb761f66df))
+* **openbao:** leave installation_id unpinned in the write policies ([#83](https://github.com/dryvist/ansible-secrets-management/issues/83)) ([91bb0a2](https://github.com/dryvist/ansible-secrets-management/commit/91bb0a25898a9f13f74e4916336bc8b71c5c9b3c))
+* **openbao:** leave installation_id unpinned in the write policies ([#83](https://github.com/dryvist/ansible-secrets-management/issues/83)) ([e1f8f0f](https://github.com/dryvist/ansible-secrets-management/commit/e1f8f0fadb2f41b3a934374523b385d1bf858823))
+* **openbao:** provision Qwen Code router key ([#66](https://github.com/dryvist/ansible-secrets-management/issues/66)) ([1d9b9fb](https://github.com/dryvist/ansible-secrets-management/commit/1d9b9fb6c71fec6c5a08b8eefe100ec8c78c93c2))
+* **openbao:** seed per-agent router and gateway keys outside the apps grant ([#74](https://github.com/dryvist/ansible-secrets-management/issues/74)) ([243deb1](https://github.com/dryvist/ansible-secrets-management/commit/243deb1cdbbf4817a2da90d5d3f4293ac08b9ae0))
+* **openbao:** serve extra installations on the everyday GitHub mount ([#65](https://github.com/dryvist/ansible-secrets-management/issues/65)) ([cdc383e](https://github.com/dryvist/ansible-secrets-management/commit/cdc383e3d34cee6cd115253e2ea7eea10d7a136d))
+
+
+### Bug Fixes
+
+* **openbao_secrets:** run the endpoint probe in check mode ([#64](https://github.com/dryvist/ansible-secrets-management/issues/64)) ([9c40b51](https://github.com/dryvist/ansible-secrets-management/commit/9c40b51b9fbaaef6b0a455639982c0f818b3f22f))
+* **openbao:** do not schedule the ci-resolver policy while its repository list is empty ([7152318](https://github.com/dryvist/ansible-secrets-management/commit/7152318a71fe4a20e626a11526674e36a3ce14fd))
+* **openbao:** do not schedule the ci-resolver policy while its repository list is empty ([8749cec](https://github.com/dryvist/ansible-secrets-management/commit/8749cec03fe04cad78e65acb04edda3da58944e6))
+* **openbao:** do not schedule the ci-resolver policy while its repository list is empty ([#84](https://github.com/dryvist/ansible-secrets-management/issues/84)) ([09de305](https://github.com/dryvist/ansible-secrets-management/commit/09de30587543c5e90357f6f8d016cdbdb4c02fa4))
+* **openbao:** gate the rotation roster load on live roster readers ([#87](https://github.com/dryvist/ansible-secrets-management/issues/87)) ([54419b2](https://github.com/dryvist/ansible-secrets-management/commit/54419b24a91831750310f4b3e01922b67fdd0db4))
+* **openbao:** generate the assistant guest router key and grant its apps path ([#67](https://github.com/dryvist/ansible-secrets-management/issues/67)) ([ea24f28](https://github.com/dryvist/ansible-secrets-management/commit/ea24f28cbd5ff926b46a4d06e517da2e8b84ea62))
+* **openbao:** generate the donna router key and grant its apps path ([ea24f28](https://github.com/dryvist/ansible-secrets-management/commit/ea24f28cbd5ff926b46a4d06e517da2e8b84ea62))
+* **openbao:** leave write installation_id unpinned and skip the empty ci-resolver policy ([#85](https://github.com/dryvist/ansible-secrets-management/issues/85)) ([147b771](https://github.com/dryvist/ansible-secrets-management/commit/147b771e8c7cf3aa3680e087bda693835bf15f82))
+* **openbao:** load the agent roster before rotating AppRole secret IDs ([f7259f7](https://github.com/dryvist/ansible-secrets-management/commit/f7259f7aebfd4962a1ce1d34888df7e581b4c341))
+* **openbao:** load the agent roster before rotating AppRole secret IDs ([#82](https://github.com/dryvist/ansible-secrets-management/issues/82)) ([48cc113](https://github.com/dryvist/ansible-secrets-management/commit/48cc11363d2f74f4814270319c51c20d7692d4d6))
+* **openbao:** require the snapshot unit and skip the restart in check mode ([e7007ef](https://github.com/dryvist/ansible-secrets-management/commit/e7007efbbc167acd8e65b29f66134211aea9f8dd))
+* **openbao:** run the init path's read-only probes in check mode ([#71](https://github.com/dryvist/ansible-secrets-management/issues/71)) ([5e37787](https://github.com/dryvist/ansible-secrets-management/commit/5e377873d8bb4ec0f6f8678ee562007f0b3fd435))
+* **openbao:** snapshot and restart on a version upgrade ([57ea8ca](https://github.com/dryvist/ansible-secrets-management/commit/57ea8ca17dd597e842bcc23a183eb93416b4ebba))
+* **openbao:** snapshot and restart on a version upgrade ([#90](https://github.com/dryvist/ansible-secrets-management/issues/90)) ([29994ea](https://github.com/dryvist/ansible-secrets-management/commit/29994ea3ae67fe8b220ff170301067e4def66a4c))
+
 ## [0.7.1](https://github.com/dryvist/ansible-secrets-management/compare/v0.7.0...v0.7.1) (2026-10-11)
 
 
