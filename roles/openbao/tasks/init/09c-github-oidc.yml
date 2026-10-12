@@ -39,6 +39,7 @@
   register: openbao_github_oidc_config_current
   no_log: true
   changed_when: false
+  check_mode: false
   failed_when: false
   when: openbao_bootstrap_token is defined
 
@@ -87,6 +88,7 @@
   register: openbao_github_oidc_docs_role_current
   no_log: true
   changed_when: false
+  check_mode: false
   failed_when: false
   when: openbao_bootstrap_token is defined
 
@@ -178,6 +180,7 @@
   register: openbao_github_oidc_uicheck_role_current
   no_log: true
   changed_when: false
+  check_mode: false
   failed_when: false
   when: openbao_bootstrap_token is defined
 

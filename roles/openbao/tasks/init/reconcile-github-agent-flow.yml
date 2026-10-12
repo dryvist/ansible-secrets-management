@@ -14,6 +14,7 @@
   register: openbao_github_agent_flow_role_current
   no_log: true
   changed_when: false
+  check_mode: false
   failed_when: false
 
 - name: Reconcile the GitHub agent-flow OIDC role

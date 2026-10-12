@@ -42,6 +42,7 @@
     BAO_ADDR: "{{ openbao_api_addr }}"
   register: openbao_status_raw
   changed_when: false
+  check_mode: false
   failed_when: openbao_status_raw.rc not in [0, 2]
 
 - name: Parse OpenBao status
@@ -67,6 +68,7 @@
     label: "{{ item }}"
   register: openbao_peer_health
   changed_when: false
+  check_mode: false
   failed_when: false
   when: not openbao_status.initialized
 
