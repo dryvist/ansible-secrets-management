@@ -37,3 +37,8 @@
     - name: Write the roster key leaf with its owner marker
       ansible.builtin.include_tasks:
         file: seed_roster_agent_leaf_owner.yml
+        apply:
+          tags:
+            - openbao_kv_seed
+      tags:
+        - openbao_kv_seed

@@ -8,3 +8,7 @@
       Roster writes need the converge token, and none is set on this real run.
       Refusing to continue.
     quiet: true
+  # A dynamic include drops its caller's tags; `always` keeps a tag-scoped run
+  # (openbao_rbac, openbao_kv_seed) from skipping this check.
+  tags:
+    - always
