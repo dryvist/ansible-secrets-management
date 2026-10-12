@@ -69,6 +69,7 @@ jobs:
       # Cache Galaxy content keyed on requirements.yml. On a hit the collections
       # (and any roles) are already present, so the install below is skipped;
       # on a miss (requirements.yml changed) it runs and repopulates the cache.
+      # The key matches the shared Ansible CI and the Role tests job.
       - name: Cache Ansible Galaxy content
         id: galaxy-cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
@@ -76,7 +77,7 @@ jobs:
           path: |
             ~/.ansible/collections
             ~/.ansible/roles
-          key: ansible-galaxy-${{ runner.os }}-${{ hashFiles('requirements.yml') }}
+          key: ansible-galaxy-v2-${{ runner.os }}-${{ hashFiles('requirements.yml') }}
 
       - name: Install Ansible collections
         if: steps.galaxy-cache.outputs.cache-hit != 'true'
