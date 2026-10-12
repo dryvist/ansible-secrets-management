@@ -128,8 +128,8 @@
       openbao_azure_plugin_tune is changed
       or (openbao_azure_plugin_install_task | default({})) is changed
 
-# Root config holds the one service principal secret OpenBao uses to mint
-# client secrets. Same write-once pattern as the AWS root key.
+# Root config holds the service principal secret OpenBao uses to mint client
+# secrets.
 - name: Check whether the Azure engine root config already exists
   ansible.builtin.command:
     cmd: "bao read -format=json {{ openbao_azure_mount }}/config"
