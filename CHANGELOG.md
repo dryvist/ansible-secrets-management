@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.10.1](https://github.com/dryvist/ansible-secrets-management/compare/v0.10.0...v0.10.1) (2026-10-12)
+
+
+### Bug Fixes
+
+* **openbao:** send subscription_id in the Azure engine config ([35d95a3](https://github.com/dryvist/ansible-secrets-management/commit/35d95a315063ef0f619fdc4bb5f33006236ecddd))
+* **openbao:** send subscription_id in the Azure engine config ([#114](https://github.com/dryvist/ansible-secrets-management/issues/114)) ([f95dcaf](https://github.com/dryvist/ansible-secrets-management/commit/f95dcafc1918ded4838293c8e802d2fae61d8dbb))
+
 ## [0.10.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.9.1...v0.10.0) (2026-10-12)
 
 
