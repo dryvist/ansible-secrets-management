@@ -23,7 +23,10 @@ path "{{ openbao_github_everyday_mount }}/token" {
   allowed_parameters = {
     "installation_id" = [
       "{{ openbao_github_everyday_dryvist_installation_id }}",
-      "{{ openbao_github_everyday_personal_installation_id }}"
+      "{{ openbao_github_everyday_personal_installation_id }}"{{ "," if openbao_github_everyday_extra_write_installations_parsed | length > 0 }}
+{% for installation in openbao_github_everyday_extra_write_installations_parsed %}
+      "{{ installation.installation_id }}"{{ "," if not loop.last }}
+{% endfor %}
     ]
     "repositories" = [
 {% for repo in item.repos %}
