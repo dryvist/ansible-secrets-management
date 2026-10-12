@@ -1,0 +1,23 @@
+---
+- name: Probe the roster key-reader AppRoles
+  ansible.builtin.uri:
+    url: "{{ rotate_bao_addr }}/v1/auth/approle/role/{{ item }}/role-id"
+    method: GET
+    headers:
+      X-Vault-Token: "{{ rotate_login.json.auth.client_token }}"
+  loop:
+    - "{{ openbao_roster_router_key_reader_name }}"
+    - "{{ openbao_roster_gateway_key_reader_name }}"
+  register: _rotate_roster_reader_probe
+  changed_when: false
+  failed_when: false
+  no_log: true
+
+- name: Record roster key-reader probe statuses
+  ansible.builtin.set_fact:
+    rotate_roster_guard_probe_results: >-
+      {{ rotate_roster_guard_probe_results | default([])
+         + [{'name': item.item, 'status': item.status | default(-1)}] }}
+  loop: "{{ _rotate_roster_reader_probe.results }}"
+  loop_control:
+    label: "{{ item.item }}"
