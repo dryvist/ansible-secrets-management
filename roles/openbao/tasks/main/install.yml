@@ -136,11 +136,59 @@
 # its own openbao user/unit; we override the config + unit below so the role
 # stays the single source of truth (User/Group already created above match).
 # Skipped when the target version is already present (idempotent re-runs).
+# An upgrade (a different version already installed) first takes a raft
+# snapshot, so a rollback has the pre-upgrade data. The snapshot script is
+# leader-gated, so only the active voter writes one. A failed snapshot stops
+# the upgrade.
+- name: Check for the OpenBao snapshot unit before an upgrade
+  ansible.builtin.stat:
+    path: "/etc/systemd/system/{{ openbao_snapshot_service_name }}.service"
+  register: openbao_snapshot_unit
+  when:
+    - not openbao_already_installed
+    - openbao_installed_version.rc == 0
+
+- name: Require the snapshot unit before an upgrade
+  ansible.builtin.assert:
+    that: openbao_snapshot_unit.stat.exists
+    fail_msg: >-
+      Upgrading OpenBao needs a pre-upgrade raft snapshot, but
+      {{ openbao_snapshot_service_name }}.service is not installed. Enable
+      snapshots (openbao_snapshot_enabled and the snapshot AppRole) first.
+    quiet: true
+  when:
+    - not openbao_already_installed
+    - openbao_installed_version.rc == 0
+    - ansible_virtualization_type | default('') != 'docker'
+
+- name: Snapshot raft before upgrading OpenBao
+  ansible.builtin.systemd:
+    name: "{{ openbao_snapshot_service_name }}.service"
+    state: started
+  when:
+    - not openbao_already_installed
+    - openbao_installed_version.rc == 0
+    - ansible_virtualization_type | default('') != 'docker'
+
 - name: Install OpenBao package
   ansible.builtin.apt:
     deb: "/tmp/{{ openbao_deb_filename }}"
     state: present
   when: not openbao_already_installed
+
+# The package's postinst never restarts the service, so an upgrade notifies
+# the rolling restart; otherwise the voters keep running the old binary. A
+# first install is left to the bootstrap path, which starts the service.
+- name: Restart OpenBao onto the upgraded binary
+  ansible.builtin.debug:
+    msg: "OpenBao upgraded to {{ openbao_version }}; rolling restart queued."
+  changed_when: true
+  notify: Restart openbao
+  when:
+    - not openbao_already_installed
+    - openbao_installed_version.rc == 0
+    - not ansible_check_mode
+    - ansible_virtualization_type | default('') != 'docker'
 
 - name: Remove the staged .deb from the target
   ansible.builtin.file:
