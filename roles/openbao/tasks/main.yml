@@ -35,12 +35,12 @@
   tags:
     - always
 
-# Tagged openbao_plugins AND openbao_engines: staging the AWS/GitHub/
+# Tagged openbao_plugins AND openbao_engines: staging the AWS/Azure/GitHub/
 # OAuthapp plugin binaries is a prerequisite specifically for registering
 # those engines in init/04-06, not for RBAC/AppRole/KV work, so it is not
 # `always` -- but `--tags openbao_engines` alone must still stage the
 # binaries it registers.
-- name: Phase 5 -- stage the AWS/GitHub/OAuthapp secrets-engine plugins
+- name: Phase 5 -- stage the AWS/Azure/GitHub/OAuthapp secrets-engine plugins
   ansible.builtin.import_tasks: main/stage_plugins.yml
   tags:
     - openbao_plugins

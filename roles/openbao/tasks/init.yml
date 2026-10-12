@@ -65,6 +65,14 @@
     - openbao_engines
   when: not (openbao_reconcile_mode | default(false))
 
+- name: Register and configure the Azure secrets engine
+  ansible.builtin.import_tasks: init/04b-azure-engine.yml
+  tags:
+    - openbao_engines
+  when:
+    - not (openbao_reconcile_mode | default(false))
+    - openbao_azure_engine_enabled | bool
+
 - name: Register and configure the GitHub secrets engine
   ansible.builtin.import_tasks: init/05-github-engine.yml
   tags:

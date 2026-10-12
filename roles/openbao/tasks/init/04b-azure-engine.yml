@@ -1,0 +1,187 @@
+---
+
+- name: Read the staged Azure plugin binary sha256
+  ansible.builtin.stat:
+    path: "{{ openbao_plugin_dir }}/{{ openbao_azure_plugin_command }}"
+    checksum_algorithm: sha256
+  register: openbao_azure_plugin_stat
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_azure_engine_enabled | bool
+
+- name: Assert the Azure plugin binary is staged
+  ansible.builtin.assert:
+    that:
+      - openbao_azure_plugin_stat.stat.exists
+    fail_msg: >-
+      {{ openbao_plugin_dir }}/{{ openbao_azure_plugin_command }} is missing —
+      the staging phase in main.yml should have extracted it. Re-run the full
+      role (not init in isolation).
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_azure_engine_enabled | bool
+
+- name: Check whether the Azure plugin is already registered
+  ansible.builtin.command:
+    cmd: >-
+      bao plugin info -format=json
+      -version={{ openbao_azure_plugin_catalog_version }}
+      secret {{ openbao_azure_plugin_name }}
+  environment:
+    BAO_ADDR: "{{ openbao_cli_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
+  register: openbao_azure_plugin_check
+  no_log: true
+  changed_when: false
+  check_mode: false
+  failed_when: false
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_azure_engine_enabled | bool
+
+- name: Register the Azure plugin pinned to the staged binary sha256
+  ansible.builtin.command:
+    cmd: >-
+      bao plugin register
+      -sha256={{ openbao_azure_plugin_stat.stat.checksum }}
+      -command={{ openbao_azure_plugin_command }}
+      -version={{ openbao_azure_plugin_catalog_version }}
+      secret {{ openbao_azure_plugin_name }}
+  environment:
+    BAO_ADDR: "{{ openbao_cli_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
+  no_log: true
+  changed_when: true
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_azure_engine_enabled | bool
+    - (openbao_azure_plugin_check.rc | default(1)) != 0
+
+- name: Enable the Azure secrets engine
+  ansible.builtin.command:
+    cmd: >-
+      bao secrets enable -path={{ openbao_azure_mount }}
+      -plugin-version={{ openbao_azure_plugin_catalog_version }}
+      {{ openbao_azure_plugin_name }}
+  environment:
+    BAO_ADDR: "{{ openbao_cli_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
+  no_log: true
+  changed_when: true
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_azure_engine_enabled | bool
+    - (openbao_azure_mount ~ '/') not in (openbao_mounts_raw.stdout | from_json).keys()
+
+- name: Tune the Azure mount to the declared plugin version
+  ansible.builtin.command:
+    cmd: >-
+      bao secrets tune -plugin-version={{ openbao_azure_plugin_catalog_version }}
+      {{ openbao_azure_mount }}/
+  environment:
+    BAO_ADDR: "{{ openbao_cli_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
+  register: openbao_azure_plugin_tune
+  no_log: true
+  changed_when: true
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_azure_engine_enabled | bool
+    - (openbao_azure_mount ~ '/') in (openbao_mounts_raw.stdout | from_json).keys()
+    - >-
+      ((openbao_mounts_raw.stdout | from_json)[openbao_azure_mount ~ '/'].plugin_version
+       | default('')) != openbao_azure_plugin_catalog_version
+
+- name: Check whether the Azure engine root config exists
+  ansible.builtin.command:
+    cmd: "bao read -format=json {{ openbao_azure_mount }}/config"
+  environment:
+    BAO_ADDR: "{{ openbao_cli_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
+  register: openbao_azure_config_check
+  no_log: true
+  changed_when: false
+  check_mode: false
+  failed_when: false
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_azure_engine_enabled | bool
+
+- name: Refuse Azure role provisioning without root config
+  ansible.builtin.fail:
+    msg: >-
+      The Azure engine root config is missing. An operator must write
+      {{ openbao_azure_mount }}/config and run bao write -f
+      {{ openbao_azure_mount }}/rotate-root before Azure roles can be provisioned.
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_azure_engine_enabled | bool
+    - (openbao_azure_config_check.rc | default(1)) != 0
+
+- name: Check whether each Azure role already exists
+  ansible.builtin.command:
+    cmd: "bao read -format=json {{ openbao_azure_mount }}/roles/{{ item.name }}"
+  environment:
+    BAO_ADDR: "{{ openbao_cli_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
+  loop: "{{ openbao_azure_roles }}"
+  loop_control:
+    label: role
+  register: openbao_azure_role_checks
+  no_log: true
+  changed_when: false
+  check_mode: false
+  failed_when: false
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_azure_engine_enabled | bool
+
+- name: Create each missing Azure role
+  ansible.builtin.command:
+    argv:
+      - bao
+      - write
+      - "{{ openbao_azure_mount }}/roles/{{ item.0.name }}"
+      - "application_object_id={{ item.0.application_object_id }}"
+      - "ttl={{ item.0.ttl }}"
+      - "max_ttl={{ item.0.max_ttl }}"
+  environment:
+    BAO_ADDR: "{{ openbao_cli_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
+  loop: "{{ openbao_azure_roles | zip(openbao_azure_role_checks.results | default([])) | list }}"
+  loop_control:
+    label: role
+  no_log: true
+  changed_when: true
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_azure_engine_enabled | bool
+    - (item.1.rc | default(1)) != 0
