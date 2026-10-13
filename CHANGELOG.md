@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.13.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.12.0...v0.13.0) (2026-10-13)
+
+
+### Features
+
+* **openbao:** add the hermes orchestrator generated app secret ([#129](https://github.com/dryvist/ansible-secrets-management/issues/129)) ([dba4b84](https://github.com/dryvist/ansible-secrets-management/commit/dba4b84927d706a3cc32fafaebe764bc4ef97f62))
+* **openbao:** grant the apps read for the hermes orchestrator leaf ([a679589](https://github.com/dryvist/ansible-secrets-management/commit/a6795893cc95d850d049aaf3d24eb4e06d91ec74))
+
 ## [0.12.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.11.0...v0.12.0) (2026-10-12)
 
 
