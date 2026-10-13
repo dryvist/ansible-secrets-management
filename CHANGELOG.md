@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.16.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.15.0...v0.16.0) (2026-10-13)
+
+
+### Features
+
+* **openbao:** generate the codex-local router key ([#143](https://github.com/dryvist/ansible-secrets-management/issues/143)) ([b1979df](https://github.com/dryvist/ansible-secrets-management/commit/b1979dfbe579ee41f1b62e3030895c48089597e0))
+* **openbao:** isolate owned MCP access in dedicated local-llm policies ([#136](https://github.com/dryvist/ansible-secrets-management/issues/136)) ([ec5b9b2](https://github.com/dryvist/ansible-secrets-management/commit/ec5b9b2d62e386866dc0b85aed6daef4a1f6c617))
+* **openbao:** preserve owner MCP paths in fetch domains ([#132](https://github.com/dryvist/ansible-secrets-management/issues/132)) ([af5921a](https://github.com/dryvist/ansible-secrets-management/commit/af5921a4acfc56176dae8a77311c4f87ca3f990b))
+* **openbao:** separate Azure IaC admin AppRole policies ([#135](https://github.com/dryvist/ansible-secrets-management/issues/135)) ([76c8560](https://github.com/dryvist/ansible-secrets-management/commit/76c8560b1ccd3186fc49d89a45c12900c4dc60bb))
+
+
+### Bug Fixes
+
+* **openbao:** start the observability Splunk grant on its own line ([#147](https://github.com/dryvist/ansible-secrets-management/issues/147)) ([54b4ed7](https://github.com/dryvist/ansible-secrets-management/commit/54b4ed7f128563911a60437e8ce2b5ecbecd5685))
+
 ## [0.15.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.14.0...v0.15.0) (2026-10-13)
 
 
