@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.12.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.11.0...v0.12.0) (2026-10-12)
+
+
+### Features
+
+* **openbao:** add per-organisation repo-create permission sets ([7742019](https://github.com/dryvist/ansible-secrets-management/commit/7742019de807a0ce1fdd7f51f4cf432a2a88b384))
+* **openbao:** add per-organisation repo-create permission sets ([#123](https://github.com/dryvist/ansible-secrets-management/issues/123)) ([1ea7e1a](https://github.com/dryvist/ansible-secrets-management/commit/1ea7e1af92f713b8056b88c8187d6dcc4d2043ad))
+
 ## [0.11.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.10.1...v0.11.0) (2026-10-12)
 
 
