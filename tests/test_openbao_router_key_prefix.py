@@ -3,9 +3,11 @@
 LiteLLM's /key/generate rejects a caller-supplied virtual key that does not
 start with `sk-`. seed_generated_app_secret.yml's generate-if-absent rule
 would otherwise leave an unprefixed value stored forever, since nothing has
-ever accepted it. Router-key fields (openbao_app_secret_router_key_suffix)
-get one carve-out: regenerate when empty OR when stored but missing the
-prefix. Every other field keeps the empty-only rule untouched.
+ever accepted it. Router-key fields (the
+openbao_app_secret_router_key_suffix or
+openbao_app_secret_router_key_fields) get one carve-out: regenerate when empty
+OR when stored but missing the prefix. Every other field keeps the empty-only
+rule untouched.
 
 Renders the REAL `when` expression, never a reimplementation.
 """
@@ -25,6 +27,7 @@ DEFAULTS = yaml.safe_load(
     (ROOT / "roles/openbao/defaults/main/01b-app-secret-generation.yml").read_text()
 )
 ROUTER_SUFFIX = DEFAULTS["openbao_app_secret_router_key_suffix"]
+ROUTER_FIELDS = DEFAULTS["openbao_app_secret_router_key_fields"]
 ROUTER_PREFIX = DEFAULTS["openbao_app_secret_router_key_prefix"]
 
 
@@ -50,6 +53,7 @@ def _regenerates(item, stored_value):
         "item": item,
         "openbao_seed_current_data": {item: stored_value} if stored_value else {},
         "openbao_app_secret_router_key_suffix": ROUTER_SUFFIX,
+        "openbao_app_secret_router_key_fields": ROUTER_FIELDS,
         "openbao_app_secret_router_key_prefix": ROUTER_PREFIX,
     }
     return all(_render(c, variables) for c in cond)
@@ -57,6 +61,17 @@ def _regenerates(item, stored_value):
 
 class RouterKeyPrefixRegeneration(unittest.TestCase):
     ROUTER_FIELD = "open_webui" + ROUTER_SUFFIX
+
+    def test_explicit_contract_router_field_regenerates_without_prefix(self):
+        self.assertTrue(_regenerates("router_key", "abc123"))
+
+    def test_explicit_contract_router_field_keeps_prefix(self):
+        self.assertFalse(_regenerates("router_key", ROUTER_PREFIX + "abc123"))
+
+    def test_explicit_contract_field_uses_router_prefix_generation(self):
+        expression = _find(REL, TASK)["ansible.builtin.set_fact"]["openbao_seed_desired"]
+        self.assertIn("item in openbao_app_secret_router_key_fields", expression)
+        self.assertIn("item: (openbao_app_secret_router_key_prefix", expression)
 
     def test_an_empty_router_key_regenerates(self):
         self.assertTrue(_regenerates(self.ROUTER_FIELD, ""))

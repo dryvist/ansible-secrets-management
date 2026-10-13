@@ -69,6 +69,22 @@
     label: "{{ item.name }}"
   when: gm.mount == openbao_github_work_mount
 
+- name: "Assert the sandbox sets are public-only and narrowly permissioned on mount {{ gm.mount }}"
+  ansible.builtin.assert:
+    that:
+      - item.permissions == openbao_github_agents_set_permissions[item.name]
+      - item.public_repos_of == 'dryvist'
+      - item.private_repos_of is not defined
+      - (item.repositories | default([]) | length) == 0
+    fail_msg: >-
+      {{ gm.mount }}/permissionset/{{ item.name }} must use its declared
+      public-only permission map and repository scope.
+    quiet: true
+  loop: "{{ gm.permission_sets }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: gm.mount == openbao_github_agents_mount
+
 # ponytail: one page of 100; add pagination when a list passes 100 repos.
 - name: "Resolve the set repository lists on mount {{ gm.mount }}"
   ansible.builtin.set_fact:

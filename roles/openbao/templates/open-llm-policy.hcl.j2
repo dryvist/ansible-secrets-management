@@ -1,18 +1,14 @@
 {{ ansible_managed | comment }}
 # OpenBao policy for the open-llm AppRole — the untrusted-tier dispatcher.
-# Exactly two grants:
+# The dispatcher reads its own internal bucket and the exact external Z.ai
+# leaf, mints tokens from its public-write set, and issues short-lived wrapped
+# SecretIDs for the two sandbox roles.
 #
-#   * read its own bucket, secret/apps/open-llm (exact path, no wildcard);
-#   * mint GitHub tokens from the raw {{ openbao_github_agents_mount }}/token
-#     endpoint, pinned to the one installation of that mount's App. The App's
-#     installation repository list is the repository scope and its permission
-#     grant is the ceiling; GitHub refuses a token naming a repository outside
-#     the installation. Listing allowed_parameters denies every unlisted key,
-#     so org_name and repository_ids (alternate installation and repository
-#     selectors) are refused. Every other GitHub mount is unreachable.
+#   * read secret/apps/open-llm and secrets-external/zai-coding;
+#   * mint using the named public-write permission set;
+#   * issue wrapped SecretIDs for sandbox-agent-read and sandbox-agent-write.
 #
-# No KV write, no other secret path, no other mount. With no installation ID
-# configured the mint grant does not render.
+# No KV write, no other secret path, and no other GitHub mount.
 
 path "{{ openbao_kv_mount }}/data/apps/open-llm" {
   capabilities = ["read"]
@@ -21,19 +17,25 @@ path "{{ openbao_kv_mount }}/data/apps/open-llm" {
 path "{{ openbao_kv_mount }}/metadata/apps/open-llm" {
   capabilities = ["read"]
 }
-{% if openbao_github_agents_installation_id | length > 0 %}
 
-path "{{ openbao_github_agents_mount }}/token" {
-  # The plugin's token path has no existence check, so a mint routes as
-  # create. Callers send installation_id and repositories as plain strings:
-  # the ACL matches neither a JSON number nor list elements. Both facts are
-  # recorded in github-write-policy.hcl.j2.
+path "secrets-external/data/zai-coding" {
+  capabilities = ["read"]
+}
+
+{% if openbao_github_agents_installation_id | length > 0 %}
+path "{{ openbao_github_agents_mount }}/token/public-write" {
   capabilities = ["create", "update"]
-  required_parameters = ["installation_id", "repositories"]
-  allowed_parameters = {
-    "installation_id" = ["{{ openbao_github_agents_installation_id }}"]
-    "repositories" = []
-    "permissions" = []
-  }
 }
 {% endif %}
+
+path "auth/approle/role/{{ openbao_sandbox_agent_read_approle_name }}/secret-id" {
+  capabilities = ["create", "update"]
+  min_wrapping_ttl = "1s"
+  max_wrapping_ttl = "15m"
+}
+
+path "auth/approle/role/{{ openbao_sandbox_agent_write_approle_name }}/secret-id" {
+  capabilities = ["create", "update"]
+  min_wrapping_ttl = "1s"
+  max_wrapping_ttl = "15m"
+}
