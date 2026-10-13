@@ -68,6 +68,13 @@ class RouterKeyPrefixRegeneration(unittest.TestCase):
     def test_explicit_contract_router_field_keeps_prefix(self):
         self.assertFalse(_regenerates("router_key", ROUTER_PREFIX + "abc123"))
 
+    def test_claude_ocg_router_field_regenerates_without_prefix(self):
+        # Its name does not end in the router suffix, so only the explicit list
+        # makes the generator mint and repair it as a LiteLLM virtual key.
+        self.assertFalse("claude_ocg_router_key".endswith(ROUTER_SUFFIX))
+        self.assertTrue(_regenerates("claude_ocg_router_key", "abc123"))
+        self.assertFalse(_regenerates("claude_ocg_router_key", ROUTER_PREFIX + "abc123"))
+
     def test_explicit_contract_field_uses_router_prefix_generation(self):
         expression = _find(REL, TASK)["ansible.builtin.set_fact"]["openbao_seed_desired"]
         self.assertIn("item in openbao_app_secret_router_key_fields", expression)
