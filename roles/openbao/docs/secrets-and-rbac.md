@@ -12,6 +12,19 @@ wildcard already granted on `secret/` would reach across it.
 | `secrets-external/` | Credentials for internet-reachable vendor APIs | Critical — exploitable by anyone, anywhere |
 | `config/` | Non-secret configuration: operator selections, tunables, thresholds, coordination facts | Nothing exploitable by construction |
 
+The `sandbox-agent-read` AppRole reads only `secret/apps/sandbox-agent` and
+mints from the `public-read` GitHub permission set. `sandbox-agent-write`
+mints from `public-write` and has no KV read. Both require
+`OPENBAO_SANDBOX_AGENT_CIDRS`, use 15-minute token limits, and have one-use
+15-minute SecretIDs. The `open-llm` dispatcher can mint wrapped SecretIDs for
+either role and reads the exact `secrets-external/zai-coding` leaf. Its internal
+leaf no longer carries the sandbox service tokens.
+
+`roles/openbao/defaults/main/08d-approle-taxonomy.yml` maps declared AppRoles
+to the six identity classes. The AppRole initialization fails if any declared
+role lacks a class. `ai-orchestrator` remains a `trusted-agent-write` migration
+exception.
+
 `config/` KV v2 retention is set explicitly
 (`openbao_config_mount_max_versions`, default 30) so version history and
 rollback are actually available. `delete_version_after` is left at its default
