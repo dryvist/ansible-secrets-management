@@ -54,9 +54,8 @@ openbao_github_read_permission_sets: >-
      + (openbao_github_everyday_extra_read_installations_parsed
         | map(attribute='permission_set') | list) }}
 
-# No permission sets: the App's own installation is the repository scope, and
-# the open-llm policy mints from the raw token endpoint pinned to this one
-# installation. The mount's undeclared-set cleanup removes any stored set.
+# The sandbox gets only explicitly named public-repository read and write
+# permission sets on this existing App mount.
 openbao_github_agents_mount: github-agents
 openbao_github_agents_installation_id: >-
   {{ openbao_platform_env['OPENBAO_GITHUB_AGENTS_DRYVIST_INSTALLATION_ID'] | default('', true) }}

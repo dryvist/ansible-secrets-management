@@ -278,22 +278,24 @@
           ({{ openbao_github_mount }}). Everyday tokens must come only from
           {{ openbao_github_everyday_mount }}.
 
-    - name: Assert open-llm holds exactly its bucket read and the pinned agents mint
+    - name: Assert open-llm holds only its bucket, external key, broker, and public-write grants
       vars:
         _token_stanza: >-
-          {{ _open_llm_text | regex_search('(?ms)path "' ~ openbao_github_agents_mount ~ '/token" [{].*?^[}]') }}
+          {{ _open_llm_text | regex_search('(?ms)path "' ~ openbao_github_agents_mount
+             ~ '/token/public-write" [{].*?^[}]') }}
       ansible.builtin.assert:
         that:
           - >-
             _open_llm_paths == [openbao_kv_mount ~ '/data/apps/open-llm',
                                 openbao_kv_mount ~ '/metadata/apps/open-llm',
-                                openbao_github_agents_mount ~ '/token']
+                                'secrets-external/data/zai-coding',
+                                openbao_github_agents_mount ~ '/token/public-write',
+                                'auth/approle/role/' ~ openbao_sandbox_agent_read_approle_name ~ '/secret-id',
+                                'auth/approle/role/' ~ openbao_sandbox_agent_write_approle_name ~ '/secret-id']
           - >-
-            'required_parameters = ["installation_id", "repositories"]' in _token_stanza
+            'capabilities = ["create", "update"]' in _token_stanza
           - >-
-            '"installation_id" = ["4242"]' in _token_stanza
-          - _token_stanza | regex_findall('(?m)^ +"([a-z_]+)" =') == ['installation_id', 'repositories', 'permissions']
-          - _token_stanza is not search('org_name|repository_ids')
+            'max_wrapping_ttl = "15m"' in _open_llm_text
           - >-
             _open_llm_paths | select('match', '^(github|github-admin|' ~ openbao_github_hermes_mount ~ ')/')
             | list == []
@@ -301,10 +303,9 @@
             _open_llm_text | regex_findall('capabilities = (.*)')
             | select('search', 'list|delete|sudo') | list == []
         fail_msg: >-
-          open-llm grants {{ _open_llm_paths }}. It must read exactly
-          secret/apps/open-llm and mint only from
-          {{ openbao_github_agents_mount }}/token, pinned to one installation,
-          with org_name and repository_ids refused.
+          open-llm grants {{ _open_llm_paths }}. It must read only its internal
+          bucket and exact Z.ai leaf, mint from the public-write set, and issue
+          wrapped one-use SecretIDs for the two sandbox roles.
 
     - name: Assert no other tier reaches the agents mount
       ansible.builtin.assert:
@@ -331,32 +332,40 @@
         src: "{{ _fixture_dir }}/unset-open-llm-policy.hcl"
       register: _open_llm_unset_raw
 
-    - name: Assert an unconfigured installation leaves open-llm only its bucket read
+    - name: Assert an unconfigured installation leaves open-llm without a GitHub mint grant
       ansible.builtin.assert:
         that:
           - >-
             (_open_llm_unset_raw.content | b64decode) | regex_findall('(?m)^path "([^"]+)"')
-            == [openbao_kv_mount ~ '/data/apps/open-llm', openbao_kv_mount ~ '/metadata/apps/open-llm']
-        fail_msg: With no installation ID the open-llm policy must render no mint grant.
+            == [openbao_kv_mount ~ '/data/apps/open-llm',
+                openbao_kv_mount ~ '/metadata/apps/open-llm',
+                'secrets-external/data/zai-coding',
+                'auth/approle/role/' ~ openbao_sandbox_agent_read_approle_name ~ '/secret-id',
+                'auth/approle/role/' ~ openbao_sandbox_agent_write_approle_name ~ '/secret-id']
+        fail_msg: With no installation ID the open-llm policy must render no GitHub mint grant.
 
-    # The agents mount is declared with no sets, so the converge's set checks
-    # must resolve to nothing; its undeclared-set cleanup then removes any
-    # stored set.
+    # The agents mount carries two fixed public permission sets, which the
+    # converge resolves and checks before storing.
     - name: Run the set checks for the agents mount
       ansible.builtin.include_tasks: ../../../roles/openbao/tasks/init/05b-github-app-set-checks.yml
       vars:
         gm: "{{ openbao_github_app_mounts | selectattr('mount', 'equalto', openbao_github_agents_mount) | first }}"
-        openbao_github_app_mount_public_repos: {results: []}
+        openbao_github_app_mount_public_repos:
+          results:
+            - item: {name: public-read}
+              json: [{name: fixture-repo}]
+            - item: {name: public-write}
+              json: [{name: fixture-repo}]
         openbao_github_app_mount_private_repos: {results: []}
 
-    - name: Assert the agents mount declares and resolves no permission set
+    - name: Assert the agents mount declares and resolves both public permission sets
       ansible.builtin.assert:
         that:
           - >-
             (openbao_github_app_mounts | selectattr('mount', 'equalto', openbao_github_agents_mount)
-             | first).permission_sets == []
-          - openbao_github_app_mount_sets == []
-        fail_msg: The agents mount must carry no permission set; its App installation is the scope.
+             | first).permission_sets | map(attribute='name') | list == ['public-read', 'public-write']
+          - openbao_github_app_mount_sets | map(attribute='name') | list == ['public-read', 'public-write']
+        fail_msg: The agents mount must carry the declared public read and write sets.
 
     - name: Assert no other tier reaches the work mount
       ansible.builtin.assert:
