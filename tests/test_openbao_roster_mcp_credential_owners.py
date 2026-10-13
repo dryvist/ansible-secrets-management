@@ -453,3 +453,16 @@ def test_owned_consumer_policy_renders_do_not_leave_blank_lines_from_removed_gra
         "# cross-domain grant to its canonical KV-v2 data leaf; no metadata or siblings.\n\n"
         "# OpenRouter usage/management key" in observability
     )
+
+
+def test_observability_policy_grants_start_their_own_line_for_every_owner_set():
+    values, _, _ = _resolve_lists(FIXTURE_ROSTER)
+    source = (TEMPLATES / "observability-policy.hcl.j2").read_text(encoding="utf-8")
+
+    for owned in ([], ["splunk"]):
+        rendered = _render_template(source, values, {"openbao_roster_owned_slug_names": owned})
+        swallowed = [
+            line for line in rendered.splitlines() if line.startswith("#") and 'path "' in line
+        ]
+        assert not swallowed, owned
+        assert ('\npath "secret/data/ai/mcp/splunk" {' in rendered) == (not owned)
