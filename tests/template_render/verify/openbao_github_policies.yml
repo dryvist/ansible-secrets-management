@@ -347,28 +347,22 @@
                 'auth/approle/role/' ~ openbao_sandbox_agent_write_approle_name ~ '/secret-id']
         fail_msg: With no installation ID the open-llm policy must render no GitHub mint grant.
 
-    # The agents mount carries two fixed public permission sets, which the
-    # converge resolves and checks before storing.
-    - name: Run the set checks for the agents mount
-      ansible.builtin.include_tasks: ../../../roles/openbao/tasks/init/05b-github-app-set-checks.yml
-      vars:
-        gm: "{{ openbao_github_app_mounts | selectattr('mount', 'equalto', openbao_github_agents_mount) | first }}"
-        openbao_github_app_mount_public_repos:
-          results:
-            - item: {name: public-read}
-              json: [{name: fixture-repo}]
-            - item: {name: public-write}
-              json: [{name: fixture-repo}]
-        openbao_github_app_mount_private_repos: {results: []}
+    - name: Pin the agents installation back to the configured case
+      ansible.builtin.set_fact:
+        openbao_github_agents_installation_id: "4242"
 
-    - name: Assert the agents mount declares and resolves both public permission sets
+    - name: Assert the agents permission sets are public-only and narrowly scoped
       ansible.builtin.assert:
         that:
+          - openbao_github_agents_permission_sets | map(attribute='name') | list == ['public-read', 'public-write']
           - >-
-            (openbao_github_app_mounts | selectattr('mount', 'equalto', openbao_github_agents_mount)
-             | first).permission_sets | map(attribute='name') | list == ['public-read', 'public-write']
-          - openbao_github_app_mount_sets | map(attribute='name') | list == ['public-read', 'public-write']
-        fail_msg: The agents mount must carry the declared public read and write sets.
+            openbao_github_agents_permission_sets | map(attribute='permissions') | list
+            == [openbao_github_agents_read_permissions, openbao_github_agents_write_permissions]
+          - openbao_github_agents_permission_sets | map(attribute='installation_id') | list == ['4242', '4242']
+          - openbao_github_agents_permission_sets | map(attribute='public_repos_of') | list == ['dryvist', 'dryvist']
+          - openbao_github_agents_permission_sets | selectattr('private_repos_of', 'defined') | list == []
+          - openbao_github_agents_permission_sets | selectattr('repositories', 'defined') | list == []
+        fail_msg: The agents mount must declare only the two public permission sets.
 
     - name: Assert no other tier reaches the work mount
       ansible.builtin.assert:
