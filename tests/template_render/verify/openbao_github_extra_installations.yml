@@ -148,8 +148,15 @@
              | select('match', '^' ~ openbao_github_everyday_mount ~ '/token/read-') | list }}
       ansible.builtin.assert:
         that:
-          - _semaphore_github_read_paths == [openbao_github_everyday_mount ~ '/token/read-dryvist-all']
-        fail_msg: The Semaphore policy must keep only its one exact read path.
+          - openbao_semaphore_github_read_permission_sets == ['read-dryvist-all', 'read-jpe-cribl-all']
+          - >-
+            _semaphore_github_read_paths
+            == (openbao_semaphore_github_read_permission_sets
+                | map('regex_replace', '^', openbao_github_everyday_mount ~ '/token/') | list)
+          - >-
+            _semaphore_github_read_paths
+            | select('search', '/token/read-example-owner-all') | list | length == 0
+        fail_msg: The Semaphore policy must keep only its two exact configured read paths.
 
     - name: Select the read-only rendering case
       ansible.builtin.set_fact:
