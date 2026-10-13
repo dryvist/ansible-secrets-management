@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.14.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.13.0...v0.14.0) (2026-10-13)
+
+
+### Features
+
+* **openbao:** add sandbox agent AppRoles and identity classes ([#128](https://github.com/dryvist/ansible-secrets-management/issues/128)) ([1fbcca7](https://github.com/dryvist/ansible-secrets-management/commit/1fbcca78cf78532177dde2ebe3ed9cbce6fdd99c))
+
+
+### Bug Fixes
+
+* **openbao:** keep the internal Z.ai copy until the external leaf is seeded ([#139](https://github.com/dryvist/ansible-secrets-management/issues/139)) ([d7f28eb](https://github.com/dryvist/ansible-secrets-management/commit/d7f28eb5f6df9179d9f1835b4bb3b43142e7b9d9))
+
 ## [0.13.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.12.0...v0.13.0) (2026-10-13)
 
 
