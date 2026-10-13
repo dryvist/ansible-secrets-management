@@ -1,0 +1,20 @@
+---
+# Per-job identities: no stored SecretID is issued during a converge. The
+# dispatcher mints one wrapped SecretID for the selected read or write role.
+openbao_sandbox_agent_approles:
+  - name: "{{ openbao_sandbox_agent_read_approle_name }}"
+    policy: "{{ openbao_sandbox_agent_read_policy_name }}"
+    secret_id_bound_cidrs: "{{ openbao_sandbox_agent_cidrs }}"
+    secret_id_ttl: 15m
+    secret_id_num_uses: 1
+    token_ttl: 15m
+    token_max_ttl: 15m
+    manage_secret_id: false
+  - name: "{{ openbao_sandbox_agent_write_approle_name }}"
+    policy: "{{ openbao_sandbox_agent_write_policy_name }}"
+    secret_id_bound_cidrs: "{{ openbao_sandbox_agent_cidrs }}"
+    secret_id_ttl: 15m
+    secret_id_num_uses: 1
+    token_ttl: 15m
+    token_max_ttl: 15m
+    manage_secret_id: false

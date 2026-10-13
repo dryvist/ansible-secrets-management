@@ -33,6 +33,7 @@ openbao_approle_cidr_classes:
   machine: "{{ openbao_management_cidrs }}"
   workstation: "{{ openbao_workstation_cidrs }}"
   ci: "{{ openbao_ci_cidrs }}"
+  sandbox_agent: "{{ openbao_sandbox_agent_cidrs }}"
   # Union of machine + workstation, for an identity genuinely redeemed from
   # BOTH: never restate either range literally, derive from the two lists
   # above so there remains exactly one declaration of each.
@@ -81,6 +82,8 @@ openbao_approle_cidr_class_overrides:
   operator-workstation: workstation
   proxman: workstation
   agent-workstation: workstation
+  sandbox-agent-read: sandbox_agent
+  sandbox-agent-write: sandbox_agent
   # Backs the interactive `aikey <harness>` function, which runs on the
   # workstation.
   ai-readonly: machine_or_workstation

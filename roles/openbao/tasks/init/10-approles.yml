@@ -53,6 +53,20 @@
     quiet: true
   when: openbao_bootstrap_token is defined
 
+- name: Assert every declared AppRole has an identity class
+  vars:
+    _unclassified: >-
+      {{ openbao_approles | map(attribute='name')
+         | reject('in', openbao_approle_class_map.keys() | list) | list }}
+  ansible.builtin.assert:
+    that:
+      - _unclassified | length == 0
+    fail_msg: >-
+      AppRoles {{ _unclassified | join(', ') }} have no declared identity
+      class in openbao_approle_class_map.
+    quiet: true
+  when: openbao_bootstrap_token is defined
+
 # The sibling failure, and the quiet one: the class map is a `combine` of the
 # defaults with the override map, so an override key that matches no declared
 # role adds a phantom entry and the role it was meant to move stays on the
@@ -82,6 +96,16 @@
   when:
     - openbao_bootstrap_token is defined
     - openbao_open_llm_secret_id_cidr | length > 0
+
+- name: Assert the sandbox-agent CIDRs are configured
+  ansible.builtin.assert:
+    that:
+      - openbao_sandbox_agent_cidrs | trim | length > 0
+    fail_msg: >-
+      OPENBAO_SANDBOX_AGENT_CIDRS is required for the sandbox-agent AppRoles;
+      they are not allowed to fall back to another CIDR class or be unbound.
+    quiet: true
+  when: openbao_bootstrap_token is defined
 
 # The complementary half of the two asserts above: those catch a role this
 # converge CREATES with no source-address class. This one catches a role that
