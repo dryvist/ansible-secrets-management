@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.16.1](https://github.com/dryvist/ansible-secrets-management/compare/v0.16.0...v0.16.1) (2026-10-13)
+
+
+### Bug Fixes
+
+* **openbao:** mint the claude-ocg router key with the sk- prefix ([#149](https://github.com/dryvist/ansible-secrets-management/issues/149)) ([912be28](https://github.com/dryvist/ansible-secrets-management/commit/912be28d342fe8f1b940a6d68fd3253827fd9656))
+
 ## [0.16.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.15.0...v0.16.0) (2026-10-13)
 
 
