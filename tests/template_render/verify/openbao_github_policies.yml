@@ -35,6 +35,10 @@
       {{ openbao_github_mount }}/token/dryvist-org-admin
 
   tasks:
+    - name: Pin the agents installation before loading defaults
+      ansible.builtin.set_fact:
+        openbao_github_agents_installation_id: "4242"
+
     # The real defaults, not a mirrored subset: the composition of
     # openbao_github_permission_sets from its base list plus the conditional
     # publish tier IS what is under test, so a hand-written fixture would test
@@ -140,7 +144,6 @@
       ansible.builtin.set_fact:
         openbao_github_docs_publisher_repos: [fixture-repo]
         openbao_github_ci_resolver_repos: [fixture-repo]
-        openbao_github_agents_installation_id: "4242"
 
     - name: Render the tier policies with a publisher repository configured
       ansible.builtin.template:
