@@ -7,7 +7,7 @@
 # supplied private key is a deliberate (re)configuration.
 #
 #   github         everyday read/write
-#   github-agents  untrusted-tier writes, scoped by the App's installation
+#   github-agents  untrusted-tier public read/write, scoped by its installation
 #   github-hermes  review and allowlisted authoring, split by repository visibility
 #   github-work    read and write over one installation, no administration
 #   github-enterprise-read  human-gated raw-token read tier
@@ -60,6 +60,29 @@ openbao_github_read_permission_sets: >-
 openbao_github_agents_mount: github-agents
 openbao_github_agents_installation_id: >-
   {{ openbao_platform_env['OPENBAO_GITHUB_AGENTS_DRYVIST_INSTALLATION_ID'] | default('', true) }}
+openbao_github_agents_read_permissions:
+  contents: read
+  metadata: read
+  pull_requests: read
+  issues: read
+  actions: read
+  checks: read
+openbao_github_agents_write_permissions:
+  contents: write
+  metadata: read
+  pull_requests: write
+  issues: write
+  actions: read
+  checks: read
+openbao_github_agents_set_permissions:
+  public-read: "{{ openbao_github_agents_read_permissions }}"
+  public-write: "{{ openbao_github_agents_write_permissions }}"
+openbao_github_agents_permission_sets: >-
+  {{ (openbao_github_agents_set_permissions
+      | dict2items(key_name='name', value_name='permissions')
+      | map('combine', {'installation_id': openbao_github_agents_installation_id,
+                        'public_repos_of': 'dryvist'}) | list)
+     if openbao_github_agents_installation_id | length > 0 else [] }}
 
 openbao_github_hermes_mount: github-hermes
 # Two identities split by repository visibility: neither can mint a token that
@@ -191,7 +214,7 @@ openbao_github_app_mounts_base:
   - mount: "{{ openbao_github_agents_mount }}"
     app_id: "{{ lookup('env', 'OPENBAO_GITHUB_AGENTS_APP_ID') | default('', true) }}"
     private_key: "{{ lookup('env', 'OPENBAO_GITHUB_AGENTS_APP_PRIVATE_KEY') | default('', true) }}"
-    permission_sets: []
+    permission_sets: "{{ openbao_github_agents_permission_sets }}"
 openbao_github_app_mounts: >-
   {{ openbao_github_app_mounts_base
      + ([{'mount': openbao_github_hermes_mount,

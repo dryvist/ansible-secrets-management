@@ -83,6 +83,16 @@
     - openbao_bootstrap_token is defined
     - openbao_open_llm_secret_id_cidr | length > 0
 
+- name: Assert the sandbox-agent CIDRs are configured
+  ansible.builtin.assert:
+    that:
+      - openbao_sandbox_agent_cidrs | trim | length > 0
+    fail_msg: >-
+      OPENBAO_SANDBOX_AGENT_CIDRS is required for the sandbox-agent AppRoles;
+      they are not allowed to fall back to another CIDR class or be unbound.
+    quiet: true
+  when: openbao_bootstrap_token is defined
+
 # The complementary half of the two asserts above: those catch a role this
 # converge CREATES with no source-address class. This one catches a role that
 # exists live and this converge never even LOOPS, because it is declared

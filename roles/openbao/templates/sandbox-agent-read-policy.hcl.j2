@@ -1,0 +1,9 @@
+{{ ansible_managed | comment }}
+# Sandbox read access and public repository read tokens.
+path "{{ openbao_kv_mount }}/data/apps/sandbox-agent" {
+  capabilities = ["read"]
+}
+
+path "{{ openbao_github_agents_mount }}/token/public-read" {
+  capabilities = ["create", "update"]
+}
