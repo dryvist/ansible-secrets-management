@@ -39,11 +39,12 @@ Token access is tiered; the tier IS the privilege boundary:
 - **read (`github-read`)** — `github/token/read-dryvist-all` and
   `github/token/read-personal-all`: all repos, read-only permission map stored
   in the set itself (the set path ignores request bodies, so a holder cannot
-  widen it). Standing ambient AppRole. The `semaphore` AppRole also names
-  `github/token/read-dryvist-all` — exact path, no wildcard — so the
-  unattended Ansible execution plane can check out the repositories it runs,
-  including one with a private submodule, without holding a stored token. Read
-  only: a checkout can never write a repository.
+  widen it). Standing ambient AppRole. The `semaphore` AppRole names the exact
+  paths `github/token/read-dryvist-all` and `github/token/read-jpe-cribl-all`,
+  with no wildcard, so the unattended Ansible execution plane can check out
+  the repositories it runs and the Cribl pack mirror can look up releases
+  without holding a stored token. Read only: these grants cannot write a
+  repository.
 - **write (`github-write`)** — the raw `github/token` endpoint; the policy
   requires `installation_id` and `repositories`, does not pin the
   installation, and GitHub's installation repository selection is the scope

@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.15.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.14.0...v0.15.0) (2026-10-13)
+
+
+### Features
+
+* **openbao:** let the semaphore role mint the jpe-cribl read token ([#142](https://github.com/dryvist/ansible-secrets-management/issues/142)) ([296a0c7](https://github.com/dryvist/ansible-secrets-management/commit/296a0c786bf86323aa070374f596e012f516172a))
+
 ## [0.14.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.13.0...v0.14.0) (2026-10-13)
 
 
