@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.17.1](https://github.com/dryvist/ansible-secrets-management/compare/v0.17.0...v0.17.1) (2026-10-14)
+
+
+### Bug Fixes
+
+* **openbao:** refresh apt cache before installing prerequisites ([#158](https://github.com/dryvist/ansible-secrets-management/issues/158)) ([986eeeb](https://github.com/dryvist/ansible-secrets-management/commit/986eeebcbb853f7501bac2885749c033b7ab3766))
+
 ## [0.17.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.16.1...v0.17.0) (2026-10-14)
 
 
