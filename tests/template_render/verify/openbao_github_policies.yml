@@ -302,7 +302,8 @@
           - >-
             'capabilities = ["create", "update"]' in _raw_token_stanza
           - >-
-            'required_parameters = ["installation_id", "repositories"]' in _raw_token_stanza
+            'required_parameters = ["installation_id", "repositories", "permissions"]'
+            in _raw_token_stanza
           - >-
             _raw_token_stanza | regex_findall('(?m)^    "([^"]+)" =')
             == ['installation_id', 'repositories', 'permissions']
@@ -312,7 +313,8 @@
           - >-
             '"repositories" = []' in _raw_token_stanza
           - >-
-            '"permissions" = []' in _raw_token_stanza
+            '"permissions" = [{ "contents" = "write", "pull_requests" = "write" }, { "contents" = "read" }]'
+            in _raw_token_stanza
           - >-
             'capabilities = ["create", "update"]' in _token_stanza
           - >-

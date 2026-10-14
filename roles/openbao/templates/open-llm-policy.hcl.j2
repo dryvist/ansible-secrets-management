@@ -7,7 +7,7 @@
 #
 #   * read secret/apps/open-llm and secrets-external/zai-coding;
 #   * mint a one-repository token from the raw endpoint pinned to the agents
-#     installation;
+#     installation and to the two exact permission maps the dispatcher sends;
 #   * mint using the named public-write permission set;
 #   * issue wrapped SecretIDs for sandbox-agent-read and sandbox-agent-write.
 #
@@ -30,13 +30,15 @@ path "{{ openbao_github_agents_mount }}/token" {
   # The plugin's token path has no existence check, so a mint routes as
   # create. Callers send installation_id and repositories as plain strings:
   # the ACL matches neither a JSON number nor list elements. Both facts are
-  # recorded in github-write-policy.hcl.j2.
+  # recorded in github-write-policy.hcl.j2. The ACL matches a permissions map
+  # as a whole, so a request must send exactly one of the listed maps; an
+  # omitted, empty, wider or narrower map is refused.
   capabilities = ["create", "update"]
-  required_parameters = ["installation_id", "repositories"]
+  required_parameters = ["installation_id", "repositories", "permissions"]
   allowed_parameters = {
     "installation_id" = ["{{ openbao_github_agents_installation_id }}"]
     "repositories" = []
-    "permissions" = []
+    "permissions" = [{% for permissions in openbao_github_agents_raw_mint_permissions %}{ {% for name, level in permissions | dictsort %}"{{ name }}" = "{{ level }}"{{ ", " if not loop.last else "" }}{% endfor %} }{{ ", " if not loop.last else "" }}{% endfor %}]
   }
 }
 

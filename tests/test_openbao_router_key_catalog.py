@@ -17,6 +17,7 @@ EXCLUDED_DEFAULTS = ROOT / "roles/openbao/defaults/main/05h-cribl-edge-readers.y
 GENERATION = ROOT / "roles/openbao/tasks/init/03-kv-mounts-and-seed-secrets.yml"
 ROSTER_DEFAULTS = ROOT / "roles/openbao/defaults/main/05k-roster-agents.yml"
 OPEN_LLM_POLICY = ROOT / "roles/openbao/templates/open-llm-policy.hcl.j2"
+GITHUB_MOUNT_DEFAULTS = ROOT / "roles/openbao/defaults/main/03b-github-app-mounts.yml"
 APPS_POLICY = ROOT / "roles/openbao/templates/apps-policy.hcl.j2"
 
 DEFAULTS_DATA = yaml.safe_load(DEFAULTS.read_text(encoding="utf-8"))
@@ -25,6 +26,9 @@ READ_DATA = yaml.safe_load(READ_DEFAULTS.read_text(encoding="utf-8"))
 EXCLUDED_DATA = yaml.safe_load(EXCLUDED_DEFAULTS.read_text(encoding="utf-8"))
 OPENBAO_META_DATA = yaml.safe_load(OPENBAO_META.read_text(encoding="utf-8"))
 ROSTER_DATA = yaml.safe_load(ROSTER_DEFAULTS.read_text(encoding="utf-8"))
+RAW_MINT_PERMISSIONS = yaml.safe_load(GITHUB_MOUNT_DEFAULTS.read_text(encoding="utf-8"))[
+    "openbao_github_agents_raw_mint_permissions"
+]
 
 
 def _render(value, variables):
@@ -90,6 +94,7 @@ def _render_open_llm_policy(installation_id):
         openbao_kv_mount="secret",
         openbao_github_agents_mount="github",
         openbao_github_agents_installation_id=installation_id,
+        openbao_github_agents_raw_mint_permissions=RAW_MINT_PERMISSIONS,
         openbao_sandbox_agent_read_approle_name="sandbox-agent-read",
         openbao_sandbox_agent_write_approle_name="sandbox-agent-write",
     )
@@ -201,7 +206,10 @@ def test_open_llm_policy_mints_raw_and_named_agents_tokens():
     raw_token = re.search(r'(?ms)^path "github/token" \{\n(.*?)^\}', rendered)
     assert raw_token is not None
     assert 'capabilities = ["create", "update"]' in raw_token.group(1)
-    assert 'required_parameters = ["installation_id", "repositories"]' in raw_token.group(1)
+    assert (
+        'required_parameters = ["installation_id", "repositories", "permissions"]'
+        in raw_token.group(1)
+    )
     assert re.findall(r'(?m)^    "([^"]+)" =', raw_token.group(1)) == [
         "installation_id",
         "repositories",
@@ -209,7 +217,10 @@ def test_open_llm_policy_mints_raw_and_named_agents_tokens():
     ]
     assert '"installation_id" = ["4242"]' in raw_token.group(1)
     assert '"repositories" = []' in raw_token.group(1)
-    assert '"permissions" = []' in raw_token.group(1)
+    assert (
+        '"permissions" = [{ "contents" = "write", "pull_requests" = "write" }, '
+        '{ "contents" = "read" }]'
+    ) in raw_token.group(1)
 
     public_write = re.search(
         r'(?ms)^path "github/token/public-write" \{\n(.*?)^\}', rendered

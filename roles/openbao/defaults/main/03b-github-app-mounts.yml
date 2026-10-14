@@ -55,7 +55,8 @@ openbao_github_read_permission_sets: >-
         | map(attribute='permission_set') | list) }}
 
 # open-llm can mint one-repository tokens from the raw endpoint pinned to this
-# installation and from the named public-write set. The sandbox gets only
+# installation and to the exact permission maps below, and from the named
+# public-write set. The sandbox gets only
 # explicitly named public-repository read and write permission sets.
 openbao_github_agents_mount: github-agents
 openbao_github_agents_installation_id: >-
@@ -74,6 +75,13 @@ openbao_github_agents_write_permissions:
   issues: write
   actions: read
   checks: read
+# The raw token grant admits only these exact permission maps. They are the
+# two requests the sandbox dispatcher sends (write job; fix job), each a subset
+# of the public-write and public-read sets above.
+openbao_github_agents_raw_mint_permissions:
+  - contents: write
+    pull_requests: write
+  - contents: read
 openbao_github_agents_set_permissions:
   public-read: "{{ openbao_github_agents_read_permissions }}"
   public-write: "{{ openbao_github_agents_write_permissions }}"
