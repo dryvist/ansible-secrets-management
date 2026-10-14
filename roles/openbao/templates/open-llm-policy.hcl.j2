@@ -1,10 +1,15 @@
 {{ ansible_managed | comment }}
 # OpenBao policy for the open-llm AppRole — the untrusted-tier dispatcher.
-# The dispatcher reads its own internal bucket and the exact external Z.ai
-# leaf, mints tokens from its public-write set, and issues short-lived wrapped
-# SecretIDs for the two sandbox roles.
+# The dispatcher reads its internal bucket, the exact external Z.ai leaf, and
+# the role IDs for the two sandbox roles; mints raw tokens with caller-selected
+# org and repository selectors and one of two exact permission maps, and mints
+# from the named public-write set; and issues wrapped SecretIDs for the roles.
 #
 #   * read secret/apps/open-llm and secrets-external/zai-coding;
+#   * read the role IDs for sandbox-agent-read and sandbox-agent-write;
+#   * mint from the raw endpoint with optional org_name and required
+#     repositories, restricted to the two exact permission maps the dispatcher sends;
+#     installation_id and repository_ids are denied;
 #   * mint using the named public-write permission set;
 #   * issue wrapped SecretIDs for sandbox-agent-read and sandbox-agent-write.
 #
@@ -23,15 +28,43 @@ path "secrets-external/data/zai-coding" {
 }
 
 {% if openbao_github_agents_installation_id | length > 0 %}
+path "{{ openbao_github_agents_mount }}/token" {
+  # The plugin's token path has no existence check, so a mint routes as
+  # create. Callers send org_name and repositories as plain strings when
+  # present; the ACL matches neither JSON numbers nor list elements. The ACL
+  # matches a permissions map as a whole, so a request must send exactly one
+  # of the listed maps; an omitted, empty, wider or narrower map is refused.
+  # installation_id and repository_ids are denied.
+  capabilities = ["create", "update"]
+  required_parameters = ["repositories", "permissions"]
+  allowed_parameters = {
+    "org_name" = []
+    "repositories" = []
+    "permissions" = [{% for permissions in openbao_github_agents_raw_mint_permissions %}{ {% for name, level in permissions | dictsort %}"{{ name }}" = "{{ level }}"{{ ", " if not loop.last else "" }}{% endfor %} }{{ ", " if not loop.last else "" }}{% endfor %}]
+  }
+  denied_parameters = {
+    "installation_id" = []
+    "repository_ids" = []
+  }
+}
+
 path "{{ openbao_github_agents_mount }}/token/public-write" {
   capabilities = ["create", "update"]
 }
 {% endif %}
 
+path "auth/approle/role/{{ openbao_sandbox_agent_read_approle_name }}/role-id" {
+  capabilities = ["read"]
+}
+
 path "auth/approle/role/{{ openbao_sandbox_agent_read_approle_name }}/secret-id" {
   capabilities = ["create", "update"]
   min_wrapping_ttl = "1s"
   max_wrapping_ttl = "15m"
+}
+
+path "auth/approle/role/{{ openbao_sandbox_agent_write_approle_name }}/role-id" {
+  capabilities = ["read"]
 }
 
 path "auth/approle/role/{{ openbao_sandbox_agent_write_approle_name }}/secret-id" {
