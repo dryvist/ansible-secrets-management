@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.20.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.19.0...v0.20.0) (2026-10-14)
+
+
+### Features
+
+* **openbao:** add the herdr-hail workstation AppRole ([#168](https://github.com/dryvist/ansible-secrets-management/issues/168)) ([a19574a](https://github.com/dryvist/ansible-secrets-management/commit/a19574ab5ce61bad9c9690aea662d1fd2f8511b0))
+
+
+### Bug Fixes
+
+* **openbao:** authenticate the public repository listing on GitHub App mounts ([#169](https://github.com/dryvist/ansible-secrets-management/issues/169)) ([3aa4cd2](https://github.com/dryvist/ansible-secrets-management/commit/3aa4cd23d8475486f6c87520a4c474e29dcb41bc))
+
 ## [0.19.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.18.0...v0.19.0) (2026-10-14)
 
 
