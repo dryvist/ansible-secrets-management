@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.17.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.16.1...v0.17.0) (2026-10-14)
+
+
+### Features
+
+* **openbao:** generate laya and decisions router secrets ([967dccd](https://github.com/dryvist/ansible-secrets-management/commit/967dccd77b099c8e6ef9d76f42fa9b6a2865715b))
+* **openbao:** generate two router application secrets ([#155](https://github.com/dryvist/ansible-secrets-management/issues/155)) ([967dccd](https://github.com/dryvist/ansible-secrets-management/commit/967dccd77b099c8e6ef9d76f42fa9b6a2865715b))
+
 ## [0.16.1](https://github.com/dryvist/ansible-secrets-management/compare/v0.16.0...v0.16.1) (2026-10-13)
 
 
