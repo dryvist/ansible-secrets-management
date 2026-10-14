@@ -96,6 +96,14 @@ server-side quorum HA needs a fourth node and is out of scope.
 | `media` | `OPENBAO_APPROLE_MEDIA_ROLE_ID` / `_SECRET_ID` | `apps/media` | *arr/qBittorrent/Plex roles |
 | `local-llm` | `OPENBAO_APPROLE_LOCAL_LLM_ROLE_ID` / `_SECRET_ID` | `ai/*` (router/llm-large/qdrant/open-webui/hermes) | LLM serving roles |
 | `clickhouse` | `OPENBAO_APPROLE_CLICKHOUSE_ROLE_ID` / `_SECRET_ID` | `ai/clickhouse` | clickhouse_docker |
+| `apps` | `OPENBAO_APPROLE_APPS_ROLE_ID` / `_SECRET_ID` | configured `apps/*` paths; `core/client` in the Authelia controller-side override | app roles |
+
+The `apps` default path list leaves `core/client` out because it can use the
+`apps-workstation` issuer, whose shared policy does not grant that document.
+The Authelia consuming play must override the `apps` domain paths to include
+`core/client` and omit `workstation_issuer_role`, so the `apps` AppRole reads
+it directly. That path has its own exact read policy, also attached to the
+`bao-elevate-client` AppRole.
 
 Each pair is derived from the domain name (upper-cased, non-alphanumerics ->
 `_`) -- the same formula every other AppRole credential helper in this

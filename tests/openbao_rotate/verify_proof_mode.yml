@@ -89,7 +89,7 @@
           - _names.index(_write) > _names.index(_lookup.name)
         fail_msg: The rotated pair is published before it is proven.
 
-    - name: Assert agent-workstation rotates through Doppler without reading the env document
+    - name: Assert workstation-only identities rotate through Doppler without reading the env document
       vars:
         _seed_probe: >-
           {{ _one_domain_tasks | selectattr('name', 'search', '^Seed run, check') | first }}
@@ -101,6 +101,10 @@
         that:
           - openbao_agent_workstation_approle_name in openbao_rotate_doppler_only_domains
           - openbao_agent_workstation_approle_name in openbao_rotate_doppler_sync_domains
+          - openbao_herdr_hail_approle_name in openbao_rotate_doppler_only_domains
+          - openbao_herdr_hail_approle_name in openbao_rotate_doppler_sync_domains
+          - openbao_bao_elevate_client_approle_name in openbao_rotate_doppler_only_domains
+          - openbao_bao_elevate_client_approle_name in openbao_rotate_doppler_sync_domains
           - _seed_probe.when | select('search', 'rotate_env_document_enabled') | list | length == 1
           - _env_document_tasks | length == 4
           - >-
@@ -112,6 +116,6 @@
           - _prior_id_init['ansible.builtin.set_fact'].rotate_old_secret_id == ''
           - _prior_id_lookup.when is search('rotate_old_secret_id')
         fail_msg: >-
-          agent-workstation pairs must be republished to Doppler only; the
-          workstation holder must not read or write the env document, and the
-          rotation must not look up an old secret_id from it.
+          Workstation-only pairs must be republished to Doppler only; their
+          holders must not read or write the env document, and rotation must
+          not look up an old secret_id from it.

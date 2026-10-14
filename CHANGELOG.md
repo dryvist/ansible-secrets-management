@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.19.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.18.0...v0.19.0) (2026-10-14)
+
+
+### Features
+
+* **authelia:** generate the trusted elevation client secret ([#166](https://github.com/dryvist/ansible-secrets-management/issues/166)) ([50952a9](https://github.com/dryvist/ansible-secrets-management/commit/50952a9b054890fde3e1b4d72b2089da1654b6d7))
+* **authelia:** generate the trusted elevation client secret and use client_secret_basic ([5370088](https://github.com/dryvist/ansible-secrets-management/commit/5370088a97db8facfb9e7331162edc9f90a2e410))
+
 ## [0.18.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.17.1...v0.18.0) (2026-10-14)
 
 

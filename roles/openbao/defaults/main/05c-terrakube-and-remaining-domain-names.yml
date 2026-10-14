@@ -164,6 +164,10 @@ openbao_local_llm_approle_name: local-llm
 openbao_local_llm_workstation_policy_name: local-llm-workstation
 openbao_local_llm_workstation_approle_name: local-llm-workstation
 openbao_agent_workstation_approle_name: agent-workstation
+openbao_herdr_hail_policy_name: herdr-hail
+openbao_herdr_hail_approle_name: herdr-hail
+openbao_bao_elevate_client_policy_name: bao-elevate-client
+openbao_bao_elevate_client_approle_name: bao-elevate-client
 # Host secret-zero identities delivered through the env document. Seed mode
 # writes these; scheduled rotation follows the domain catalog below.
 openbao_host_secret_zero_approle_names:
@@ -190,6 +194,8 @@ openbao_secrets_domain_approle_names: >-
      + openbao_roster_key_reader_approle_names
      + [openbao_agent_ssh_sign_approle_name,
       openbao_agent_workstation_approle_name,
+      openbao_herdr_hail_approle_name,
+      openbao_bao_elevate_client_approle_name,
       openbao_hermes_approle_name,
       openbao_ai_donna_approle_name,
       openbao_open_llm_approle_name,

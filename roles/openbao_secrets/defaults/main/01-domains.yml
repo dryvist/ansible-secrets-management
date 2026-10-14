@@ -51,6 +51,9 @@ openbao_secrets_domains:
       - apps/media/prowlarr
       - apps/media/qbittorrent
   - name: apps
+    # Keep core/client out of this shared path list: its exact read policy is
+    # attached to the apps AppRole, not apps-workstation. The Authelia play
+    # selects it through a controller-side override using the apps AppRole.
     workstation_issuer_role: apps-workstation
     paths:
       # The dispatcher uses the write-only ntfy ai-jobs publisher token

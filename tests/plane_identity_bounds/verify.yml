@@ -209,6 +209,8 @@
           {{ [openbao_local_llm_workstation_approle_name,
               openbao_agent_ssh_sign_approle_name,
               openbao_agent_workstation_approle_name,
+              openbao_herdr_hail_approle_name,
+              openbao_bao_elevate_client_approle_name,
               openbao_approle_secret_id_rotate_scheduled_approle_name]
              + openbao_cribl_edge_mac_approle_names }}
         _declared: >-
@@ -290,6 +292,42 @@
         fail_msg: >-
           The automation workstation identity must stay in the workstation
           address class and scheduled Doppler-only rotation set.
+
+    - name: The Hail identity stays finite workstation-bound and scheduled
+      vars:
+        row: >-
+          {{ openbao_approles
+             | selectattr('name', 'equalto', openbao_herdr_hail_approle_name)
+             | first }}
+      ansible.builtin.assert:
+        that:
+          - row.policy == openbao_herdr_hail_policy_name
+          - row.secret_id_num_uses | int == 100
+          - openbao_approle_cidr_class_map[openbao_herdr_hail_approle_name] == 'workstation'
+          - openbao_herdr_hail_approle_name in openbao_secrets_domain_approle_names
+          - openbao_herdr_hail_approle_name in openbao_rotate_doppler_sync_domains
+          - openbao_herdr_hail_approle_name in openbao_rotate_doppler_only_domains
+        fail_msg: >-
+          The Hail identity must keep its exact policy, finite workstation
+          binding, and scheduled Doppler-only rotation.
+
+    - name: The client identity stays finite workstation-bound and scheduled
+      vars:
+        row: >-
+          {{ openbao_approles
+             | selectattr('name', 'equalto', openbao_bao_elevate_client_approle_name)
+             | first }}
+      ansible.builtin.assert:
+        that:
+          - row.policy == openbao_bao_elevate_client_policy_name
+          - row.secret_id_num_uses | int == 100
+          - openbao_approle_cidr_class_map[openbao_bao_elevate_client_approle_name] == 'workstation'
+          - openbao_bao_elevate_client_approle_name in openbao_secrets_domain_approle_names
+          - openbao_bao_elevate_client_approle_name in openbao_rotate_doppler_sync_domains
+          - openbao_bao_elevate_client_approle_name in openbao_rotate_doppler_only_domains
+        fail_msg: >-
+          The client identity must keep its exact policy, finite workstation
+          binding, and scheduled Doppler-only rotation.
 
     # The general guard. Any future non-expiring secret_id must earn it the same
     # way, or this fails on the day it is added rather than the day it leaks.

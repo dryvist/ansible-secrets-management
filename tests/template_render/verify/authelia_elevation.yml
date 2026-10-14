@@ -6,6 +6,7 @@
 
   vars:
     ansible_become: false
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
     # Minimal stand-ins, as in authelia_access_control.yml. Only the elevation
     # clients, the elevate policy and the device-code lifespan are asserted here.
     tofu_data:
@@ -35,6 +36,26 @@
     - name: Load the authelia role defaults
       ansible.builtin.include_vars:
         dir: "../../../roles/authelia/defaults/main"
+
+    - name: Load the generated OpenBao app-secret roster
+      ansible.builtin.include_vars:
+        file: "../../../roles/openbao/defaults/main/01c-app-secrets-generated.yml"
+
+    - name: Load the generated OpenBao path overrides
+      ansible.builtin.include_vars:
+        file: "../../../roles/openbao/defaults/main/01d-app-secret-paths.yml"
+
+    - name: Assert the trusted elevation secret uses its dedicated generated path
+      ansible.builtin.assert:
+        that:
+          - >-
+            'authelia_oidc_bao_elevate_trusted_client_secret'
+            in openbao_generated_app_secrets.client
+          - >-
+            'authelia_oidc_bao_elevate_trusted_client_secret'
+            not in openbao_generated_app_secrets.authelia
+          - openbao_generated_app_secret_paths.client == 'core/client'
+        quiet: true
 
     # The defaults read AUTHELIA_APPROVE_NETWORKS from env, which is empty here.
     # set_fact outranks include_vars, so the render gets a documentation-range
@@ -66,7 +87,7 @@
           # or a redirect URI, or it could drive a browser redirect. The trusted
           # client stays confidential; the untrusted one stays public with no secret.
           - _trusted.public == false
-          - _trusted.token_endpoint_auth_method == 'client_secret_post'
+          - _trusted.token_endpoint_auth_method == 'client_secret_basic'
           - _trusted.client_secret is defined
           - _trusted.grant_types == ['urn:ietf:params:oauth:grant-type:device_code']
           - _trusted.redirect_uris is not defined

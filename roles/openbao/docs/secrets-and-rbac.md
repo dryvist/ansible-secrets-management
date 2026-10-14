@@ -81,6 +81,7 @@ The KV v2 mount `secret/` is organized by category (canonical doc:
 secret/infra/      proxmox/ aws/ network/   # IaC kernel — terraform-apply writes
 secret/platform/   dns/ traefik/ terrakube/ splunk/ cribl/ object-storage/ compute/
 secret/apps/       media/ monitoring/ home-automation/
+secret/core/       client                    # one shared client document
 secret/ai/         hermes/ agents/          # LLM stack + AI-agent creds
 secret/locks/      global                   # cross-repo apply lock state
 secret/ci/         github/ doppler-sync/
@@ -95,6 +96,8 @@ plans):
 | --- | --- | --- | --- |
 | `terraform-apply` | `secret/infra/*`, `secret/platform/{dns,traefik}`, `secret/apps/nautobot/*`, `homelab/*` | (same) | Human-triggered IaC apply[^aws-sts] |
 | `apps-seed` | `secret/apps/*` | `secret/apps/*` create/update | Doppler-published writer; Terraform `vault-secrets` seeds `secret/apps/<app>` at source |
+| `apps` | Enumerated `secret/apps/*`; `secret/core/client` | — | The core path uses a separate exact policy |
+| `bao-elevate-client` | `secret/core/client` | — | Workstation-bound; finite SecretID with Doppler-only rotation |
 | `flow-lock` | `secret/locks/global`, `secret/infra/*` | `secret/locks/global` | Cross-repo apply lock; releases the lock via metadata delete |
 | `azure-iac-admin` | `azure/creds/openbao-iac-admin` | — | Dynamic Azure client secret for the IaC admin application; per-call, workstation-only |
 | `terrakube-<workspace>` JWT | Only that workspace's native paths | Workspace-specific | Short-lived; exact organization/workspace subject and audience |
