@@ -7,7 +7,7 @@ facts the policy comments rely on: a permissions map matches as a whole, a strin
 installation_id matches, and an omitted or wider map is refused.
 
 Run with a bao binary on PATH, for example:
-    nix shell github:NixOS/nixpkgs/nixpkgs-26.05-darwin#openbao --command python3 -m pytest <this file>
+    nix shell --inputs-from . nixpkgs#openbao --command python3 -m pytest <this file>
 """
 
 import json

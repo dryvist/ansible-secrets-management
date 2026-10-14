@@ -419,7 +419,12 @@
     },
     "root": {
       "inputs": {
-        "nix-devenv": "nix-devenv"
+        "nix-devenv": "nix-devenv",
+        "nixpkgs": [
+          "nix-devenv",
+          "channels",
+          "nixpkgs"
+        ]
       }
     },
     "rust-overlay": {
