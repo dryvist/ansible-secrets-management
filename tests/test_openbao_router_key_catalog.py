@@ -96,7 +96,7 @@ def test_public_router_key_entries_remain_literal_and_allowlisted():
     assert generated["zcode"] == ["zcode_llm_router_key"]
     assert generated["qwen-code"] == ["qwen_code_llm_router_key"]
     assert generated["opencode"] == ["opencode_llm_router_key"]
-    assert generated["codex"] == ["codex_llm_router_key", "codex_local_llm_router_key"]
+    assert generated["codex"] == ["codex_llm_router_key"]
     assert {"agy", "hermes-private", "donna", "zcode", "qwen-code", "opencode"}.issubset(
         _read_apps({})
     )
