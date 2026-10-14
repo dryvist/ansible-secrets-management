@@ -1,11 +1,12 @@
 {{ ansible_managed | comment }}
 # OpenBao policy for the open-llm AppRole — the untrusted-tier dispatcher.
-# The dispatcher reads its own internal bucket and the exact external Z.ai
-# leaf, mints one-repository tokens from the raw endpoint pinned to its
-# installation and from the named public-write set, and issues short-lived
-# wrapped SecretIDs for the two sandbox roles.
+# The dispatcher reads its internal bucket, the exact external Z.ai leaf, and
+# the role IDs for the two sandbox roles; mints one-repository tokens from the
+# raw endpoint pinned to its installation and from the named public-write set;
+# and issues short-lived wrapped SecretIDs for the two sandbox roles.
 #
 #   * read secret/apps/open-llm and secrets-external/zai-coding;
+#   * read the role IDs for sandbox-agent-read and sandbox-agent-write;
 #   * mint a one-repository token from the raw endpoint pinned to the agents
 #     installation and to the two exact permission maps the dispatcher sends;
 #   * mint using the named public-write permission set;
@@ -47,10 +48,18 @@ path "{{ openbao_github_agents_mount }}/token/public-write" {
 }
 {% endif %}
 
+path "auth/approle/role/{{ openbao_sandbox_agent_read_approle_name }}/role-id" {
+  capabilities = ["read"]
+}
+
 path "auth/approle/role/{{ openbao_sandbox_agent_read_approle_name }}/secret-id" {
   capabilities = ["create", "update"]
   min_wrapping_ttl = "1s"
   max_wrapping_ttl = "15m"
+}
+
+path "auth/approle/role/{{ openbao_sandbox_agent_write_approle_name }}/role-id" {
+  capabilities = ["read"]
 }
 
 path "auth/approle/role/{{ openbao_sandbox_agent_write_approle_name }}/secret-id" {

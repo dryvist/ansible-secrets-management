@@ -199,7 +199,9 @@ def test_open_llm_policy_mints_raw_and_named_agents_tokens():
         "secrets-external/data/zai-coding",
         "github/token",
         "github/token/public-write",
+        "auth/approle/role/sandbox-agent-read/role-id",
         "auth/approle/role/sandbox-agent-read/secret-id",
+        "auth/approle/role/sandbox-agent-write/role-id",
         "auth/approle/role/sandbox-agent-write/secret-id",
     ]
 
