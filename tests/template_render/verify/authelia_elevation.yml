@@ -6,6 +6,7 @@
 
   vars:
     ansible_become: false
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
     # Minimal stand-ins, as in authelia_access_control.yml. Only the elevation
     # clients, the elevate policy and the device-code lifespan are asserted here.
     tofu_data:
@@ -40,12 +41,20 @@
       ansible.builtin.include_vars:
         file: "../../../roles/openbao/defaults/main/01c-app-secrets-generated.yml"
 
-    - name: Assert the trusted elevation secret is generated for Authelia
+    - name: Load the generated OpenBao path overrides
+      ansible.builtin.include_vars:
+        file: "../../../roles/openbao/defaults/main/01d-app-secret-paths.yml"
+
+    - name: Assert the trusted elevation secret uses its dedicated generated path
       ansible.builtin.assert:
         that:
           - >-
             'authelia_oidc_bao_elevate_trusted_client_secret'
-            in openbao_generated_app_secrets.authelia
+            in openbao_generated_app_secrets.client
+          - >-
+            'authelia_oidc_bao_elevate_trusted_client_secret'
+            not in openbao_generated_app_secrets.authelia
+          - openbao_generated_app_secret_paths.client == 'core/client'
         quiet: true
 
     # The defaults read AUTHELIA_APPROVE_NETWORKS from env, which is empty here.

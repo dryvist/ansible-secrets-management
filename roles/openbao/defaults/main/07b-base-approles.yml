@@ -86,7 +86,9 @@ openbao_base_approles_core:
     policy: "{{ openbao_ntfy_policy_name }}"
     secret_id_num_uses: 0
   - name: "{{ openbao_apps_approle_name }}"
-    policy: "{{ openbao_apps_policy_name }}"
+    token_policies:
+      - "{{ openbao_apps_policy_name }}"
+      - "{{ openbao_bao_elevate_client_policy_name }}"
     secret_id_num_uses: 0
   # local-llm additionally attaches the exact external provider-key leaves.
   # Model selection and limits remain in LiteLLM configuration; adding a

@@ -112,7 +112,7 @@ authelia_oidc_bao_elevate_trusted_client_id: bao-elevate-trusted
 authelia_oidc_bao_elevate_trusted_client_secret_plain: >-
   {{ (bao_apps_secrets.authelia_oidc_bao_elevate_trusted_client_secret | default('', true))
      or undef(hint='authelia_oidc_bao_elevate_trusted_client_secret missing from OpenBao '
-                   ~ 'secret/apps/authelia') }}
+                   ~ 'secret/core/client') }}
 authelia_oidc_bao_elevate_trusted_client_secret_hash_file: >-
   {{ authelia_secrets_dir }}/oidc_bao_elevate_trusted_client_secret_hash
 authelia_oidc_bao_elevate_untrusted_client_id: bao-elevate-untrusted

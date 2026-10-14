@@ -34,11 +34,14 @@
           - ntfy
           - apps
           - local-llm
+          - clickhouse
           - local-llm-workstation
           - cribl-edge-mac-a
           - cribl-edge-mac-b
           - agent-ssh-sign
           - agent-workstation
+          - herdr-hail
+          - bao-elevate-client
           - hermes
           - ai-donna
           - open-llm
@@ -91,7 +94,7 @@
           - openbao_roster_key_reader_approles | map(attribute='secret_id_num_uses') | map('int') | list == [0, 0]
           - >-
             openbao_secrets_domain_approle_names
-            == _empty_rotation_names[:10] + _roster_rotation_names + _empty_rotation_names[10:]
+            == _empty_rotation_names[:11] + _roster_rotation_names + _empty_rotation_names[11:]
           - >-
             _roster_rotation_names
             | reject('in', openbao_secrets_domain_approle_names) | list == []

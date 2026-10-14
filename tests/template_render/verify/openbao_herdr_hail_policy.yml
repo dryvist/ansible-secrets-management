@@ -1,0 +1,35 @@
+---
+- name: Render and verify the herdr-hail policy
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    ansible_become: false
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    _fixture_dir: "{{ render_tmp }}"
+    ansible_managed: "test fixture"
+
+  tasks:
+    - name: Render the herdr-hail policy
+      ansible.builtin.template:
+        src: "../../../roles/openbao/templates/herdr-hail-policy.hcl.j2"
+        dest: "{{ _fixture_dir }}/herdr-hail-policy.hcl"
+        mode: "0644"
+
+    - name: Read the rendered policy
+      ansible.builtin.slurp:
+        src: "{{ _fixture_dir }}/herdr-hail-policy.hcl"
+      register: _herdr_hail_policy_raw
+
+    - name: Assert the policy grants read on exactly the Hail credential document
+      vars:
+        _policy: "{{ _herdr_hail_policy_raw.content | b64decode }}"
+      ansible.builtin.assert:
+        that:
+          - _policy | regex_findall('(?m)^path "([^"]+)"') == ['secrets-external/data/platform/herdr-hail']
+          - >-
+            _policy is search('path "secrets-external/data/platform/herdr-hail" \{\s*'
+                              ~ 'capabilities = \["read"\]\s*\}')
+        fail_msg: The herdr-hail policy must be read-only on one exact KV document.
+        quiet: true
