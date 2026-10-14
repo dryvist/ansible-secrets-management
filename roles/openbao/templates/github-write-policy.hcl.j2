@@ -3,13 +3,12 @@
 # ONE policy allowed to touch the raw {{ openbao_github_everyday_mount }}/token endpoint,
 # and the parameter pinning is the entire privilege boundary:
 #
-#   * required_parameters forces every request to name an installation AND a
-#     repositories value. The selector may cover any installed repositories,
-#     including multiple repositories or the full installation.
+#   * repositories is required. Existing callers select an installation ID;
+#     owner-neutral callers can supply org_name instead.
 #   * allowed_parameters does not pin installation_id; GitHub's App
 #     installation selects the repositories.
-#     Listing any key denies all unlisted parameters, so org_name and
-#     repository_ids are denied by construction.
+#     Listing a key denies all unlisted parameters, so repository_ids is
+#     denied by construction. installation_id remains for legacy callers.
 #   * `permissions` is allowed with any value. GitHub only narrows an
 #     installation token's permissions below the App's grant, so a map can
 #     reduce a token and never widen it; the App grant stays the ceiling. The
@@ -26,15 +25,17 @@ path "{{ openbao_github_everyday_mount }}/token" {
   # live 2026-07-18; sys/capabilities-self still reports the path as usable,
   # which makes the omission invisible until a real mint is attempted).
   capabilities = ["create", "update"]
-  required_parameters = ["installation_id", "repositories"]
+  required_parameters = ["repositories"]
   allowed_parameters = {
     # String forms only: the JSON-number form matches neither a quoted nor an
     # unquoted policy value, so listing numbers is dead weight that reads as
     # a live grant.
     "installation_id" = []
+    "org_name" = []
     "repositories" = []
     "permissions" = []
   }
+  # Denying installation_id waits for the legacy helper removal step.
 }
 
 # Write-lease lock records (claim/extend/release + metadata for

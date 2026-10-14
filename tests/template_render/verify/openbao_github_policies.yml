@@ -239,11 +239,11 @@
     - name: Assert the repo-create policy grants exactly its own set
       ansible.builtin.assert:
         that:
-          - _repo_create_paths == [_repo_create_path]
+          - _repo_create_paths == [openbao_github_mount ~ '/token', _repo_create_path]
         fail_msg: >-
           The github-repo-create policy grants {{ _repo_create_paths }}. It
-          must grant exactly the dryvist-repo-create set: no raw token
-          endpoint, no read/publish/admin set.
+          must grant its raw admin-mount token path and repo-create set, with
+          no read, publish, or full-automation set.
 
     - name: Assert no other tier inherits the repo-create grant
       ansible.builtin.assert:
