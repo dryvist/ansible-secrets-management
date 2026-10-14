@@ -102,6 +102,11 @@ openbao_base_approles_elevated:
     policy: "{{ openbao_vikunja_mcp_policy_name }}"
     secret_id_ttl: "0s"
     secret_id_num_uses: 0
+  # herdr-hail: workstation Slack bridge; rotates its bounded secret_id into
+  # Doppler only and reads exactly its external credential document.
+  - name: "{{ openbao_herdr_hail_approle_name }}"
+    policy: "{{ openbao_herdr_hail_policy_name }}"
+    secret_id_num_uses: 100
   # operator-workstation: one operator-workstation identity carrying the
   # converge-domain read policies. Never rotated (the scheduled rotation
   # re-mints only the machine-class domain originals), so its secret-zero copy

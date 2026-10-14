@@ -39,7 +39,9 @@ openbao_rotate_doppler_sync_domains:
   - monitoring
   - local-cloud
   - observability
+  - "{{ openbao_herdr_hail_approle_name }}"
 # These domains publish their pair only to Doppler. All other domains keep the
 # existing env-document read/write/destroy-lookup behavior by default.
 openbao_rotate_doppler_only_domains:
   - "{{ openbao_agent_workstation_approle_name }}"
+  - "{{ openbao_herdr_hail_approle_name }}"

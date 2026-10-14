@@ -1,0 +1,5 @@
+{{ ansible_managed | comment }}
+# The herdr-hail AppRole reads exactly one external KV-v2 document.
+path "secrets-external/data/platform/herdr-hail" {
+  capabilities = ["read"]
+}

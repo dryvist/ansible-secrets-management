@@ -178,6 +178,8 @@ openbao_base_policies_static:
     template: ai-orchestrator-policy.hcl.j2
   - name: "{{ openbao_open_llm_policy_name }}"
     template: open-llm-policy.hcl.j2
+  - name: "{{ openbao_herdr_hail_policy_name }}"
+    template: herdr-hail-policy.hcl.j2
   - name: "{{ openbao_sandbox_agent_read_policy_name }}"
     template: sandbox-agent-read-policy.hcl.j2
   - name: "{{ openbao_sandbox_agent_write_policy_name }}"
