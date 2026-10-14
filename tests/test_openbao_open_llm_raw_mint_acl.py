@@ -5,6 +5,9 @@ agents mount path. The ACL decides before any backend runs, so an allowed reques
 reaches the stub and returns 204 while a refused one returns 403. This pins the
 facts the policy comments rely on: a permissions map matches as a whole, a string
 installation_id matches, and an omitted or wider map is refused.
+
+Run with a bao binary on PATH, for example:
+    nix shell github:NixOS/nixpkgs/nixpkgs-26.05-darwin#openbao --command python3 -m pytest <this file>
 """
 
 import json

@@ -137,13 +137,13 @@ jobs:
       - name: Verify the AppRole rotation roster guard and check mode
         run: python3 -m pytest -v tests/test_openbao_rotation_roster.py
 
-      - name: Install the pinned OpenBao binary
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: .github/scripts/install-pinned-openbao.sh
+      - name: Install Nix
+        uses: DeterminateSystems/determinate-nix-action@8d87e8d5e5b8a8309d4281094560f127d9a265f1 # v3
 
       - name: Verify the dispatcher raw mint grant is enforced by the ACL
-        run: python3 -m pytest -v tests/test_openbao_open_llm_raw_mint_acl.py
+        run: >-
+          nix shell github:NixOS/nixpkgs/nixpkgs-26.05-darwin#openbao
+          --command python3 -m pytest -v tests/test_openbao_open_llm_raw_mint_acl.py
 
   gate:
     name: Merge Gate
