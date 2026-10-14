@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.18.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.17.1...v0.18.0) (2026-10-14)
+
+
+### Features
+
+* **openbao:** add owner-neutral GitHub token grants ([#163](https://github.com/dryvist/ansible-secrets-management/issues/163)) ([6270354](https://github.com/dryvist/ansible-secrets-management/commit/627035489ce67a6bfeac15c38be6ce3baea3f129))
+* **openbao:** mint agents tokens by org name and read two role IDs ([#157](https://github.com/dryvist/ansible-secrets-management/issues/157)) ([b44409e](https://github.com/dryvist/ansible-secrets-management/commit/b44409eb9060e32d39965e4cdd2bf12ecb8acfa6))
+
 ## [0.17.1](https://github.com/dryvist/ansible-secrets-management/compare/v0.17.0...v0.17.1) (2026-10-14)
 
 
