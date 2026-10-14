@@ -41,6 +41,7 @@
           - agent-ssh-sign
           - agent-workstation
           - herdr-hail
+          - bao-elevate-client
           - hermes
           - ai-donna
           - open-llm

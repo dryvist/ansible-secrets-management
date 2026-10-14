@@ -103,6 +103,8 @@
           - openbao_agent_workstation_approle_name in openbao_rotate_doppler_sync_domains
           - openbao_herdr_hail_approle_name in openbao_rotate_doppler_only_domains
           - openbao_herdr_hail_approle_name in openbao_rotate_doppler_sync_domains
+          - openbao_bao_elevate_client_approle_name in openbao_rotate_doppler_only_domains
+          - openbao_bao_elevate_client_approle_name in openbao_rotate_doppler_sync_domains
           - _seed_probe.when | select('search', 'rotate_env_document_enabled') | list | length == 1
           - _env_document_tasks | length == 4
           - >-

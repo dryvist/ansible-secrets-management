@@ -28,8 +28,8 @@ Hermes and Donna are public PKCE clients (no secret); Homarr, Langfuse,
 Phoenix, Semaphore, Terrakube's Dex, Grafana, LiteLLM and the trusted OpenBao
 elevation client are confidential clients. A confidential client's secret is
 the one exception to the no-shared-store rule below — it has a second consumer,
-the relying party — so it is generated once in OpenBao (`secret/apps/authelia`)
-and hashed guest-side into `configuration.yml`; the plaintext never renders.
+the relying party — so it is generated once in OpenBao and hashed guest-side
+into `configuration.yml`; the plaintext never renders.
 Client ids, redirect URIs and secret hash files live in
 `defaults/main/01-oidc-clients.yml`.
 
@@ -41,10 +41,11 @@ device-code clients that approve OpenBao logins. They have no redirect URI. The
 `elevate` authorization policy denies by default and admits only the operator
 account, and only from the networks in `AUTHELIA_APPROVE_NETWORKS`. The
 converge refuses to render the policy while that variable is unset. The trusted
-client's secret is generated at `secret/apps/authelia` like the other
-confidential clients, then hashed by Authelia's create-if-absent hash task. The
-trusted client uses `client_secret_basic`, matching the workstation helper's
-HTTP Basic authentication.
+client's secret is generated at `secret/core/client`, then hashed by Authelia's
+create-if-absent hash task. An exact path policy grants it to the `apps` domain
+AppRole and the `bao-elevate-client` AppRole. The trusted client uses
+`client_secret_basic`, matching the workstation helper's HTTP Basic
+authentication.
 
 Both elevation role flags, `authelia_bao_elevation_enabled` and
 `openbao_authelia_elevation_enabled`, default to false and must be explicitly

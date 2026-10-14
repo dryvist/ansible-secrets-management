@@ -1,0 +1,69 @@
+---
+- name: Render and verify the bao-elevate-client policy
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    ansible_become: false
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    _fixture_dir: "{{ render_tmp }}"
+    ansible_managed: "test fixture"
+
+  tasks:
+    - name: Load the OpenBao defaults
+      ansible.builtin.include_vars:
+        dir: ../../../roles/openbao/defaults/main
+
+    - name: Render the client policy
+      ansible.builtin.template:
+        src: ../../../roles/openbao/templates/bao-elevate-client-policy.hcl.j2
+        dest: "{{ _fixture_dir }}/bao-elevate-client-policy.hcl"
+        mode: "0644"
+
+    - name: Read the rendered policy
+      ansible.builtin.slurp:
+        src: "{{ _fixture_dir }}/bao-elevate-client-policy.hcl"
+      register: _client_policy_raw
+
+    - name: Capture policy holders and AI actor rollups
+      ansible.builtin.set_fact:
+        _client_policy: "{{ _client_policy_raw.content | b64decode }}"
+        _client_path: "{{ openbao_generated_app_secret_paths.client }}"
+        _client_policy_holders: []
+        _ai_actor_policy_names: >-
+          {{ openbao_approles
+             | selectattr('name', 'search', '^ai-(readonly|elevated|apply-)')
+             | map(attribute='token_policies', default=[])
+             | flatten | list }}
+
+    - name: Find each AppRole that attaches the client policy
+      ansible.builtin.set_fact:
+        _client_policy_holders: "{{ _client_policy_holders + [item.name] }}"
+      loop: "{{ openbao_approles }}"
+      when: >-
+        openbao_bao_elevate_client_policy_name in (item.token_policies | default([]))
+        or item.policy | default('') == openbao_bao_elevate_client_policy_name
+
+    - name: Assert the client policy grants only its data document
+      ansible.builtin.assert:
+        that:
+          - >-
+            _client_policy | regex_findall('(?m)^path "([^"]+)"')
+            == [openbao_kv_mount ~ '/data/' ~ _client_path]
+          - >-
+            _client_policy is search('path "' ~ openbao_kv_mount ~ '/data/' ~ _client_path ~ '" \{\s*'
+                                     ~ 'capabilities = \["read"\]\s*\}')
+          - >-
+            _client_policy_holders | sort
+            == [openbao_apps_approle_name, openbao_bao_elevate_client_approle_name] | sort
+          - openbao_bao_elevate_client_policy_name in (openbao_base_policies_static | map(attribute='name') | list)
+          - openbao_bao_elevate_client_policy_name not in _ai_actor_policy_names
+          - _client_path.split('/')[0] not in openbao_ai_read_subtrees
+          - _client_path.split('/')[0] not in openbao_ai_domains
+          - _client_path.split('/')[0] not in openbao_ai_readonly_extra_subtrees
+          - _client_path.split('/')[0] not in openbao_ai_forbidden_subtrees
+        fail_msg: >-
+          The client policy must grant only its exact data path to the apps
+          reader and workstation client, outside every AI capability subtree.
+        quiet: true

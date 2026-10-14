@@ -1,0 +1,5 @@
+{{ ansible_managed | comment }}
+# The bao-elevate-client AppRole reads one generated KV-v2 document.
+path "{{ openbao_kv_mount }}/data/{{ openbao_generated_app_secret_paths.client }}" {
+  capabilities = ["read"]
+}

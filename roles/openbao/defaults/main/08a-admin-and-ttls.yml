@@ -113,6 +113,7 @@ openbao_approle_secret_id_ttl_overrides_base:
   agent-ssh-sign: "{{ openbao_rotated_domain_secret_id_ttl }}"
   agent-workstation: "{{ openbao_rotated_domain_secret_id_ttl }}"
   herdr-hail: "{{ openbao_rotated_domain_secret_id_ttl }}"
+  bao-elevate-client: "{{ openbao_rotated_domain_secret_id_ttl }}"
   hermes: "{{ openbao_rotated_domain_secret_id_ttl }}"
   hermes-private-agent: "{{ openbao_rotated_domain_secret_id_ttl }}"
   ai-donna: "{{ openbao_rotated_domain_secret_id_ttl }}"
