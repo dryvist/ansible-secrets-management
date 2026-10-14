@@ -98,17 +98,64 @@
   loop_control:
     label: "{{ item.name }}"
 
+- name: "Mint a metadata-only token for sets that are public-only on mount {{ gm.mount }}"
+  ansible.builtin.uri:
+    url: "{{ openbao_cli_addr }}/v1/{{ gm.mount }}/token"
+    method: POST
+    headers:
+      X-Vault-Token: "{{ openbao_bootstrap_token }}"
+    body_format: json
+    body:
+      org_name: "{{ item.public_repos_of }}"
+      permissions:
+        metadata: read
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
+  loop: "{{ gm.permission_sets | selectattr('public_repos_of', 'defined') | list }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: openbao_github_app_mount_public_tokens
+  no_log: true
+
 - name: "Read the public repositories for sets that are public-only on mount {{ gm.mount }}"
   ansible.builtin.uri:
     url: >-
       https://api.github.com/orgs/{{ item.public_repos_of }}/repos?type=public&per_page=100
     headers:
       Accept: application/vnd.github+json
+      Authorization: >-
+        Bearer {{ (openbao_github_app_mount_public_tokens.results
+        | selectattr('item.name', 'equalto', item.name) | first).json.data.token }}
     return_content: true
   loop: "{{ gm.permission_sets | selectattr('public_repos_of', 'defined') | list }}"
   loop_control:
     label: "{{ item.name }}"
   register: openbao_github_app_mount_public_repos
+  no_log: true
+
+- name: "Revoke the metadata-only tokens for public repositories on mount {{ gm.mount }}"
+  ansible.builtin.uri:
+    url: "{{ openbao_cli_addr }}/v1/sys/leases/revoke"
+    method: PUT
+    headers:
+      X-Vault-Token: "{{ openbao_bootstrap_token }}"
+    body_format: json
+    body:
+      lease_id: "{{ item.json.lease_id }}"
+    status_code:
+      - 200
+      - 204
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
+  loop: "{{ openbao_github_app_mount_public_tokens.results }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+  no_log: true
+  when: item.json.lease_id | default('', true) | length > 0
 
 # `private_repos_of`: the set's repository list is the named organization's
 # private repositories the mount's own App installation can see, read with a
