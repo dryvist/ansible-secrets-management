@@ -78,6 +78,20 @@
           grant its own key read and one set scoped to the docs source
           repository only.
 
+    - name: Assert open-llm carries both agents token grants
+      vars:
+        _open_llm_text: >-
+          {{ (_snapshot_raw.results
+              | selectattr('item', 'equalto', 'open-llm-policy.hcl') | first).content
+             | b64decode }}
+        _open_llm_paths: "{{ _open_llm_text | regex_findall('(?m)^path \"([^\"]+)\"') }}"
+      ansible.builtin.assert:
+        that:
+          - >-
+            _open_llm_paths | select('match', '^' ~ openbao_github_agents_mount ~ '/token')
+            | list == [openbao_github_agents_mount ~ '/token',
+                       openbao_github_agents_mount ~ '/token/public-write']
+
     - name: Assert no other tier inherits the snapshot set
       ansible.builtin.assert:
         that:

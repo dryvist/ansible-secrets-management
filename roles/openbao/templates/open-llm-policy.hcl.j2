@@ -1,10 +1,13 @@
 {{ ansible_managed | comment }}
 # OpenBao policy for the open-llm AppRole — the untrusted-tier dispatcher.
 # The dispatcher reads its own internal bucket and the exact external Z.ai
-# leaf, mints tokens from its public-write set, and issues short-lived wrapped
-# SecretIDs for the two sandbox roles.
+# leaf, mints one-repository tokens from the raw endpoint pinned to its
+# installation and from the named public-write set, and issues short-lived
+# wrapped SecretIDs for the two sandbox roles.
 #
 #   * read secret/apps/open-llm and secrets-external/zai-coding;
+#   * mint a one-repository token from the raw endpoint pinned to the agents
+#     installation;
 #   * mint using the named public-write permission set;
 #   * issue wrapped SecretIDs for sandbox-agent-read and sandbox-agent-write.
 #
@@ -23,6 +26,20 @@ path "secrets-external/data/zai-coding" {
 }
 
 {% if openbao_github_agents_installation_id | length > 0 %}
+path "{{ openbao_github_agents_mount }}/token" {
+  # The plugin's token path has no existence check, so a mint routes as
+  # create. Callers send installation_id and repositories as plain strings:
+  # the ACL matches neither a JSON number nor list elements. Both facts are
+  # recorded in github-write-policy.hcl.j2.
+  capabilities = ["create", "update"]
+  required_parameters = ["installation_id", "repositories"]
+  allowed_parameters = {
+    "installation_id" = ["{{ openbao_github_agents_installation_id }}"]
+    "repositories" = []
+    "permissions" = []
+  }
+}
+
 path "{{ openbao_github_agents_mount }}/token/public-write" {
   capabilities = ["create", "update"]
 }

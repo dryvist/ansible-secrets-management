@@ -82,6 +82,19 @@ def _render_apps_policy(router_catalog):
     )
 
 
+def _render_open_llm_policy(installation_id):
+    environment = jinja2.Environment()
+    environment.filters["comment"] = str
+    return environment.from_string(OPEN_LLM_POLICY.read_text(encoding="utf-8")).render(
+        ansible_managed="",
+        openbao_kv_mount="secret",
+        openbao_github_agents_mount="github",
+        openbao_github_agents_installation_id=installation_id,
+        openbao_sandbox_agent_read_approle_name="sandbox-agent-read",
+        openbao_sandbox_agent_write_approle_name="sandbox-agent-write",
+    )
+
+
 def test_public_router_key_entries_remain_literal_and_allowlisted():
     assert DEFAULTS_DATA["openbao_router_key_catalog"] == (
         "{{ llm_router_key_catalog_facts.openbao_router_key_catalog }}"
@@ -160,14 +173,7 @@ def test_open_llm_fields_mirror_the_generated_router_fields():
 
 
 def test_open_llm_policy_reads_only_its_own_bucket():
-    environment = jinja2.Environment()
-    environment.filters["comment"] = str
-    rendered = environment.from_string(OPEN_LLM_POLICY.read_text(encoding="utf-8")).render(
-        ansible_managed="",
-        openbao_kv_mount="secret",
-        openbao_github_agents_mount="github",
-        openbao_github_agents_installation_id="",
-    )
+    rendered = _render_open_llm_policy("")
     app_paths = [
         path
         for path in re.findall(r'^path "([^"]+)"', rendered, re.MULTILINE)
@@ -177,3 +183,36 @@ def test_open_llm_policy_reads_only_its_own_bucket():
         "secret/data/apps/open-llm",
         "secret/metadata/apps/open-llm",
     ]
+
+
+def test_open_llm_policy_mints_raw_and_named_agents_tokens():
+    rendered = _render_open_llm_policy("4242")
+    paths = re.findall(r'^path "([^"]+)"', rendered, re.MULTILINE)
+    assert paths == [
+        "secret/data/apps/open-llm",
+        "secret/metadata/apps/open-llm",
+        "secrets-external/data/zai-coding",
+        "github/token",
+        "github/token/public-write",
+        "auth/approle/role/sandbox-agent-read/secret-id",
+        "auth/approle/role/sandbox-agent-write/secret-id",
+    ]
+
+    raw_token = re.search(r'(?ms)^path "github/token" \{\n(.*?)^\}', rendered)
+    assert raw_token is not None
+    assert 'capabilities = ["create", "update"]' in raw_token.group(1)
+    assert 'required_parameters = ["installation_id", "repositories"]' in raw_token.group(1)
+    assert re.findall(r'(?m)^    "([^"]+)" =', raw_token.group(1)) == [
+        "installation_id",
+        "repositories",
+        "permissions",
+    ]
+    assert '"installation_id" = ["4242"]' in raw_token.group(1)
+    assert '"repositories" = []' in raw_token.group(1)
+    assert '"permissions" = []' in raw_token.group(1)
+
+    public_write = re.search(
+        r'(?ms)^path "github/token/public-write" \{\n(.*?)^\}', rendered
+    )
+    assert public_write is not None
+    assert 'capabilities = ["create", "update"]' in public_write.group(1)

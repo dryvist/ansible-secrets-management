@@ -72,6 +72,7 @@
       ansible.builtin.set_fact:
         openbao_github_hermes_installation_id: "1"
         openbao_github_hermes_author_public_repos: [pub-a]
+        openbao_github_agents_installation_id: "4242"
         openbao_github_oidc_docs_repository: example-org/example-docs
         openbao_aws_hermes_webhook_consumer_role_arn: fixture-arn
 
@@ -141,6 +142,20 @@
         src: "{{ _fixture_dir }}/hermes-{{ item }}"
       register: _raw
       loop: *policies
+
+    - name: Assert open-llm carries both agents token grants
+      vars:
+        _open_llm_text: >-
+          {{ (_raw.results
+              | selectattr('item', 'equalto', 'open-llm-policy.hcl') | first).content
+             | b64decode }}
+        _open_llm_paths: "{{ _open_llm_text | regex_findall('(?m)^path \"([^\"]+)\"') }}"
+      ansible.builtin.assert:
+        that:
+          - >-
+            _open_llm_paths | select('match', '^' ~ openbao_github_agents_mount ~ '/token')
+            | list == [openbao_github_agents_mount ~ '/token',
+                       openbao_github_agents_mount ~ '/token/public-write']
 
     - name: Assert each hermes policy mints its own visibility only, and no other policy reaches the mount
       vars:
