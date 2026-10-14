@@ -25,12 +25,13 @@ opens every Traefik route whose tofu ingress row carries `sso = true`; the
 
 Authelia is the estate OIDC provider for apps that do their own sign-in.
 Hermes and Donna are public PKCE clients (no secret); Homarr, Langfuse,
-Phoenix, Semaphore, Terrakube's Dex, Grafana and LiteLLM are confidential
-clients. A confidential client's secret is the one exception to the
-no-shared-store rule below — it has a second consumer, the relying party — so
-it is generated once in OpenBao (`secret/apps/authelia`) and hashed guest-side
-into `configuration.yml`; the plaintext never renders. Client ids, redirect
-URIs and secret hash files live in `defaults/main/01-oidc-clients.yml`.
+Phoenix, Semaphore, Terrakube's Dex, Grafana, LiteLLM and the trusted OpenBao
+elevation client are confidential clients. A confidential client's secret is
+the one exception to the no-shared-store rule below — it has a second consumer,
+the relying party — so it is generated once in OpenBao (`secret/apps/authelia`)
+and hashed guest-side into `configuration.yml`; the plaintext never renders.
+Client ids, redirect URIs and secret hash files live in
+`defaults/main/01-oidc-clients.yml`.
 
 `litellm` is the AI repo's LiteLLM proxy Admin UI (AI `roles/llm_router`);
 its redirect is `https://llm.<domain>/sso/callback`.
@@ -40,8 +41,20 @@ device-code clients that approve OpenBao logins. They have no redirect URI. The
 `elevate` authorization policy denies by default and admits only the operator
 account, and only from the networks in `AUTHELIA_APPROVE_NETWORKS`. The
 converge refuses to render the policy while that variable is unset. The trusted
-client's secret is read from `secret/apps/authelia` like the other confidential
-clients.
+client's secret is generated at `secret/apps/authelia` like the other
+confidential clients, then hashed by Authelia's create-if-absent hash task. The
+trusted client uses `client_secret_basic`, matching the workstation helper's
+HTTP Basic authentication.
+
+Both elevation role flags, `authelia_bao_elevation_enabled` and
+`openbao_authelia_elevation_enabled`, default to false and must be explicitly
+enabled for their respective converges. The Authelia input comes from the
+controller environment through `AUTHELIA_APPROVE_NETWORKS`; OpenBao reads
+`OPENBAO_AUTHELIA_ISSUER_URL`, `OPENBAO_ELEVATE_SUBJECT` and
+`OPENBAO_WORKSTATION_CIDRS` the same way. The documented Authelia and OpenBao
+converges use Doppler-wrapped Ansible invocations, which provide the runtime
+environment to those lookups. They do not set either Ansible role flag. No
+tracked vars file enables the gates.
 
 ## Secrets — generated at the source, no shared store
 

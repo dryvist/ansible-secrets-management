@@ -1,0 +1,67 @@
+---
+- name: Render and verify the OpenBao Authelia elevation policies
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    ansible_become: false
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    _fixture_dir: "{{ render_tmp }}"
+    _template_dir: ../../../roles/openbao/templates
+    ansible_managed: "test fixture"
+
+  tasks:
+    - name: Load the openbao role defaults
+      ansible.builtin.include_vars:
+        dir: ../../../roles/openbao/defaults/main
+
+    - name: Render the trusted and untrusted policies
+      ansible.builtin.template:
+        src: "{{ _template_dir }}/{{ item.template }}"
+        dest: "{{ _fixture_dir }}/{{ item.name }}.hcl"
+        mode: "0644"
+      loop:
+        - name: human-unlock
+          template: human-unlock-policy.hcl.j2
+        - name: human-unlock-untrusted
+          template: human-unlock-untrusted-policy.hcl.j2
+
+    - name: Read the rendered policies
+      ansible.builtin.slurp:
+        src: "{{ _fixture_dir }}/{{ item }}.hcl"
+      loop:
+        - human-unlock
+        - human-unlock-untrusted
+      register: _elevation_policy_raw
+
+    - name: Assert each elevation role maps to its policy and the untrusted one stays per-service
+      vars:
+        _trusted_policy: >-
+          {{ openbao_elevate_roles
+             | selectattr('name', 'equalto', 'elevate-trusted')
+             | map(attribute='policy') | first }}
+        _untrusted_policy: >-
+          {{ openbao_elevate_roles
+             | selectattr('name', 'equalto', 'elevate-untrusted')
+             | map(attribute='policy') | first }}
+        _untrusted_rendered_paths: >-
+          {{ _elevation_policy_raw.results[1].content | b64decode
+             | regex_findall('(?m)^path "([^"]+)"') }}
+      ansible.builtin.assert:
+        that:
+          - _trusted_policy == openbao_human_unlock_policy_name
+          - _untrusted_policy == openbao_human_unlock_untrusted_policy_name
+          - >-
+            ('auth/approle/role/ai-apply-all/secret-id'
+             not in _untrusted_rendered_paths)
+          - >-
+            ('auth/approle/role/' ~ openbao_ai_admin_approle_name ~ '/secret-id'
+             not in _untrusted_rendered_paths)
+          - >-
+            ('auth/approle/role/' ~ openbao_ai_admin_session_approle_name ~ '/secret-id'
+             not in _untrusted_rendered_paths)
+        fail_msg: >-
+          The untrusted phone role must reach only per-service apply AppRoles,
+          never ai-apply-all or an administrator identity.
+        quiet: true
