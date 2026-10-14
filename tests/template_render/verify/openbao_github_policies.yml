@@ -239,11 +239,11 @@
     - name: Assert the repo-create policy grants exactly its own set
       ansible.builtin.assert:
         that:
-          - _repo_create_paths == [_repo_create_path]
+          - _repo_create_paths == [openbao_github_mount ~ '/token', _repo_create_path]
         fail_msg: >-
           The github-repo-create policy grants {{ _repo_create_paths }}. It
-          must grant exactly the dryvist-repo-create set: no raw token
-          endpoint, no read/publish/admin set.
+          must grant its raw admin-mount token path and repo-create set, with
+          no read, publish, or full-automation set.
 
     - name: Assert no other tier inherits the repo-create grant
       ansible.builtin.assert:
@@ -281,24 +281,65 @@
           ({{ openbao_github_mount }}). Everyday tokens must come only from
           {{ openbao_github_everyday_mount }}.
 
-    - name: Assert open-llm holds only its bucket, external key, broker, and public-write grants
+    - name: Assert open-llm holds only its bucket, external key, role IDs, broker, and mint grants
       vars:
+        _raw_token_stanza: >-
+          {{ _open_llm_text | regex_search('(?ms)path "' ~ openbao_github_agents_mount
+             ~ '/token" [{].*?^[}]') }}
         _token_stanza: >-
           {{ _open_llm_text | regex_search('(?ms)path "' ~ openbao_github_agents_mount
              ~ '/token/public-write" [{].*?^[}]') }}
+        _raw_allowed_parameters: >-
+          {{ _raw_token_stanza | regex_search('(?ms)^  allowed_parameters = [{].*?^  }') }}
+        _raw_denied_parameters: >-
+          {{ _raw_token_stanza | regex_search('(?ms)^  denied_parameters = [{].*?^  }') }}
+        _read_role_id_stanza: >-
+          {{ _open_llm_text | regex_search('(?ms)path "auth/approle/role/'
+             ~ openbao_sandbox_agent_read_approle_name ~ '/role-id" [{].*?^[}]') }}
+        _write_role_id_stanza: >-
+          {{ _open_llm_text | regex_search('(?ms)path "auth/approle/role/'
+             ~ openbao_sandbox_agent_write_approle_name ~ '/role-id" [{].*?^[}]') }}
       ansible.builtin.assert:
         that:
           - >-
             _open_llm_paths == [openbao_kv_mount ~ '/data/apps/open-llm',
                                 openbao_kv_mount ~ '/metadata/apps/open-llm',
                                 'secrets-external/data/zai-coding',
+                                openbao_github_agents_mount ~ '/token',
                                 openbao_github_agents_mount ~ '/token/public-write',
+                                'auth/approle/role/' ~ openbao_sandbox_agent_read_approle_name ~ '/role-id',
                                 'auth/approle/role/' ~ openbao_sandbox_agent_read_approle_name ~ '/secret-id',
+                                'auth/approle/role/' ~ openbao_sandbox_agent_write_approle_name ~ '/role-id',
                                 'auth/approle/role/' ~ openbao_sandbox_agent_write_approle_name ~ '/secret-id']
+          - _read_role_id_stanza | regex_findall('capabilities = (.*)') == ['["read"]']
+          - _write_role_id_stanza | regex_findall('capabilities = (.*)') == ['["read"]']
+          - >-
+            'capabilities = ["create", "update"]' in _raw_token_stanza
+          - >-
+            'required_parameters = ["repositories", "permissions"]'
+            in _raw_token_stanza
+          - >-
+            _raw_allowed_parameters | regex_findall('(?m)^    "([^"]+)" =')
+            == ['org_name', 'repositories', 'permissions']
+          - >-
+            '"org_name" = []' in _raw_allowed_parameters
+          - >-
+            '"repositories" = []' in _raw_allowed_parameters
+          - >-
+            _raw_denied_parameters | regex_findall('(?m)^    "([^"]+)" =')
+            == ['installation_id', 'repository_ids']
+          - >-
+            '"installation_id" = []' in _raw_denied_parameters
+          - >-
+            '"repository_ids" = []' in _raw_denied_parameters
+          - >-
+            '"permissions" = [{ "contents" = "write", "pull_requests" = "write" }, { "contents" = "read" }]'
+            in _raw_token_stanza
           - >-
             'capabilities = ["create", "update"]' in _token_stanza
           - >-
             'max_wrapping_ttl = "15m"' in _open_llm_text
+          - _open_llm_text | regex_findall('min_wrapping_ttl = "1s"') | length == 2
           - >-
             _open_llm_paths | select('match', '^(github|github-admin|' ~ openbao_github_hermes_mount ~ ')/')
             | list == []
@@ -307,8 +348,9 @@
             | select('search', 'list|delete|sudo') | list == []
         fail_msg: >-
           open-llm grants {{ _open_llm_paths }}. It must read only its internal
-          bucket and exact Z.ai leaf, mint from the public-write set, and issue
-          wrapped one-use SecretIDs for the two sandbox roles.
+          bucket, exact Z.ai leaf, and two sandbox role IDs, mint raw tokens
+          and use the named public-write set, and issue wrapped one-use SecretIDs
+          for the two sandbox roles.
 
     - name: Assert no other tier reaches the agents mount
       ansible.builtin.assert:
@@ -343,7 +385,9 @@
             == [openbao_kv_mount ~ '/data/apps/open-llm',
                 openbao_kv_mount ~ '/metadata/apps/open-llm',
                 'secrets-external/data/zai-coding',
+                'auth/approle/role/' ~ openbao_sandbox_agent_read_approle_name ~ '/role-id',
                 'auth/approle/role/' ~ openbao_sandbox_agent_read_approle_name ~ '/secret-id',
+                'auth/approle/role/' ~ openbao_sandbox_agent_write_approle_name ~ '/role-id',
                 'auth/approle/role/' ~ openbao_sandbox_agent_write_approle_name ~ '/secret-id']
         fail_msg: With no installation ID the open-llm policy must render no GitHub mint grant.
 

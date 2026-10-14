@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.18.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.17.1...v0.18.0) (2026-10-14)
+
+
+### Features
+
+* **openbao:** add owner-neutral GitHub token grants ([#163](https://github.com/dryvist/ansible-secrets-management/issues/163)) ([6270354](https://github.com/dryvist/ansible-secrets-management/commit/627035489ce67a6bfeac15c38be6ce3baea3f129))
+* **openbao:** mint agents tokens by org name and read two role IDs ([#157](https://github.com/dryvist/ansible-secrets-management/issues/157)) ([b44409e](https://github.com/dryvist/ansible-secrets-management/commit/b44409eb9060e32d39965e4cdd2bf12ecb8acfa6))
+
 ## [0.17.1](https://github.com/dryvist/ansible-secrets-management/compare/v0.17.0...v0.17.1) (2026-10-14)
 
 
@@ -448,7 +456,7 @@
 * **openbao:** bind github-repo-create to the workstation class ([#1869](https://github.com/dryvist/ansible-secrets-management/issues/1869)) ([0dc4133](https://github.com/dryvist/ansible-secrets-management/commit/0dc4133efa6d5c77fd9f7890ea6a907f667456b4))
 * **openbao:** bind the ai-sessions-backup AppRole to the workstation class ([81cef7d](https://github.com/dryvist/ansible-secrets-management/commit/81cef7dbd1a28ffef153d40502a0b882f331c797))
 * **openbao:** bind the ai-sessions-backup AppRole to the workstation class ([0912923](https://github.com/dryvist/ansible-secrets-management/commit/091292381a6286b1656f2ee913fd5b4cf2eac9c3))
-* **openbao:** bind the github-write-x10 realm to the workstation class ([#1858](https://github.com/dryvist/ansible-secrets-management/issues/1858)) ([a8462b0](https://github.com/dryvist/ansible-secrets-management/commit/a8462b058cc2e08d84922e373f2ba3c3ba2ee63f))
+* **openbao:** bind the GitHub write realm to the workstation class ([#1858](https://github.com/dryvist/ansible-secrets-management/issues/1858)) ([a8462b0](https://github.com/dryvist/ansible-secrets-management/commit/a8462b058cc2e08d84922e373f2ba3c3ba2ee63f))
 * **openbao:** bound the admin AppRole token to the human unlock window ([#1734](https://github.com/dryvist/ansible-secrets-management/issues/1734)) ([6a172b5](https://github.com/dryvist/ansible-secrets-management/commit/6a172b5e7687de2afad55fc1b8e0c08959fa9ab1))
 * **openbao:** build the capability probe's paths without a regex backreference ([04f4b9f](https://github.com/dryvist/ansible-secrets-management/commit/04f4b9f5545efcd1e1c464356f2ac8febd3ad33a))
 * **openbao:** classify the platform deploy identity as workstation-held ([#1754](https://github.com/dryvist/ansible-secrets-management/issues/1754)) ([0df097c](https://github.com/dryvist/ansible-secrets-management/commit/0df097c2b8fa212908e4d696ac72c18d4e21497f))
