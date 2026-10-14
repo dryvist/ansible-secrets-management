@@ -289,6 +289,10 @@
         _token_stanza: >-
           {{ _open_llm_text | regex_search('(?ms)path "' ~ openbao_github_agents_mount
              ~ '/token/public-write" [{].*?^[}]') }}
+        _raw_allowed_parameters: >-
+          {{ _raw_token_stanza | regex_search('(?ms)^  allowed_parameters = [{].*?^  }') }}
+        _raw_denied_parameters: >-
+          {{ _raw_token_stanza | regex_search('(?ms)^  denied_parameters = [{].*?^  }') }}
         _read_role_id_stanza: >-
           {{ _open_llm_text | regex_search('(?ms)path "auth/approle/role/'
              ~ openbao_sandbox_agent_read_approle_name ~ '/role-id" [{].*?^[}]') }}
@@ -312,16 +316,22 @@
           - >-
             'capabilities = ["create", "update"]' in _raw_token_stanza
           - >-
-            'required_parameters = ["installation_id", "repositories", "permissions"]'
+            'required_parameters = ["repositories", "permissions"]'
             in _raw_token_stanza
           - >-
-            _raw_token_stanza | regex_findall('(?m)^    "([^"]+)" =')
-            == ['installation_id', 'repositories', 'permissions']
+            _raw_allowed_parameters | regex_findall('(?m)^    "([^"]+)" =')
+            == ['org_name', 'repositories', 'permissions']
           - >-
-            '"installation_id" = ["' ~ openbao_github_agents_installation_id ~ '"]'
-            in _raw_token_stanza
+            '"org_name" = []' in _raw_allowed_parameters
           - >-
-            '"repositories" = []' in _raw_token_stanza
+            '"repositories" = []' in _raw_allowed_parameters
+          - >-
+            _raw_denied_parameters | regex_findall('(?m)^    "([^"]+)" =')
+            == ['installation_id', 'repository_ids']
+          - >-
+            '"installation_id" = []' in _raw_denied_parameters
+          - >-
+            '"repository_ids" = []' in _raw_denied_parameters
           - >-
             '"permissions" = [{ "contents" = "write", "pull_requests" = "write" }, { "contents" = "read" }]'
             in _raw_token_stanza
@@ -338,9 +348,9 @@
             | select('search', 'list|delete|sudo') | list == []
         fail_msg: >-
           open-llm grants {{ _open_llm_paths }}. It must read only its internal
-          bucket, exact Z.ai leaf, and two sandbox role IDs, mint one-repository
-          tokens from the installation-pinned raw endpoint and named public-write
-          set, and issue wrapped one-use SecretIDs for the two sandbox roles.
+          bucket, exact Z.ai leaf, and two sandbox role IDs, mint raw tokens
+          and use the named public-write set, and issue wrapped one-use SecretIDs
+          for the two sandbox roles.
 
     - name: Assert no other tier reaches the agents mount
       ansible.builtin.assert:

@@ -208,17 +208,31 @@ def test_open_llm_policy_mints_raw_and_named_agents_tokens():
     raw_token = re.search(r'(?ms)^path "github/token" \{\n(.*?)^\}', rendered)
     assert raw_token is not None
     assert 'capabilities = ["create", "update"]' in raw_token.group(1)
+    allowed_parameters = re.search(
+        r"(?ms)^  allowed_parameters = \{\n(.*?)^  \}", raw_token.group(1)
+    )
+    denied_parameters = re.search(
+        r"(?ms)^  denied_parameters = \{\n(.*?)^  \}", raw_token.group(1)
+    )
+    assert allowed_parameters is not None
+    assert denied_parameters is not None
     assert (
-        'required_parameters = ["installation_id", "repositories", "permissions"]'
+        'required_parameters = ["repositories", "permissions"]'
         in raw_token.group(1)
     )
-    assert re.findall(r'(?m)^    "([^"]+)" =', raw_token.group(1)) == [
-        "installation_id",
+    assert re.findall(r'(?m)^    "([^"]+)" =', allowed_parameters.group(1)) == [
+        "org_name",
         "repositories",
         "permissions",
     ]
-    assert '"installation_id" = ["4242"]' in raw_token.group(1)
-    assert '"repositories" = []' in raw_token.group(1)
+    assert '"org_name" = []' in allowed_parameters.group(1)
+    assert '"repositories" = []' in allowed_parameters.group(1)
+    assert re.findall(r'(?m)^    "([^"]+)" =', denied_parameters.group(1)) == [
+        "installation_id",
+        "repository_ids",
+    ]
+    assert '"installation_id" = []' in denied_parameters.group(1)
+    assert '"repository_ids" = []' in denied_parameters.group(1)
     assert (
         '"permissions" = [{ "contents" = "write", "pull_requests" = "write" }, '
         '{ "contents" = "read" }]'

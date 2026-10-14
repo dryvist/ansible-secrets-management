@@ -15,7 +15,7 @@ configuration, so each App's own grant caps every token its mount mints:
 | --- | --- | --- |
 | `github` | everyday | read sets and the raw `github/token` write endpoint |
 | `github-admin` | admin | admin, repo-create, docs-publisher, ci-resolver, runner, exporter |
-| `github-agents` | agents | none: `open-llm` mints from the raw `github-agents/token`, pinned to the App's installation |
+| `github-agents` | agents | none: `open-llm` uses the raw `github-agents/token` with caller-selected org and repository fields |
 | `github-hermes` | hermes | `hermes-{review,author}-{public,private}`, split by repository visibility |
 | `github-work` | work | `work-read` and `work-write`, both pinned to the work installation; no administration |
 | `github-enterprise-read` | read-only Enterprise App | none: raw token endpoint, pinned to its installation |
@@ -95,12 +95,13 @@ Token access is tiered; the tier IS the privilege boundary:
   repository in the everyday App installation, then `github/token` (raw, `github-write`)
   mints the token that actually pushes. The repo-create token is never reused
   to push — its stored permission map has no `contents` grant to do so.
-- **untrusted (`open-llm`)** — the raw `github-agents/token` endpoint with
-  `installation_id` pinned to the agents App's one installation and
-  `repositories` required; `org_name` and `repository_ids` are denied. The
-  installation's repository list is the scope and the App's grant the
-  ceiling, so a request naming any other repository fails at GitHub. The
-  policy reaches no other GitHub mount and reads only `secret/apps/open-llm`,
+- **untrusted (`open-llm`)** — the raw `github-agents/token` endpoint accepts
+  any `org_name` and `repositories` value, with `org_name` optional and
+  `repositories` and `permissions` required. It denies `installation_id` and
+  `repository_ids`, and accepts only the exact `contents: write` plus
+  `pull_requests: write` map or the exact `contents: read` map. The App's grant
+  remains the permission ceiling. The policy reaches no other GitHub mount and
+  reads only `secret/apps/open-llm`,
   `secrets-external/zai-coding`, and the role IDs for its two sandbox roles.
   Machine-class AppRole bound to one /32; 15m token, renewable to 60m.
 - **hermes (`hermes-public`, `hermes-private`)** — four sets on

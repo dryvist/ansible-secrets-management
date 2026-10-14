@@ -4,7 +4,7 @@ The rendered policy is loaded into `bao server -dev` with a plain kv mount at th
 agents mount path. The ACL decides before any backend runs, so an allowed request
 reaches the stub and returns 204 while a refused one returns 403. This pins the
 facts the policy comments rely on: a permissions map matches as a whole, a string
-installation_id matches, and an omitted or wider map is refused.
+selector is accepted, and an omitted or wider permission map is refused.
 
 Run with a bao binary on PATH, for example:
     nix shell --inputs-from . nixpkgs#openbao --command python3 -m pytest <this file>
@@ -94,15 +94,21 @@ def minter():
 
 
 def _request(**overrides):
-    payload = {"installation_id": INSTALLATION, "repositories": "repo", "permissions": WRITE}
+    payload = {"org_name": "owner", "repositories": "repo", "permissions": WRITE}
     payload.update(overrides)
     return {key: value for key, value in payload.items() if value is not None}
 
 
 @pytest.mark.parametrize(
     "payload",
-    [_request(), _request(permissions=READ)],
-    ids=["write-map", "read-map"],
+    [
+        _request(),
+        _request(permissions=READ),
+        _request(org_name="another-owner"),
+        _request(repositories="another-repo"),
+        _request(org_name=None),
+    ],
+    ids=["write-map", "read-map", "any-org-name", "any-repository", "org-name-optional"],
 )
 def test_the_two_dispatcher_permission_maps_are_allowed(minter, payload):
     assert minter("POST", "github/token", payload)[0] == 204
@@ -117,7 +123,8 @@ def test_the_two_dispatcher_permission_maps_are_allowed(minter, payload):
         _request(permissions={**READ, "pull_requests": "write"}),
         _request(permissions={}),
         _request(permissions=None),
-        _request(installation_id="9999"),
+        _request(installation_id=INSTALLATION),
+        _request(repository_ids=["123"]),
         _request(repositories=None),
         _request(extra="value"),
     ],
@@ -128,7 +135,8 @@ def test_the_two_dispatcher_permission_maps_are_allowed(minter, payload):
         "read-plus-pull-requests",
         "empty-permissions",
         "permissions-omitted",
-        "other-installation",
+        "installation-id-denied",
+        "repository-ids-denied",
         "repositories-omitted",
         "unlisted-parameter",
     ],

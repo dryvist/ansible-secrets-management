@@ -54,10 +54,11 @@ openbao_github_read_permission_sets: >-
      + (openbao_github_everyday_extra_read_installations_parsed
         | map(attribute='permission_set') | list) }}
 
-# open-llm can mint one-repository tokens from the raw endpoint pinned to this
-# installation and to the exact permission maps below, and from the named
-# public-write set. The sandbox gets only
-# explicitly named public-repository read and write permission sets.
+# open-llm can mint from the raw endpoint with optional org_name and required
+# repositories, restricted to the exact permission maps below; installation_id
+# and repository_ids are denied. It can also mint from the named public-write
+# set. The sandbox gets only explicitly named public-repository read and write
+# permission sets.
 openbao_github_agents_mount: github-agents
 openbao_github_agents_installation_id: >-
   {{ openbao_platform_env['OPENBAO_GITHUB_AGENTS_DRYVIST_INSTALLATION_ID'] | default('', true) }}
