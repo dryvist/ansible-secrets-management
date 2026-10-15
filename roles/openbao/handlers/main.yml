@@ -14,6 +14,7 @@
   ansible.builtin.include_tasks: restart_rolling.yml
   listen: Restart openbao
   run_once: true
+  when: not ansible_check_mode
 
 - name: Restart rsyslog
   ansible.builtin.systemd:
