@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 INIT = ROOT / "roles" / "openbao" / "tasks" / "init"
 INSTALL = ROOT / "roles" / "openbao" / "tasks" / "main" / "install.yml"
 SEED = ROOT / "roles" / "openbao" / "tasks" / "seed_generated_app_secret.yml"
+HANDLERS = ROOT / "roles" / "openbao" / "handlers" / "main.yml"
 READ_COMMAND_PREFIXES = (
     "bao status",
     "bao kv get",
@@ -156,3 +157,14 @@ def test_login_calls_never_run_during_check_mode():
         and task.get("check_mode") is False
     ]
     assert not offenders, offenders
+
+
+def test_rolling_restart_handler_skips_check_mode():
+    handlers = list(from_yaml(HANDLERS))
+    restart = next(
+        task
+        for task in handlers
+        if task.get("name") == "Restart flagged openbao voters one at a time"
+    )
+
+    assert restart.get("when") == "not ansible_check_mode"
