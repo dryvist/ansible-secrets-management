@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.21.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.20.1...v0.21.0) (2026-10-15)
+
+
+### Features
+
+* **openbao:** allow workflow file writes in the work write set ([#176](https://github.com/dryvist/ansible-secrets-management/issues/176)) ([24d78a0](https://github.com/dryvist/ansible-secrets-management/commit/24d78a0bd9adf2d29541e6abb25e9a03ee6060cf))
+
 ## [0.20.1](https://github.com/dryvist/ansible-secrets-management/compare/v0.20.0...v0.20.1) (2026-10-15)
 
 
