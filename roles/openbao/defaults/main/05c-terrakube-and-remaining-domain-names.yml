@@ -91,10 +91,14 @@ openbao_ansible_converge_approle_name: ansible-converge
 # `ansible`. Kept distinct from ansible-converge because the two callers are
 # not equally trusted: see the header of semaphore-policy.hcl.j2.
 openbao_semaphore_policy_name: semaphore
-# All-repo READ sets the unattended Semaphore identity may mint for Ansible checkouts and Cribl pack release lookups.
+# All-repo READ sets the unattended Semaphore identity may mint for Ansible checkouts.
 openbao_semaphore_github_read_permission_sets:
   - read-dryvist-all
   - read-jpe-cribl-all
+# The Cribl pack sync requests this exact read-only map on the raw org endpoint.
+openbao_semaphore_github_raw_read_permissions:
+  contents: read
+  metadata: read
 openbao_semaphore_approle_name: semaphore
 openbao_observability_policy_name: observability
 openbao_observability_approle_name: observability

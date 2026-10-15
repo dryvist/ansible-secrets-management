@@ -59,6 +59,22 @@ path "{{ openbao_kv_mount }}/data/platform/ansible/env" {
   capabilities = ["read"]
 }
 
+# Cribl pack discovery selects an org through the App installation. Pin its raw
+# request to the exact read map and forbid repository or installation selectors.
+path "{{ openbao_github_everyday_mount }}/token" {
+  capabilities = ["create", "update"]
+  required_parameters = ["org_name", "permissions"]
+  allowed_parameters = {
+    "org_name" = []
+    "permissions" = [{ {% for name, level in openbao_semaphore_github_raw_read_permissions | dictsort %}"{{ name }}" = "{{ level }}"{{ ", " if not loop.last else "" }}{% endfor %} }]
+  }
+  denied_parameters = {
+    "repositories" = []
+    "repository_ids" = []
+    "installation_id" = []
+  }
+}
+
 # The execution plane checks out the Ansible repositories it runs, one of which
 # carries a private submodule, so every checkout needs a GitHub credential and
 # has no human to supply one. Its git credential helper mints an ephemeral
