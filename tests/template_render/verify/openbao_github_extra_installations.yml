@@ -142,12 +142,51 @@
 
     - name: Assert the read list does not widen the Semaphore policy
       vars:
+        _semaphore_policy_text: "{{ _semaphore_extra_read_policy.content | b64decode }}"
+        _semaphore_raw_token_stanza: >-
+          {{ _semaphore_policy_text
+             | regex_search('(?ms)^path "' ~ openbao_github_everyday_mount
+               ~ '/token" [{].*?^[}]') }}
+        _semaphore_raw_allowed_parameters: >-
+          {{ _semaphore_raw_token_stanza
+             | regex_search('(?ms)^  allowed_parameters = [{].*?^  }') }}
+        _semaphore_raw_denied_parameters: >-
+          {{ _semaphore_raw_token_stanza
+             | regex_search('(?ms)^  denied_parameters = [{].*?^  }') }}
         _semaphore_github_read_paths: >-
-          {{ _semaphore_extra_read_policy.content | b64decode
+          {{ _semaphore_policy_text
              | regex_findall('(?m)^path "([^\"]+)"')
              | select('match', '^' ~ openbao_github_everyday_mount ~ '/token/read-') | list }}
       ansible.builtin.assert:
         that:
+          - "openbao_semaphore_github_raw_read_permissions == {'contents': 'read', 'metadata': 'read'}"
+          - >-
+            ('path "' ~ openbao_github_everyday_mount ~ '/token"')
+            in _semaphore_raw_token_stanza
+          - >-
+            'capabilities = ["create", "update"]' in _semaphore_raw_token_stanza
+          - >-
+            'required_parameters = ["org_name", "permissions"]' in _semaphore_raw_token_stanza
+          - >-
+            _semaphore_raw_allowed_parameters
+            | regex_findall('(?m)^    "([^\"]+)" =')
+            == ['org_name', 'permissions']
+          - >-
+            '"org_name" = []' in _semaphore_raw_allowed_parameters
+          - >-
+            '"permissions" = [{ "contents" = "read", "metadata" = "read" }]'
+            in _semaphore_raw_allowed_parameters
+          - >-
+            _semaphore_raw_denied_parameters
+            | regex_findall('(?m)^    "([^\"]+)" =')
+            == ['repositories', 'repository_ids', 'installation_id']
+          - >-
+            '"repositories" = []' in _semaphore_raw_denied_parameters
+          - >-
+            '"repository_ids" = []' in _semaphore_raw_denied_parameters
+          - >-
+            '"installation_id" = []' in _semaphore_raw_denied_parameters
+          - _semaphore_raw_token_stanza is not search('=\s*"write"')
           - openbao_semaphore_github_read_permission_sets == ['read-dryvist-all', 'read-jpe-cribl-all']
           - >-
             _semaphore_github_read_paths
