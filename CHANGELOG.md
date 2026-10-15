@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.20.1](https://github.com/dryvist/ansible-secrets-management/compare/v0.20.0...v0.20.1) (2026-10-15)
+
+
+### Bug Fixes
+
+* **openbao:** let semaphore mint read-only tokens by org on the everyday mount ([#173](https://github.com/dryvist/ansible-secrets-management/issues/173)) ([091a7f5](https://github.com/dryvist/ansible-secrets-management/commit/091a7f5e3aed3884e1f023d7f45b37cb09549c68))
+
 ## [0.20.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.19.0...v0.20.0) (2026-10-14)
 
 
