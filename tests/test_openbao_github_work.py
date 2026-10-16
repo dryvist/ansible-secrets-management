@@ -1,4 +1,4 @@
-"""The github-work verification pins both permission sets and their policies."""
+"""The github-work verification pins all permission sets and their policies."""
 
 import subprocess
 from pathlib import Path
