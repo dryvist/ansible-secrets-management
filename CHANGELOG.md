@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.22.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.21.0...v0.22.0) (2026-10-16)
+
+
+### Features
+
+* **openbao:** add a work-admin permission set ([#183](https://github.com/dryvist/ansible-secrets-management/issues/183)) ([d0a5af4](https://github.com/dryvist/ansible-secrets-management/commit/d0a5af46103fab0b847977d7774fe62e5fbb8ce3))
+* **openbao:** add the work-admin GitHub tier ([d0a5af4](https://github.com/dryvist/ansible-secrets-management/commit/d0a5af46103fab0b847977d7774fe62e5fbb8ce3))
+
+
+### Bug Fixes
+
+* **openbao:** skip rolling restarts in check mode ([#181](https://github.com/dryvist/ansible-secrets-management/issues/181)) ([86cf4af](https://github.com/dryvist/ansible-secrets-management/commit/86cf4af5dd9c8b2077d39891e247f8228613b3c8))
+* **openbao:** skip the package install task in check mode ([#180](https://github.com/dryvist/ansible-secrets-management/issues/180)) ([c16b6f6](https://github.com/dryvist/ansible-secrets-management/commit/c16b6f67b3e3416aa3358a8fc9c61a4adc664b9a))
+
 ## [0.21.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.20.1...v0.21.0) (2026-10-15)
 
 
