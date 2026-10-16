@@ -44,20 +44,24 @@
         _apps_policy: >-
           {{ lookup('template', _openbao_role ~ '/templates/apps-policy.hcl.j2') }}
 
-    - name: The benchmark key is generated once and readable at its source path
+    - name: The inference-direct-only key is generated once and readable at its source path
       ansible.builtin.assert:
         quiet: true
         that:
-          - openbao_router_key_catalog.keys() | list == ['benchmark']
-          - openbao_router_key_catalog.benchmark == ['benchmark_llm_router_key']
-          - openbao_router_key_catalog.benchmark | length == 1
+          - openbao_router_key_catalog.keys() | list == ['inference-direct-only']
+          - openbao_router_key_catalog['inference-direct-only'] == ['benchmark_llm_router_key']
+          - openbao_router_key_catalog['inference-direct-only'] | length == 1
           - llm_router_key_catalog_facts.program_key_catalog is not defined
           - llm_router_key_catalog_facts.program_key_definitions is not defined
           - >-
             openbao_generated_app_secrets | combine(openbao_router_key_catalog)
-            | dict2items | selectattr('key', 'equalto', 'benchmark')
-            | map(attribute='value') | first == openbao_router_key_catalog.benchmark
-          - "'benchmark' in openbao_apps_read_apps"
-          - "'path \"secret/data/apps/benchmark\"' in _apps_policy"
-          - "'path \"secret/metadata/apps/benchmark\"' in _apps_policy"
+            | dict2items | selectattr('key', 'equalto', 'inference-direct-only')
+            | map(attribute='value') | first == openbao_router_key_catalog['inference-direct-only']
+          - "'inference-direct-only' in openbao_apps_read_apps"
+          - >-
+            ('path \"secret/data/apps/' ~ (openbao_router_key_catalog.keys() | first) ~ '\"')
+            in _apps_policy
+          - >-
+            ('path \"secret/metadata/apps/' ~ (openbao_router_key_catalog.keys() | first) ~ '\"')
+            in _apps_policy
           - openbao_seed_rotate_fields == []
