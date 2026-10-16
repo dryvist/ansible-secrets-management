@@ -17,7 +17,7 @@ configuration, so each App's own grant caps every token its mount mints:
 | `github-admin` | admin | admin, repo-create, docs-publisher, ci-resolver, runner, exporter |
 | `github-agents` | agents | none: `open-llm` uses the raw `github-agents/token` with caller-selected org and repository fields |
 | `github-hermes` | hermes | `hermes-{review,author}-{public,private}`, split by repository visibility |
-| `github-work` | work | `work-read` and `work-write`, both pinned to the work installation; no administration |
+| `github-work` | work | `work-read`, `work-write` and operator-gated `work-admin`, all pinned to the work installation; no administration |
 | `github-enterprise-read` | read-only Enterprise App | none: raw token endpoint, pinned to its installation |
 | `github-enterprise` | admin Enterprise App | none: raw token endpoint, pinned to its installation |
 
@@ -117,12 +117,19 @@ Token access is tiered; the tier IS the privilege boundary:
   also reads `secret/apps/hermes-webhook` (written by the AWS Terrakube
   workspace) and mints `aws/sts/hermes-webhook-consumer` when that role's ARN
   is configured.
-- **work (`github-work-read`, `github-work-write`)** — `github-work/token/work-read`
-  and `github-work/token/work-write`, one set each, both pinned to the work
-  installation; no administration. Each set has its own policy and AppRole, and
-  neither policy grants the other set or the raw `github-work/token` endpoint.
-  Both AppRoles are workstation-class with a 30m token and human-minted
-  secret_ids (`manage_secret_id: false`).
+- **work (`github-work-read`, `github-work-write`, `github-work-admin`)** —
+  `github-work/token/work-read`, `github-work/token/work-write` and
+  `github-work/token/work-admin`, each pinned to the work installation and
+  granted by its own policy and AppRole. `work-write` holds
+  `contents: write`, `pull_requests: write` and `issues: write`, with
+  `actions`, `checks` and `metadata` read; it has no `workflows` or
+  `repository_creation` permission.
+  `work-admin` has that exact map plus `workflows: write` and
+  `repository_creation: write` (forking into the work organisation), with no
+  `administration` or `secrets`; it is operator-gated with a response-wrapped,
+  single-use secret_id with a 15m TTL and a one-hour token maximum. No work
+  policy grants another set or the raw `github-work/token` endpoint. The read
+  and write AppRoles have a 1h token cap.
 - **Enterprise read (`github-enterprise-read`)** — the raw
   `github-enterprise-read/token` endpoint, pinned to the one configured
   installation ID. Its App has no permission sets; the App grant supplies the

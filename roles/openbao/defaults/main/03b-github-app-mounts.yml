@@ -9,7 +9,8 @@
 #   github         everyday read/write
 #   github-agents  untrusted-tier public read/write, scoped by its installation
 #   github-hermes  review and allowlisted authoring, split by repository visibility
-#   github-work    read and write over one installation, no administration
+#   github-work    read, write and operator-gated workflow write over one
+#                  installation, no administration
 #   github-enterprise-read  human-gated raw-token read tier
 #   github-enterprise       human-gated raw-token admin tier
 #   github-enterprise-owner human-gated stored owner token, readable by the admin tiers only
@@ -177,7 +178,15 @@ openbao_github_work_read_permissions:
   checks: read
 openbao_github_work_write_permissions:
   contents: write
+  pull_requests: write
+  issues: write
+  actions: read
+  checks: read
+  metadata: read
+openbao_github_work_admin_permissions:
+  contents: write
   workflows: write
+  repository_creation: write
   pull_requests: write
   issues: write
   actions: read
@@ -187,6 +196,7 @@ openbao_github_work_write_permissions:
 openbao_github_work_set_permissions:
   work-read: "{{ openbao_github_work_read_permissions }}"
   work-write: "{{ openbao_github_work_write_permissions }}"
+  work-admin: "{{ openbao_github_work_admin_permissions }}"
 openbao_github_work_permission_sets: >-
   {{ (openbao_github_work_set_permissions
       | dict2items(key_name='name', value_name='permissions')

@@ -59,6 +59,15 @@
 - name: "Assert the work sets hold exactly their declared maps on mount {{ gm.mount }}"
   ansible.builtin.assert:
     that:
+      - >-
+        openbao_github_work_write_permissions
+        == {'contents': 'write', 'pull_requests': 'write', 'issues': 'write',
+            'actions': 'read', 'checks': 'read', 'metadata': 'read'}
+      - >-
+        openbao_github_work_admin_permissions
+        == {'contents': 'write', 'workflows': 'write', 'repository_creation': 'write',
+            'pull_requests': 'write',
+            'issues': 'write', 'actions': 'read', 'checks': 'read', 'metadata': 'read'}
       - item.permissions == openbao_github_work_set_permissions.get(item.name, {})
     fail_msg: >-
       {{ gm.mount }}/permissionset/{{ item.name }} must carry exactly
