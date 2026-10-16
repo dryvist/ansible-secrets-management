@@ -177,6 +177,7 @@ openbao_github_work_read_permissions:
   checks: read
 openbao_github_work_write_permissions:
   contents: write
+  workflows: write
   pull_requests: write
   issues: write
   actions: read

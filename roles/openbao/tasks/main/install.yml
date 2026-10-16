@@ -174,7 +174,9 @@
   ansible.builtin.apt:
     deb: "/tmp/{{ openbao_deb_filename }}"
     state: present
-  when: not openbao_already_installed
+  when:
+    - not openbao_already_installed
+    - not ansible_check_mode
 
 # The package's postinst never restarts the service, so an upgrade notifies
 # the rolling restart; otherwise the voters keep running the old binary. A

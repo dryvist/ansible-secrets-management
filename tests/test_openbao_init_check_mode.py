@@ -10,7 +10,9 @@ from ansible.template import Templar, trust_as_template
 
 ROOT = Path(__file__).resolve().parents[1]
 INIT = ROOT / "roles" / "openbao" / "tasks" / "init"
+INSTALL = ROOT / "roles" / "openbao" / "tasks" / "main" / "install.yml"
 SEED = ROOT / "roles" / "openbao" / "tasks" / "seed_generated_app_secret.yml"
+HANDLERS = ROOT / "roles" / "openbao" / "handlers" / "main.yml"
 READ_COMMAND_PREFIXES = (
     "bao status",
     "bao kv get",
@@ -56,6 +58,14 @@ def _command(task):
             return str(spec["cmd"]).strip()
         return " ".join(str(argument) for argument in spec.get("argv", []))
     return str(spec).strip()
+
+
+def test_openbao_package_install_is_skipped_in_check_mode():
+    install = next(
+        task for task in from_yaml(INSTALL) if task.get("name") == "Install OpenBao package"
+    )
+
+    assert "not ansible_check_mode" in install["when"]
 
 
 def test_read_only_openbao_commands_run_during_check_mode():
@@ -147,3 +157,14 @@ def test_login_calls_never_run_during_check_mode():
         and task.get("check_mode") is False
     ]
     assert not offenders, offenders
+
+
+def test_rolling_restart_handler_skips_check_mode():
+    handlers = list(from_yaml(HANDLERS))
+    restart = next(
+        task
+        for task in handlers
+        if task.get("name") == "Restart flagged openbao voters one at a time"
+    )
+
+    assert restart.get("when") == "not ansible_check_mode"
