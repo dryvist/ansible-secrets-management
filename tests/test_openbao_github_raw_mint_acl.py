@@ -23,13 +23,24 @@ DEFAULTS = yaml.safe_load(
 READ = DEFAULTS["openbao_github_read_permissions"]
 REPO_CREATE = DEFAULTS["openbao_github_repo_create_permissions"]
 WRITE = {"contents": "write", "pull_requests": "write"}
+TELEMETRY = {
+    "actions": "read",
+    "checks": "read",
+    "metadata": "read",
+    "pull_requests": "read",
+    "statuses": "read",
+}
 POLICIES = {
     "github-read": "github-read-policy.hcl.j2",
     "github-mint": "github-mint-policy.hcl.j2",
     "github-write": "github-write-policy.hcl.j2",
     "github-repo-create": "github-repo-create-policy.hcl.j2",
     "github-admin": "github-admin-policy.hcl.j2",
+    "github-exporter": "github-exporter-policy.hcl.j2",
 }
+EXPORTER_SETS = [
+    {"mount": "github-admin", "name": "exporter-dryvist", "tier": "exporter"},
+]
 LEGACY_SETS = [
     {"mount": "github", "name": "read-legacy-a-all", "tier": "read"},
     {"mount": "github", "name": "read-legacy-b-all", "tier": "read"},
@@ -49,9 +60,19 @@ def _render_policies():
         "openbao_github_permission_sets": LEGACY_SETS,
         "openbao_github_read_permissions": READ,
         "openbao_github_repo_create_permissions": REPO_CREATE,
+        "openbao_github_telemetry_permissions": DEFAULTS[
+            "openbao_github_telemetry_permissions"
+        ],
     }
     return {
-        policy: environment.get_template(template).render(**values)
+        policy: environment.get_template(template).render(
+            **{
+                **values,
+                "openbao_github_permission_sets": (
+                    EXPORTER_SETS if policy == "github-exporter" else LEGACY_SETS
+                ),
+            }
+        )
         for policy, template in POLICIES.items()
     }
 
@@ -163,6 +184,7 @@ def minter():
 
 def test_rendered_raw_grants_are_owner_neutral_and_parameter_pinned():
     policies = _render_policies()
+    assert DEFAULTS["openbao_github_telemetry_permissions"] == TELEMETRY
     for name in ("github-read", "github-mint"):
         stanza = _raw(policies[name], "github/token")
         _assert_installation_id_denied(stanza)
@@ -199,6 +221,24 @@ def test_rendered_raw_grants_are_owner_neutral_and_parameter_pinned():
     ):
         stanza = _raw(policies[policy], raw_path)
         assert not any(item["name"] in stanza for item in LEGACY_SETS)
+
+    exporter_paths = _stanzas(policies["github-exporter"])
+    exporter = _raw(policies["github-exporter"], "github/token")
+    assert "github-admin/token" not in exporter_paths
+    assert re.search(
+        r'capabilities\s*=\s*\["create",\s*"update"\]', exporter
+    )
+    assert 'required_parameters = ["org_name", "permissions"]' in exporter
+    assert re.search(
+        rf'allowed_parameters\s*=\s*\{{\s*"org_name"\s*=\s*\[\s*\]\s*'
+        rf'{re.escape(_hcl_map(TELEMETRY))}\s*\}}',
+        exporter,
+    )
+    assert re.search(
+        r'denied_parameters\s*=\s*\{\s*"installation_id"\s*=\s*\[\s*\]\s*'
+        r'"repositories"\s*=\s*\[\s*\]\s*\}',
+        exporter,
+    )
 
 
 @pytest.mark.parametrize("policy", ["github-read", "github-mint"])
