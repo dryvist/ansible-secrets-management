@@ -27,6 +27,7 @@ openbao_reconcile_addr: >-
   {{ lookup('env', 'BAO_ADDR') | default('', true) }}
 
 # --- AppRole token TTLs -------------------------------------------------------
+openbao_approle_bind_secret_id: true
 openbao_approle_token_ttl: 1h
 openbao_approle_token_max_ttl: 4h
 

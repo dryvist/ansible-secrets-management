@@ -183,36 +183,21 @@
 - name: Create the missing AppRoles bound to their policy
   vars:
     ansible_become: "{{ openbao_cli_become }}"
-    approle_cidr_class: "{{ openbao_approle_cidr_class_map[item.0.name] }}"
-    # An explicitly declared but EMPTY secret_id_bound_cidrs (ai-runner, whose
-    # value is env-delivered) falls back to its class rather than to unbound.
-    approle_bound_cidrs: >-
-      {{ item.0.secret_id_bound_cidrs | default('', true)
-         or openbao_approle_cidr_classes[approle_cidr_class] }}
-    approle_secret_id_ttl: >-
-      {{ item.0.secret_id_ttl
-         | default(openbao_approle_secret_id_ttl_overrides[item.0.name]
-                   | default(openbao_approle_secret_id_ttl)) }}
-    # `in` rather than `default()`: an override of 0 is a real value, and
-    # `default()` with a boolean-true second argument would discard it.
-    approle_secret_id_num_uses: >-
-      {{ item.0.secret_id_num_uses
-         | default(openbao_approle_secret_id_num_uses_overrides[item.0.name]
-                   if item.0.name in openbao_approle_secret_id_num_uses_overrides
-                   else openbao_approle_secret_id_num_uses) }}
+    approle_cli_parameters: "{{ openbao_approle_cli_parameters[item.0.name] }}"
   ansible.builtin.command:
     cmd: >-
       bao write auth/approle/role/{{ item.0.name }}
-      token_policies={{ (item.0.token_policies | default([item.0.policy])) | join(',') }}
-      token_ttl={{ item.0.token_ttl | default(openbao_approle_token_ttl) }}
-      token_max_ttl={{ item.0.token_max_ttl | default(openbao_approle_token_max_ttl) }}
-      token_explicit_max_ttl={{ item.0.token_explicit_max_ttl | default(0) }}
-      token_type={{ item.0.token_type | default('default') }}
-      secret_id_ttl={{ approle_secret_id_ttl }}
-      secret_id_num_uses={{ approle_secret_id_num_uses }}
-      {{ ('secret_id_bound_cidrs=' ~ approle_bound_cidrs ~
-          ' token_bound_cidrs=' ~ approle_bound_cidrs)
-         if (approle_bound_cidrs | length > 0) else '' }}
+      token_policies={{ approle_cli_parameters.token_policies }}
+      bind_secret_id={{ approle_cli_parameters.bind_secret_id }}
+      token_ttl={{ approle_cli_parameters.token_ttl }}
+      token_max_ttl={{ approle_cli_parameters.token_max_ttl }}
+      token_explicit_max_ttl={{ approle_cli_parameters.token_explicit_max_ttl }}
+      token_type={{ approle_cli_parameters.token_type }}
+      secret_id_ttl={{ approle_cli_parameters.secret_id_ttl }}
+      secret_id_num_uses={{ approle_cli_parameters.secret_id_num_uses }}
+      {{ ('secret_id_bound_cidrs=' ~ approle_cli_parameters.secret_id_bound_cidrs ~
+          ' token_bound_cidrs=' ~ approle_cli_parameters.token_bound_cidrs)
+         if (approle_cli_parameters.secret_id_bound_cidrs | length > 0) else '' }}
   environment:
     BAO_ADDR: "{{ openbao_cli_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
@@ -239,17 +224,18 @@
 # during reconcile and stay inert here BY DESIGN — do not widen the set
 # to retune them.
 - name: Reconcile token_policies on existing AppRoles
+  vars:
+    approle_cli_parameters: "{{ openbao_approle_cli_parameters[item.0.name] }}"
+    ansible_become: "{{ openbao_cli_become }}"
   ansible.builtin.command:
     cmd: >-
       bao write auth/approle/role/{{ item.0.name }}/policies
-      token_policies={{ (item.0.token_policies | default([item.0.policy])) | join(',') }}
+      token_policies={{ approle_cli_parameters.token_policies }}
   environment:
     BAO_ADDR: "{{ openbao_cli_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
   delegate_to: "{{ openbao_cli_host }}"
   become: "{{ openbao_cli_become }}"
-  vars:
-    ansible_become: "{{ openbao_cli_become }}"
   loop: "{{ openbao_manageable_approles | zip(openbao_approle_checks.results | default([])) | list }}"
   loop_control:
     label: "{{ item.0.name }}"

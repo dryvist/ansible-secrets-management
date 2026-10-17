@@ -75,6 +75,11 @@
     - not (openbao_reconcile_mode | default(false))
     - openbao_azure_engine_enabled | bool
 
+- name: Configure the Transit secrets engine for OpenTofu state encryption
+  ansible.builtin.import_tasks: init/04c-transit-engine.yml
+  tags:
+    - openbao_engines
+
 - name: Register and configure the GitHub secrets engine
   ansible.builtin.import_tasks: init/05-github-engine.yml
   tags:

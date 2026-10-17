@@ -180,6 +180,33 @@ openbao_approle_cidr_class_map: >-
      | combine(openbao_github_write_scope_cidr_classes)
      | combine(openbao_roster_agent_cidr_classes)
      | combine(openbao_roster_key_reader_cidr_classes) }}
+# Exact strings passed by `bao write ... key=value`; keep these shared by the
+# reconcile writer and its ACL so neither side can change independently.
+openbao_approle_cli_parameters: >-
+  {%- set _parameters = {} -%}
+  {%- for _approle in openbao_approles -%}
+  {%- set _cidr_class = openbao_approle_cidr_class_map[_approle.name] -%}
+  {%- set _cidr_csv = _approle.secret_id_bound_cidrs | default('', true)
+      or openbao_approle_cidr_classes[_cidr_class] -%}
+  {%- set _ = _parameters.update({_approle.name: {
+      'token_policies': ((_approle.token_policies | default([_approle.policy])) | join(',')),
+      'bind_secret_id': ((_approle.bind_secret_id | default(openbao_approle_bind_secret_id)) | bool | string | lower),
+      'token_ttl': (_approle.token_ttl | default(openbao_approle_token_ttl) | string),
+      'token_max_ttl': (_approle.token_max_ttl | default(openbao_approle_token_max_ttl) | string),
+      'token_explicit_max_ttl': (_approle.token_explicit_max_ttl | default(0) | string),
+      'token_type': (_approle.token_type | default('default') | string),
+      'secret_id_ttl': (_approle.secret_id_ttl
+          | default(openbao_approle_secret_id_ttl_overrides[_approle.name]
+                   | default(openbao_approle_secret_id_ttl)) | string),
+      'secret_id_num_uses': (_approle.secret_id_num_uses
+          | default(openbao_approle_secret_id_num_uses_overrides[_approle.name]
+                   if _approle.name in openbao_approle_secret_id_num_uses_overrides
+                   else openbao_approle_secret_id_num_uses) | string),
+      'secret_id_bound_cidrs': _cidr_csv,
+      'token_bound_cidrs': _cidr_csv
+  }}) -%}
+  {%- endfor -%}
+  {{ _parameters }}
 # The classes that actually carry a role, so the assert in init/10-approles.yml
 # demands only the CIDRs this declaration set really needs. `unbound` is
 # excluded by definition — it is the documented opt-out, not a missing value.

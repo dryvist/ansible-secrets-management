@@ -274,6 +274,19 @@ identity_providers:
         consent_mode: explicit
         authorization_policy: elevate
         token_endpoint_auth_method: client_secret_basic
+      - client_id: '{{ authelia_oidc_bao_elevate_policy_sync_client_id }}'
+        client_name: OpenBao policy sync
+        client_secret: '{{ authelia_oidc_client_secret_hashes.bao_elevate_policy_sync }}'
+        public: false
+        scopes:
+          - openid
+          - profile
+          - groups
+        grant_types:
+          - urn:ietf:params:oauth:grant-type:device_code
+        consent_mode: explicit
+        authorization_policy: elevate
+        token_endpoint_auth_method: client_secret_basic
       - client_id: '{{ authelia_oidc_bao_elevate_untrusted_client_id }}'
         client_name: OpenBao elevation (untrusted)
         public: true

@@ -165,6 +165,8 @@ openbao_base_policies_static:
     template: openbao-reconcile-policy.hcl.j2
   - name: "{{ openbao_policy_sync_policy_name }}"
     template: policy-sync-policy.hcl.j2
+  - name: "{{ openbao_policy_sync_unlock_policy_name }}"
+    template: policy-sync-unlock-policy.hcl.j2
   # approle-issuer: the secret_id minting half, split off openbao-reconcile so
   # a leaked reconcile credential is not a credential factory. See the template.
   - name: "{{ openbao_approle_issuer_policy_name }}"

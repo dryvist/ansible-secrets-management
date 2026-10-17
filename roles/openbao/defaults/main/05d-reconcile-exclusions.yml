@@ -13,6 +13,7 @@
 # inert openbao-policy-sync AppRole (07f), never by the execution plane's
 # identity, so a plane converge cannot rewrite the reconcile policy.
 openbao_policy_sync_policy_name: policy-sync
+openbao_policy_sync_unlock_policy_name: policy-sync-unlock
 openbao_reconcile_excluded_policies:
   - "{{ openbao_approle_issuer_policy_name }}"
   # Anything that can rewrite this policy can grant itself the break-glass
@@ -29,6 +30,8 @@ openbao_reconcile_excluded_policies:
   # policy-sync may rewrite the reconcile policy, so reconcile must not be able
   # to rewrite policy-sync.
   - "{{ openbao_policy_sync_policy_name }}"
+  # The phone-approved mint grant is operator-managed and never reconciled.
+  - "{{ openbao_policy_sync_unlock_policy_name }}"
   - "{{ openbao_ai_admin_session_approle_name }}"
   # This list is matched against POLICY names when filtering policies and
   # against APPROLE names when filtering AppRoles, so a name belongs here for
@@ -54,3 +57,28 @@ openbao_reconcile_excluded_policies:
   - "{{ openbao_semaphore_policy_name }}"
   - "{{ openbao_ansible_converge_policy_name }}"
   - ssh-sign-automation-semaphore
+
+# Policy names need a separate derived exclusion because an AppRole name may
+# also be a policy name. Reusing the list above would remove those role grants.
+# Match approle-issuer-policy.hcl.j2's mintable-role selection, then protect
+# every policy attached to those roles and to the execution plane identity.
+openbao_reconcile_policy_excluded_names: >-
+  {%- set _base = openbao_reconcile_excluded_policies | default([]) -%}
+  {%- set _issuer_excluded = _base | reject('equalto', openbao_reconcile_policy_name) | list -%}
+  {%- set _issuer_roles = openbao_approles
+      | selectattr('secret_id_issuance', 'defined')
+      | selectattr('secret_id_issuance', 'equalto', 'per_call')
+      | rejectattr('manage_secret_id', 'defined')
+      | map(attribute='name')
+      | reject('in', _issuer_excluded)
+      | reject('equalto', openbao_approle_issuer_approle_name)
+      | list -%}
+  {%- set _protected = [] -%}
+  {%- for _approle in openbao_approles -%}
+  {%- if _approle.name in _issuer_roles or _approle.name == openbao_semaphore_approle_name -%}
+  {%- set _attached = _approle.token_policies
+      | default([_approle.policy] if _approle.policy is defined else []) -%}
+  {%- set _ = _protected.extend(_attached) -%}
+  {%- endif -%}
+  {%- endfor -%}
+  {{ (_base + _protected) | unique | list }}
