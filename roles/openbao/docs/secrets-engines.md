@@ -1,5 +1,10 @@
 # Secrets engines
 
+## Transit secrets engine (OpenTofu state encryption)
+
+Mounted at `transit/` with the `tofu-state` key (`aes256-gcm96`), created only
+when absent with export, plaintext backup, and deletion disabled.
+
 ## AWS secrets engine (dynamic STS creds)
 
 Mounted at `aws/` (add-if-missing, in `tasks/init.yml`) alongside the KV
