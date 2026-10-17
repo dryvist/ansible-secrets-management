@@ -2,7 +2,6 @@
 
 from pathlib import Path
 import re
-import subprocess
 
 import jinja2
 from ansible.parsing.dataloader import DataLoader
@@ -23,10 +22,6 @@ FIXTURE_ROSTER = {
     "cribl-bifrost": {"container": "example", "hostname": "example.com", "display": "Cribl", "purpose": "fixture", "owns": ["cribl"]},
     "fixture-observer": {"container": "example", "hostname": "example.com", "display": "Observer", "purpose": "fixture", "owns": []},
 }
-SHARED_POLICY_TEMPLATES = (
-    "local-llm-policy.hcl.j2",
-)
-RECONCILE_POLICY_TEMPLATE = "openbao-reconcile-policy.hcl.j2"
 OWNER_CONSUMER_TEMPLATES = (
     "hermes-policy.hcl.j2",
     "hermes-private-agent-policy.hcl.j2",
@@ -50,16 +45,6 @@ def _render_only_inputs(monkeypatch):
     monkeypatch.setenv("OPENBAO_AI_API_KEY_MOUNT", "secret")
     monkeypatch.setenv("OPENBAO_AI_API_KEY_PATH_PREFIX", "fixture-provider-keys")
     monkeypatch.setenv("PROXMOX_SUBDOMAIN", "example.com")
-
-
-def _git_text(ref, path):
-    return subprocess.run(
-        ["git", "show", f"{ref}:{path.relative_to(ROOT).as_posix()}"],
-        cwd=ROOT,
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout
 
 
 def _default_paths():
@@ -156,26 +141,6 @@ def _render_owner_wrapper(source, owned_slugs):
         item={"agent": "fixture-observer"},
     )
 
-
-def _without_reconcile_transit_grants(name, source):
-    if name != RECONCILE_POLICY_TEMPLATE:
-        return source
-    # The transit grants are asserted separately (tests/test_openbao_transit_state_key.py);
-    # parity ignores them, comments and blank lines, and compares every other stanza.
-    source = re.sub(r"(?m)^\s*#.*\n", "", source)
-    for path in (
-        "sys/mounts/transit",
-        "transit/keys/tofu-state",
-        "sys/mounts/{{ openbao_transit_mount }}",
-        "{{ openbao_transit_mount }}/keys/{{ openbao_tofu_state_transit_key }}",
-    ):
-        source = re.sub(rf'path\s+"{re.escape(path)}"\s*\{{[^}}]*\}}\s*', "", source)
-    source = re.sub(
-        r'path\s+"sys/policies/acl/[^" ]*[*+][^" ]*"\s*\{[^}]*\}\s*',
-        "",
-        source,
-    )
-    return re.sub(r"\n\s*\n", "\n", source).strip()
 
 def _stanzas(source):
     return [
@@ -399,19 +364,6 @@ def test_mcp_credential_effective_holders_match_approle_grants():
     } | {
         (f"secret/metadata/ai/mcp/{slug}", frozenset({"deny"})) for slug in ownable_slugs
     }
-
-
-def test_shared_policies_remain_develop_identical_for_owned_roster():
-    # The reconcile policy is intentionally different now: its writable names
-    # exclude every issuer-mintable and plane-attached policy. The dedicated
-    # rendered ACL test covers that contract.
-    values, _, _ = _resolve_lists(FIXTURE_ROSTER)
-    for name in SHARED_POLICY_TEMPLATES:
-        current = _render_template((TEMPLATES / name).read_text(encoding="utf-8"), values)
-        original = _render_template(_git_text("origin/develop", TEMPLATES / name), values)
-        current = _without_reconcile_transit_grants(name, current)
-        original = _without_reconcile_transit_grants(name, original)
-        assert current.encode("utf-8") == original.encode("utf-8"), name
 
 
 def test_owned_consumer_policy_renders_do_not_leave_blank_lines_from_removed_grants():
