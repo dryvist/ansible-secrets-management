@@ -1,0 +1,58 @@
+---
+- name: Enable the Transit engine for OpenTofu state encryption
+  ansible.builtin.command:
+    cmd: >-
+      bao secrets enable -path={{ openbao_transit_mount }}
+      -description="{{ openbao_transit_mount_description }}" transit
+  environment:
+    BAO_ADDR: "{{ openbao_cli_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
+  no_log: true
+  changed_when: true
+  when:
+    - openbao_bootstrap_token is defined
+    - (openbao_transit_mount ~ '/') not in (openbao_mounts_raw.stdout | from_json).keys()
+
+- name: Check whether the OpenTofu state Transit key exists
+  ansible.builtin.uri:
+    url: "{{ openbao_cli_addr }}/v1/{{ openbao_transit_mount }}/keys/{{ openbao_tofu_state_transit_key }}"
+    method: GET
+    headers:
+      X-Vault-Token: "{{ openbao_bootstrap_token }}"
+    status_code: [200, 404]
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
+  register: openbao_tofu_state_transit_key_check
+  no_log: true
+  changed_when: false
+  check_mode: false
+  when: openbao_bootstrap_token is defined
+
+- name: Create the OpenTofu state Transit key if absent
+  ansible.builtin.uri:
+    url: "{{ openbao_cli_addr }}/v1/{{ openbao_transit_mount }}/keys/{{ openbao_tofu_state_transit_key }}"
+    method: POST
+    headers:
+      X-Vault-Token: "{{ openbao_bootstrap_token }}"
+    body_format: json
+    body:
+      type: aes256-gcm96
+      exportable: false
+      allow_plaintext_backup: false
+      deletion_allowed: false
+    status_code: [200, 204]
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
+  no_log: true
+  changed_when: true
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_tofu_state_transit_key_check.status == 404

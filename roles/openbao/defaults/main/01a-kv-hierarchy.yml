@@ -48,6 +48,10 @@ openbao_kv_mounts:
 # the same order, which two separate inline filters would not guarantee.
 openbao_kv_tuned_mounts: >-
   {{ openbao_kv_mounts | selectattr('max_versions', 'defined') | list }}
+# OpenTofu state encryption uses a dedicated Transit key.
+openbao_transit_mount: transit
+openbao_transit_mount_description: OpenTofu state encryption
+openbao_tofu_state_transit_key: tofu-state
 # Legacy demo subtree the terraform-proxmox vault-secrets proof writes to; kept
 # writable by the terraform-apply policy so that read/write proof keeps working.
 openbao_homelab_path: homelab
