@@ -191,6 +191,17 @@ openbao_approle_cli_parameters: >-
   {%- set _ = _parameters.update({_approle.name: {
       'token_policies': ((_approle.token_policies | default([_approle.policy])) | join(',')),
       'bind_secret_id': ((_approle.bind_secret_id | default(openbao_approle_bind_secret_id)) | bool | string | lower),
+      'token_ttl': (_approle.token_ttl | default(openbao_approle_token_ttl) | string),
+      'token_max_ttl': (_approle.token_max_ttl | default(openbao_approle_token_max_ttl) | string),
+      'token_explicit_max_ttl': (_approle.token_explicit_max_ttl | default(0) | string),
+      'token_type': (_approle.token_type | default('default') | string),
+      'secret_id_ttl': (_approle.secret_id_ttl
+          | default(openbao_approle_secret_id_ttl_overrides[_approle.name]
+                   | default(openbao_approle_secret_id_ttl)) | string),
+      'secret_id_num_uses': (_approle.secret_id_num_uses
+          | default(openbao_approle_secret_id_num_uses_overrides[_approle.name]
+                   if _approle.name in openbao_approle_secret_id_num_uses_overrides
+                   else openbao_approle_secret_id_num_uses) | string),
       'secret_id_bound_cidrs': _cidr_csv,
       'token_bound_cidrs': _cidr_csv
   }}) -%}

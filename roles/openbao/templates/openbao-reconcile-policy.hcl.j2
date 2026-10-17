@@ -4,10 +4,10 @@
 #
 # It is NOT an admin tier. Policy writes are limited to declared names and
 # exclude every policy attached to a role the issuer can mint and to this
-# identity itself. AppRole writes pin the rendered token policies, binding flag,
-# and CIDR bounds; the remaining parameters sent by the role tasks are named
-# explicitly so future parameters stay denied. This keeps reconcile from
-# widening the grants carried by any credential it can obtain or use.
+# identity itself. AppRole writes pin every parameter sent by the role tasks
+# to that role's rendered values. Future parameters stay denied, keeping
+# reconcile from widening the grants carried by any credential it can obtain
+# or use.
 #
 # The policy and AppRole name sets come from role defaults. Routine converges
 # write only names in those sets that satisfy the bounds above; excluded policy
@@ -56,6 +56,10 @@ path "sys/policies/acl" {
 {% set approle_cidrs = approle_cli_parameters.secret_id_bound_cidrs.split(',')
      | map('trim') | reject('equalto', '') | list %}
 {% set required = ['token_policies', 'bind_secret_id'] %}
+{% set _ = required.extend([
+    'token_ttl', 'token_max_ttl', 'token_explicit_max_ttl', 'token_type',
+    'secret_id_ttl', 'secret_id_num_uses'
+]) %}
 {% if approle_cidrs | length > 0 %}
 {% set _ = required.extend(['secret_id_bound_cidrs', 'token_bound_cidrs']) %}
 {% endif %}
@@ -68,12 +72,12 @@ path "auth/approle/role/{{ approle_name }}" {
     "secret_id_bound_cidrs"   = [{{ approle_cli_parameters.secret_id_bound_cidrs | tojson }}]
     "token_bound_cidrs"       = [{{ approle_cli_parameters.token_bound_cidrs | tojson }}]
 {% endif %}
-    "token_ttl"               = []
-    "token_max_ttl"           = []
-    "token_explicit_max_ttl"  = []
-    "token_type"              = []
-    "secret_id_ttl"            = []
-    "secret_id_num_uses"      = []
+    "token_ttl"               = [{{ approle_cli_parameters.token_ttl | tojson }}]
+    "token_max_ttl"           = [{{ approle_cli_parameters.token_max_ttl | tojson }}]
+    "token_explicit_max_ttl"  = [{{ approle_cli_parameters.token_explicit_max_ttl | tojson }}]
+    "token_type"              = [{{ approle_cli_parameters.token_type | tojson }}]
+    "secret_id_ttl"            = [{{ approle_cli_parameters.secret_id_ttl | tojson }}]
+    "secret_id_num_uses"      = [{{ approle_cli_parameters.secret_id_num_uses | tojson }}]
   }
   required_parameters = {{ required | tojson }}
 }
