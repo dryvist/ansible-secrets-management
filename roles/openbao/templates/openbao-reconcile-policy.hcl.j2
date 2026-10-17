@@ -52,13 +52,9 @@ path "sys/policies/acl" {
 # are omitted above by that marker rather than by a second hand-kept list —
 # one declaration, so a new inert tier cannot be forgotten here.
 {% for approle_name in managed_approles %}
-{% set approle = openbao_approles | selectattr('name', 'equalto', approle_name) | first %}
-{% set token_policies = approle.token_policies | default([approle.policy]) %}
-{% set bind_secret_id = (approle.bind_secret_id | default(openbao_approle_bind_secret_id) | string | lower) == 'true' %}
-{% set approle_cidr_class = openbao_approle_cidr_class_map[approle_name] %}
-{% set approle_cidr_csv = approle.secret_id_bound_cidrs | default('', true)
-     or openbao_approle_cidr_classes[approle_cidr_class] %}
-{% set approle_cidrs = approle_cidr_csv.split(',') | map('trim') | reject('equalto', '') | list %}
+{% set approle_cli_parameters = openbao_approle_cli_parameters[approle_name] %}
+{% set approle_cidrs = approle_cli_parameters.secret_id_bound_cidrs.split(',')
+     | map('trim') | reject('equalto', '') | list %}
 {% set required = ['token_policies', 'bind_secret_id'] %}
 {% if approle_cidrs | length > 0 %}
 {% set _ = required.extend(['secret_id_bound_cidrs', 'token_bound_cidrs']) %}
@@ -66,10 +62,12 @@ path "sys/policies/acl" {
 path "auth/approle/role/{{ approle_name }}" {
   capabilities = ["create", "read", "update"]
   allowed_parameters = {
-    "token_policies"          = [{{ token_policies | tojson }}]
-    "bind_secret_id"          = [{{ bind_secret_id | tojson }}]
-    "secret_id_bound_cidrs"   = [{{ approle_cidrs | tojson }}]
-    "token_bound_cidrs"       = [{{ approle_cidrs | tojson }}]
+    "token_policies"          = [{{ approle_cli_parameters.token_policies | tojson }}]
+    "bind_secret_id"          = [{{ approle_cli_parameters.bind_secret_id | tojson }}]
+{% if approle_cidrs | length > 0 %}
+    "secret_id_bound_cidrs"   = [{{ approle_cli_parameters.secret_id_bound_cidrs | tojson }}]
+    "token_bound_cidrs"       = [{{ approle_cli_parameters.token_bound_cidrs | tojson }}]
+{% endif %}
     "token_ttl"               = []
     "token_max_ttl"           = []
     "token_explicit_max_ttl"  = []
@@ -85,7 +83,7 @@ path "auth/approle/role/{{ approle_name }}/role-id" {
 path "auth/approle/role/{{ approle_name }}/policies" {
   capabilities = ["create", "update"]
   allowed_parameters = {
-    "token_policies" = [{{ token_policies | tojson }}]
+    "token_policies" = [{{ approle_cli_parameters.token_policies | tojson }}]
   }
   required_parameters = ["token_policies"]
 }

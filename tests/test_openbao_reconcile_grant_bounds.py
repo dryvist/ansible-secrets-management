@@ -14,6 +14,8 @@ DEFAULTS = ROOT / "roles/openbao/defaults/main"
 TEMPLATES = ROOT / "roles/openbao/templates"
 RECONCILE = TEMPLATES / "openbao-reconcile-policy.hcl.j2"
 ISSUER = TEMPLATES / "approle-issuer-policy.hcl.j2"
+APPROLE_TASKS = ROOT / "roles/openbao/tasks/init/10-approles.yml"
+TTL_TASKS = ROOT / "roles/openbao/tasks/init/10c-approle-ttl-bounds.yml"
 
 
 def _trust(value):
@@ -70,6 +72,9 @@ def rendered_defaults(monkeypatch):
         "openbao_retired_policies",
     ):
         values[name] = templar.template(_trust(values[name]))
+    values["openbao_approle_cli_parameters"] = templar.template(
+        _trust(values["openbao_approle_cli_parameters"])
+    )
     return values, approles, policies
 
 
@@ -113,12 +118,6 @@ def _role_policies(role):
     return {role["policy"]}
 
 
-def _role_policy_list(role):
-    if "token_policies" in role:
-        return role["token_policies"]
-    return [role["policy"]]
-
-
 def _allowed_parameters(body):
     match = re.search(r"allowed_parameters\s*=\s*\{([^}]*)\}", body, re.DOTALL)
     assert match, "managed AppRole path has no allowed_parameters"
@@ -126,6 +125,47 @@ def _allowed_parameters(body):
         name: json.loads(value)
         for name, value in re.findall(r'"([^"]+)"\s*=\s*(\[[^\n]*\])', match.group(1))
     }
+
+
+def _task(path, name):
+    tasks = yaml.safe_load(path.read_text(encoding="utf-8"))
+    return next(task for task in tasks if task.get("name") == name)
+
+
+def _render_task_command(task, values, role):
+    live = {
+        "data": {
+            "secret_id_bound_cidrs": [],
+            "token_bound_cidrs": [],
+            "secret_id_ttl": 0,
+            "secret_id_num_uses": 0,
+            "token_ttl": 0,
+            "token_max_ttl": 0,
+            "token_explicit_max_ttl": 0,
+            "token_type": "default",
+        }
+    }
+    command = task["ansible.builtin.command"]["cmd"]
+    context = dict(
+        values,
+        item=(role, {"rc": 0, "stdout": json.dumps(live)}),
+        live=live["data"],
+        approle_cli_parameters=values["openbao_approle_cli_parameters"][role["name"]],
+    )
+    task_vars = task.get("vars", {})
+    if "approle_cli_parameters" in task_vars:
+        assert task_vars["approle_cli_parameters"] == (
+            "{{ openbao_approle_cli_parameters[item.0.name] }}"
+        )
+    referenced = dict.fromkeys(re.findall(r"{{\s*([A-Za-z_]\w*)", command))
+    for name in referenced:
+        if name in task_vars and name != "approle_cli_parameters":
+            context[name] = _templar(_trust(context)).template(_trust(task_vars[name]))
+    return _templar(_trust(context)).template(trust_as_template(command))
+
+
+def _command_arguments(command):
+    return dict(re.findall(r"(?:^|\s)([a-z_]+)=([^\s]+)", command))
 
 
 def _assert_policy_bounds(reconcile, issuer, values, approles):
@@ -204,38 +244,45 @@ def test_managed_approle_writes_pin_declared_policy_binding_and_cidrs(rendered_d
         "secret_id_ttl",
         "secret_id_num_uses",
     }
-    pinned = {
-        "token_policies",
-        "bind_secret_id",
-        "secret_id_bound_cidrs",
-        "token_bound_cidrs",
-    }
+    create_task = _task(APPROLE_TASKS, "Create the missing AppRoles bound to their policy")
+    policy_task = _task(APPROLE_TASKS, "Reconcile token_policies on existing AppRoles")
+    ttl_task = _task(TTL_TASKS, "Reconcile AppRole TTL and token bounds on existing AppRoles")
     for name, body in root_paths.items():
         role = roles_by_name[name]
-        cidr_csv = role.get("secret_id_bound_cidrs") or values[
-            "openbao_approle_cidr_classes"
-        ][values["openbao_approle_cidr_class_map"][name]]
-        cidrs = [part.strip() for part in cidr_csv.split(",") if part.strip()]
+        parameters = values["openbao_approle_cli_parameters"][name]
         allowed = _allowed_parameters(body)
-        expected = {
-            "token_policies": [_role_policy_list(role)],
-            "bind_secret_id": [
-                role.get("bind_secret_id", values["openbao_approle_bind_secret_id"])
-            ],
-            "secret_id_bound_cidrs": [cidrs],
-            "token_bound_cidrs": [cidrs],
-        }
-        assert {key: allowed[key] for key in pinned} == expected, name
+        assert allowed["token_policies"] == [parameters["token_policies"]], name
+        assert allowed["bind_secret_id"] == [parameters["bind_secret_id"]], name
+        pinned = {"token_policies", "bind_secret_id"}
+        if parameters["secret_id_bound_cidrs"]:
+            pinned.update({"secret_id_bound_cidrs", "token_bound_cidrs"})
+            assert allowed["secret_id_bound_cidrs"] == [parameters["secret_id_bound_cidrs"]], name
+            assert allowed["token_bound_cidrs"] == [parameters["token_bound_cidrs"]], name
+        assert set(allowed) == pinned | ancillary, name
+        assert all(
+            isinstance(value, str) and "*" not in value
+            for key in pinned
+            for value in allowed[key]
+        ), name
         assert {key: allowed[key] for key in ancillary} == {
             key: [] for key in ancillary
         }, name
-        assert set(allowed) == pinned | ancillary, name
+
+        for task in (create_task, ttl_task):
+            sent = _command_arguments(_render_task_command(task, values, role))
+            for key in pinned:
+                assert sent[key].encode() == allowed[key][0].encode(), (name, task["name"], key)
+            if not parameters["secret_id_bound_cidrs"]:
+                assert not {"secret_id_bound_cidrs", "token_bound_cidrs"} & sent.keys(), name
 
     for name, body in policy_paths.items():
         role = roles_by_name[name]
-        assert _allowed_parameters(body) == {
-            "token_policies": [_role_policy_list(role)]
-        }, name
+        parameters = values["openbao_approle_cli_parameters"][name]
+        allowed = _allowed_parameters(body)
+        assert allowed == {"token_policies": [parameters["token_policies"]]}, name
+        assert "*" not in allowed["token_policies"][0], name
+        sent = _command_arguments(_render_task_command(policy_task, values, role))
+        assert sent["token_policies"].encode() == allowed["token_policies"][0].encode(), name
         assert json.loads(
             re.search(r"required_parameters\s*=\s*(\[[^\n]*\])", body).group(1)
         ) == ["token_policies"], name
@@ -245,10 +292,7 @@ def test_managed_approle_writes_pin_declared_policy_binding_and_cidrs(rendered_d
             re.search(r"required_parameters\s*=\s*(\[[^\n]*\])", body).group(1)
         )
         role = roles_by_name[name]
-        cidr_csv = role.get("secret_id_bound_cidrs") or values[
-            "openbao_approle_cidr_classes"
-        ][values["openbao_approle_cidr_class_map"][name]]
         expected_required = ["token_policies", "bind_secret_id"]
-        if cidr_csv:
+        if values["openbao_approle_cli_parameters"][name]["secret_id_bound_cidrs"]:
             expected_required.extend(["secret_id_bound_cidrs", "token_bound_cidrs"])
         assert required == expected_required, name

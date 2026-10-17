@@ -18,8 +18,8 @@ from ansible.template import Templar, trust_as_template
 ROOT = Path(__file__).resolve().parents[1]
 TASKS = ROOT / "roles/openbao/tasks/init/10c-approle-ttl-bounds.yml"
 TASK_NAME = "Reconcile AppRole TTL and token bounds on existing AppRoles"
-NEEDED = ["approle_cidr_class", "approle_bound_cidrs", "live", "desired_bound_cidrs",
-          "desired_bound_cidrs_cmp", "cidr_drift"]
+NEEDED = ["approle_cli_parameters", "approle_cidr_class", "approle_bound_cidrs", "live",
+          "desired_bound_cidrs", "desired_bound_cidrs_cmp", "cidr_drift"]
 
 
 def _task():
@@ -52,6 +52,11 @@ def _drift(row, live, classes):
         "item": [row, {"stdout": json.dumps({"data": live})}],
         "openbao_approle_cidr_class_map": {row["name"]: "machine"},
         "openbao_approle_cidr_classes": {"machine": classes},
+        "openbao_approle_cli_parameters": {
+            row["name"]: {
+                "secret_id_bound_cidrs": row.get("secret_id_bound_cidrs") or classes,
+            }
+        },
     }
     for name in [n for n in task_vars if n in NEEDED]:
         namespace[name] = _render(task_vars[name], namespace)
