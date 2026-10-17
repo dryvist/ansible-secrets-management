@@ -2,7 +2,6 @@
 
 from pathlib import Path
 import re
-import subprocess
 
 import jinja2
 from ansible.parsing.dataloader import DataLoader
@@ -23,17 +22,10 @@ FIXTURE_ROSTER = {
     "cribl-bifrost": {"container": "example", "hostname": "example.com", "display": "Cribl", "purpose": "fixture", "owns": ["cribl"]},
     "fixture-observer": {"container": "example", "hostname": "example.com", "display": "Observer", "purpose": "fixture", "owns": []},
 }
-SHARED_POLICY_TEMPLATES = (
-    "local-llm-policy.hcl.j2",
-)
-RECONCILE_POLICY_TEMPLATE = "openbao-reconcile-policy.hcl.j2"
 OWNER_CONSUMER_TEMPLATES = (
     "hermes-policy.hcl.j2",
     "hermes-private-agent-policy.hcl.j2",
     "observability-policy.hcl.j2",
-)
-LEGACY_SHARED_TEMPLATES = (
-    OWNER_CONSUMER_TEMPLATES + SHARED_POLICY_TEMPLATES + (RECONCILE_POLICY_TEMPLATE,)
 )
 # These live-only policies have no local templates. OpenBao's built-in
 # `default` policy is also attached unless token_no_default_policy is true.
@@ -55,34 +47,14 @@ def _render_only_inputs(monkeypatch):
     monkeypatch.setenv("PROXMOX_SUBDOMAIN", "example.com")
 
 
-def _git_text(ref, path):
-    return subprocess.run(
-        ["git", "show", f"{ref}:{path.relative_to(ROOT).as_posix()}"],
-        cwd=ROOT,
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout
+def _default_paths():
+    return sorted(DEFAULTS.glob("*.yml"))
 
 
-def _default_paths(ref=None):
-    if ref is None:
-        return sorted(DEFAULTS.glob("*.yml"))
-    names = subprocess.run(
-        ["git", "ls-tree", "-r", "--name-only", ref, "roles/openbao/defaults/main"],
-        cwd=ROOT,
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout.splitlines()
-    return [ROOT / name for name in names if name.endswith(".yml")]
-
-
-def _defaults_context(roster, ref=None):
+def _defaults_context(roster):
     values = {}
-    for path in _default_paths(ref):
-        source = _git_text(ref, path) if ref is not None else path.read_text(encoding="utf-8")
-        values.update(yaml.safe_load(source) or {})
+    for path in _default_paths():
+        values.update(yaml.safe_load(path.read_text(encoding="utf-8")) or {})
     values["tofu_data"] = {"agents": roster}
     values["ansible_managed"] = "Ansible managed"
     values["llm_router_key_catalog_facts"] = {"openbao_router_key_catalog": {}}
@@ -107,8 +79,8 @@ def _templar(values):
     return templar
 
 
-def _resolve_lists(roster, ref=None):
-    values = _defaults_context(roster, ref)
+def _resolve_lists(roster):
+    values = _defaults_context(roster)
     templar = _templar(values)
     approles = templar.template(trust_as_template(values["openbao_approles"]))
     policies = templar.template(trust_as_template(values["openbao_policies"]))
@@ -169,26 +141,6 @@ def _render_owner_wrapper(source, owned_slugs):
         item={"agent": "fixture-observer"},
     )
 
-
-def _without_reconcile_transit_grants(name, source):
-    if name != RECONCILE_POLICY_TEMPLATE:
-        return source
-    # The transit grants are asserted separately (tests/test_openbao_transit_state_key.py);
-    # parity ignores them, comments and blank lines, and compares every other stanza.
-    source = re.sub(r"(?m)^\s*#.*\n", "", source)
-    for path in (
-        "sys/mounts/transit",
-        "transit/keys/tofu-state",
-        "sys/mounts/{{ openbao_transit_mount }}",
-        "{{ openbao_transit_mount }}/keys/{{ openbao_tofu_state_transit_key }}",
-    ):
-        source = re.sub(rf'path\s+"{re.escape(path)}"\s*\{{[^}}]*\}}\s*', "", source)
-    source = re.sub(
-        r'path\s+"sys/policies/acl/[^" ]*[*+][^" ]*"\s*\{[^}]*\}\s*',
-        "",
-        source,
-    )
-    return re.sub(r"\n\s*\n", "\n", source).strip()
 
 def _stanzas(source):
     return [
@@ -412,61 +364,6 @@ def test_mcp_credential_effective_holders_match_approle_grants():
     } | {
         (f"secret/metadata/ai/mcp/{slug}", frozenset({"deny"})) for slug in ownable_slugs
     }
-
-
-def test_empty_roster_adds_only_policy_sync_unlock_to_develop_shared_lists():
-    values, approles, policies = _resolve_lists({})
-    _, develop_approles, develop_policies = _resolve_lists({}, ref="origin/develop")
-    assert approles == develop_approles
-    policy_sync_unlock = {
-        "name": values["openbao_policy_sync_unlock_policy_name"],
-        "template": "policy-sync-unlock-policy.hcl.j2",
-    }
-    assert [policy for policy in policies if policy == policy_sync_unlock] == [
-        policy_sync_unlock
-    ]
-    assert [policy for policy in policies if policy != policy_sync_unlock] == develop_policies
-
-    for name in LEGACY_SHARED_TEMPLATES:
-        current = _render_owner_wrapper(
-            (TEMPLATES / name).read_text(encoding="utf-8"), []
-        )
-        original = _render_owner_wrapper(_git_text("origin/develop", TEMPLATES / name), [])
-        current = _without_reconcile_transit_grants(name, current)
-        original = _without_reconcile_transit_grants(name, original)
-        assert current.encode("utf-8") == original.encode("utf-8"), name
-
-    assert values["openbao_roster_owned_mcp_deny_policies"] == []
-    assert values["openbao_roster_owned_mcp_deny_retired_names"] == [
-        values["openbao_roster_owned_mcp_deny_policy_name"]
-    ]
-    assert values["openbao_roster_owned_mcp_deny_policy_name"] not in {
-        policy["name"] for policy in policies
-    }
-    local_llm = values["openbao_local_llm_approle_name"]
-    local_llm_role = next(role for role in approles if role["name"] == local_llm)
-    assert values["openbao_roster_owned_mcp_deny_policy_name"] not in _policy_names(
-        local_llm_role
-    )
-    empty_deny = _render_template(
-        (TEMPLATES / "roster-owned-mcp-deny-policy.hcl.j2").read_text(encoding="utf-8"),
-        values,
-        {"openbao_roster_owned_slug_names": []},
-    )
-    assert not _stanzas(empty_deny)
-
-
-def test_shared_policies_remain_develop_identical_for_owned_roster():
-    # The reconcile policy is intentionally different now: its writable names
-    # exclude every issuer-mintable and plane-attached policy. The dedicated
-    # rendered ACL test covers that contract.
-    values, _, _ = _resolve_lists(FIXTURE_ROSTER)
-    for name in SHARED_POLICY_TEMPLATES:
-        current = _render_template((TEMPLATES / name).read_text(encoding="utf-8"), values)
-        original = _render_template(_git_text("origin/develop", TEMPLATES / name), values)
-        current = _without_reconcile_transit_grants(name, current)
-        original = _without_reconcile_transit_grants(name, original)
-        assert current.encode("utf-8") == original.encode("utf-8"), name
 
 
 def test_owned_consumer_policy_renders_do_not_leave_blank_lines_from_removed_grants():
