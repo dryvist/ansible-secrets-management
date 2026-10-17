@@ -9,10 +9,10 @@ Authelia role, and the OpenBao voter-health role.
 ## Installation
 
 `requirements.yml` lists the collection dependencies. The `openbao` role consumes the
-`llm_router_key_catalog` role from the `dryvist.homelab` collection, pinned by commit.
+`llm_router_key_catalog` role from the `dryvist.homelab` collection, following its v5 major tag.
 
 ```sh
-ansible-galaxy install -r requirements.yml
+ansible-galaxy install -r requirements.yml --force
 ```
 
 ## Usage
