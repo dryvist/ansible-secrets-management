@@ -236,11 +236,16 @@
          != (_uicheck_token_max_ttl_s | int)
 
 # The required org-wide AI review runs from one stable reusable workflow, so
-# bind that workflow identity rather than each caller repository. The owner
-# list limits callers to organizations with a managed GitHub installation;
+# bind that workflow identity rather than each caller repository. The
+# enterprise claim limits callers to the configured enterprise;
 # runner_environment rejects jobs outside the self-hosted runner pool. The
 # audience and exact ref stop tokens minted for another workload or workflow
 # revision from being reused here.
+- name: Skip the ci-ai-review OIDC role without an enterprise slug
+  ansible.builtin.debug:
+    msg: "Skipping ci-ai-review OIDC role: OPENBAO_GITHUB_ENTERPRISE_SLUG is empty."
+  when: openbao_ci_ai_review_enterprise | length == 0
+
 - name: Read the ci-ai-review OIDC role
   ansible.builtin.command:
     cmd: >-
@@ -258,14 +263,16 @@
   changed_when: false
   check_mode: false
   failed_when: false
-  when: openbao_bootstrap_token is defined
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_ci_ai_review_enterprise | length > 0
 
 - name: Reconcile the ci-ai-review OIDC role
   vars:
     ansible_become: "{{ openbao_cli_become }}"
     _ci_ai_review_role_claims:
       job_workflow_ref: "{{ openbao_ci_ai_review_job_workflow_ref }}"
-      repository_owner: "{{ openbao_ci_ai_review_repository_owners }}"
+      enterprise: "{{ openbao_ci_ai_review_enterprise }}"
       runner_environment: "{{ openbao_ci_ai_review_runner_environment }}"
     _ci_ai_review_role_live: >-
       {{ (openbao_github_oidc_ci_ai_review_role_current.stdout | default('{}') | from_json).data
@@ -295,6 +302,7 @@
   changed_when: true
   when:
     - openbao_bootstrap_token is defined
+    - openbao_ci_ai_review_enterprise | length > 0
     - >-
       (openbao_github_oidc_ci_ai_review_role_current.rc | default(1)) != 0
       or (_ci_ai_review_role_live.bound_audiences | default([]))

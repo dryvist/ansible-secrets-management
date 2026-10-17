@@ -20,7 +20,7 @@ openbao_terrakube_network_workspace: >-
 openbao_terrakube_aws_workspace: >-
   {{ lookup('env', 'OPENBAO_TERRAKUBE_AWS_WORKSPACE')
      | default(undef('OPENBAO_TERRAKUBE_AWS_WORKSPACE is empty'), true) }}
-openbao_terrakube_static_workspaces:
+openbao_terrakube_workspaces:
   - name: iac-platform
     # apps/authelia: the deploy script needs the plaintext semaphore /
     # terrakube-dex OIDC client secrets to configure those two apps —
@@ -28,17 +28,19 @@ openbao_terrakube_static_workspaces:
     # never the plaintext, so the consumer reads it back from OpenBao directly.
     kv_read: [platform/terrakube/main, apps/authelia]
   - name: tofu-github
+    bound_subjects_glob: ['tofu-github-org-*']
     # Mints an installation token per run instead of reading a stored one. The
     # workspace previously read a static GITHUB_TOKEN out of KV
     # (infrastructure/github, on both mounts); that value expired and every plan
     # failed with `401 Bad credentials`, which is the failure mode a stored PAT
     # has and an engine-minted token does not.
     #
-    # dryvist-full-automation is the admin-tier set: installation-wide, full App
-    # ceiling. This keeps the workspace's existing credential ceiling; the
-    # set carries no permissions map. Per-org workspaces below mint the matching
-    # owner's generated admin-tier set.
+    # Keep the existing set grant during the expand/contract migration. The
+    # raw admin endpoint below selects any installed org by name and uses the
+    # App's installed permissions as its ceiling.
     github_mint: [dryvist-full-automation]
+    github_admin_raw: true
+    kv_read: [infrastructure/tofu-github/private-overrides]
   - name: "{{ openbao_terrakube_network_workspace }}"
     # platform/object-storage: that workspace reads the published inventory and
     # the desired-state object out of the store to derive its DNS records and
@@ -80,13 +82,6 @@ openbao_terrakube_static_workspaces:
     #     read-only — siting it there turns a routine mint into a request to
     #     widen the access model.
     kv_read: [apps/semaphore]
-openbao_terrakube_workspaces: >-
-  {%- set _workspaces = openbao_terrakube_static_workspaces | list -%}
-  {%- for owner in openbao_github_repo_create_installations.keys() -%}
-  {%- set _ = _workspaces.append({'name': 'tofu-github-' ~ owner,
-      'github_mint': [owner ~ '-full-automation']}) -%}
-  {%- endfor -%}
-  {{ _workspaces }}
 openbao_ansible_converge_policy_name: ansible-converge
 openbao_ansible_converge_approle_name: ansible-converge
 # semaphore — the unattended execution plane's own identity. It attaches the
@@ -95,11 +90,12 @@ openbao_ansible_converge_approle_name: ansible-converge
 # `ansible`. Kept distinct from ansible-converge because the two callers are
 # not equally trusted: see the header of semaphore-policy.hcl.j2.
 openbao_semaphore_policy_name: semaphore
-# All-repo READ sets the unattended Semaphore identity may mint for Ansible checkouts.
+# The execution plane's git credential helper still mints this named set; it
+# moves to the raw org endpoint below, then this list goes.
 openbao_semaphore_github_read_permission_sets:
   - read-dryvist-all
-  - read-jpe-cribl-all
-# The Cribl pack sync requests this exact read-only map on the raw org endpoint.
+# The execution plane and Cribl pack sync use this exact read-only map on the
+# raw org endpoint.
 openbao_semaphore_github_raw_read_permissions:
   contents: read
   metadata: read

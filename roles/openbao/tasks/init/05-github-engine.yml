@@ -1,7 +1,4 @@
 ---
-- name: Validate the extra everyday GitHub installations
-  ansible.builtin.import_tasks: 05a-github-extra-installation-checks.yml
-
 - name: Read the staged GitHub plugin binary's sha256
   ansible.builtin.stat:
     path: "{{ openbao_plugin_dir }}/{{ openbao_github_plugin_command }}"

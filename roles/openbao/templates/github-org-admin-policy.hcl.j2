@@ -1,10 +1,21 @@
 {{ ansible_managed | comment }}
-# github-org-admin — mint the org-admin tier set(s) only:
-# organization_administration:write (org rulesets and settings), nothing else.
-# No repository, read, write, publish or full-automation set.
+# github-org-admin — mint the dryvist base set or a raw token for any installed
+# organization, pinned to organization_administration:write.
 {% for permission_set in openbao_github_permission_sets | selectattr('tier', 'equalto', 'org-admin') %}
 path "{{ permission_set.mount }}/token/{{ permission_set.name }}" {
   capabilities = ["create", "update"]
 }
 
 {% endfor %}
+path "{{ openbao_github_mount }}/token" {
+  capabilities = ["create", "update"]
+  required_parameters = ["org_name", "permissions"]
+  allowed_parameters = {
+    "org_name" = []
+    "permissions" = [{ {% for name, level in openbao_github_org_admin_permissions | dictsort %}"{{ name }}" = "{{ level }}"{{ ", " if not loop.last else "" }}{% endfor %} }]
+  }
+  denied_parameters = {
+    "installation_id" = []
+    "repositories" = []
+  }
+}

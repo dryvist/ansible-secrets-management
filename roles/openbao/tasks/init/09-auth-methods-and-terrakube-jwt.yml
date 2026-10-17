@@ -180,21 +180,21 @@
 # attach-a-capability-policy model ansible-converge uses. Sorted on both sides
 # of the drift check below because OpenBao returns token_policies in its own
 # order, and an order-sensitive compare would rewrite the role every converge.
-- name: Reconcile exact-claim Terrakube workspace JWT roles
+- name: Reconcile Terrakube workspace JWT roles
   ansible.builtin.command:
     cmd: "bao write auth/{{ openbao_terrakube_jwt_auth_path }}/role/terrakube-{{ item.0.name }} -"
     stdin: >-
-      {{ {'role_type': 'jwt',
+      {{ ({'role_type': 'jwt',
             'bound_audiences': [openbao_terrakube_jwt_audience],
-            'bound_claims': {
-              'sub': 'organization:' ~ openbao_terrakube_organization ~ ':workspace:' ~ item.0.name
-            },
+            'bound_claims': {'sub': _workspace_sub_claim},
             'user_claim': 'sub',
             'policies': (['terrakube-' ~ item.0.name]
                          + ([openbao_config_write_policy_name]
                             if item.0.name in openbao_config_write_terrakube_workspaces
                             else [])) | sort,
-            'token_ttl': openbao_terrakube_jwt_token_ttl} | to_json }}
+            'token_ttl': openbao_terrakube_jwt_token_ttl}
+         | combine({'bound_claims_type': 'glob'}
+                  if item.0.bound_subjects_glob is defined else {})) | to_json }}
   environment:
     BAO_ADDR: "{{ openbao_cli_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
@@ -202,6 +202,13 @@
   become: "{{ openbao_cli_become }}"
   vars:
     ansible_become: "{{ openbao_cli_become }}"
+    _workspace_sub_claim: >-
+      {{ (['organization:' ~ openbao_terrakube_organization ~ ':workspace:' ~ item.0.name]
+          + (item.0.bound_subjects_glob
+             | map('regex_replace', '^', 'organization:' ~ openbao_terrakube_organization ~ ':workspace:')
+             | list))
+         if item.0.bound_subjects_glob is defined
+         else 'organization:' ~ openbao_terrakube_organization ~ ':workspace:' ~ item.0.name }}
   loop: "{{ openbao_terrakube_workspaces | zip(openbao_terrakube_jwt_role_reads.results | default([])) | list }}"
   loop_control:
     label: "{{ item.0.name }}"
@@ -216,7 +223,10 @@
          != [openbao_terrakube_jwt_audience]
       or (((item.1.stdout | default('{}') | from_json).data
            | default({}, true)).bound_claims | default({}, true)).sub | default('')
-         != 'organization:' ~ openbao_terrakube_organization ~ ':workspace:' ~ item.0.name
+         != _workspace_sub_claim
+      or (((item.1.stdout | default('{}') | from_json).data
+           | default({}, true)).bound_claims_type | default(''))
+         != ('glob' if item.0.bound_subjects_glob is defined else 'string')
       or (((item.1.stdout | default('{}') | from_json).data
            | default({}, true)).token_policies | default([]) | sort)
          != ((['terrakube-' ~ item.0.name]
