@@ -1,5 +1,9 @@
 {{ ansible_managed | comment }}
-# Public repository write tokens.
+# Sandbox leaf read access and public repository write tokens.
 path "{{ openbao_github_agents_mount }}/token/public-write" {
   capabilities = ["create", "update"]
+}
+
+path "{{ openbao_kv_mount }}/data/apps/sandbox-agent" {
+  capabilities = ["read"]
 }

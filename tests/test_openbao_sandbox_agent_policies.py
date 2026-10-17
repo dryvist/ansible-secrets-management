@@ -40,10 +40,27 @@ class SandboxAgentPolicies(unittest.TestCase):
         self.assertIn('path "github-agents/token/public-read"', rendered)
         self.assertNotIn('path "github-agents/token/public-write"', rendered)
 
-    def test_write_policy_mints_only_the_public_write_token_set(self):
+    def test_write_policy_reads_only_the_sandbox_leaf_and_mints_write_tokens(self):
         rendered = _render(POLICIES[1])
-        self.assertIn('path "github-agents/token/public-write"', rendered)
-        self.assertNotIn('path "secret/', rendered)
+        self.assertCountEqual(
+            re.findall(r'path "([^"]+)"', rendered),
+            ["secret/data/apps/sandbox-agent", "github-agents/token/public-write"],
+        )
+        self.assertCountEqual(
+            re.findall(
+                r'path "([^"]+)" \{\s*capabilities = \[([^\]]+)\]\s*\}',
+                rendered,
+            ),
+            [
+                ("secret/data/apps/sandbox-agent", '"read"'),
+                ("github-agents/token/public-write", '"create", "update"'),
+            ],
+        )
+        self.assertNotIn("secrets-external", rendered)
+        self.assertIsNone(
+            re.search(r'path "secret/(?:data|metadata)/[^"*+]*[*+][^"]*"', rendered)
+        )
+        self.assertNotIn('path "secret/metadata', rendered)
         self.assertNotIn('path "github-agents/token/public-read"', rendered)
 
 

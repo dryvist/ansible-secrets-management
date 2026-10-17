@@ -14,7 +14,8 @@ wildcard already granted on `secret/` would reach across it.
 
 The `sandbox-agent-read` AppRole reads only `secret/apps/sandbox-agent` and
 mints from the `public-read` GitHub permission set. `sandbox-agent-write`
-mints from `public-write` and has no KV read. Both require
+reads that same leaf and mints from `public-write`. Neither role reads another
+KV path. Both require
 `OPENBAO_SANDBOX_AGENT_CIDRS`, use 15-minute token limits, and have one-use
 15-minute SecretIDs. The `open-llm` dispatcher can mint wrapped SecretIDs for
 either role and reads the exact `secrets-external/zai-coding` leaf. Its internal
