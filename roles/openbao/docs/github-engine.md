@@ -20,6 +20,7 @@ configuration, so each App's own grant caps every token its mount mints:
 | `github-work` | work | `work-read`, `work-write` and operator-gated `work-admin`, all pinned to the work installation; no administration |
 | `github-enterprise-read` | read-only Enterprise App | none: raw token endpoint, pinned to its installation |
 | `github-enterprise` | admin Enterprise App | none: raw token endpoint, pinned to its installation |
+| `github-runner` | runner App | none: raw token endpoint accepts only `org_name` |
 
 The Enterprise owner token is stored separately in the `github-enterprise-owner`
 KV v2 mount. The human-unlock login can create or replace it; only the admin
@@ -143,6 +144,17 @@ Enterprise App IDs and private keys come from `OPENBAO_GITHUB_ENTERPRISE_APP_ID`
 and `OPENBAO_GITHUB_ENTERPRISE_READ_PRIVATE_KEY`. Their installation IDs come
 from the env document keys `OPENBAO_GITHUB_ENTERPRISE_INSTALLATION_ID` and
 `OPENBAO_GITHUB_ENTERPRISE_READ_INSTALLATION_ID`.
+
+## Runner registration by organization
+
+`github-runner/token` requires `org_name` and accepts no other request
+parameters. Its App has only the organization-level `Self-hosted runners:
+write` permission and no OpenBao permission sets. The mount and policy are
+always declared; `OPENBAO_GITHUB_RUNNER_APP_ID` and
+`OPENBAO_GITHUB_RUNNER_APP_PRIVATE_KEY` are one-time environment that configure
+it. The App's GitHub installations determine the organizations available to
+the request. The existing
+`runner-register-dryvist` permission set remains on `github-admin`.
 
 Estate identities (`ai-apply-*`, `ai-orchestrator`) attach the `github-mint`
 capability policy, which grants the read-tier sets only. Raw token endpoints

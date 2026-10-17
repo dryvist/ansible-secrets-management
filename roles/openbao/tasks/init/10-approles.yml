@@ -119,16 +119,31 @@
 # Runs on the controller (openbao_cli_host, resolved in init/02): measured on
 # the target at 328s, one module execution per role. Same CLI, same
 # rc/stderr, so the denied-vs-absent classifier below reads unchanged.
+# The read carries the same parameters as the writes below, so a policy that
+# pins required parameters on this path still answers it.
 - name: Check whether each AppRole already exists
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
+    approle_cli_parameters: "{{ openbao_approle_cli_parameters[item.name] }}"
   ansible.builtin.command:
-    cmd: "bao read -format=json auth/approle/role/{{ item.name }}"
+    cmd: >-
+      bao read -format=json auth/approle/role/{{ item.name }}
+      token_policies={{ approle_cli_parameters.token_policies }}
+      bind_secret_id={{ approle_cli_parameters.bind_secret_id }}
+      token_ttl={{ approle_cli_parameters.token_ttl }}
+      token_max_ttl={{ approle_cli_parameters.token_max_ttl }}
+      token_explicit_max_ttl={{ approle_cli_parameters.token_explicit_max_ttl }}
+      token_type={{ approle_cli_parameters.token_type }}
+      secret_id_ttl={{ approle_cli_parameters.secret_id_ttl }}
+      secret_id_num_uses={{ approle_cli_parameters.secret_id_num_uses }}
+      {{ ('secret_id_bound_cidrs=' ~ approle_cli_parameters.secret_id_bound_cidrs ~
+          ' token_bound_cidrs=' ~ approle_cli_parameters.token_bound_cidrs)
+         if (approle_cli_parameters.secret_id_bound_cidrs | length > 0) else '' }}
   environment:
     BAO_ADDR: "{{ openbao_cli_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
   delegate_to: "{{ openbao_cli_host }}"
   become: "{{ openbao_cli_become }}"
-  vars:
-    ansible_become: "{{ openbao_cli_become }}"
   loop: "{{ openbao_manageable_approles }}"
   loop_control:
     label: "{{ item.name }}"
