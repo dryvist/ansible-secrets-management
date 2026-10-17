@@ -148,6 +148,13 @@ path "{{ openbao_ssh_mount | default('ssh-client-ca') }}/*" {
 path "{{ openbao_oauthapp_mount | default('oauthapp') }}/*" {
   capabilities = ["create", "read", "update", "delete", "list"]
 }
+# The human-unlocked admin window uses this key for OpenTofu state.
+path "{{ openbao_transit_mount }}/datakey/plaintext/{{ openbao_tofu_state_transit_key }}" {
+  capabilities = ["update"]
+}
+path "{{ openbao_transit_mount }}/decrypt/{{ openbao_tofu_state_transit_key }}" {
+  capabilities = ["update"]
+}
 
 # --- Raft storage: snapshot, restore, peer surgery ----------------------------
 # sudo-protected. This is the tier that takes and restores a cluster snapshot
