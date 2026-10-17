@@ -76,7 +76,6 @@ openbao_github_exporter_permissions:
 openbao_github_telemetry_permissions:
   actions: read
   checks: read
-  contents: read
   metadata: read
   pull_requests: read
   statuses: read

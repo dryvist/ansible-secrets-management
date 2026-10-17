@@ -26,7 +26,6 @@ WRITE = {"contents": "write", "pull_requests": "write"}
 TELEMETRY = {
     "actions": "read",
     "checks": "read",
-    "contents": "read",
     "metadata": "read",
     "pull_requests": "read",
     "statuses": "read",

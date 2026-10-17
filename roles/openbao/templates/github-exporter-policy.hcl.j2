@@ -7,7 +7,8 @@
 # The raw {{ openbao_github_mount }}/token endpoint, the *-full-automation
 # admin sets, the read-* sets, the runner set, and the engine's config/* +
 # permissionset/* administration paths are absent: a leaked exporter
-# secret-zero can mint read-only tokens and nothing else.
+# secret-zero can read CI metadata (actions, checks, statuses, pull requests,
+# repository metadata) and nothing else: no repository content, no write.
 #
 # `read` is here alongside create/update for the same reason as
 # github-runner-policy.hcl.j2: the OpenBao Agent's template engine issues a
