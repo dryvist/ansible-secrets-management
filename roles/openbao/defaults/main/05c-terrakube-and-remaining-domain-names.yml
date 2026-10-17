@@ -120,7 +120,7 @@ openbao_media_approle_name: media
 openbao_ntfy_policy_name: ntfy
 openbao_ntfy_approle_name: ntfy
 # disclosure-denylist — org-wide GitHub disclosure-gate deny terms, one fixed
-# string per line. GitHub-consumed (dryvist/.github's reusable
+# string per line. GitHub-consumed (JacobPEvans/.github's reusable
 # _disclosure-gate.yml reads it as the org secret DISCLOSURE_DENYLIST, org
 # dryvist, visibility: all), so it lives in secrets-external like
 # slack-webhooks above, not secret/apps. No Ansible converge fetches this
@@ -131,9 +131,9 @@ openbao_disclosure_denylist_mount: secrets-external
 openbao_disclosure_denylist_path: platform/disclosure-denylist
 openbao_disclosure_denylist_field: terms
 openbao_disclosure_denylist_metadata:
-  owner: dryvist/.github
+  owner: JacobPEvans/.github
   reader: "GitHub org secret DISCLOSURE_DENYLIST (org dryvist, visibility: all)"
-  docs: "dryvist/.github _disclosure-gate.yml"
+  docs: "JacobPEvans/.github _disclosure-gate.yml"
   rotation: "manual -- edit the term list directly; no scheduled rotation"
 # Narrow read-only leaf (disclosure-denylist-read-policy.hcl.j2), registered
 # in openbao_base_policies (07c) but deliberately unattached to any AppRole:

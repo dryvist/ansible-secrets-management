@@ -153,14 +153,14 @@ openbao_github_agent_flow_base_roles:
   - name: github-agent-ci-fix
     policy: github-agent-ci-fix
     repository: dryvist/ansible-proxmox-ai
-    job_workflow_ref: dryvist/ai-workflows/.github/workflows/cc-ci-fix.yml@refs/heads/main
+    job_workflow_ref: JacobPEvans/.github-ai/.github/workflows/cc-ci-fix.yml@refs/tags/v1
     event_names: [workflow_run]
     token_ttl: 10m
     token_max_ttl: 15m
   - name: github-agent-pr-review
     policy: github-agent-pr-review
     repository: dryvist/ansible-proxmox-ai
-    job_workflow_ref: dryvist/ai-workflows/.github/workflows/cc-pr-review-responder.yml@refs/heads/main
+    job_workflow_ref: JacobPEvans/.github-ai/.github/workflows/cc-pr-review-responder.yml@refs/tags/v1
     event_names: [pull_request_review, pull_request_review_comment]
     token_ttl: 10m
     token_max_ttl: 15m
