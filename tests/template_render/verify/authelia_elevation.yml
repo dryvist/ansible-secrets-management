@@ -29,6 +29,7 @@
       grafana: x
       litellm: x
       bao_elevate_trusted: x
+      bao_elevate_policy_sync: x
     ingress_domain: example.test
     grafana_hostname: grafana
 
@@ -53,6 +54,12 @@
             in openbao_generated_app_secrets.client
           - >-
             'authelia_oidc_bao_elevate_trusted_client_secret'
+            not in openbao_generated_app_secrets.authelia
+          - >-
+            'authelia_oidc_bao_elevate_policy_sync_client_secret'
+            in openbao_generated_app_secrets.client
+          - >-
+            'authelia_oidc_bao_elevate_policy_sync_client_secret'
             not in openbao_generated_app_secrets.authelia
           - openbao_generated_app_secret_paths.client == 'core/client'
         quiet: true
@@ -99,13 +106,23 @@
           - _trusted.consent_mode == 'explicit'
           - _untrusted.consent_mode == 'explicit'
           - _trusted.authorization_policy == 'elevate'
+          - _policy_sync.public == false
+          - _policy_sync.token_endpoint_auth_method == 'client_secret_basic'
+          - _policy_sync.client_secret is defined
+          - _policy_sync.grant_types == ['urn:ietf:params:oauth:grant-type:device_code']
+          - _policy_sync.redirect_uris is not defined
+          - _policy_sync.consent_mode == 'explicit'
+          - _policy_sync.authorization_policy == 'elevate'
           - _untrusted.authorization_policy == 'elevate'
         fail_msg: >-
           an OpenBao elevation client drifted from device-code only
-          (trusted={{ _trusted | default('ABSENT') }}, untrusted={{ _untrusted | default('ABSENT') }})
+          (trusted={{ _trusted | default('ABSENT') }},
+          policy-sync={{ _policy_sync | default('ABSENT') }},
+          untrusted={{ _untrusted | default('ABSENT') }})
       vars:
         _clients: "{{ _authelia_config['identity_providers']['oidc']['clients'] }}"
         _trusted: "{{ _clients | selectattr('client_id', 'eq', 'bao-elevate-trusted') | first }}"
+        _policy_sync: "{{ _clients | selectattr('client_id', 'eq', 'bao-elevate-policy-sync') | first }}"
         _untrusted: "{{ _clients | selectattr('client_id', 'eq', 'bao-elevate-untrusted') | first }}"
 
     - name: Assert the elevate policy admits only the operator, from the approval networks
@@ -137,6 +154,6 @@
       ansible.builtin.debug:
         msg: |
           Authelia elevation assertions passed:
-          - both OpenBao elevation clients are device-code only
+          - all three OpenBao elevation clients are device-code only
           - the elevate policy is deny-by-default with one operator rule scoped to the approval networks
           - the device-code lifespan is five minutes

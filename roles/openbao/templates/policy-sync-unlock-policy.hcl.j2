@@ -1,0 +1,13 @@
+{{ ansible_managed | comment }}
+path "auth/approle/role/openbao-policy-sync/secret-id" {
+  capabilities = ["create", "update"]
+}
+path "auth/approle/role/openbao-policy-sync/role-id" {
+  capabilities = ["read"]
+}
+path "sys/wrapping/wrap" {
+  capabilities = ["update"]
+}
+path "auth/token/lookup-self" {
+  capabilities = ["read"]
+}

@@ -27,3 +27,6 @@ openbao_elevate_roles:
   - name: elevate-untrusted
     audience: bao-elevate-untrusted
     policy: "{{ openbao_human_unlock_untrusted_policy_name }}"
+  - name: elevate-policy-sync
+    audience: bao-elevate-policy-sync
+    policy: "{{ openbao_policy_sync_unlock_policy_name }}"
