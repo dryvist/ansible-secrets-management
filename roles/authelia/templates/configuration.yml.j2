@@ -11,13 +11,14 @@ theme: auto
 server:
   address: "tcp://0.0.0.0:{{ authelia_port }}"
   endpoints:
-    # Each bucket refills one request per period (burst = requests). The defaults
-    # leave a client IP about one token-endpoint call per 10 minutes once spent,
-    # which a device-code client polling every few seconds exhausts in one approval.
+    # Each bucket refills one request per period (burst = requests); Authelia
+    # rejects a period under 10s. The defaults leave a client IP about one
+    # token-endpoint call per 10 minutes once spent, which a device-code client
+    # polling every 10s exhausts in one approval.
     rate_limits:
       openid_connect_token:
         buckets:
-          - period: 5s
+          - period: 10s
             requests: 60
 
 log:
