@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.24.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.23.0...v0.24.0) (2026-10-17)
+
+
+### Features
+
+* **openbao:** admin set and Terrakube identity per GitHub org ([#190](https://github.com/dryvist/ansible-secrets-management/issues/190)) ([76e5263](https://github.com/dryvist/ansible-secrets-management/commit/76e5263e0f59e8233631e8a1d4171518d0e73d74))
+* **openbao:** allow fan-control write credential publication ([d130c4c](https://github.com/dryvist/ansible-secrets-management/commit/d130c4cbe57ef65c0ce88f1c524d5084ddcc12f5))
+* **openbao:** bind the tofu-github role to per-org workspaces ([#202](https://github.com/dryvist/ansible-secrets-management/issues/202)) ([8a7e804](https://github.com/dryvist/ansible-secrets-management/commit/8a7e8046ad96ad395dc45048f27c5b31a70b80c5))
+* **openbao:** extend publisher app catalog ([#192](https://github.com/dryvist/ansible-secrets-management/issues/192)) ([d130c4c](https://github.com/dryvist/ansible-secrets-management/commit/d130c4cbe57ef65c0ce88f1c524d5084ddcc12f5))
+* **openbao:** OIDC role for the central AI review workflow ([#191](https://github.com/dryvist/ansible-secrets-management/issues/191)) ([0af4708](https://github.com/dryvist/ansible-secrets-management/commit/0af470829e3fbe7c088f29f1e154d06fe1ff2da4))
+* **openbao:** pinned read-only token mint in the exporter policy ([#194](https://github.com/dryvist/ansible-secrets-management/issues/194)) ([7f9e347](https://github.com/dryvist/ansible-secrets-management/commit/7f9e347a3bf335e41390dd61505266be6c39a15b))
+
+
+### Bug Fixes
+
+* **ci:** hold the workflow Python at 3.14 ([#205](https://github.com/dryvist/ansible-secrets-management/issues/205)) ([c89fbec](https://github.com/dryvist/ansible-secrets-management/commit/c89fbecd9e3cbbdb8118ea08686b5c118380cb52))
+* **openbao:** single policy field on the github-exporter role entry ([#195](https://github.com/dryvist/ansible-secrets-management/issues/195)) ([50c0d6c](https://github.com/dryvist/ansible-secrets-management/commit/50c0d6c767d2e9ae2a157b27360369c3d50ef651))
+* **openbao:** the exporter AppRole holds only the exporter policy ([50c0d6c](https://github.com/dryvist/ansible-secrets-management/commit/50c0d6c767d2e9ae2a157b27360369c3d50ef651))
+
 ## [0.23.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.22.0...v0.23.0) (2026-10-17)
 
 
