@@ -180,16 +180,15 @@
 # attach-a-capability-policy model ansible-converge uses. Sorted on both sides
 # of the drift check below because OpenBao returns token_policies in its own
 # order, and an order-sensitive compare would rewrite the role every converge.
-- name: Reconcile exact-claim Terrakube workspace JWT roles
+- name: Reconcile Terrakube workspace JWT roles
   ansible.builtin.command:
     cmd: "bao write auth/{{ openbao_terrakube_jwt_auth_path }}/role/terrakube-{{ item.0.name }} -"
     stdin: >-
       {{ {'role_type': 'jwt',
             'bound_audiences': [openbao_terrakube_jwt_audience],
-            'bound_claims': {
-              'sub': 'organization:' ~ openbao_terrakube_organization ~ ':workspace:' ~ item.0.name
-            },
+            'bound_claims': {'sub': _workspace_sub_claim},
             'user_claim': 'sub',
+            'bound_claims_type': 'string',
             'policies': (['terrakube-' ~ item.0.name]
                          + ([openbao_config_write_policy_name]
                             if item.0.name in openbao_config_write_terrakube_workspaces
@@ -202,6 +201,8 @@
   become: "{{ openbao_cli_become }}"
   vars:
     ansible_become: "{{ openbao_cli_become }}"
+    _workspace_sub_claim: >-
+      {{ 'organization:' ~ openbao_terrakube_organization ~ ':workspace:' ~ item.0.name }}
   loop: "{{ openbao_terrakube_workspaces | zip(openbao_terrakube_jwt_role_reads.results | default([])) | list }}"
   loop_control:
     label: "{{ item.0.name }}"
@@ -216,7 +217,10 @@
          != [openbao_terrakube_jwt_audience]
       or (((item.1.stdout | default('{}') | from_json).data
            | default({}, true)).bound_claims | default({}, true)).sub | default('')
-         != 'organization:' ~ openbao_terrakube_organization ~ ':workspace:' ~ item.0.name
+         != _workspace_sub_claim
+      or (((item.1.stdout | default('{}') | from_json).data
+           | default({}, true)).bound_claims_type | default(''))
+         != 'string'
       or (((item.1.stdout | default('{}') | from_json).data
            | default({}, true)).token_policies | default([]) | sort)
          != ((['terrakube-' ~ item.0.name]
@@ -226,6 +230,9 @@
       or ((item.1.stdout | default('{}') | from_json).data
           | default({}, true)).token_ttl | default(0) | int
          != (openbao_terrakube_jwt_token_ttl | regex_replace('m$', '') | int) * 60
+
+- name: Delete retired Terrakube JWT roles
+  ansible.builtin.import_tasks: 09f-retired-terrakube-jwt-roles.yml
 
 # --- GitHub Actions OIDC workload identity ---------------------------------
 # Its own file, for the same reason the human login below has one: a second

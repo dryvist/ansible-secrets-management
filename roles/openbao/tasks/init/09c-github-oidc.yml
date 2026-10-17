@@ -235,12 +235,15 @@
       or (_uicheck_role_live.token_max_ttl | default(0) | int)
          != (_uicheck_token_max_ttl_s | int)
 
-# The required org-wide AI review runs from one stable reusable workflow, so
-# bind that workflow identity rather than each caller repository. The owner
-# list limits callers to organizations with a managed GitHub installation;
-# runner_environment rejects jobs outside the self-hosted runner pool. The
-# audience and exact ref stop tokens minted for another workload or workflow
-# revision from being reused here.
+# The org-wide review uses one reusable workflow. Its workflow ref and audience
+# bind the workload; `enterprise_id` admits every organization in the
+# configured enterprise, the intended scope. `runner_environment` limits it
+# to self-hosted runner jobs.
+- name: Skip the ci-ai-review OIDC role without an enterprise ID
+  ansible.builtin.debug:
+    msg: "Skipping ci-ai-review OIDC role: OPENBAO_GITHUB_ENTERPRISE_ID is empty."
+  when: openbao_ci_ai_review_enterprise_id | length == 0
+
 - name: Read the ci-ai-review OIDC role
   ansible.builtin.command:
     cmd: >-
@@ -258,14 +261,16 @@
   changed_when: false
   check_mode: false
   failed_when: false
-  when: openbao_bootstrap_token is defined
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_ci_ai_review_enterprise_id | length > 0
 
 - name: Reconcile the ci-ai-review OIDC role
   vars:
     ansible_become: "{{ openbao_cli_become }}"
     _ci_ai_review_role_claims:
       job_workflow_ref: "{{ openbao_ci_ai_review_job_workflow_ref }}"
-      repository_owner: "{{ openbao_ci_ai_review_repository_owners }}"
+      enterprise_id: "{{ openbao_ci_ai_review_enterprise_id }}"
       runner_environment: "{{ openbao_ci_ai_review_runner_environment }}"
     _ci_ai_review_role_live: >-
       {{ (openbao_github_oidc_ci_ai_review_role_current.stdout | default('{}') | from_json).data
@@ -295,6 +300,7 @@
   changed_when: true
   when:
     - openbao_bootstrap_token is defined
+    - openbao_ci_ai_review_enterprise_id | length > 0
     - >-
       (openbao_github_oidc_ci_ai_review_role_current.rc | default(1)) != 0
       or (_ci_ai_review_role_live.bound_audiences | default([]))

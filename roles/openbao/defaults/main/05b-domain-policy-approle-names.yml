@@ -67,8 +67,8 @@ openbao_packer_approle_name: packer
 # see the plugins-first rule). nix-darwin's
 # `openbao-github-creds` logs in as one of these; the AppRole IS the tier:
 #
-#   github-read  -> github/token/read-*        all-repo, read-only permission
-#                                              sets; standing ambient identity
+#   github-read  -> github/token               org_name + fixed read map;
+#                                              standing ambient identity
 #   github-write -> github/token (raw)         any repository the App
 #                                              installation covers (pinned
 #                                              installation_id) +

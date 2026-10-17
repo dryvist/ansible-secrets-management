@@ -36,6 +36,9 @@ openbao_retired_approles: >-
   {{ ['open-llm-workstation', 'github-agents', 'github-admin-claude',
       'claude-identity', 'github-work', 'github-write-work']
      + openbao_roster_key_reader_retired_names }}
+# Retired per-owner Terrakube JWT roles and policies share this prefix. The
+# trailing hyphen keeps the live `terrakube-tofu-github` role and policy out of it.
+openbao_retired_terrakube_prefix: terrakube-tofu-github-
 # Retired policies, deleted the same way (init/08b-rbac-policy-writes.yml).
 openbao_retired_policies: >-
   {{ ['github-agents', 'github-admin-claude-issuer', 'github-work', 'github-write-work']

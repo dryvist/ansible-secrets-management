@@ -54,3 +54,18 @@ path "{{ (openbao_github_permission_sets | selectattr('name', 'equalto', permiss
   capabilities = ["create", "update"]
 }
 {% endfor %}
+{% if item.workspace.github_admin_raw | default(false) %}
+
+path "{{ openbao_github_mount }}/token" {
+  capabilities = ["create", "update"]
+  required_parameters = ["org_name"]
+  allowed_parameters = {
+    "org_name" = []
+    "repositories" = []
+    "permissions" = []
+  }
+  denied_parameters = {
+    "installation_id" = []
+  }
+}
+{% endif %}
