@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.26.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.25.1...v0.26.0) (2026-10-17)
+
+
+### Features
+
+* **openbao:** declare transit mount and tofu-state key ([#216](https://github.com/dryvist/ansible-secrets-management/issues/216)) ([1494f59](https://github.com/dryvist/ansible-secrets-management/commit/1494f59c347368f8d54e6af68fde67da4879da61))
+
+
+### Bug Fixes
+
+* **authelia:** use a token-endpoint bucket period Authelia accepts ([#212](https://github.com/dryvist/ansible-secrets-management/issues/212)) ([e1fece7](https://github.com/dryvist/ansible-secrets-management/commit/e1fece7e564ce294e8aff1116544b43d8df80917))
+
 ## [0.25.1](https://github.com/dryvist/ansible-secrets-management/compare/v0.25.0...v0.25.1) (2026-10-17)
 
 
