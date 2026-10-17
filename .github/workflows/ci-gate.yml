@@ -89,6 +89,9 @@ jobs:
       - name: Install Ansible, pytest and PyYAML
         run: uv pip install --system 'ansible-core>=2.16' pytest pyyaml
 
+      - name: Verify the rendered Authelia configuration with Authelia's validator
+        run: ansible-playbook -i localhost, -c local tests/authelia_validate_config/verify.yml
+
       # Exact cache hits force-refresh only the floating homelab-contracts v5
       # tag; misses run the forced install for the full requirement set.
       # Same path and key as the shared Ansible CI and _molecule.yml, so one

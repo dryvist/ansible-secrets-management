@@ -1,0 +1,215 @@
+---
+- name: Render and validate the Authelia configuration with its deployed release
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    ansible_become: false
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    ingress_domain: example.test
+    grafana_hostname: grafana
+    wall_kiosk_route_names: [wall, glance]
+    tofu_data:
+      domain: example.test
+      constants:
+        service_ports:
+          authelia_portal: 9091
+
+  tasks:
+    - name: Create a temporary directory for the render and release binary
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: authelia-validate-
+      register: _authelia_test_dir
+
+    - name: Render and validate the Authelia configuration
+      block:
+        - name: Load the Authelia role defaults
+          ansible.builtin.include_vars:
+            dir: "{{ playbook_dir }}/../../roles/authelia/defaults/main"
+
+        - name: Set test paths and dummy configuration values
+          ansible.builtin.set_fact:
+            _authelia_test_client_secret_hash: >-
+              {{ '$pbkdf2-sha512$310000$c8p78n7pUMln0jzvd4aK4Q$'
+                 ~ 'JNRBzwAo0ek5qKn50cFzzvE9RXV88h1wJn5KGiHrD0YKtZaR/nCb2CJPOsKaPK0hjf.9yHxzQGZziziccp6Yng' }}
+            authelia_db_path: "{{ _authelia_test_dir.path }}/authelia.sqlite3"
+            authelia_notification_file: "{{ _authelia_test_dir.path }}/notification.txt"
+            authelia_users_file: "{{ _authelia_test_dir.path }}/users.yml"
+            authelia_bao_elevation_enabled: true
+            authelia_approve_subject: user:ci
+            authelia_approve_networks: [192.0.2.0/24]
+            authelia_wall_kiosk_networks: [192.0.2.10/32]
+            authelia_oidc_hmac_secret: ci-only-dummy-hmac-secret-0123456789abcdef0123456789abcdef0123456789abcdef
+          no_log: true
+
+        - name: Set dummy OIDC client hashes
+          ansible.builtin.set_fact:
+            authelia_oidc_client_secret_hashes: >-
+              {{ dict(['homarr', 'langfuse', 'phoenix', 'semaphore', 'terrakube_dex',
+                       'grafana', 'litellm', 'bao_elevate_trusted']
+                      | zip([_authelia_test_client_secret_hash] * 8)) }}
+          no_log: true
+
+        - name: Create valid users database and referenced files
+          ansible.builtin.copy:
+            dest: "{{ item.path }}"
+            content: "{{ item.content }}"
+            mode: "0600"
+          loop:
+            - path: "{{ authelia_users_file }}"
+              content: |
+                users:
+                  ci:
+                    disabled: false
+                    displayname: CI
+                    password: "{{ _authelia_test_client_secret_hash }}"
+                    email: ci@example.test
+                    groups: [admins]
+            - path: "{{ authelia_notification_file }}"
+              content: ""
+          loop_control:
+            label: "{{ item.path }}"
+
+        - name: Create the SQLite database path
+          ansible.builtin.file:
+            path: "{{ authelia_db_path }}"
+            state: touch
+            mode: "0600"
+
+        - name: Create dummy JWT, session, and storage secret files
+          ansible.builtin.copy:
+            dest: "{{ _authelia_test_dir.path }}/{{ item }}"
+            content: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+            mode: "0600"
+          loop:
+            - jwt-secret
+            - session-secret
+            - storage-encryption-key
+
+        - name: Generate a temporary OIDC signing key
+          ansible.builtin.command:
+            argv:
+              - openssl
+              - genpkey
+              - -algorithm
+              - RSA
+              - -out
+              - "{{ _authelia_test_dir.path }}/oidc-jwks.pem"
+              - -pkeyopt
+              - rsa_keygen_bits:2048
+          changed_when: false
+          no_log: true
+
+        - name: Read the temporary OIDC signing key
+          ansible.builtin.slurp:
+            src: "{{ _authelia_test_dir.path }}/oidc-jwks.pem"
+          register: _authelia_oidc_jwks
+          no_log: true
+
+        - name: Add the temporary OIDC signing key to the render variables
+          ansible.builtin.set_fact:
+            authelia_oidc_jwks_key: "{{ _authelia_oidc_jwks.content | b64decode }}"
+          no_log: true
+
+        - name: Render the Authelia configuration
+          ansible.builtin.template:
+            src: "{{ playbook_dir }}/../../roles/authelia/templates/configuration.yml.j2"
+            dest: "{{ _authelia_test_dir.path }}/configuration.yml"
+            mode: "0600"
+
+        - name: Download Authelia's signed release checksum manifest
+          ansible.builtin.get_url:
+            url: "{{ authelia_release_checksums_url }}"
+            dest: "{{ _authelia_test_dir.path }}/{{ authelia_release_checksums_filename }}"
+            mode: "0600"
+            force: true
+
+        - name: Download the release checksum manifest signature
+          ansible.builtin.get_url:
+            url: "{{ authelia_release_checksums_signature_url }}"
+            dest: "{{ _authelia_test_dir.path }}/{{ authelia_release_checksums_filename }}.sig"
+            mode: "0600"
+            force: true
+
+        - name: Build the Authelia release verification keyring
+          ansible.builtin.command:
+            argv:
+              - gpg
+              - --batch
+              - --yes
+              - --dearmor
+              - --output
+              - "{{ _authelia_test_dir.path }}/authelia-security.gpg"
+              - "{{ playbook_dir }}/../../roles/authelia/files/authelia-security.asc"
+          changed_when: false
+
+        - name: Verify the Authelia release checksum manifest signature
+          ansible.builtin.command:
+            argv:
+              - gpgv
+              - --keyring
+              - "{{ _authelia_test_dir.path }}/authelia-security.gpg"
+              - "{{ _authelia_test_dir.path }}/{{ authelia_release_checksums_filename }}.sig"
+              - "{{ _authelia_test_dir.path }}/{{ authelia_release_checksums_filename }}"
+          changed_when: false
+
+        - name: Read the expected SHA256 for the Authelia release tarball
+          ansible.builtin.set_fact:
+            _authelia_release_tgz_sha256: >-
+              {{ (lookup('file', _authelia_test_dir.path ~ '/' ~ authelia_release_checksums_filename)
+                  | regex_search('([0-9a-f]{64})\s+\*?' ~ (authelia_release_tgz | regex_escape) ~ '$',
+                                 '\1', multiline=True)
+                  | first | default('')) }}
+
+        - name: Assert the signed manifest contains the expected release tarball
+          ansible.builtin.assert:
+            that:
+              - _authelia_release_tgz_sha256 | length == 64
+            fail_msg: >-
+              Could not find {{ authelia_release_tgz }} in the signed Authelia
+              checksum manifest for v{{ authelia_version }}.
+            quiet: true
+
+        - name: Download the checksum-verified Authelia release tarball
+          ansible.builtin.get_url:
+            url: "{{ authelia_release_tgz_url }}"
+            dest: "{{ _authelia_test_dir.path }}/{{ authelia_release_tgz }}"
+            checksum: "sha256:{{ _authelia_release_tgz_sha256 }}"
+            mode: "0600"
+            force: true
+
+        - name: Create the versioned Authelia extraction directory
+          ansible.builtin.file:
+            path: "{{ _authelia_test_dir.path }}/authelia-v{{ authelia_version }}"
+            state: directory
+            mode: "0700"
+
+        - name: Extract the Authelia binary
+          ansible.builtin.unarchive:
+            src: "{{ _authelia_test_dir.path }}/{{ authelia_release_tgz }}"
+            dest: "{{ _authelia_test_dir.path }}/authelia-v{{ authelia_version }}"
+            remote_src: true
+            include:
+              - "{{ authelia_binary_name }}"
+            creates: "{{ _authelia_test_dir.path }}/authelia-v{{ authelia_version }}/{{ authelia_binary_name }}"
+
+        - name: Validate the rendered configuration with Authelia
+          ansible.builtin.command:
+            argv:
+              - "{{ _authelia_test_dir.path }}/authelia-v{{ authelia_version }}/{{ authelia_binary_name }}"
+              - validate-config
+              - --config
+              - "{{ _authelia_test_dir.path }}/configuration.yml"
+          environment:
+            AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET_FILE: "{{ _authelia_test_dir.path }}/jwt-secret"
+            AUTHELIA_SESSION_SECRET_FILE: "{{ _authelia_test_dir.path }}/session-secret"
+            AUTHELIA_STORAGE_ENCRYPTION_KEY_FILE: "{{ _authelia_test_dir.path }}/storage-encryption-key"
+          changed_when: false
+
+      always:
+        - name: Remove temporary Authelia test files
+          ansible.builtin.file:
+            path: "{{ _authelia_test_dir.path }}"
+            state: absent
