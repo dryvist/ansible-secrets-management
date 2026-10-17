@@ -1,14 +1,6 @@
 {{ ansible_managed | comment }}
-# github-read — the workstation's standing, ambient READ tier. Mints the
-# read-tier permission sets and a raw token with the same fixed read map. The
-# owner and optional repository selector are chosen at mint time; the map is
-# fixed by this policy. Admin sets and engine administration paths are absent.
-{% for permission_set in openbao_github_permission_sets | selectattr('tier', 'equalto', 'read') %}
-path "{{ permission_set.mount }}/token/{{ permission_set.name }}" {
-  capabilities = ["create", "update"]
-}
-
-{% endfor %}
+# github-read — the workstation's standing, ambient READ tier. The caller
+# selects an installed organization by name; this policy pins the read map.
 
 path "{{ openbao_github_everyday_mount }}/token" {
   capabilities = ["create", "update"]

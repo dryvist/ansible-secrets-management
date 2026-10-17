@@ -40,9 +40,9 @@ FORBIDDEN = yaml.safe_load((DEFAULTS / "06-ai-access-model.yml").read_text())[
 KV_MOUNT = yaml.safe_load((DEFAULTS / "01a-kv-hierarchy.yml").read_text())[
     "openbao_kv_mount"
 ]
-WORKSPACE_DEFAULTS = yaml.safe_load(
-    (DEFAULTS / "05c-terrakube-and-remaining-domain-names.yml").read_text(encoding="utf-8")
-)
+LIVE_WORKSPACES = yaml.safe_load(
+    (DEFAULTS / "05c-terrakube-and-remaining-domain-names.yml").read_text()
+)["openbao_terrakube_workspaces"]
 
 
 def _task():
@@ -50,19 +50,6 @@ def _task():
         if task.get("name") == TASK:
             return task
     raise AssertionError(f"task {TASK!r} not found in {REL}")
-
-
-def _live_workspaces():
-    templar = Templar(loader=DataLoader())
-    templar.available_variables = {
-        "openbao_terrakube_static_workspaces": WORKSPACE_DEFAULTS[
-            "openbao_terrakube_static_workspaces"
-        ],
-        "openbao_github_repo_create_installations": {},
-    }
-    return templar.template(
-        trust_as_template(WORKSPACE_DEFAULTS["openbao_terrakube_workspaces"])
-    )
 
 
 def _passes(workspaces):
@@ -101,7 +88,7 @@ class ApiUpdateGuard(unittest.TestCase):
     def test_the_LIVE_inventory_passes(self):
         # The guard must not disable the behaviour it protects: every real
         # workspace today is legitimate and must keep rendering.
-        self.assertTrue(_passes(_live_workspaces()))
+        self.assertTrue(_passes(LIVE_WORKSPACES))
 
     def test_a_control_plane_path_is_REFUSED(self):
         # The one that matters. `sys/policies/acl/...` with read+update lets the

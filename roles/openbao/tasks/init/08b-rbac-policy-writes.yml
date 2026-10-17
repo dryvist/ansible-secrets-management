@@ -121,7 +121,9 @@
     _retired: >-
       {{ openbao_retired_policies
          | select('in', openbao_policies_raw.stdout | default('[]', true) | from_json)
-         | list }}
+         | list
+         + (openbao_policies_raw.stdout | default('[]', true) | from_json
+            | select('match', '^' ~ (openbao_retired_terrakube_prefix | regex_escape)) | list) }}
   when:
     - ansible_check_mode
     - openbao_bootstrap_token is defined
@@ -165,7 +167,9 @@
     ansible_become: "{{ openbao_cli_become }}"
   loop: >-
     {{ openbao_retired_policies
-       | select('in', openbao_policies_raw.stdout | default('[]', true) | from_json) | list }}
+       | select('in', openbao_policies_raw.stdout | default('[]', true) | from_json) | list
+       + (openbao_policies_raw.stdout | default('[]', true) | from_json
+          | select('match', '^' ~ (openbao_retired_terrakube_prefix | regex_escape)) | list) }}
   no_log: true
   changed_when: true
   when: openbao_bootstrap_token is defined

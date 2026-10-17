@@ -29,22 +29,14 @@ A key is required only for first configuration or an explicit rotation; routine
 converges never rewrite it. Installation IDs come from the env document
 (`secret/platform/ansible/env`).
 
-The everyday App accepts extra read installations through
-`OPENBAO_GITHUB_EXTRA_READ_INSTALLATION_IDS`, as a comma-separated list of
-`owner=id` entries. Read entries add named read sets and never grant write
-access.
-
 Token access is tiered; the tier IS the privilege boundary:
 
-- **read (`github-read`)** — `github/token/read-dryvist-all` and
-  `github/token/read-personal-all`: all repos, read-only permission map stored
-  in the set itself (the set path ignores request bodies, so a holder cannot
-  widen it). Standing ambient AppRole. The `semaphore` AppRole names the exact
-  paths `github/token/read-dryvist-all` and `github/token/read-jpe-cribl-all`,
-  with no wildcard, so the unattended Ansible execution plane can check out
-  the repositories it runs and the Cribl pack mirror can look up releases
-  without holding a stored token. Read only: these grants cannot write a
-  repository.
+- **read (`github-read`)** — the raw `github/token` endpoint, requiring an
+  organization name and the fixed read permission map; installation IDs are
+  denied. The App's installation determines which organizations are available.
+  The `semaphore` AppRole also uses the raw endpoint with its own fixed read
+  map so it can check out repositories and let the Cribl pack mirror look up
+  releases without holding a stored token.
 - **write (`github-write`)** — the raw `github/token` endpoint; the policy
   requires `installation_id` and `repositories`, does not pin the
   installation, and GitHub's installation repository selection is the scope

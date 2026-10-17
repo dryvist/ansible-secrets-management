@@ -75,17 +75,10 @@ path "{{ openbao_github_everyday_mount }}/token" {
   }
 }
 
-# The execution plane checks out the Ansible repositories it runs, one of which
-# carries a private submodule, so every checkout needs a GitHub credential and
-# has no human to supply one. Its git credential helper mints an ephemeral
-# installation token per request instead of holding a stored token.
-#
-# Exact paths for all-repo READ sets — not the raw token endpoint and not an
-# admin set. Each set's permission map is stored server-side and the endpoint
-# ignores request bodies at plugin v2.3.2, so these grants cannot be widened
-# into write by their holder: an unattended run can read repository contents
-# and can never change them. The same reasoning is why the CI fleet's grant
-# names only its runner-registration set (github-runner-policy.hcl.j2).
+# The execution plane checks out repositories from installed organizations via
+# its git credential helper. The raw-token grant above pins its read map while
+# letting the request select the organization by name; the named set below
+# serves the helper until it switches to that grant.
 {% for permission_set in openbao_semaphore_github_read_permission_sets %}
 path "{{ openbao_github_everyday_mount }}/token/{{ permission_set }}" {
   capabilities = ["create", "update"]

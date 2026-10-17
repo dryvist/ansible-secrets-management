@@ -175,6 +175,7 @@
         _read_paths: "{{ _paths[2] }}"
         _repo_create_paths: "{{ _paths[3] }}"
         _org_admin_paths: "{{ _paths[4] }}"
+        _org_admin_text: "{{ _tier_raw.results[4].content | b64decode }}"
         _write_paths: "{{ _paths[5] }}"
         _open_llm_paths: "{{ _paths[6] }}"
         _open_llm_text: "{{ _tier_raw.results[6].content | b64decode }}"
@@ -260,14 +261,24 @@
     - name: Assert the org-admin policy grants exactly its own set, and no other tier does
       ansible.builtin.assert:
         that:
-          - _org_admin_paths == [_org_admin_path]
+          - _org_admin_paths == [_org_admin_path, openbao_github_mount ~ '/token']
           - _org_admin_path not in _mint_paths
           - _org_admin_path not in _read_paths
           - _org_admin_path not in _repo_create_paths
+          - >-
+            'required_parameters = ["org_name", "permissions"]' in _org_admin_text
+          - >-
+            '"org_name" = []' in _org_admin_text
+          - >-
+            '"organization_administration" = "write"' in _org_admin_text
+          - >-
+            '"installation_id" = []' in _org_admin_text
+          - >-
+            '"repositories" = []' not in _org_admin_text
         fail_msg: >-
           github-org-admin grants {{ _org_admin_paths }}, or another tier
-          grants organization_administration:write. It must be exactly the
-          dryvist-org-admin set and appear nowhere else.
+          grants organization_administration:write. It must grant the
+          dryvist-org-admin set and the parameter-pinned raw endpoint.
 
     - name: Assert everyday writes use the everyday mount and never the admin mount
       ansible.builtin.assert:
