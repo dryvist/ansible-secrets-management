@@ -274,7 +274,7 @@
           - >-
             '"installation_id" = []' in _org_admin_text
           - >-
-            '"repositories" = []' in _org_admin_text
+            '"repositories" = []' not in _org_admin_text
         fail_msg: >-
           github-org-admin grants {{ _org_admin_paths }}, or another tier
           grants organization_administration:write. It must grant the
