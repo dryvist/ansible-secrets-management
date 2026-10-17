@@ -236,7 +236,7 @@ def test_managed_approle_writes_pin_declared_policy_binding_and_cidrs(rendered_d
     assert root_paths
     assert set(root_paths) == set(policy_paths)
 
-    ancillary = {
+    pinned_parameters = {
         "token_ttl",
         "token_max_ttl",
         "token_explicit_max_ttl",
@@ -258,15 +258,20 @@ def test_managed_approle_writes_pin_declared_policy_binding_and_cidrs(rendered_d
             pinned.update({"secret_id_bound_cidrs", "token_bound_cidrs"})
             assert allowed["secret_id_bound_cidrs"] == [parameters["secret_id_bound_cidrs"]], name
             assert allowed["token_bound_cidrs"] == [parameters["token_bound_cidrs"]], name
-        assert set(allowed) == pinned | ancillary, name
+        pinned.update(pinned_parameters)
+        assert set(allowed) == pinned, name
         assert all(
             isinstance(value, str) and "*" not in value
             for key in pinned
             for value in allowed[key]
         ), name
-        assert {key: allowed[key] for key in ancillary} == {
-            key: [] for key in ancillary
-        }, name
+        assert not re.search(
+            r'"(?:token_ttl|token_max_ttl|token_explicit_max_ttl|token_type|'
+            r'secret_id_ttl|secret_id_num_uses)"\s*=\s*\[\]',
+            body,
+        ), name
+        for key in pinned_parameters:
+            assert allowed[key] == [parameters[key]], (name, key)
 
         for task in (create_task, ttl_task):
             sent = _command_arguments(_render_task_command(task, values, role))
@@ -293,6 +298,16 @@ def test_managed_approle_writes_pin_declared_policy_binding_and_cidrs(rendered_d
         )
         role = roles_by_name[name]
         expected_required = ["token_policies", "bind_secret_id"]
+        expected_required.extend(
+            [
+                "token_ttl",
+                "token_max_ttl",
+                "token_explicit_max_ttl",
+                "token_type",
+                "secret_id_ttl",
+                "secret_id_num_uses",
+            ]
+        )
         if values["openbao_approle_cli_parameters"][name]["secret_id_bound_cidrs"]:
             expected_required.extend(["secret_id_bound_cidrs", "token_bound_cidrs"])
         assert required == expected_required, name

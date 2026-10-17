@@ -184,28 +184,17 @@
   vars:
     ansible_become: "{{ openbao_cli_become }}"
     approle_cli_parameters: "{{ openbao_approle_cli_parameters[item.0.name] }}"
-    approle_secret_id_ttl: >-
-      {{ item.0.secret_id_ttl
-         | default(openbao_approle_secret_id_ttl_overrides[item.0.name]
-                   | default(openbao_approle_secret_id_ttl)) }}
-    # `in` rather than `default()`: an override of 0 is a real value, and
-    # `default()` with a boolean-true second argument would discard it.
-    approle_secret_id_num_uses: >-
-      {{ item.0.secret_id_num_uses
-         | default(openbao_approle_secret_id_num_uses_overrides[item.0.name]
-                   if item.0.name in openbao_approle_secret_id_num_uses_overrides
-                   else openbao_approle_secret_id_num_uses) }}
   ansible.builtin.command:
     cmd: >-
       bao write auth/approle/role/{{ item.0.name }}
       token_policies={{ approle_cli_parameters.token_policies }}
       bind_secret_id={{ approle_cli_parameters.bind_secret_id }}
-      token_ttl={{ item.0.token_ttl | default(openbao_approle_token_ttl) }}
-      token_max_ttl={{ item.0.token_max_ttl | default(openbao_approle_token_max_ttl) }}
-      token_explicit_max_ttl={{ item.0.token_explicit_max_ttl | default(0) }}
-      token_type={{ item.0.token_type | default('default') }}
-      secret_id_ttl={{ approle_secret_id_ttl }}
-      secret_id_num_uses={{ approle_secret_id_num_uses }}
+      token_ttl={{ approle_cli_parameters.token_ttl }}
+      token_max_ttl={{ approle_cli_parameters.token_max_ttl }}
+      token_explicit_max_ttl={{ approle_cli_parameters.token_explicit_max_ttl }}
+      token_type={{ approle_cli_parameters.token_type }}
+      secret_id_ttl={{ approle_cli_parameters.secret_id_ttl }}
+      secret_id_num_uses={{ approle_cli_parameters.secret_id_num_uses }}
       {{ ('secret_id_bound_cidrs=' ~ approle_cli_parameters.secret_id_bound_cidrs ~
           ' token_bound_cidrs=' ~ approle_cli_parameters.token_bound_cidrs)
          if (approle_cli_parameters.secret_id_bound_cidrs | length > 0) else '' }}

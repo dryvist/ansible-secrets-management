@@ -18,34 +18,19 @@
     approle_cli_parameters: "{{ openbao_approle_cli_parameters[item.0.name] }}"
     approle_cidr_class: "{{ openbao_approle_cidr_class_map[item.0.name] }}"
     approle_bound_cidrs: "{{ approle_cli_parameters.secret_id_bound_cidrs }}"
-    approle_secret_id_ttl: >-
-      {{ item.0.secret_id_ttl
-         | default(openbao_approle_secret_id_ttl_overrides[item.0.name]
-                   | default(openbao_approle_secret_id_ttl)) }}
-    approle_secret_id_num_uses: >-
-      {{ item.0.secret_id_num_uses
-         | default(openbao_approle_secret_id_num_uses_overrides[item.0.name]
-                   if item.0.name in openbao_approle_secret_id_num_uses_overrides
-                   else openbao_approle_secret_id_num_uses) }}
-    approle_token_ttl: "{{ item.0.token_ttl | default(openbao_approle_token_ttl) }}"
-    approle_token_max_ttl: "{{ item.0.token_max_ttl | default(openbao_approle_token_max_ttl) }}"
     live: "{{ (item.1.stdout | default('{}') | from_json).data | default({}) }}"
-    # Full AppRole writes replace omitted fields. Preserve undeclared live
-    # type and explicit max TTL on bound-only updates; declared values reconcile.
-    approle_token_type: "{{ item.0.token_type | default(live.token_type | default('default')) }}"
-    approle_token_explicit_max_ttl: >-
-      {{ item.0.token_explicit_max_ttl
-         | default(live.token_explicit_max_ttl | default(0)) }}
     token_type_drift: >-
-      {{ item.0.token_type is defined
-         and (live.token_type | default('default')) != item.0.token_type }}
+      {{ (live.token_type | default('default')) != approle_cli_parameters.token_type }}
     token_explicit_max_ttl_drift: >-
-      {{ item.0.token_explicit_max_ttl is defined
-         and (live.token_explicit_max_ttl | default(0) | int)
-             != (item.0.token_explicit_max_ttl | community.general.to_seconds | int) }}
-    desired_secret_id_ttl_s: "{{ approle_secret_id_ttl | community.general.to_seconds }}"
-    desired_token_ttl_s: "{{ approle_token_ttl | community.general.to_seconds }}"
-    desired_token_max_ttl_s: "{{ approle_token_max_ttl | community.general.to_seconds }}"
+      {{ (live.token_explicit_max_ttl | default(0) | int)
+         != (approle_cli_parameters.token_explicit_max_ttl
+             | community.general.to_seconds | int) }}
+    desired_secret_id_ttl_s: >-
+      {{ approle_cli_parameters.secret_id_ttl | community.general.to_seconds }}
+    desired_token_ttl_s: >-
+      {{ approle_cli_parameters.token_ttl | community.general.to_seconds }}
+    desired_token_max_ttl_s: >-
+      {{ approle_cli_parameters.token_max_ttl | community.general.to_seconds }}
     desired_bound_cidrs: >-
       {{ approle_bound_cidrs | split(',') | map('trim')
          | reject('equalto', '') | sort | list }}
@@ -71,12 +56,12 @@
       bao write auth/approle/role/{{ item.0.name }}
       token_policies={{ approle_cli_parameters.token_policies }}
       bind_secret_id={{ approle_cli_parameters.bind_secret_id }}
-      token_ttl={{ approle_token_ttl }}
-      token_max_ttl={{ approle_token_max_ttl }}
-      token_explicit_max_ttl={{ approle_token_explicit_max_ttl }}
-      token_type={{ approle_token_type }}
-      secret_id_ttl={{ approle_secret_id_ttl }}
-      secret_id_num_uses={{ approle_secret_id_num_uses }}
+      token_ttl={{ approle_cli_parameters.token_ttl }}
+      token_max_ttl={{ approle_cli_parameters.token_max_ttl }}
+      token_explicit_max_ttl={{ approle_cli_parameters.token_explicit_max_ttl }}
+      token_type={{ approle_cli_parameters.token_type }}
+      secret_id_ttl={{ approle_cli_parameters.secret_id_ttl }}
+      secret_id_num_uses={{ approle_cli_parameters.secret_id_num_uses }}
       {{ ('secret_id_bound_cidrs=' ~ approle_cli_parameters.secret_id_bound_cidrs ~
           ' token_bound_cidrs=' ~ approle_cli_parameters.token_bound_cidrs)
          if (approle_cli_parameters.secret_id_bound_cidrs | length > 0) else '' }}
@@ -96,7 +81,7 @@
     - >-
       (live.secret_id_ttl | default(0) | int != desired_secret_id_ttl_s | int)
       or (live.secret_id_num_uses | default(0) | int
-          != approle_secret_id_num_uses | int)
+          != approle_cli_parameters.secret_id_num_uses | int)
       or (live.token_ttl | default(0) | int != desired_token_ttl_s | int)
       or (live.token_max_ttl | default(0) | int != desired_token_max_ttl_s | int)
       or (token_explicit_max_ttl_drift | bool)
