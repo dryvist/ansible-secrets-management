@@ -28,6 +28,8 @@
          | default(openbao_approle_secret_id_num_uses_overrides[item.0.name]
                    if item.0.name in openbao_approle_secret_id_num_uses_overrides
                    else openbao_approle_secret_id_num_uses) }}
+    approle_bind_secret_id: >-
+      {{ item.0.bind_secret_id | default(openbao_approle_bind_secret_id) | bool }}
     approle_token_ttl: "{{ item.0.token_ttl | default(openbao_approle_token_ttl) }}"
     approle_token_max_ttl: "{{ item.0.token_max_ttl | default(openbao_approle_token_max_ttl) }}"
     live: "{{ (item.1.stdout | default('{}') | from_json).data | default({}) }}"
@@ -71,6 +73,7 @@
     cmd: >-
       bao write auth/approle/role/{{ item.0.name }}
       token_policies={{ (item.0.token_policies | default([item.0.policy])) | join(',') }}
+      bind_secret_id={{ approle_bind_secret_id | string | lower }}
       token_ttl={{ approle_token_ttl }}
       token_max_ttl={{ approle_token_max_ttl }}
       token_explicit_max_ttl={{ approle_token_explicit_max_ttl }}

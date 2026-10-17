@@ -38,7 +38,6 @@ class RetirementGrants(unittest.TestCase):
             "auth/approle/role/open-llm-workstation",
             "auth/approle/role/github-agents",
             "auth/terrakube/role/terrakube-tofu-github-*",
-            "sys/policies/acl/terrakube-tofu-github-*",
             "sys/policies/acl/github-agents",
             "github-agents/permissionset/agents-write",
         })
