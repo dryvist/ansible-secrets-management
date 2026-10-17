@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.23.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.22.0...v0.23.0) (2026-10-17)
+
+
+### Features
+
+* **openbao:** let the telemetry identity mint the read map ([#188](https://github.com/dryvist/ansible-secrets-management/issues/188)) ([f3c9416](https://github.com/dryvist/ansible-secrets-management/commit/f3c94160d96266e44bfca09f11ffcf471db0ff65))
+
 ## [0.22.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.21.0...v0.22.0) (2026-10-16)
 
 
