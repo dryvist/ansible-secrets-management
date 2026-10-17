@@ -1,21 +1,14 @@
 {{ ansible_managed | comment }}
 # github-exporter — the CI-metrics exporter's standing identity (github_exporter
-# role, prometheus host). Mints ONLY the exporter-tier permission sets, whose
-# stored map is actions:read + administration:read and nothing else (the
-# permission-set token path ignores request bodies at plugin v2.3.2, so a
-# holder cannot widen the stored scope).
-#
-# This tier exists so the exporter holds no personal access token. A GitHub
-# App installation token expires in about an hour, so the capability to mint
-# one has to be standing; making it an AppRole makes it revocable, audited,
-# and scoped to exactly the two read-only permissions the exporter's
-# collectors need.
+# role, prometheus host). Mints the exporter-tier permission sets, plus
+# read-only tokens on the everyday mount for any org where that App is
+# installed, limited to the telemetry collector's pinned permission map.
 #
 # The raw {{ openbao_github_mount }}/token endpoint, the *-full-automation
 # admin sets, the read-* sets, the runner set, and the engine's config/* +
-# permissionset/* administration paths are all absent: a leaked exporter
-# secret-zero can read workflow run/job/runner metadata and nothing else — no
-# repository content, no write of any kind.
+# permissionset/* administration paths are absent: a leaked exporter
+# secret-zero can read CI metadata (actions, checks, statuses, pull requests,
+# repository metadata) and nothing else: no repository content, no write.
 #
 # `read` is here alongside create/update for the same reason as
 # github-runner-policy.hcl.j2: the OpenBao Agent's template engine issues a
@@ -28,3 +21,16 @@ path "{{ permission_set.mount }}/token/{{ permission_set.name }}" {
 }
 
 {% endfor %}
+
+path "{{ openbao_github_everyday_mount }}/token" {
+  capabilities = ["create", "update"]
+  required_parameters = ["org_name", "permissions"]
+  allowed_parameters = {
+    "org_name" = []
+    "permissions" = [{ {% for name, level in openbao_github_telemetry_permissions | dictsort %}"{{ name }}" = "{{ level }}"{{ ", " if not loop.last else "" }}{% endfor %} }]
+  }
+  denied_parameters = {
+    "installation_id" = []
+    "repositories" = []
+  }
+}

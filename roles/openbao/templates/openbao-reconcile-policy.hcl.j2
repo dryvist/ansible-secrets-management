@@ -51,6 +51,9 @@ path "sys/policies/acl/{{ policy_name }}" {
   capabilities = ["read", "delete"]
 }
 {% endfor %}
+path "sys/policies/acl/{{ openbao_retired_terrakube_prefix }}*" {
+  capabilities = ["read", "delete"]
+}
 # Listing is read-only and makes drift visible without granting a write.
 path "sys/policies/acl" {
   capabilities = ["list"]
@@ -81,6 +84,14 @@ path "auth/approle/role/{{ approle_name }}" {
 # the enumerate-by-name design above means such a role is otherwise invisible
 # to every future reconcile. Read-only, same reasoning as the policy list line.
 path "auth/approle/role" {
+  capabilities = ["list"]
+}
+
+# Retired Terrakube JWT roles, by retired prefix only.
+path "auth/{{ openbao_terrakube_jwt_auth_path }}/role/{{ openbao_retired_terrakube_prefix }}*" {
+  capabilities = ["read", "delete"]
+}
+path "auth/{{ openbao_terrakube_jwt_auth_path }}/role" {
   capabilities = ["list"]
 }
 

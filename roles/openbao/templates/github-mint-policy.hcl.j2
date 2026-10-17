@@ -1,11 +1,7 @@
 {{ ansible_managed | comment }}
-# BASE CAPABILITY policy `github-mint` — actor-agnostic, mint-only. Grants ONLY
-# the READ-tier GitHub App permission sets (ephemeral installation tokens) so a
-# run's API reads are attributed to a per-run token, not a standing PAT. The
-# admin-tier *-full-automation sets (installation-wide, full App ceiling) and
-# the engine's config/* + permissionset/* administration paths are ABSENT. A
-# raw token grant allows owner/repository selection while pinning the same
-# fixed read map as the read sets.
+# BASE CAPABILITY policy `github-mint` — actor-agnostic, mint-only. Grants a raw
+# token for reads with a fixed map. Admin-tier *-full-automation sets and the
+# engine's config/* + permissionset/* administration paths are ABSENT.
 # Per-repo WRITE minting is the github-write identity's policy alone; an estate
 # identity that needs repo write gets its own parameter-pinned grant, never
 # this leaf widened. The publish tier is rejected here for that reason: its

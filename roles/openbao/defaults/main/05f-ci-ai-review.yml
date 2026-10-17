@@ -1,0 +1,18 @@
+---
+# The central AI review workflow's OIDC identity. The enterprise_id claim
+# admits every organization in the configured GitHub enterprise.
+openbao_ci_ai_review_policy_name: ci-ai-review
+openbao_ci_ai_review_job_workflow_ref: >-
+  JacobPEvans/.github-ai/.github/workflows/ai-review.yml@refs/tags/v1
+openbao_ci_ai_review_enterprise_id: >-
+  {{ openbao_platform_env['OPENBAO_GITHUB_ENTERPRISE_ID'] | default('', true) }}
+openbao_ci_ai_review_audience: openbao
+openbao_ci_ai_review_runner_environment: self-hosted
+openbao_ci_ai_review_token_ttl: 5m
+openbao_ci_ai_review_token_max_ttl: 10m
+
+# The router base URL is non-secret configuration. Promote the existing
+# converge value into its own config leaf for the OIDC role to read.
+openbao_ci_ai_review_config_path: ci-ai-review
+openbao_promoted_config_values: >-
+  {{ {openbao_ci_ai_review_config_path: {'base_url': 'LLM_ROUTER_BASE_URL'}} }}

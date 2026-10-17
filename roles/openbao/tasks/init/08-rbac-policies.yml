@@ -1,7 +1,4 @@
 ---
-- name: Validate the extra everyday GitHub installations
-  ansible.builtin.import_tasks: 05a-github-extra-installation-checks.yml
-
 # Each Terrakube workspace policy references its workspace BY LIST INDEX
 # (openbao_terrakube_workspaces[N]) while carrying the workspace's name in its
 # own `name`. Nothing structural keeps the two in step: inserting a workspace

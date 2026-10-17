@@ -72,6 +72,13 @@ openbao_github_runner_permissions:
 openbao_github_exporter_permissions:
   actions: read
   administration: read
+# Must equal the telemetry collector's GitHub token login body.
+openbao_github_telemetry_permissions:
+  actions: read
+  checks: read
+  metadata: read
+  pull_requests: read
+  statuses: read
 # Publish tier: the ONE set that both WRITES and is repository-scoped. The
 # scope lives in the set itself — installation_id, the repository list and the
 # permission map are all stored server-side, and the permission-set token path
@@ -178,26 +185,11 @@ openbao_github_base_permission_sets:
     tier: exporter
     installation_id: "{{ openbao_github_dryvist_installation_id }}"
     permissions: "{{ openbao_github_exporter_permissions }}"
-# Further organisations that get an <owner>-repo-create set, same
-# administration:write map as dryvist's. Comma-separated owner=installation_id
-# pairs from the platform env; unset yields no extra sets.
-openbao_github_repo_create_installations: >-
-  {{ dict((openbao_platform_env['OPENBAO_GITHUB_REPO_CREATE_INSTALLATION_IDS']
-           | default('', true)).split(',') | map('trim') | reject('equalto', '')
-          | map('split', '=') | list) }}
-openbao_github_org_repo_create_permission_sets: >-
-  {{ dict(openbao_github_repo_create_installations.keys() | map('regex_replace', '$', '-repo-create')
-          | zip(openbao_github_repo_create_installations.values()))
-     | dict2items(key_name='name', value_name='installation_id')
-     | map('combine', {'tier': 'repo-create',
-                       'permissions': openbao_github_repo_create_permissions})
-     | list }}
 # Full set list = the static base above plus repository-scoped tiers, which
 # exist only when their repository lists are configured.
 # Sets on the admin mount only; 05-github-engine.yml reconciles exactly these.
 openbao_github_admin_permission_sets: >-
   {{ openbao_github_base_permission_sets
-     + openbao_github_org_repo_create_permission_sets
      + openbao_github_docs_publisher_permission_sets
      + openbao_github_ci_resolver_permission_sets
      + openbao_github_router_snapshot_permission_sets }}

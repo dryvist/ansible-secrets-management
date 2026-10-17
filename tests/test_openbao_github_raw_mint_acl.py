@@ -23,18 +23,31 @@ DEFAULTS = yaml.safe_load(
 READ = DEFAULTS["openbao_github_read_permissions"]
 REPO_CREATE = DEFAULTS["openbao_github_repo_create_permissions"]
 WRITE = {"contents": "write", "pull_requests": "write"}
+TELEMETRY = {
+    "actions": "read",
+    "checks": "read",
+    "metadata": "read",
+    "pull_requests": "read",
+    "statuses": "read",
+}
 POLICIES = {
     "github-read": "github-read-policy.hcl.j2",
     "github-mint": "github-mint-policy.hcl.j2",
     "github-write": "github-write-policy.hcl.j2",
     "github-repo-create": "github-repo-create-policy.hcl.j2",
+    "github-org-admin": "github-org-admin-policy.hcl.j2",
     "github-admin": "github-admin-policy.hcl.j2",
+    "github-exporter": "github-exporter-policy.hcl.j2",
 }
+EXPORTER_SETS = [
+    {"mount": "github-admin", "name": "exporter-dryvist", "tier": "exporter"},
+]
 LEGACY_SETS = [
     {"mount": "github", "name": "read-legacy-a-all", "tier": "read"},
     {"mount": "github", "name": "read-legacy-b-all", "tier": "read"},
     {"mount": "github-admin", "name": "repo-create-legacy", "tier": "repo-create"},
     {"mount": "github-admin", "name": "full-automation-legacy", "tier": "admin"},
+    {"mount": "github-admin", "name": "dryvist-org-admin", "tier": "org-admin"},
 ]
 
 
@@ -49,9 +62,22 @@ def _render_policies():
         "openbao_github_permission_sets": LEGACY_SETS,
         "openbao_github_read_permissions": READ,
         "openbao_github_repo_create_permissions": REPO_CREATE,
+        "openbao_github_org_admin_permissions": DEFAULTS[
+            "openbao_github_org_admin_permissions"
+        ],
+        "openbao_github_telemetry_permissions": DEFAULTS[
+            "openbao_github_telemetry_permissions"
+        ],
     }
     return {
-        policy: environment.get_template(template).render(**values)
+        policy: environment.get_template(template).render(
+            **{
+                **values,
+                "openbao_github_permission_sets": (
+                    EXPORTER_SETS if policy == "github-exporter" else LEGACY_SETS
+                ),
+            }
+        )
         for policy, template in POLICIES.items()
     }
 
@@ -153,6 +179,18 @@ def minter():
             assert status == 200, (name, body)
             tokens[name] = json.loads(body)["auth"]["client_token"]
 
+        status, body = _call(
+            base,
+            "root",
+            "POST",
+            "auth/token/create",
+            {"policies": ["github-org-admin", "github-repo-create"]},
+        )
+        assert status == 200, body
+        tokens["github-org-admin+github-repo-create"] = json.loads(body)["auth"][
+            "client_token"
+        ]
+
         yield lambda policy, method, path, body=None: _call(
             base, tokens[policy], method, path, body
         )
@@ -163,6 +201,7 @@ def minter():
 
 def test_rendered_raw_grants_are_owner_neutral_and_parameter_pinned():
     policies = _render_policies()
+    assert DEFAULTS["openbao_github_telemetry_permissions"] == TELEMETRY
     for name in ("github-read", "github-mint"):
         stanza = _raw(policies[name], "github/token")
         _assert_installation_id_denied(stanza)
@@ -183,6 +222,12 @@ def test_rendered_raw_grants_are_owner_neutral_and_parameter_pinned():
     assert '"repositories" = []' in full_automation
     assert '"permissions"' not in full_automation
 
+    org_admin = _raw(policies["github-org-admin"], "github-admin/token")
+    _assert_installation_id_denied(org_admin)
+    assert 'required_parameters = ["org_name", "permissions"]' in org_admin
+    assert _hcl_map(DEFAULTS["openbao_github_org_admin_permissions"]) in org_admin
+    assert '"repositories" = []' not in org_admin
+
     # The write grant keeps installation_id until the legacy helper is removed.
     write = _raw(policies["github-write"], "github/token")
     assert 'required_parameters = ["repositories"]' in write
@@ -199,6 +244,24 @@ def test_rendered_raw_grants_are_owner_neutral_and_parameter_pinned():
     ):
         stanza = _raw(policies[policy], raw_path)
         assert not any(item["name"] in stanza for item in LEGACY_SETS)
+
+    exporter_paths = _stanzas(policies["github-exporter"])
+    exporter = _raw(policies["github-exporter"], "github/token")
+    assert "github-admin/token" not in exporter_paths
+    assert re.search(
+        r'capabilities\s*=\s*\["create",\s*"update"\]', exporter
+    )
+    assert 'required_parameters = ["org_name", "permissions"]' in exporter
+    assert re.search(
+        rf'allowed_parameters\s*=\s*\{{\s*"org_name"\s*=\s*\[\s*\]\s*'
+        rf'{re.escape(_hcl_map(TELEMETRY))}\s*\}}',
+        exporter,
+    )
+    assert re.search(
+        r'denied_parameters\s*=\s*\{\s*"installation_id"\s*=\s*\[\s*\]\s*'
+        r'"repositories"\s*=\s*\[\s*\]\s*\}',
+        exporter,
+    )
 
 
 @pytest.mark.parametrize("policy", ["github-read", "github-mint"])
@@ -260,6 +323,27 @@ def test_repo_create_grant_pins_administration_map(minter):
         assert minter("github-repo-create", "POST", "github-admin/token", payload)[0] == 403
 
 
+def test_org_admin_union_preserves_repo_create_selector_and_denies_installation_id(minter):
+    union = "github-org-admin+github-repo-create"
+    assert minter(
+        union,
+        "POST",
+        "github-admin/token",
+        {"org_name": "org-a", "permissions": REPO_CREATE, "repositories": "new-repo"},
+    )[0] == 204
+    assert minter(
+        union,
+        "POST",
+        "github-admin/token",
+        {
+            "org_name": "org-a",
+            "permissions": REPO_CREATE,
+            "repositories": "new-repo",
+            "installation_id": "4242",
+        },
+    )[0] == 403
+
+
 def test_full_automation_uses_app_ceiling_and_rejects_permissions(minter):
     for payload in (
         {"org_name": "org-a"},
@@ -278,3 +362,21 @@ def test_full_automation_uses_app_ceiling_and_rejects_permissions(minter):
         "github-admin/token",
         {"org_name": "org-a", "installation_id": "4242"},
     )[0] == 403
+
+
+def test_exporter_approle_holds_only_the_exporter_policy():
+    approles = yaml.safe_load(
+        (ROOT / "roles" / "openbao" / "defaults" / "main" / "07b-base-approles.yml")
+        .read_text(encoding="utf-8")
+    )
+    exporter = [
+        role
+        for roles in approles.values()
+        if isinstance(roles, list)
+        for role in roles
+        if isinstance(role, dict)
+        and role.get("name") == "{{ openbao_github_exporter_approle_name }}"
+    ]
+    assert len(exporter) == 1
+    assert exporter[0].get("policy") == "{{ openbao_github_exporter_policy_name }}"
+    assert "token_policies" not in exporter[0]

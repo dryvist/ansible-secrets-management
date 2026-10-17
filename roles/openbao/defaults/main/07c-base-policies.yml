@@ -104,6 +104,8 @@ openbao_base_policies_static:
   - name: github-agent-pr-review
     template: github-agent-router-key-policy.hcl.j2
     path: "{{ openbao_kv_mount }}/data/apps/github-actions-pr-review"
+  - name: "{{ openbao_ci_ai_review_policy_name }}"
+    template: ci-ai-review-policy.hcl.j2
   - name: docs-router-snapshot
     template: docs-router-snapshot-policy.hcl.j2
   - name: "{{ openbao_hermes_policy_name }}"
@@ -266,6 +268,8 @@ openbao_credential_publish_apps:
   # The untrusted-tier Qdrant JWT (QDRANT_UNTRUSTED_JWT), minted by
   # ansible-proxmox-ai's qdrant_docker role and merged into this bucket.
   - open-llm
+  # The service-generated API credential used by the fan-control role.
+  - fan-control-write
 
 # Policies whose template emits a `path` stanza only for a configured input.
 # With that input unset the mount they govern is not created either (see

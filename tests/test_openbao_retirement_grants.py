@@ -17,6 +17,8 @@ def grants(retired_roles, retired_policies):
         openbao_ssh_mount="ssh-client-ca", openbao_kv_mounts=[],
         openbao_github_mount="github", openbao_github_app_mounts=[],
         openbao_retired_approles=retired_roles, openbao_retired_policies=retired_policies,
+        openbao_retired_terrakube_prefix="terrakube-tofu-github-",
+        openbao_terrakube_jwt_auth_path="terrakube",
     )
     return {
         path: set(re.findall(r'"([^"]+)"', body))
@@ -33,11 +35,14 @@ class RetirementGrants(unittest.TestCase):
         self.assertEqual(deleted, {
             "auth/approle/role/open-llm-workstation",
             "auth/approle/role/github-agents",
+            "auth/terrakube/role/terrakube-tofu-github-*",
+            "sys/policies/acl/terrakube-tofu-github-*",
             "sys/policies/acl/github-agents",
             "github-agents/permissionset/agents-write",
         })
         for path in deleted:
             self.assertEqual(policy[path], {"read", "delete"})
+        self.assertEqual(policy["auth/terrakube/role"], {"list"})
 
     def test_protected_names_cannot_be_retired(self):
         policy = grants(["ai-admin", "openbao-reconcile"], ["ai-admin", "openbao-reconcile"])

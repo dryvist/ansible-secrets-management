@@ -15,45 +15,16 @@
 #   github-enterprise       human-gated raw-token admin tier
 #   github-enterprise-owner human-gated stored owner token, readable by the admin tiers only
 openbao_github_everyday_mount: github
+# Read tokens come from the raw endpoint by org name (github-read). The one
+# named set remains only for the execution plane's git credential helper until
+# that helper mints by org name; then this list becomes empty.
 openbao_github_everyday_dryvist_installation_id: >-
   {{ openbao_platform_env['OPENBAO_GITHUB_DRYVIST_INSTALLATION_ID'] | default('', true) }}
-openbao_github_everyday_personal_installation_id: >-
-  {{ openbao_platform_env['OPENBAO_GITHUB_PERSONAL_INSTALLATION_ID'] | default('', true) }}
-openbao_github_everyday_extra_read_installations: >-
-  {{ openbao_platform_env['OPENBAO_GITHUB_EXTRA_READ_INSTALLATION_IDS'] | default('', true) }}
-openbao_github_everyday_extra_read_installations_parsed: >-
-  {%- set parsed = namespace(entries=[]) -%}
-  {%- if openbao_github_everyday_extra_read_installations | trim | length > 0 -%}
-  {%- for entry in openbao_github_everyday_extra_read_installations.split(',') | map('trim') -%}
-  {%- set parts = entry.split('=', 1) -%}
-  {%- set installation_id = parts[1] if parts | length > 1 else '' -%}
-  {%- set parsed.entries = parsed.entries + [{
-      'entry': entry,
-      'owner': parts[0],
-      'installation_id': installation_id,
-      'permission_set': {
-        'name': 'read-' ~ (parts[0] | lower) ~ '-all',
-        'tier': 'read',
-        'installation_id': installation_id,
-        'permissions': openbao_github_read_permissions
-      }
-    }] -%}
-  {%- endfor -%}
-  {%- endif -%}
-  {{ parsed.entries }}
-openbao_github_everyday_base_read_permission_sets:
+openbao_github_read_permission_sets:
   - name: read-dryvist-all
     tier: read
     installation_id: "{{ openbao_github_everyday_dryvist_installation_id }}"
     permissions: "{{ openbao_github_read_permissions }}"
-  - name: read-personal-all
-    tier: read
-    installation_id: "{{ openbao_github_everyday_personal_installation_id }}"
-    permissions: "{{ openbao_github_read_permissions }}"
-openbao_github_read_permission_sets: >-
-  {{ openbao_github_everyday_base_read_permission_sets
-     + (openbao_github_everyday_extra_read_installations_parsed
-        | map(attribute='permission_set') | list) }}
 
 # open-llm can mint from the raw endpoint with optional org_name and required
 # repositories, restricted to the exact permission maps below; installation_id

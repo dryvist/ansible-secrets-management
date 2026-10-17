@@ -34,14 +34,12 @@ openbao_terrakube_workspaces:
     # failed with `401 Bad credentials`, which is the failure mode a stored PAT
     # has and an engine-minted token does not.
     #
-    # dryvist-full-automation is the admin-tier set: installation-wide, full App
-    # ceiling. That is the ceiling this workspace already had via the stored
-    # token, so this is not a widening — but it IS wider than the work needs,
-    # because the set carries no permissions map. The narrower fix is a
-    # dedicated permission set scoped to what org configuration actually
-    # touches; that is a follow-up, and it is a change to
-    # openbao_github_permission_sets rather than to this entry.
+    # Keep the existing set grant during the expand/contract migration. The
+    # raw admin endpoint below selects any installed org by name and uses the
+    # App's installed permissions as its ceiling.
     github_mint: [dryvist-full-automation]
+    github_admin_raw: true
+    kv_read: [infrastructure/tofu-github/private-overrides]
   - name: "{{ openbao_terrakube_network_workspace }}"
     # platform/object-storage: that workspace reads the published inventory and
     # the desired-state object out of the store to derive its DNS records and
@@ -91,11 +89,12 @@ openbao_ansible_converge_approle_name: ansible-converge
 # `ansible`. Kept distinct from ansible-converge because the two callers are
 # not equally trusted: see the header of semaphore-policy.hcl.j2.
 openbao_semaphore_policy_name: semaphore
-# All-repo READ sets the unattended Semaphore identity may mint for Ansible checkouts.
+# The execution plane's git credential helper still mints this named set; it
+# moves to the raw org endpoint below, then this list goes.
 openbao_semaphore_github_read_permission_sets:
   - read-dryvist-all
-  - read-jpe-cribl-all
-# The Cribl pack sync requests this exact read-only map on the raw org endpoint.
+# The execution plane and Cribl pack sync use this exact read-only map on the
+# raw org endpoint.
 openbao_semaphore_github_raw_read_permissions:
   contents: read
   metadata: read
@@ -116,7 +115,7 @@ openbao_media_approle_name: media
 openbao_ntfy_policy_name: ntfy
 openbao_ntfy_approle_name: ntfy
 # disclosure-denylist — org-wide GitHub disclosure-gate deny terms, one fixed
-# string per line. GitHub-consumed (dryvist/.github's reusable
+# string per line. GitHub-consumed (JacobPEvans/.github's reusable
 # _disclosure-gate.yml reads it as the org secret DISCLOSURE_DENYLIST, org
 # dryvist, visibility: all), so it lives in secrets-external like
 # slack-webhooks above, not secret/apps. No Ansible converge fetches this
@@ -127,9 +126,9 @@ openbao_disclosure_denylist_mount: secrets-external
 openbao_disclosure_denylist_path: platform/disclosure-denylist
 openbao_disclosure_denylist_field: terms
 openbao_disclosure_denylist_metadata:
-  owner: dryvist/.github
+  owner: JacobPEvans/.github
   reader: "GitHub org secret DISCLOSURE_DENYLIST (org dryvist, visibility: all)"
-  docs: "dryvist/.github _disclosure-gate.yml"
+  docs: "JacobPEvans/.github _disclosure-gate.yml"
   rotation: "manual -- edit the term list directly; no scheduled rotation"
 # Narrow read-only leaf (disclosure-denylist-read-policy.hcl.j2), registered
 # in openbao_base_policies (07c) but deliberately unattached to any AppRole:
