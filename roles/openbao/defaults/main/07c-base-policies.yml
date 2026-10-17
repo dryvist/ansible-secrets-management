@@ -268,6 +268,8 @@ openbao_credential_publish_apps:
   # The untrusted-tier Qdrant JWT (QDRANT_UNTRUSTED_JWT), minted by
   # ansible-proxmox-ai's qdrant_docker role and merged into this bucket.
   - open-llm
+  # The service-generated API credential used by the fan-control role.
+  - fan-control-write
 
 # Policies whose template emits a `path` stanza only for a configured input.
 # With that input unset the mount they govern is not created either (see
