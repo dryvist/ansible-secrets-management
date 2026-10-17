@@ -190,11 +190,11 @@ openbao_base_approles_core:
     policy: "{{ openbao_github_runner_policy_name }}"
     token_ttl: 15m
   # The CI telemetry collector: runner state from its exporter set, and runs,
-  # jobs and pull requests for every owner through the fixed read map.
+  # jobs and pull requests for every owner through the exporter policy's
+  # pinned metadata-only map. No other policy: OpenBao unions parameter
+  # constraints across policies, so a second grant on github/token widens it.
   - name: "{{ openbao_github_exporter_approle_name }}"
-    token_policies:
-      - "{{ openbao_github_exporter_policy_name }}"
-      - "{{ openbao_github_read_policy_name }}"
+    policy: "{{ openbao_github_exporter_policy_name }}"
     token_ttl: 15m
   - name: "{{ openbao_reconcile_approle_name }}"
     policy: "{{ openbao_reconcile_policy_name }}"

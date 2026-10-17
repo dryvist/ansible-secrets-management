@@ -318,3 +318,21 @@ def test_full_automation_uses_app_ceiling_and_rejects_permissions(minter):
         "github-admin/token",
         {"org_name": "org-a", "installation_id": "4242"},
     )[0] == 403
+
+
+def test_exporter_approle_holds_only_the_exporter_policy():
+    approles = yaml.safe_load(
+        (ROOT / "roles" / "openbao" / "defaults" / "main" / "07b-base-approles.yml")
+        .read_text(encoding="utf-8")
+    )
+    exporter = [
+        role
+        for roles in approles.values()
+        if isinstance(roles, list)
+        for role in roles
+        if isinstance(role, dict)
+        and role.get("name") == "{{ openbao_github_exporter_approle_name }}"
+    ]
+    assert len(exporter) == 1
+    assert exporter[0].get("policy") == "{{ openbao_github_exporter_policy_name }}"
+    assert "token_policies" not in exporter[0]
