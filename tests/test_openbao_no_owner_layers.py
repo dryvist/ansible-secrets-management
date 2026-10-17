@@ -1,14 +1,19 @@
 """Prevent per-owner GitHub permission and Terrakube layers from returning."""
 
+import ast
 import re
 from pathlib import Path
 
 import yaml
+from jinja2 import Environment
 
 ROOT = Path(__file__).resolve().parents[1]
 ROLES = ROOT / "roles"
 DEFAULTS = ROLES / "openbao" / "defaults"
 TERRAKUBE = DEFAULTS / "main" / "05c-terrakube-and-remaining-domain-names.yml"
+RETIRED = DEFAULTS / "main" / "07c-approle-undeclared-exceptions.yml"
+RETIRE_TASKS = ROLES / "openbao" / "tasks" / "init" / "09f-retired-terrakube-jwt-roles.yml"
+JWT_TASKS = ROLES / "openbao" / "tasks" / "init" / "09-auth-methods-and-terrakube-jwt.yml"
 
 INSTALLATION_ID_LIST = re.compile(r"OPENBAO_GITHUB_[A-Z_]*INSTALLATION_IDS")
 GENERATED_READ_ALL_NAME = re.compile(
@@ -21,6 +26,14 @@ JINJA_LOOP = re.compile(r"{%-?\s*for\b.*?{%-?\s*endfor\s*-?%}", re.DOTALL)
 
 def _text(path):
     return path.read_text(encoding="utf-8", errors="ignore")
+
+
+def _render_jinja_list(expression, **variables):
+    environment = Environment()
+    environment.filters["regex_replace"] = (
+        lambda value, pattern, replacement: re.sub(pattern, replacement, value)
+    )
+    return ast.literal_eval(environment.from_string(expression).render(**variables))
 
 
 def test_roles_have_no_github_installation_id_lists():
@@ -51,9 +64,28 @@ def test_terrakube_does_not_append_per_owner_github_workspaces():
     )
 
 
-def test_static_tofu_github_workspace_uses_org_anchored_subject_glob():
-    # A plain list, not a template: molecule's verify reads it straight from the file.
-    workspaces = yaml.safe_load(_text(TERRAKUBE))["openbao_terrakube_workspaces"]
+def test_tofu_github_workspace_binds_only_its_own_subject():
+    defaults = yaml.safe_load(_text(TERRAKUBE))
+    workspaces = defaults["openbao_terrakube_workspaces"]
     assert isinstance(workspaces, list)
     (tofu_github,) = [w for w in workspaces if w.get("name") == "tofu-github"]
-    assert tofu_github["bound_subjects_glob"] == ["tofu-github-org-*"]
+    assert not any(key.startswith("bound_subjects") for key in tofu_github)
+    assert "tofu-github-org-" not in _text(TERRAKUBE)
+
+
+def test_terrakube_subject_defaults_and_task_have_no_glob_matching():
+    assert "glob" not in _text(TERRAKUBE).lower()
+    tasks = _text(JWT_TASKS)
+    assert "glob" not in tasks.lower()
+    assert "'bound_claims_type': 'string'" in tasks
+    assert "!= 'string'" in tasks
+
+
+def test_retired_terrakube_prefix_spares_the_shared_tofu_github_identity():
+    prefix = yaml.safe_load(_text(RETIRED))["openbao_retired_terrakube_prefix"]
+    assert prefix == "terrakube-tofu-github-"
+    live = ["terrakube-tofu-github", "terrakube-tofu-github-owner-a", "terrakube-iac-platform"]
+    assert [name for name in live if re.match("^" + re.escape(prefix), name)] == [
+        "terrakube-tofu-github-owner-a"
+    ]
+    assert "openbao_retired_terrakube_prefix | regex_escape" in _text(RETIRE_TASKS)

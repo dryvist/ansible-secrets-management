@@ -145,14 +145,15 @@ services, specific on users."
 ### Terrakube workload identity
 
 The role enables JWT auth at `auth/terrakube` using the internal Terrakube API
-as both OIDC discovery URL and bound issuer. Each fleet workspace in
-`openbao_terrakube_workspaces` has its own `terrakube-<workspace>` role and
-policy. The role binds audience
-`openbao.workload.identity` and the exact subject
-`organization:<openbao_terrakube_organization>:workspace:<workspace>`; a token from one workspace cannot
-select another workspace's policy. Terrakube stores only the non-secret dynamic
-credential controls. Provider credentials remain in their native OpenBao KV or
-secrets-engine paths and are returned through a short-lived OpenBao token.
+as both OIDC discovery URL and bound issuer. Each entry in
+`openbao_terrakube_workspaces` has a `terrakube-<workspace>` role and policy.
+Roles bind audience `openbao.workload.identity` and the exact string subject
+`organization:<openbao_terrakube_organization>:workspace:<workspace>`; a token
+from one workspace cannot select another workspace's policy. The converge
+deletes live roles and policies under `openbao_retired_terrakube_prefix`.
+Terrakube stores only the non-secret dynamic credential controls. Provider
+credentials remain in their native OpenBao KV or secrets-engine paths and are
+returned through a short-lived OpenBao token.
 
 [^config-write]: A capability policy, not an identity — attached to
     `terraform-apply` (OpenTofu), `ansible-converge` (Ansible), and the

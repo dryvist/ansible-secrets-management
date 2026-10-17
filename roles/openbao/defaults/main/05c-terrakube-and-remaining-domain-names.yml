@@ -28,7 +28,6 @@ openbao_terrakube_workspaces:
     # never the plaintext, so the consumer reads it back from OpenBao directly.
     kv_read: [platform/terrakube/main, apps/authelia]
   - name: tofu-github
-    bound_subjects_glob: ['tofu-github-org-*']
     # Mints an installation token per run instead of reading a stored one. The
     # workspace previously read a static GITHUB_TOKEN out of KV
     # (infrastructure/github, on both mounts); that value expired and every plan

@@ -1,0 +1,54 @@
+---
+# Live roles under the retired prefix are removed.
+- name: List existing Terrakube JWT roles
+  ansible.builtin.command:
+    cmd: "bao list -format=json auth/{{ openbao_terrakube_jwt_auth_path }}/role"
+  environment:
+    BAO_ADDR: "{{ openbao_cli_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
+  register: openbao_terrakube_jwt_role_live_list
+  no_log: true
+  changed_when: false
+  check_mode: false
+  failed_when: false
+  when: openbao_bootstrap_token is defined
+
+- name: FAIL -- the Terrakube JWT role listing was denied
+  ansible.builtin.fail:
+    msg: >-
+      `bao list auth/{{ openbao_terrakube_jwt_auth_path }}/role` was denied
+      (403), so retired JWT roles cannot be compared against the live set.
+      The reconcile policy needs `list` on
+      `auth/{{ openbao_terrakube_jwt_auth_path }}/role`.
+  when:
+    - openbao_bootstrap_token is defined
+    - (openbao_terrakube_jwt_role_live_list.rc | default(0)) != 0
+    - openbao_terrakube_jwt_role_live_list.stderr | default('') is search('403')
+
+- name: Resolve the set of Terrakube JWT roles that exist live
+  ansible.builtin.set_fact:
+    openbao_terrakube_jwt_role_live_names: >-
+      {{ (openbao_terrakube_jwt_role_live_list.stdout | default('[]', true) | from_json)
+         if (openbao_terrakube_jwt_role_live_list.rc | default(1)) == 0 else [] }}
+  when: openbao_bootstrap_token is defined
+
+- name: Delete retired Terrakube JWT roles that still exist live
+  ansible.builtin.command:
+    cmd: "bao delete auth/{{ openbao_terrakube_jwt_auth_path }}/role/{{ item }}"
+  environment:
+    BAO_ADDR: "{{ openbao_cli_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
+  loop: >-
+    {{ openbao_terrakube_jwt_role_live_names | default([])
+       | select('match', '^' ~ (openbao_retired_terrakube_prefix | regex_escape)) | list }}
+  no_log: true
+  changed_when: true
+  when: openbao_bootstrap_token is defined
