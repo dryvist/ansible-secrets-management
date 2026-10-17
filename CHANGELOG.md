@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.27.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.26.0...v0.27.0) (2026-10-17)
+
+
+### Features
+
+* **openbao:** add github-runner mount for runner registration by org ([#225](https://github.com/dryvist/ansible-secrets-management/issues/225)) ([79b42b8](https://github.com/dryvist/ansible-secrets-management/commit/79b42b89f9e1a82b2f90959549b60d07a3ef5e85))
+* **openbao:** add tofu-state transit paths to terraform-apply policy ([#218](https://github.com/dryvist/ansible-secrets-management/issues/218)) ([3c0c019](https://github.com/dryvist/ansible-secrets-management/commit/3c0c0195d1330db7d72d0ae96f38be7314995379))
+* **openbao:** add tofu-state transit paths to the ai-admin policy ([#220](https://github.com/dryvist/ansible-secrets-management/issues/220)) ([8d05b4e](https://github.com/dryvist/ansible-secrets-management/commit/8d05b4edc1f5da3cf8c0d8c2b6a9d8fbf273c4bd))
+* **openbao:** add transit paths to the reconcile policy ([#219](https://github.com/dryvist/ansible-secrets-management/issues/219)) ([a98bc52](https://github.com/dryvist/ansible-secrets-management/commit/a98bc529590d62f32b2b38ca348222bb5acee27b))
+* **openbao:** allow terraform-apply to use the tofu-state transit key ([3c0c019](https://github.com/dryvist/ansible-secrets-management/commit/3c0c0195d1330db7d72d0ae96f38be7314995379))
+* **openbao:** one-approval phone unlock for policy sync ([#223](https://github.com/dryvist/ansible-secrets-management/issues/223)) ([40f5fb1](https://github.com/dryvist/ansible-secrets-management/commit/40f5fb18d44c6f7a69b5c3163d574472bc4d834a))
+
+
+### Bug Fixes
+
+* **openbao:** bound reconcile policy and AppRole writes ([#221](https://github.com/dryvist/ansible-secrets-management/issues/221)) ([2f01f1e](https://github.com/dryvist/ansible-secrets-management/commit/2f01f1e63f42e163f263fd46c68bde4bc495d50c))
+* **openbao:** pin reconcile AppRole TTL and use-count parameters ([#222](https://github.com/dryvist/ansible-secrets-management/issues/222)) ([53c861d](https://github.com/dryvist/ansible-secrets-management/commit/53c861d6a0cf77783cd9050821564a198f2c266c))
+
 ## [0.26.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.25.1...v0.26.0) (2026-10-17)
 
 
