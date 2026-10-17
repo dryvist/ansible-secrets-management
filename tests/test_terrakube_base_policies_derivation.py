@@ -27,7 +27,12 @@ BASE_POLICIES_FILE = OPENBAO_DEFAULTS_DIR / "07c-base-policies.yml"
 
 def _workspaces():
     data = yaml.safe_load(WORKSPACES_FILE.read_text(encoding="utf-8"))
-    return data["openbao_terrakube_workspaces"]
+    templar = Templar(loader=DataLoader())
+    templar.available_variables = {
+        "openbao_terrakube_static_workspaces": data["openbao_terrakube_static_workspaces"],
+        "openbao_github_repo_create_installations": {},
+    }
+    return templar.template(trust_as_template(data["openbao_terrakube_workspaces"]))
 
 
 def _derivation_expr():
@@ -38,9 +43,6 @@ def _derivation_expr():
 def _render_derived_entries(workspaces):
     templar = Templar(loader=DataLoader())
     templar.available_variables = {"openbao_terrakube_workspaces": workspaces}
-    # lookup/template resolution is unused by this expression, but set for
-    # parity with how the real task file's Templar is constructed.
-    templar._loader.set_basedir(str(ROOT / "roles" / "openbao"))
     return templar.template(trust_as_template(_derivation_expr()))
 
 
