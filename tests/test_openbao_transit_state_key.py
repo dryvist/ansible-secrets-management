@@ -1,6 +1,7 @@
 """The Transit mount and OpenTofu state key are declared and provisioned once."""
 
 from pathlib import Path
+import re
 import unittest
 
 import yaml
@@ -10,6 +11,11 @@ ROOT = Path(__file__).resolve().parents[1]
 DEFAULTS = ROOT / "roles/openbao/defaults/main/01a-kv-hierarchy.yml"
 INIT = ROOT / "roles/openbao/tasks/init.yml"
 TRANSIT_TASKS = ROOT / "roles/openbao/tasks/init/04c-transit-engine.yml"
+TERRAFORM_APPLY_POLICY = ROOT / "roles/openbao/templates/terraform-apply-policy.hcl.j2"
+POLICY_PATH_BLOCK = re.compile(
+    r'path "([^\"]+)"\s*\{\s*capabilities\s*=\s*\[([^]]+)\]\s*\}',
+    re.MULTILINE,
+)
 
 
 def _task(tasks, name):
@@ -65,6 +71,33 @@ class TransitStateKeyIsDeclared(unittest.TestCase):
         )
         self.assertEqual(task["ansible.builtin.import_tasks"], "init/04c-transit-engine.yml")
         self.assertIn("not (openbao_reconcile_mode | default(false))", task["when"])
+
+    def test_terraform_apply_transit_policy_grants_are_exact(self):
+        template = TERRAFORM_APPLY_POLICY.read_text(encoding="utf-8")
+        grants = []
+        for path, capabilities in POLICY_PATH_BLOCK.findall(template):
+            rendered_path = path.replace(
+                "{{ openbao_transit_mount }}", self.defaults["openbao_transit_mount"]
+            ).replace(
+                "{{ openbao_tofu_state_transit_key }}",
+                self.defaults["openbao_tofu_state_transit_key"],
+            )
+            if rendered_path.startswith(f'{self.defaults["openbao_transit_mount"]}/'):
+                grants.append((path, tuple(re.findall(r'"([^\"]+)"', capabilities))))
+
+        self.assertEqual(
+            grants,
+            [
+                (
+                    "{{ openbao_transit_mount }}/datakey/plaintext/{{ openbao_tofu_state_transit_key }}",
+                    ("update",),
+                ),
+                (
+                    "{{ openbao_transit_mount }}/decrypt/{{ openbao_tofu_state_transit_key }}",
+                    ("update",),
+                ),
+            ],
+        )
 
 
 if __name__ == "__main__":

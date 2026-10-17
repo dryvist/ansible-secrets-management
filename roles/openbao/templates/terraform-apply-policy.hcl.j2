@@ -55,3 +55,12 @@ path "{{ openbao_aws_mount }}/sts/{{ openbao_aws_role_name }}" {
 path "{{ openbao_aws_mount }}/sts/{{ openbao_aws_iac_admin_role_name }}" {
   capabilities = ["read", "update"]
 }
+
+# OpenTofu state encryption needs data-key generation and decryption.
+path "{{ openbao_transit_mount }}/datakey/plaintext/{{ openbao_tofu_state_transit_key }}" {
+  capabilities = ["update"]
+}
+
+path "{{ openbao_transit_mount }}/decrypt/{{ openbao_tofu_state_transit_key }}" {
+  capabilities = ["update"]
+}
