@@ -72,6 +72,14 @@ openbao_github_runner_permissions:
 openbao_github_exporter_permissions:
   actions: read
   administration: read
+# Must equal the telemetry collector's GitHub token login body.
+openbao_github_telemetry_permissions:
+  actions: read
+  checks: read
+  contents: read
+  metadata: read
+  pull_requests: read
+  statuses: read
 # Publish tier: the ONE set that both WRITES and is repository-scoped. The
 # scope lives in the set itself — installation_id, the repository list and the
 # permission map are all stored server-side, and the permission-set token path
