@@ -11,8 +11,9 @@ deploying it is reversible (stop/disable the timer, nothing else changes).
 
 ## Installation
 
-Install the collection with `ansible-galaxy install -r requirements.yml` from the repository
-root. Reference the role by its fully qualified name, `dryvist.secrets_management.openbao_voter_health`.
+Install the collection with `ansible-galaxy install -r requirements.yml --force` from the
+repository root. Reference the role by its fully qualified name,
+`dryvist.secrets_management.openbao_voter_health`.
 
 ## Usage
 

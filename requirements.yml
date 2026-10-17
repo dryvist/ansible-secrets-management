@@ -18,7 +18,7 @@ collections:
   - name: community.hashi_vault
     version: ">=6.0.0"
 
-  # renovate: datasource=git-refs depName=https://github.com/dryvist/homelab-contracts.git currentValue=v5.11.0
+  # Follow homelab-contracts' major tag; breaking changes ship as v6.
   - name: https://github.com/dryvist/homelab-contracts.git#/ansible/
     type: git
-    version: e9dd60b9ff318092ea436d66ef007caeb5ce19e3
+    version: v5

@@ -66,9 +66,8 @@ jobs:
             netaddr \
             ansible-lint
 
-      # Cache Galaxy content keyed on requirements.yml. On a hit the collections
-      # (and any roles) are already present, so the install below is skipped;
-      # on a miss (requirements.yml changed) it runs and repopulates the cache.
+      # Exact cache hits force-refresh only the floating homelab-contracts v5
+      # tag; misses run the forced install for the full requirement set.
       # The key matches the shared Ansible CI and the Role tests job.
       - name: Cache Ansible Galaxy content
         id: galaxy-cache
@@ -82,6 +81,14 @@ jobs:
       - name: Install Ansible collections
         if: steps.galaxy-cache.outputs.cache-hit != 'true'
         run: ansible-galaxy install -r requirements.yml
+
+      - name: Refresh homelab-contracts major tag
+        if: steps.galaxy-cache.outputs.cache-hit == 'true'
+        run: >-
+          ansible-galaxy collection install
+          'git+https://github.com/dryvist/homelab-contracts.git#/ansible/,v5' --force
+        env:
+          ANSIBLE_GALAXY_SERVER_TIMEOUT: "60"
 
       - name: Run molecule tests
         env:
