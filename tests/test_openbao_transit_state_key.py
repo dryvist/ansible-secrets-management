@@ -53,7 +53,6 @@ class TransitStateKeyIsDeclared(unittest.TestCase):
             "type": "aes256-gcm96",
             "exportable": False,
             "allow_plaintext_backup": False,
-            "deletion_allowed": False,
         })
         self.assertIn("openbao_tofu_state_transit_key_check.status == 404", create["when"])
         self.assertTrue(check["no_log"])
