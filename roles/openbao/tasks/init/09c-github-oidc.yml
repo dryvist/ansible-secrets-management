@@ -234,3 +234,80 @@
          != (_uicheck_token_ttl_s | int)
       or (_uicheck_role_live.token_max_ttl | default(0) | int)
          != (_uicheck_token_max_ttl_s | int)
+
+# The required org-wide AI review runs from one stable reusable workflow, so
+# bind that workflow identity rather than each caller repository. The owner
+# list limits callers to organizations with a managed GitHub installation;
+# runner_environment rejects jobs outside the self-hosted runner pool. The
+# audience and exact ref stop tokens minted for another workload or workflow
+# revision from being reused here.
+- name: Read the ci-ai-review OIDC role
+  ansible.builtin.command:
+    cmd: >-
+      bao read -format=json
+      auth/{{ openbao_github_oidc_auth_path }}/role/{{ openbao_ci_ai_review_policy_name }}
+  environment:
+    BAO_ADDR: "{{ openbao_cli_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
+  register: openbao_github_oidc_ci_ai_review_role_current
+  no_log: true
+  changed_when: false
+  check_mode: false
+  failed_when: false
+  when: openbao_bootstrap_token is defined
+
+- name: Reconcile the ci-ai-review OIDC role
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
+    _ci_ai_review_role_claims:
+      job_workflow_ref: "{{ openbao_ci_ai_review_job_workflow_ref }}"
+      repository_owner: "{{ openbao_ci_ai_review_repository_owners }}"
+      runner_environment: "{{ openbao_ci_ai_review_runner_environment }}"
+    _ci_ai_review_role_live: >-
+      {{ (openbao_github_oidc_ci_ai_review_role_current.stdout | default('{}') | from_json).data
+         | default({}, true) }}
+    _ci_ai_review_token_ttl_s: "{{ openbao_ci_ai_review_token_ttl | community.general.to_seconds | int }}"
+    _ci_ai_review_token_max_ttl_s: >-
+      {{ openbao_ci_ai_review_token_max_ttl | community.general.to_seconds | int }}
+  ansible.builtin.command:
+    cmd: >-
+      bao write
+      auth/{{ openbao_github_oidc_auth_path }}/role/{{ openbao_ci_ai_review_policy_name }} -
+    stdin: >-
+      {{ {'role_type': 'jwt',
+            'user_claim': 'job_workflow_ref',
+            'bound_audiences': [openbao_ci_ai_review_audience],
+            'bound_claims': _ci_ai_review_role_claims,
+            'bound_claims_type': 'string',
+            'token_policies': [openbao_ci_ai_review_policy_name],
+            'token_ttl': openbao_ci_ai_review_token_ttl,
+            'token_max_ttl': openbao_ci_ai_review_token_max_ttl} | to_json }}
+  environment:
+    BAO_ADDR: "{{ openbao_cli_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  no_log: true
+  changed_when: true
+  when:
+    - openbao_bootstrap_token is defined
+    - >-
+      (openbao_github_oidc_ci_ai_review_role_current.rc | default(1)) != 0
+      or (_ci_ai_review_role_live.bound_audiences | default([]))
+         != [openbao_ci_ai_review_audience]
+      or (_ci_ai_review_role_live.bound_claims | default({}, true))
+         != _ci_ai_review_role_claims
+      or (_ci_ai_review_role_live.bound_claims_type | default(''))
+         != 'string'
+      or (_ci_ai_review_role_live.user_claim | default(''))
+         != 'job_workflow_ref'
+      or (_ci_ai_review_role_live.token_policies | default([]) | sort)
+         != [openbao_ci_ai_review_policy_name]
+      or (_ci_ai_review_role_live.token_ttl | default(0) | int)
+         != (_ci_ai_review_token_ttl_s | int)
+      or (_ci_ai_review_role_live.token_max_ttl | default(0) | int)
+         != (_ci_ai_review_token_max_ttl_s | int)
