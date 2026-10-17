@@ -45,8 +45,8 @@ def test_ci_ai_review_role_uses_the_required_bounds_and_enterprise_claim():
     assert defaults["openbao_ci_ai_review_job_workflow_ref"] == (
         "JacobPEvans/.github-ai/.github/workflows/ai-review.yml@refs/tags/v1"
     )
-    assert defaults["openbao_ci_ai_review_enterprise"] == (
-        "{{ openbao_platform_env['OPENBAO_GITHUB_ENTERPRISE_SLUG'] | default('', true) }}"
+    assert defaults["openbao_ci_ai_review_enterprise_id"] == (
+        "{{ openbao_platform_env['OPENBAO_GITHUB_ENTERPRISE_ID'] | default('', true) }}"
     )
     assert defaults["openbao_ci_ai_review_audience"] == "openbao"
     assert defaults["openbao_ci_ai_review_runner_environment"] == "self-hosted"
@@ -56,7 +56,7 @@ def test_ci_ai_review_role_uses_the_required_bounds_and_enterprise_claim():
     claims = write["vars"]["_ci_ai_review_role_claims"]
     assert claims == {
         "job_workflow_ref": "{{ openbao_ci_ai_review_job_workflow_ref }}",
-        "enterprise": "{{ openbao_ci_ai_review_enterprise }}",
+        "enterprise_id": "{{ openbao_ci_ai_review_enterprise_id }}",
         "runner_environment": "{{ openbao_ci_ai_review_runner_environment }}",
     }
     payload = write["ansible.builtin.command"]["stdin"]
@@ -67,14 +67,14 @@ def test_ci_ai_review_role_uses_the_required_bounds_and_enterprise_claim():
 
     read = _find_task(tasks, "Read the ci-ai-review OIDC role")
     skip = _find_task(
-        tasks, "Skip the ci-ai-review OIDC role without an enterprise slug"
+        tasks, "Skip the ci-ai-review OIDC role without an enterprise ID"
     )
     assert read is not None
     assert skip is not None
-    assert "openbao_ci_ai_review_enterprise | length > 0" in read["when"]
-    assert "openbao_ci_ai_review_enterprise | length > 0" in write["when"]
-    assert skip["when"] == "openbao_ci_ai_review_enterprise | length == 0"
-    assert "OPENBAO_GITHUB_ENTERPRISE_SLUG is empty" in skip[
+    assert "openbao_ci_ai_review_enterprise_id | length > 0" in read["when"]
+    assert "openbao_ci_ai_review_enterprise_id | length > 0" in write["when"]
+    assert skip["when"] == "openbao_ci_ai_review_enterprise_id | length == 0"
+    assert "OPENBAO_GITHUB_ENTERPRISE_ID is empty" in skip[
         "ansible.builtin.debug"
     ]["msg"]
 
