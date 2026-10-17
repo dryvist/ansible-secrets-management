@@ -48,8 +48,9 @@
           ansible.builtin.set_fact:
             authelia_oidc_client_secret_hashes: >-
               {{ dict(['homarr', 'langfuse', 'phoenix', 'semaphore', 'terrakube_dex',
-                       'grafana', 'litellm', 'bao_elevate_trusted']
-                      | zip([_authelia_test_client_secret_hash] * 8)) }}
+                       'grafana', 'litellm', 'bao_elevate_trusted',
+                       'bao_elevate_policy_sync']
+                      | zip([_authelia_test_client_secret_hash] * 9)) }}
           no_log: true
 
         - name: Create valid users database and referenced files
