@@ -27,6 +27,16 @@ path "{{ permission_set.mount }}/token/{{ permission_set.name }}" {
 }
 
 {% endfor %}
+{% if openbao_github_runner_mount in (openbao_github_app_mounts | map(attribute='mount') | list) %}
+path "{{ openbao_github_runner_mount }}/token" {
+  capabilities = ["create", "update"]
+  required_parameters = ["org_name"]
+  allowed_parameters = {
+    "org_name" = []
+  }
+}
+
+{% endif %}
 # The e2e suite's Splunk credentials, one app bucket and nothing beside it.
 # KV because no engine mints a Splunk login; the values are promoted there by
 # openbao_promoted_app_secrets. The per-host agent renders them into an env
