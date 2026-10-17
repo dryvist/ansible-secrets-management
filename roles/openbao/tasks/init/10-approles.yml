@@ -119,9 +119,10 @@
 # Runs on the controller (openbao_cli_host, resolved in init/02): measured on
 # the target at 328s, one module execution per role. Same CLI, same
 # rc/stderr, so the denied-vs-absent classifier below reads unchanged.
+# role-id answers "No value found" for an absent role.
 - name: Check whether each AppRole already exists
   ansible.builtin.command:
-    cmd: "bao read -format=json auth/approle/role/{{ item.name }}"
+    cmd: "bao read -format=json auth/approle/role/{{ item.name }}/role-id"
   environment:
     BAO_ADDR: "{{ openbao_cli_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
