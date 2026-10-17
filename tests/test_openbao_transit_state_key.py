@@ -14,6 +14,7 @@ RECONCILE_INIT = ROOT / "roles/openbao/tasks/init/02-initialize-cluster.yml"
 MOUNT_TASKS = ROOT / "roles/openbao/tasks/init/03-kv-mounts-and-seed-secrets.yml"
 TRANSIT_TASKS = ROOT / "roles/openbao/tasks/init/04c-transit-engine.yml"
 TERRAFORM_APPLY_POLICY = ROOT / "roles/openbao/templates/terraform-apply-policy.hcl.j2"
+AI_ADMIN_POLICY = ROOT / "roles/openbao/templates/ai-admin-policy.hcl.j2"
 POLICY_PATH_BLOCK = re.compile(
     r'path "([^\"]+)"\s*\{\s*capabilities\s*=\s*\[([^]]+)\]\s*\}',
     re.MULTILINE,
@@ -110,6 +111,33 @@ class TransitStateKeyIsDeclared(unittest.TestCase):
 
     def test_terraform_apply_transit_policy_grants_are_exact(self):
         template = TERRAFORM_APPLY_POLICY.read_text(encoding="utf-8")
+        grants = []
+        for path, capabilities in POLICY_PATH_BLOCK.findall(template):
+            rendered_path = path.replace(
+                "{{ openbao_transit_mount }}", self.defaults["openbao_transit_mount"]
+            ).replace(
+                "{{ openbao_tofu_state_transit_key }}",
+                self.defaults["openbao_tofu_state_transit_key"],
+            )
+            if rendered_path.startswith(f'{self.defaults["openbao_transit_mount"]}/'):
+                grants.append((path, tuple(re.findall(r'"([^\"]+)"', capabilities))))
+
+        self.assertEqual(
+            grants,
+            [
+                (
+                    "{{ openbao_transit_mount }}/datakey/plaintext/{{ openbao_tofu_state_transit_key }}",
+                    ("update",),
+                ),
+                (
+                    "{{ openbao_transit_mount }}/decrypt/{{ openbao_tofu_state_transit_key }}",
+                    ("update",),
+                ),
+            ],
+        )
+
+    def test_ai_admin_transit_policy_grants_are_exact(self):
+        template = AI_ADMIN_POLICY.read_text(encoding="utf-8")
         grants = []
         for path, capabilities in POLICY_PATH_BLOCK.findall(template):
             rendered_path = path.replace(
