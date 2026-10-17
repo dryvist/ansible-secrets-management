@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.25.1](https://github.com/dryvist/ansible-secrets-management/compare/v0.25.0...v0.25.1) (2026-10-17)
+
+
+### Bug Fixes
+
+* **authelia:** size the token-endpoint rate limit for device-code polling ([f9e8776](https://github.com/dryvist/ansible-secrets-management/commit/f9e8776b7a28091d18a2ac25fa3e09002b9eb95f))
+* **authelia:** size the token-endpoint rate limit for device-code polling ([#210](https://github.com/dryvist/ansible-secrets-management/issues/210)) ([fe1ecc2](https://github.com/dryvist/ansible-secrets-management/commit/fe1ecc2d09c61b192d77c81a1c34c45aca1078c8))
+
 ## [0.25.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.24.0...v0.25.0) (2026-10-17)
 
 
