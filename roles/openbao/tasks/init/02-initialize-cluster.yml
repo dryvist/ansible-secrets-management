@@ -260,7 +260,7 @@
       {{ openbao_policies
          if not (openbao_reconcile_mode | default(false))
          else (openbao_policies
-               | rejectattr('name', 'in', openbao_reconcile_excluded_policies)
+               | rejectattr('name', 'in', openbao_reconcile_policy_excluded_names)
                | list) }}
     openbao_manageable_approles: >-
       {{ openbao_approles

@@ -15,10 +15,9 @@
 - name: Reconcile AppRole TTL and token bounds on existing AppRoles
   vars:
     ansible_become: "{{ openbao_cli_become }}"
+    approle_cli_parameters: "{{ openbao_approle_cli_parameters[item.0.name] }}"
     approle_cidr_class: "{{ openbao_approle_cidr_class_map[item.0.name] }}"
-    approle_bound_cidrs: >-
-      {{ item.0.secret_id_bound_cidrs | default('', true)
-         or openbao_approle_cidr_classes[approle_cidr_class] }}
+    approle_bound_cidrs: "{{ approle_cli_parameters.secret_id_bound_cidrs }}"
     approle_secret_id_ttl: >-
       {{ item.0.secret_id_ttl
          | default(openbao_approle_secret_id_ttl_overrides[item.0.name]
@@ -70,16 +69,17 @@
   ansible.builtin.command:
     cmd: >-
       bao write auth/approle/role/{{ item.0.name }}
-      token_policies={{ (item.0.token_policies | default([item.0.policy])) | join(',') }}
+      token_policies={{ approle_cli_parameters.token_policies }}
+      bind_secret_id={{ approle_cli_parameters.bind_secret_id }}
       token_ttl={{ approle_token_ttl }}
       token_max_ttl={{ approle_token_max_ttl }}
       token_explicit_max_ttl={{ approle_token_explicit_max_ttl }}
       token_type={{ approle_token_type }}
       secret_id_ttl={{ approle_secret_id_ttl }}
       secret_id_num_uses={{ approle_secret_id_num_uses }}
-      {{ ('secret_id_bound_cidrs=' ~ approle_bound_cidrs ~
-          ' token_bound_cidrs=' ~ approle_bound_cidrs)
-         if (approle_bound_cidrs | length > 0) else '' }}
+      {{ ('secret_id_bound_cidrs=' ~ approle_cli_parameters.secret_id_bound_cidrs ~
+          ' token_bound_cidrs=' ~ approle_cli_parameters.token_bound_cidrs)
+         if (approle_cli_parameters.secret_id_bound_cidrs | length > 0) else '' }}
   environment:
     BAO_ADDR: "{{ openbao_cli_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"

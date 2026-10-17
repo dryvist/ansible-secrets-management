@@ -25,14 +25,16 @@ FIXTURE_ROSTER = {
 }
 SHARED_POLICY_TEMPLATES = (
     "local-llm-policy.hcl.j2",
-    "openbao-reconcile-policy.hcl.j2",
 )
+RECONCILE_POLICY_TEMPLATE = "openbao-reconcile-policy.hcl.j2"
 OWNER_CONSUMER_TEMPLATES = (
     "hermes-policy.hcl.j2",
     "hermes-private-agent-policy.hcl.j2",
     "observability-policy.hcl.j2",
 )
-LEGACY_SHARED_TEMPLATES = OWNER_CONSUMER_TEMPLATES + SHARED_POLICY_TEMPLATES
+LEGACY_SHARED_TEMPLATES = (
+    OWNER_CONSUMER_TEMPLATES + SHARED_POLICY_TEMPLATES + (RECONCILE_POLICY_TEMPLATE,)
+)
 # These live-only policies have no local templates. OpenBao's built-in
 # `default` policy is also attached unless token_no_default_policy is true.
 # Treat these policies as granting nothing on ai/mcp in this local audit.
@@ -169,7 +171,7 @@ def _render_owner_wrapper(source, owned_slugs):
 
 
 def _without_reconcile_transit_grants(name, source):
-    if name != "openbao-reconcile-policy.hcl.j2":
+    if name != RECONCILE_POLICY_TEMPLATE:
         return source
     # The transit grants are asserted separately (tests/test_openbao_transit_state_key.py);
     # parity ignores them, comments and blank lines, and compares every other stanza.
@@ -181,7 +183,12 @@ def _without_reconcile_transit_grants(name, source):
         "{{ openbao_transit_mount }}/keys/{{ openbao_tofu_state_transit_key }}",
     ):
         source = re.sub(rf'path\s+"{re.escape(path)}"\s*\{{[^}}]*\}}\s*', "", source)
-    return re.sub(r"\n\s*\n", "\n", source)
+    source = re.sub(
+        r'path\s+"sys/policies/acl/[^" ]*[*+][^" ]*"\s*\{[^}]*\}\s*',
+        "",
+        source,
+    )
+    return re.sub(r"\n\s*\n", "\n", source).strip()
 
 def _stanzas(source):
     return [
@@ -443,6 +450,9 @@ def test_empty_roster_keeps_shared_policy_and_declared_lists_identical_to_develo
 
 
 def test_shared_policies_remain_develop_identical_for_owned_roster():
+    # The reconcile policy is intentionally different now: its writable names
+    # exclude every issuer-mintable and plane-attached policy. The dedicated
+    # rendered ACL test covers that contract.
     values, _, _ = _resolve_lists(FIXTURE_ROSTER)
     for name in SHARED_POLICY_TEMPLATES:
         current = _render_template((TEMPLATES / name).read_text(encoding="utf-8"), values)

@@ -122,8 +122,9 @@
       {{ openbao_retired_policies
          | select('in', openbao_policies_raw.stdout | default('[]', true) | from_json)
          | list
-         + (openbao_policies_raw.stdout | default('[]', true) | from_json
-            | select('match', '^' ~ (openbao_retired_terrakube_prefix | regex_escape)) | list) }}
+         + ([] if (openbao_reconcile_mode | default(false) | bool)
+            else (openbao_policies_raw.stdout | default('[]', true) | from_json
+                  | select('match', '^' ~ (openbao_retired_terrakube_prefix | regex_escape)) | list)) }}
   when:
     - ansible_check_mode
     - openbao_bootstrap_token is defined
@@ -153,8 +154,9 @@
       !=
       (openbao_rendered_policy_map | default({})).get(item.name, '')
 
-# Retired policies (07c-approle-undeclared-exceptions.yml) that are still
-# stored. Needs delete on sys/policies/acl/*; any other identity fails here.
+# Named retired policies (07c-approle-undeclared-exceptions.yml) are deleted
+# during reconcile. Prefix-discovered Terrakube policy cleanup requires a
+# provisioning token because reconcile has no wildcard ACL grant.
 - name: Delete retired RBAC policies that still exist
   ansible.builtin.command:
     cmd: "bao policy delete {{ item }}"
@@ -168,8 +170,9 @@
   loop: >-
     {{ openbao_retired_policies
        | select('in', openbao_policies_raw.stdout | default('[]', true) | from_json) | list
-       + (openbao_policies_raw.stdout | default('[]', true) | from_json
-          | select('match', '^' ~ (openbao_retired_terrakube_prefix | regex_escape)) | list) }}
+       + ([] if (openbao_reconcile_mode | default(false) | bool)
+          else (openbao_policies_raw.stdout | default('[]', true) | from_json
+                | select('match', '^' ~ (openbao_retired_terrakube_prefix | regex_escape)) | list)) }}
   no_log: true
   changed_when: true
   when: openbao_bootstrap_token is defined

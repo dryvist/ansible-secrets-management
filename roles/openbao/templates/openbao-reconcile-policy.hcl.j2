@@ -2,35 +2,26 @@
 # openbao-reconcile — the identity an unattended converge uses to keep this
 # cluster's declared RBAC in step with the repository.
 #
-# It is NOT an admin tier and must never become one. The grants below are
-# enumerated by NAME from the role's own declarations, never wildcarded across
-# sys/policies/acl/*, because a wildcard there is escalation: anything that can
-# write an arbitrary policy can write itself a better one.
+# It is NOT an admin tier. Policy writes are limited to declared names and
+# exclude every policy attached to a role the issuer can mint and to this
+# identity itself. AppRole writes pin the rendered token policies, binding flag,
+# and CIDR bounds; the remaining parameters sent by the role tasks are named
+# explicitly so future parameters stay denied. This keeps reconcile from
+# widening the grants carried by any credential it can obtain or use.
 #
-# Three exclusions are what make that true, and all are load-bearing:
-#
-#   1. The break-glass tiers are excluded. This identity cannot create or
-#      rewrite them, so it can never mint itself break-glass.
-#   2. Its OWN policy is excluded. It cannot widen its own grant.
-#   3. The approle-issuer policy is excluded, and this identity holds NO
-#      secret-id endpoint of its own. Minting a credential for another
-#      identity is a separate power on a separate credential
-#      (approle-issuer-policy.hcl.j2); a leaked reconcile secret_id
-#      reconciles declarations, it does not manufacture credentials.
-#
-# The consequence is deliberate: adding a NEW policy or AppRole name is not a
-# routine converge. The name has to be added to this template first, and that
-# edit only takes effect through a break-glass run, which is a human decision.
-# Routine converges — every change that touches only already-declared names —
-# need no operator and no token in anyone's environment.
+# The policy and AppRole name sets come from role defaults. Routine converges
+# write only names in those sets that satisfy the bounds above; excluded policy
+# content and prefix-discovered retirement cleanup require a provisioning run.
+# No token or operator action is needed for other eligible declared-name changes.
 #
 # If this identity is revoked, provisioning skips cleanly rather than failing;
 # the cluster keeps serving, it just stops reconciling until someone restores it.
 
 {% set breakglass = openbao_reconcile_excluded_policies | default([]) %}
+{% set excluded_policies = openbao_reconcile_policy_excluded_names | default(breakglass) %}
 {% set managed_policies = openbao_policies
      | map(attribute='name')
-     | reject('in', breakglass)
+     | reject('in', excluded_policies)
      | list %}
 {% set managed_approles = openbao_approles
      | rejectattr('manage_secret_id', 'defined')
@@ -39,7 +30,7 @@
      | list %}
 
 # --- Policies this converge owns, by name --------------------------------
-# Excluded and therefore unreachable from here: {{ breakglass | join(', ') }}
+# Excluded and therefore unreachable from here: {{ excluded_policies | join(', ') }}
 {% for policy_name in managed_policies %}
 path "sys/policies/acl/{{ policy_name }}" {
   capabilities = ["create", "read", "update"]
@@ -51,9 +42,6 @@ path "sys/policies/acl/{{ policy_name }}" {
   capabilities = ["read", "delete"]
 }
 {% endfor %}
-path "sys/policies/acl/{{ openbao_retired_terrakube_prefix }}*" {
-  capabilities = ["read", "delete"]
-}
 # Listing is read-only and makes drift visible without granting a write.
 path "sys/policies/acl" {
   capabilities = ["list"]
@@ -64,14 +52,40 @@ path "sys/policies/acl" {
 # are omitted above by that marker rather than by a second hand-kept list —
 # one declaration, so a new inert tier cannot be forgotten here.
 {% for approle_name in managed_approles %}
+{% set approle_cli_parameters = openbao_approle_cli_parameters[approle_name] %}
+{% set approle_cidrs = approle_cli_parameters.secret_id_bound_cidrs.split(',')
+     | map('trim') | reject('equalto', '') | list %}
+{% set required = ['token_policies', 'bind_secret_id'] %}
+{% if approle_cidrs | length > 0 %}
+{% set _ = required.extend(['secret_id_bound_cidrs', 'token_bound_cidrs']) %}
+{% endif %}
 path "auth/approle/role/{{ approle_name }}" {
   capabilities = ["create", "read", "update"]
+  allowed_parameters = {
+    "token_policies"          = [{{ approle_cli_parameters.token_policies | tojson }}]
+    "bind_secret_id"          = [{{ approle_cli_parameters.bind_secret_id | tojson }}]
+{% if approle_cidrs | length > 0 %}
+    "secret_id_bound_cidrs"   = [{{ approle_cli_parameters.secret_id_bound_cidrs | tojson }}]
+    "token_bound_cidrs"       = [{{ approle_cli_parameters.token_bound_cidrs | tojson }}]
+{% endif %}
+    "token_ttl"               = []
+    "token_max_ttl"           = []
+    "token_explicit_max_ttl"  = []
+    "token_type"              = []
+    "secret_id_ttl"            = []
+    "secret_id_num_uses"      = []
+  }
+  required_parameters = {{ required | tojson }}
 }
 path "auth/approle/role/{{ approle_name }}/role-id" {
   capabilities = ["read"]
 }
 path "auth/approle/role/{{ approle_name }}/policies" {
   capabilities = ["create", "update"]
+  allowed_parameters = {
+    "token_policies" = [{{ approle_cli_parameters.token_policies | tojson }}]
+  }
+  required_parameters = ["token_policies"]
 }
 {% endfor %}
 {% for approle_name in openbao_retired_approles | default([]) | reject('in', breakglass) %}
