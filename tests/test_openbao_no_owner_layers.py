@@ -64,7 +64,7 @@ def test_terrakube_does_not_append_per_owner_github_workspaces():
     )
 
 
-def test_tofu_github_workspace_binds_only_its_own_subject():
+def test_tofu_github_workspace_does_not_declare_per_owner_roles():
     defaults = yaml.safe_load(_text(TERRAKUBE))
     workspaces = defaults["openbao_terrakube_workspaces"]
     assert isinstance(workspaces, list)
@@ -73,12 +73,39 @@ def test_tofu_github_workspace_binds_only_its_own_subject():
     assert "tofu-github-org-" not in _text(TERRAKUBE)
 
 
-def test_terrakube_subject_defaults_and_task_have_no_glob_matching():
+def test_tofu_github_subject_claims_include_exact_and_glob_subjects():
+    defaults = yaml.safe_load(_text(TERRAKUBE))
+    task_list = yaml.safe_load(_text(JWT_TASKS))
+    reconcile = next(
+        task
+        for task in task_list
+        if task.get("name") == "Reconcile Terrakube workspace JWT roles"
+    )
+    exact_subject = (
+        f"organization:{defaults['openbao_terrakube_organization']}"
+        ":workspace:tofu-github"
+    )
+    claims = _render_jinja_list(
+        reconcile["vars"]["_workspace_sub_claims"],
+        _workspace_sub_claim=exact_subject,
+        item=({"name": "tofu-github"}, {}),
+    )
+    assert claims == [exact_subject, f"{exact_subject}-*"]
+
+
+def test_terrakube_claims_type_uses_glob_only_for_tofu_github():
     assert "glob" not in _text(TERRAKUBE).lower()
-    tasks = _text(JWT_TASKS)
-    assert "glob" not in tasks.lower()
-    assert "'bound_claims_type': 'string'" in tasks
-    assert "!= 'string'" in tasks
+    task_list = yaml.safe_load(_text(JWT_TASKS))
+    reconcile = next(
+        task
+        for task in task_list
+        if task.get("name") == "Reconcile Terrakube workspace JWT roles"
+    )
+    type_expression = reconcile["vars"]["_workspace_bound_claims_type"]
+    type_template = Environment().from_string(type_expression)
+    assert type_template.render(item=({"name": "tofu-github"}, {})) == "glob"
+    assert type_template.render(item=({"name": "iac-platform"}, {})) == "string"
+    assert "!= _workspace_bound_claims_type" in _text(JWT_TASKS)
 
 
 def test_retired_terrakube_prefix_spares_the_shared_tofu_github_identity():

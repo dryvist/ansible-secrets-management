@@ -186,9 +186,9 @@
     stdin: >-
       {{ {'role_type': 'jwt',
             'bound_audiences': [openbao_terrakube_jwt_audience],
-            'bound_claims': {'sub': _workspace_sub_claim},
+            'bound_claims': {'sub': _workspace_sub_claims},
             'user_claim': 'sub',
-            'bound_claims_type': 'string',
+            'bound_claims_type': _workspace_bound_claims_type,
             'policies': (['terrakube-' ~ item.0.name]
                          + ([openbao_config_write_policy_name]
                             if item.0.name in openbao_config_write_terrakube_workspaces
@@ -203,6 +203,11 @@
     ansible_become: "{{ openbao_cli_become }}"
     _workspace_sub_claim: >-
       {{ 'organization:' ~ openbao_terrakube_organization ~ ':workspace:' ~ item.0.name }}
+    _workspace_sub_claims: >-
+      {{ [_workspace_sub_claim, _workspace_sub_claim ~ '-*']
+         if item.0.name == 'tofu-github' else _workspace_sub_claim }}
+    _workspace_bound_claims_type: >-
+      {{ 'glob' if item.0.name == 'tofu-github' else 'string' }}
   loop: "{{ openbao_terrakube_workspaces | zip(openbao_terrakube_jwt_role_reads.results | default([])) | list }}"
   loop_control:
     label: "{{ item.0.name }}"
@@ -217,10 +222,10 @@
          != [openbao_terrakube_jwt_audience]
       or (((item.1.stdout | default('{}') | from_json).data
            | default({}, true)).bound_claims | default({}, true)).sub | default('')
-         != _workspace_sub_claim
+         != _workspace_sub_claims
       or (((item.1.stdout | default('{}') | from_json).data
            | default({}, true)).bound_claims_type | default(''))
-         != 'string'
+         != _workspace_bound_claims_type
       or (((item.1.stdout | default('{}') | from_json).data
            | default({}, true)).token_policies | default([]) | sort)
          != ((['terrakube-' ~ item.0.name]
