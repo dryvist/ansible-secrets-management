@@ -47,6 +47,90 @@
       ansible.builtin.include_vars:
         dir: ../../../roles/openbao/defaults/main
 
+    - name: Pin runner App credentials to the unconfigured case
+      ansible.builtin.set_fact:
+        openbao_github_runner_app_id: ""
+        openbao_github_runner_app_private_key: ""
+
+    - name: Render the runner policy without runner App credentials
+      ansible.builtin.template:
+        src: "{{ _template_dir }}/github-runner-policy.hcl.j2"
+        dest: "{{ _fixture_dir }}/unset-github-runner-policy.hcl"
+        mode: "0644"
+
+    - name: Read the runner policy without runner App credentials
+      ansible.builtin.slurp:
+        src: "{{ _fixture_dir }}/unset-github-runner-policy.hcl"
+      register: _github_runner_unset_raw
+
+    - name: Assert missing runner App credentials omit the mount and raw token grant
+      ansible.builtin.assert:
+        that:
+          - openbao_github_runner_app_mounts == []
+          - >-
+            openbao_github_runner_mount not in
+            (openbao_github_app_mounts | map(attribute='mount') | list)
+          - >-
+            (_github_runner_unset_raw.content | b64decode)
+            | regex_findall('(?m)^path "' ~ openbao_github_runner_mount ~ '/token" [{]$') == []
+        fail_msg: >-
+          Without both runner App credentials, the mount and its raw token
+          policy path must be omitted.
+
+    - name: Pin runner App credentials to the configured case
+      ansible.builtin.set_fact:
+        openbao_github_runner_app_id: "4242"
+        openbao_github_runner_app_private_key: fixture-private-key
+
+    - name: Render the runner policy with runner App credentials
+      ansible.builtin.template:
+        src: "{{ _template_dir }}/github-runner-policy.hcl.j2"
+        dest: "{{ _fixture_dir }}/set-github-runner-policy.hcl"
+        mode: "0644"
+
+    - name: Read the runner policy with runner App credentials
+      ansible.builtin.slurp:
+        src: "{{ _fixture_dir }}/set-github-runner-policy.hcl"
+      register: _github_runner_set_raw
+
+    - name: Assert the runner App mount and raw token policy are narrowly scoped
+      vars:
+        _runner_mounts: >-
+          {{ openbao_github_app_mounts
+             | selectattr('mount', 'equalto', openbao_github_runner_mount) | list }}
+        _runner_token_stanza: >-
+          {{ (_github_runner_set_raw.content | b64decode)
+             | regex_search('(?ms)^path "' ~ openbao_github_runner_mount
+                ~ '/token" [{].*?^[}]') }}
+      ansible.builtin.assert:
+        that:
+          - _runner_mounts | length == 1
+          - _runner_mounts[0].app_id == '4242'
+          - _runner_mounts[0].private_key == 'fixture-private-key'
+          - _runner_mounts[0].permission_sets == []
+          - >-
+            'installation_id' not in _runner_mounts[0]
+          - >-
+            (_github_runner_set_raw.content | b64decode)
+            | regex_findall('(?m)^path "' ~ openbao_github_runner_mount ~ '/token" [{]$')
+            | length == 1
+          - >-
+            'capabilities = ["create", "update"]' in _runner_token_stanza
+          - >-
+            'required_parameters = ["org_name"]' in _runner_token_stanza
+          - >-
+            _runner_token_stanza
+            | regex_findall('(?m)^    "([^"]+)" =') == ['org_name']
+          - >-
+            'installation_id' not in _runner_token_stanza
+          - >-
+            'repositories' not in _runner_token_stanza
+          - >-
+            'permissions' not in _runner_token_stanza
+        fail_msg: >-
+          The runner App must have no permission sets and its raw token path
+          must allow only org_name.
+
     - name: Assert the CI resolver repository input is split, trimmed, and empty-safe
       ansible.builtin.assert:
         that:
