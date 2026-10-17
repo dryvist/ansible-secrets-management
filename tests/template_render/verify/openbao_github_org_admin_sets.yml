@@ -1,0 +1,76 @@
+---
+- name: Render and verify per-org GitHub admin sets and Terrakube workspaces
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    expected_github_org_owners: []
+
+  tasks:
+    - name: Load the openbao role defaults
+      ansible.builtin.include_vars:
+        dir: ../../../roles/openbao/defaults/main
+
+    - name: Assert per-org admin sets match the supplied installation owners
+      vars:
+        _expected_admin_names: >-
+          {{ expected_github_org_owners
+             | map('regex_replace', '$', '-full-automation') | list }}
+        _generated_workspace_names: >-
+          {{ openbao_terrakube_workspaces
+             | selectattr('name', 'match', '^tofu-github-')
+             | map(attribute='name') | list }}
+      ansible.builtin.assert:
+        that:
+          - >-
+            openbao_github_org_admin_permission_sets
+            | map(attribute='name') | list == _expected_admin_names
+          - >-
+            (openbao_github_admin_permission_sets
+             | selectattr('name', 'in', _expected_admin_names) | list)
+            == openbao_github_org_admin_permission_sets
+          - >-
+            _generated_workspace_names
+            == expected_github_org_owners
+               | map('regex_replace', '^', 'tofu-github-') | list
+        fail_msg: >-
+          Generated admin sets and Terrakube workspaces must follow the supplied
+          GitHub installation owner list in order.
+
+    - name: Assert generated admin sets have no permissions map
+      ansible.builtin.assert:
+        that:
+          - item.tier == 'admin'
+          - item.installation_id == openbao_github_repo_create_installations[
+              item.name | regex_replace('-full-automation$', '')]
+          - "'permissions' not in item"
+        fail_msg: "{{ item.name }} must be an unbounded admin-tier set for its installation."
+        quiet: true
+      loop: "{{ openbao_github_org_admin_permission_sets }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: Assert generated workspaces mint only their matching admin set
+      vars:
+        _generated_workspaces: >-
+          {{ openbao_terrakube_workspaces
+             | selectattr('name', 'match', '^tofu-github-') | list }}
+      ansible.builtin.assert:
+        that:
+          - item.1.name == 'tofu-github-' ~ item.0
+          - item.1.github_mint == [item.0 ~ '-full-automation']
+        fail_msg: "{{ item.1.name }} must mint only {{ item.0 }}-full-automation."
+        quiet: true
+      loop: "{{ expected_github_org_owners | zip(_generated_workspaces) | list }}"
+      loop_control:
+        label: "{{ item.1.name }}"
+
+    - name: Show the generated names
+      ansible.builtin.debug:
+        msg:
+          admin_sets: "{{ openbao_github_org_admin_permission_sets | map(attribute='name') | list }}"
+          workspaces: >-
+            {{ openbao_terrakube_workspaces
+               | selectattr('name', 'match', '^tofu-github-')
+               | map(attribute='name') | list }}

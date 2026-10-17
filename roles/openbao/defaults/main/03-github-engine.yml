@@ -185,6 +185,12 @@ openbao_github_repo_create_installations: >-
   {{ dict((openbao_platform_env['OPENBAO_GITHUB_REPO_CREATE_INSTALLATION_IDS']
            | default('', true)).split(',') | map('trim') | reject('equalto', '')
           | map('split', '=') | list) }}
+openbao_github_org_admin_permission_sets: >-
+  {{ dict(openbao_github_repo_create_installations.keys()
+          | map('regex_replace', '$', '-full-automation')
+          | zip(openbao_github_repo_create_installations.values()))
+     | dict2items(key_name='name', value_name='installation_id')
+     | map('combine', {'tier': 'admin'}) | list }}
 openbao_github_org_repo_create_permission_sets: >-
   {{ dict(openbao_github_repo_create_installations.keys() | map('regex_replace', '$', '-repo-create')
           | zip(openbao_github_repo_create_installations.values()))
@@ -197,6 +203,7 @@ openbao_github_org_repo_create_permission_sets: >-
 # Sets on the admin mount only; 05-github-engine.yml reconciles exactly these.
 openbao_github_admin_permission_sets: >-
   {{ openbao_github_base_permission_sets
+     + openbao_github_org_admin_permission_sets
      + openbao_github_org_repo_create_permission_sets
      + openbao_github_docs_publisher_permission_sets
      + openbao_github_ci_resolver_permission_sets

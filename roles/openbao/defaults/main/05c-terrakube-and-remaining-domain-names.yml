@@ -20,7 +20,7 @@ openbao_terrakube_network_workspace: >-
 openbao_terrakube_aws_workspace: >-
   {{ lookup('env', 'OPENBAO_TERRAKUBE_AWS_WORKSPACE')
      | default(undef('OPENBAO_TERRAKUBE_AWS_WORKSPACE is empty'), true) }}
-openbao_terrakube_workspaces:
+openbao_terrakube_static_workspaces:
   - name: iac-platform
     # apps/authelia: the deploy script needs the plaintext semaphore /
     # terrakube-dex OIDC client secrets to configure those two apps —
@@ -35,12 +35,9 @@ openbao_terrakube_workspaces:
     # has and an engine-minted token does not.
     #
     # dryvist-full-automation is the admin-tier set: installation-wide, full App
-    # ceiling. That is the ceiling this workspace already had via the stored
-    # token, so this is not a widening — but it IS wider than the work needs,
-    # because the set carries no permissions map. The narrower fix is a
-    # dedicated permission set scoped to what org configuration actually
-    # touches; that is a follow-up, and it is a change to
-    # openbao_github_permission_sets rather than to this entry.
+    # ceiling. This keeps the workspace's existing credential ceiling; the
+    # set carries no permissions map. Per-org workspaces below mint the matching
+    # owner's generated admin-tier set.
     github_mint: [dryvist-full-automation]
   - name: "{{ openbao_terrakube_network_workspace }}"
     # platform/object-storage: that workspace reads the published inventory and
@@ -83,6 +80,13 @@ openbao_terrakube_workspaces:
     #     read-only — siting it there turns a routine mint into a request to
     #     widen the access model.
     kv_read: [apps/semaphore]
+openbao_terrakube_workspaces: >-
+  {%- set _workspaces = openbao_terrakube_static_workspaces | list -%}
+  {%- for owner in openbao_github_repo_create_installations.keys() -%}
+  {%- set _ = _workspaces.append({'name': 'tofu-github-' ~ owner,
+      'github_mint': [owner ~ '-full-automation']}) -%}
+  {%- endfor -%}
+  {{ _workspaces }}
 openbao_ansible_converge_policy_name: ansible-converge
 openbao_ansible_converge_approle_name: ansible-converge
 # semaphore — the unattended execution plane's own identity. It attaches the
