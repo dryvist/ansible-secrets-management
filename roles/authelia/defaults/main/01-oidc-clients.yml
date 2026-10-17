@@ -116,6 +116,13 @@ authelia_oidc_bao_elevate_trusted_client_secret_plain: >-
 authelia_oidc_bao_elevate_trusted_client_secret_hash_file: >-
   {{ authelia_secrets_dir }}/oidc_bao_elevate_trusted_client_secret_hash
 authelia_oidc_bao_elevate_untrusted_client_id: bao-elevate-untrusted
+authelia_oidc_bao_elevate_policy_sync_client_id: bao-elevate-policy-sync
+authelia_oidc_bao_elevate_policy_sync_client_secret_plain: >-
+  {{ (bao_apps_secrets.authelia_oidc_bao_elevate_policy_sync_client_secret | default('', true))
+     or undef(hint='authelia_oidc_bao_elevate_policy_sync_client_secret missing from OpenBao '
+                   ~ 'secret/core/client') }}
+authelia_oidc_bao_elevate_policy_sync_client_secret_hash_file: >-
+  {{ authelia_secrets_dir }}/oidc_bao_elevate_policy_sync_client_secret_hash
 
 # Source networks allowed to approve, and the one account allowed to approve.
 # Read from env as a comma-separated CIDR list, the same channel as
@@ -157,4 +164,7 @@ authelia_oidc_confidential_clients: >-
      + ([{'name': 'bao_elevate_trusted',
           'secret_plain': authelia_oidc_bao_elevate_trusted_client_secret_plain,
           'hash_file': authelia_oidc_bao_elevate_trusted_client_secret_hash_file}]
+        + [{'name': 'bao_elevate_policy_sync',
+            'secret_plain': authelia_oidc_bao_elevate_policy_sync_client_secret_plain,
+            'hash_file': authelia_oidc_bao_elevate_policy_sync_client_secret_hash_file}]
         if authelia_bao_elevation_enabled | bool else []) }}

@@ -414,11 +414,18 @@ def test_mcp_credential_effective_holders_match_approle_grants():
     }
 
 
-def test_empty_roster_keeps_shared_policy_and_declared_lists_identical_to_develop():
+def test_empty_roster_adds_only_policy_sync_unlock_to_develop_shared_lists():
     values, approles, policies = _resolve_lists({})
     _, develop_approles, develop_policies = _resolve_lists({}, ref="origin/develop")
     assert approles == develop_approles
-    assert policies == develop_policies
+    policy_sync_unlock = {
+        "name": values["openbao_policy_sync_unlock_policy_name"],
+        "template": "policy-sync-unlock-policy.hcl.j2",
+    }
+    assert [policy for policy in policies if policy == policy_sync_unlock] == [
+        policy_sync_unlock
+    ]
+    assert [policy for policy in policies if policy != policy_sync_unlock] == develop_policies
 
     for name in LEGACY_SHARED_TEMPLATES:
         current = _render_owner_wrapper(

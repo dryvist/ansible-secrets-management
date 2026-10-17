@@ -13,6 +13,7 @@
 # inert openbao-policy-sync AppRole (07f), never by the execution plane's
 # identity, so a plane converge cannot rewrite the reconcile policy.
 openbao_policy_sync_policy_name: policy-sync
+openbao_policy_sync_unlock_policy_name: policy-sync-unlock
 openbao_reconcile_excluded_policies:
   - "{{ openbao_approle_issuer_policy_name }}"
   # Anything that can rewrite this policy can grant itself the break-glass
@@ -29,6 +30,8 @@ openbao_reconcile_excluded_policies:
   # policy-sync may rewrite the reconcile policy, so reconcile must not be able
   # to rewrite policy-sync.
   - "{{ openbao_policy_sync_policy_name }}"
+  # The phone-approved mint grant is operator-managed and never reconciled.
+  - "{{ openbao_policy_sync_unlock_policy_name }}"
   - "{{ openbao_ai_admin_session_approle_name }}"
   # This list is matched against POLICY names when filtering policies and
   # against APPROLE names when filtering AppRoles, so a name belongs here for
