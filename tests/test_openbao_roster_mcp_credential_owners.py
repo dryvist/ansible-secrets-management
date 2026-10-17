@@ -174,7 +174,13 @@ def _without_reconcile_transit_grants(name, source):
     # The transit grants are asserted separately (tests/test_openbao_transit_state_key.py);
     # parity ignores them, comments and blank lines, and compares every other stanza.
     source = re.sub(r"(?m)^\s*#.*\n", "", source)
-    source = re.sub(r'path\s+"[^"]*transit[^"]*"\s*\{[^}]*\}\s*', "", source)
+    for path in (
+        "sys/mounts/transit",
+        "transit/keys/tofu-state",
+        "sys/mounts/{{ openbao_transit_mount }}",
+        "{{ openbao_transit_mount }}/keys/{{ openbao_tofu_state_transit_key }}",
+    ):
+        source = re.sub(rf'path\s+"{re.escape(path)}"\s*\{{[^}}]*\}}\s*', "", source)
     return re.sub(r"\n\s*\n", "\n", source)
 
 def _stanzas(source):

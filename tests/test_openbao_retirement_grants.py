@@ -61,7 +61,7 @@ class RetirementGrants(unittest.TestCase):
             {"sys/mounts/transit"},
         )
         self.assertEqual(
-            {path for path in policy if path.startswith("transit/keys/")},
+            {path for path in policy if path.startswith("transit/")},
             {"transit/keys/tofu-state"},
         )
         self.assertEqual(policy["sys/mounts"], {"read", "list"})
