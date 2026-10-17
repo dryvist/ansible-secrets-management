@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.25.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.24.0...v0.25.0) (2026-10-17)
+
+
+### Features
+
+* **openbao:** let the sandbox write role read the sandbox leaf ([#204](https://github.com/dryvist/ansible-secrets-management/issues/204)) ([255b9f4](https://github.com/dryvist/ansible-secrets-management/commit/255b9f4df361a8c83e4a52c8e5057912bf0ceaee))
+
 ## [0.24.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.23.0...v0.24.0) (2026-10-17)
 
 
