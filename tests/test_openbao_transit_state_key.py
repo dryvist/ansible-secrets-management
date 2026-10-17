@@ -10,6 +10,8 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULTS = ROOT / "roles/openbao/defaults/main/01a-kv-hierarchy.yml"
 INIT = ROOT / "roles/openbao/tasks/init.yml"
+RECONCILE_INIT = ROOT / "roles/openbao/tasks/init/02-initialize-cluster.yml"
+MOUNT_TASKS = ROOT / "roles/openbao/tasks/init/03-kv-mounts-and-seed-secrets.yml"
 TRANSIT_TASKS = ROOT / "roles/openbao/tasks/init/04c-transit-engine.yml"
 TERRAFORM_APPLY_POLICY = ROOT / "roles/openbao/templates/terraform-apply-policy.hcl.j2"
 POLICY_PATH_BLOCK = re.compile(
@@ -27,6 +29,8 @@ class TransitStateKeyIsDeclared(unittest.TestCase):
     def setUpClass(cls):
         cls.defaults = yaml.safe_load(DEFAULTS.read_text(encoding="utf-8"))
         cls.init_tasks = yaml.safe_load(INIT.read_text(encoding="utf-8"))
+        cls.reconcile_init_tasks = yaml.safe_load(RECONCILE_INIT.read_text(encoding="utf-8"))
+        cls.mount_tasks = yaml.safe_load(MOUNT_TASKS.read_text(encoding="utf-8"))
         cls.transit_tasks = yaml.safe_load(TRANSIT_TASKS.read_text(encoding="utf-8"))
 
     def test_mount_and_key_names_are_defaults(self):
@@ -64,13 +68,45 @@ class TransitStateKeyIsDeclared(unittest.TestCase):
         self.assertTrue(check["no_log"])
         self.assertTrue(create["no_log"])
 
-    def test_transit_provisioning_is_skipped_in_reconcile_mode(self):
+    def test_transit_provisioning_uses_the_mode_selected_token_in_both_modes(self):
         task = _task(
             self.init_tasks,
             "Configure the Transit secrets engine for OpenTofu state encryption",
         )
         self.assertEqual(task["ansible.builtin.import_tasks"], "init/04c-transit-engine.yml")
-        self.assertIn("not (openbao_reconcile_mode | default(false))", task["when"])
+        self.assertNotIn("when", task)
+
+        # Reconcile mode replaces this shared token variable before init/03
+        # probes mounts. Transit reuses it, so the bootstrap path stays intact.
+        token_selection = _task(
+            self.reconcile_init_tasks,
+            "Use the per-call reconcile token when it authenticated",
+        )
+        self.assertEqual(
+            token_selection["ansible.builtin.set_fact"]["openbao_bootstrap_token"],
+            "{{ openbao_reconcile_login.login.auth.client_token }}",
+        )
+        mounts = _task(self.mount_tasks, "List enabled secrets engines")
+        self.assertEqual(mounts["register"], "openbao_mounts_raw")
+        self.assertEqual(mounts["when"], "openbao_bootstrap_token is defined")
+
+        engine = _task(
+            self.transit_tasks,
+            "Enable the Transit engine for OpenTofu state encryption",
+        )
+        check = _task(self.transit_tasks, "Check whether the OpenTofu state Transit key exists")
+        create = _task(self.transit_tasks, "Create the OpenTofu state Transit key if absent")
+        self.assertEqual(
+            engine["environment"]["BAO_TOKEN"], "{{ openbao_bootstrap_token }}"
+        )
+        self.assertEqual(
+            check["ansible.builtin.uri"]["headers"]["X-Vault-Token"],
+            "{{ openbao_bootstrap_token }}",
+        )
+        self.assertEqual(
+            create["ansible.builtin.uri"]["headers"]["X-Vault-Token"],
+            "{{ openbao_bootstrap_token }}",
+        )
 
     def test_terraform_apply_transit_policy_grants_are_exact(self):
         template = TERRAFORM_APPLY_POLICY.read_text(encoding="utf-8")

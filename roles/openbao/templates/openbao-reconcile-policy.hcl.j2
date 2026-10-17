@@ -113,8 +113,12 @@ path "github-agents/permissionset/agents-write" {
 }
 
 # --- Mounts, by name -----------------------------------------------------
-# Read-only on the mount table: the converge needs to see what exists to be
-# add-if-missing. Creating or tuning a mount needs sudo, which is break-glass.
+# Reconcile may create only the declared OpenTofu Transit mount.
+path "sys/mounts/{{ openbao_transit_mount }}" {
+  capabilities = ["read", "update"]
+}
+# Mount creation needs update on exact sys/mounts/<path>; tuning/auth changes stay break-glass.
+# Root-protected API endpoints: https://openbao.org/docs/concepts/policies/#root-protected-api-endpoints
 path "sys/mounts" {
   capabilities = ["read", "list"]
 }
@@ -123,6 +127,10 @@ path "sys/auth" {
 }
 
 # --- Engine content the converge seeds -----------------------------------
+# Updating keys/tofu-state cannot change exportability or deletion (those are under /config, not granted); reconcile cannot delete the key.
+path "{{ openbao_transit_mount }}/keys/{{ openbao_tofu_state_transit_key }}" {
+  capabilities = ["read", "update"]
+}
 {% for mount in openbao_kv_mounts | default([]) %}
 path "{{ mount.path | default(mount) }}/*" {
   capabilities = ["create", "read", "update", "list"]
