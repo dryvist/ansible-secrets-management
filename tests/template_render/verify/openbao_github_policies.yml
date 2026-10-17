@@ -63,19 +63,19 @@
         src: "{{ _fixture_dir }}/unset-github-runner-policy.hcl"
       register: _github_runner_unset_raw
 
-    - name: Assert missing runner App credentials omit the mount and raw token grant
+    - name: Assert a converge without runner App credentials keeps the mount and raw token grant
       ansible.builtin.assert:
         that:
-          - openbao_github_runner_app_mounts == []
           - >-
-            openbao_github_runner_mount not in
+            openbao_github_runner_mount in
             (openbao_github_app_mounts | map(attribute='mount') | list)
           - >-
             (_github_runner_unset_raw.content | b64decode)
-            | regex_findall('(?m)^path "' ~ openbao_github_runner_mount ~ '/token" [{]$') == []
+            | regex_findall('(?m)^path "' ~ openbao_github_runner_mount ~ '/token" [{]$')
+            | length == 1
         fail_msg: >-
-          Without both runner App credentials, the mount and its raw token
-          policy path must be omitted.
+          The runner mount and its raw token policy path must stay declared
+          when the one-time App credentials are absent.
 
     - name: Pin runner App credentials to the configured case
       ansible.builtin.set_fact:

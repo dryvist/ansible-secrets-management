@@ -149,10 +149,11 @@ from the env document keys `OPENBAO_GITHUB_ENTERPRISE_INSTALLATION_ID` and
 
 `github-runner/token` requires `org_name` and accepts no other request
 parameters. Its App has only the organization-level `Self-hosted runners:
-write` permission and no OpenBao permission sets. The mount is declared when
-both `OPENBAO_GITHUB_RUNNER_APP_ID` and
-`OPENBAO_GITHUB_RUNNER_APP_PRIVATE_KEY` are set; the App's GitHub installations
-determine the organizations available to the request. The existing
+write` permission and no OpenBao permission sets. The mount and policy are
+always declared; `OPENBAO_GITHUB_RUNNER_APP_ID` and
+`OPENBAO_GITHUB_RUNNER_APP_PRIVATE_KEY` are one-time environment that configure
+it. The App's GitHub installations determine the organizations available to
+the request. The existing
 `runner-register-dryvist` permission set remains on `github-admin`.
 
 Estate identities (`ai-apply-*`, `ai-orchestrator`) attach the `github-mint`

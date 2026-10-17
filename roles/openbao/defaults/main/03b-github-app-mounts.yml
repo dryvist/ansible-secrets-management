@@ -198,7 +198,8 @@ openbao_github_enterprise_app_mounts: >-
         if openbao_github_enterprise_installation_id | length > 0 else []) }}
 
 # The runner App is scoped by GitHub's installations, so it has no OpenBao
-# permission sets or installation-ID list. Unset credentials omit the mount.
+# permission sets or installation-ID list. Its credentials are one-time
+# environment: the mount and policy stay declared on converges without them.
 openbao_github_runner_mount: github-runner
 openbao_github_runner_app_id: "{{ lookup('env', 'OPENBAO_GITHUB_RUNNER_APP_ID') | default('', true) }}"
 openbao_github_runner_app_private_key: >-
@@ -207,9 +208,7 @@ openbao_github_runner_app_mounts: >-
   {{ ([{'mount': openbao_github_runner_mount,
         'app_id': openbao_github_runner_app_id,
         'private_key': openbao_github_runner_app_private_key,
-        'permission_sets': []}]
-      if openbao_github_runner_app_id | length > 0
-         and openbao_github_runner_app_private_key | length > 0 else []) }}
+        'permission_sets': []}]) }}
 
 openbao_github_app_mounts_base:
   - mount: "{{ openbao_github_everyday_mount }}"
