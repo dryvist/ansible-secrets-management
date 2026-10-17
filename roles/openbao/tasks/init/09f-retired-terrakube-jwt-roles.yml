@@ -17,17 +17,16 @@
   failed_when: false
   when: openbao_bootstrap_token is defined
 
-- name: FAIL -- the Terrakube JWT role listing was denied
+- name: FAIL -- the Terrakube JWT role listing failed
   ansible.builtin.fail:
     msg: >-
-      `bao list auth/{{ openbao_terrakube_jwt_auth_path }}/role` was denied
-      (403), so retired JWT roles cannot be compared against the live set.
-      The reconcile policy needs `list` on
-      `auth/{{ openbao_terrakube_jwt_auth_path }}/role`.
+      `bao list auth/{{ openbao_terrakube_jwt_auth_path }}/role` failed
+      (rc={{ openbao_terrakube_jwt_role_live_list.rc }}), so retired JWT roles
+      cannot be compared against the live set. A 403 means the reconcile
+      policy lacks `list` on `auth/{{ openbao_terrakube_jwt_auth_path }}/role`.
   when:
     - openbao_bootstrap_token is defined
     - (openbao_terrakube_jwt_role_live_list.rc | default(0)) != 0
-    - openbao_terrakube_jwt_role_live_list.stderr | default('') is search('403')
 
 - name: Resolve the set of Terrakube JWT roles that exist live
   ansible.builtin.set_fact:
