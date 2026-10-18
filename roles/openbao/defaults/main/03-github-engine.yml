@@ -32,6 +32,18 @@ openbao_github_dryvist_installation_id: >-
   {{ openbao_platform_env['OPENBAO_GITHUB_ADMIN_DRYVIST_INSTALLATION_ID'] | default('', true) }}
 openbao_github_personal_installation_id: >-
   {{ openbao_platform_env['OPENBAO_GITHUB_ADMIN_PERSONAL_INSTALLATION_ID'] | default('', true) }}
+openbao_github_jacobpevans_installation_id: >-
+  {{ openbao_platform_env['OPENBAO_GITHUB_ADMIN_JACOBPEVANS_INSTALLATION_ID'] | default('', true) }}
+openbao_github_jpe_ansible_installation_id: >-
+  {{ openbao_platform_env['OPENBAO_GITHUB_ADMIN_JPE_ANSIBLE_INSTALLATION_ID'] | default('', true) }}
+openbao_github_jpe_cribl_installation_id: >-
+  {{ openbao_platform_env['OPENBAO_GITHUB_ADMIN_JPE_CRIBL_INSTALLATION_ID'] | default('', true) }}
+openbao_github_jpe_private_installation_id: >-
+  {{ openbao_platform_env['OPENBAO_GITHUB_ADMIN_JPE_PRIVATE_INSTALLATION_ID'] | default('', true) }}
+openbao_github_jpe_splunk_installation_id: >-
+  {{ openbao_platform_env['OPENBAO_GITHUB_ADMIN_JPE_SPLUNK_INSTALLATION_ID'] | default('', true) }}
+openbao_github_jpe_openbao_plugin_secrets_installation_id: >-
+  {{ openbao_platform_env['OPENBAO_GITHUB_ADMIN_JPE_OPENBAO_PLUGIN_SECRETS_INSTALLATION_ID'] | default('', true) }}
 # Read-tier permission map: what a group-scoped read token may do. Applied to
 # ALL repos of the installation (no repositories list on the read sets — the
 # blast radius of a leaked read token is "can read", not "can change").
@@ -60,6 +72,9 @@ openbao_github_repo_create_permissions:
 # other organization settings; asserted verbatim like the repo-create map.
 openbao_github_org_admin_permissions:
   organization_administration: write
+# Org Actions secrets use only the organization_secrets permission.
+openbao_github_org_secrets_permissions:
+  organization_secrets: write
 # Runner registration is organization-scoped.  This is deliberately separate
 # from repository read/write credentials: it cannot read source or name a
 # repository, and only mints the short-lived registration token a runner needs.
@@ -185,11 +200,36 @@ openbao_github_base_permission_sets:
     tier: exporter
     installation_id: "{{ openbao_github_dryvist_installation_id }}"
     permissions: "{{ openbao_github_exporter_permissions }}"
+openbao_github_org_secrets_installations:
+  - name: dryvist
+    installation_id: "{{ openbao_github_dryvist_installation_id }}"
+  - name: jacobpevans
+    installation_id: "{{ openbao_github_jacobpevans_installation_id }}"
+  - name: jpe-ansible
+    installation_id: "{{ openbao_github_jpe_ansible_installation_id }}"
+  - name: jpe-cribl
+    installation_id: "{{ openbao_github_jpe_cribl_installation_id }}"
+  - name: jpe-private
+    installation_id: "{{ openbao_github_jpe_private_installation_id }}"
+  - name: jpe-splunk
+    installation_id: "{{ openbao_github_jpe_splunk_installation_id }}"
+  - name: jpe-openbao-plugin-secrets
+    installation_id: "{{ openbao_github_jpe_openbao_plugin_secrets_installation_id }}"
+openbao_github_org_secrets_permission_sets: >-
+  {%- set _sets = [] -%}
+  {%- for org in openbao_github_org_secrets_installations -%}
+  {%- if org.installation_id | default('', true) | string | length > 0 -%}
+  {%- set _ = _sets.append({'name': org.name ~ '-org-secrets',
+      'tier': 'org-secrets', 'installation_id': org.installation_id,
+      'permissions': openbao_github_org_secrets_permissions}) -%}
+  {%- endif -%}
+  {%- endfor -%}
+  {{ _sets }}
 # Full set list = the static base above plus repository-scoped tiers, which
 # exist only when their repository lists are configured.
 # Sets on the admin mount only; 05-github-engine.yml reconciles exactly these.
 openbao_github_admin_permission_sets: >-
-  {{ openbao_github_base_permission_sets
+  {{ openbao_github_base_permission_sets + openbao_github_org_secrets_permission_sets
      + openbao_github_docs_publisher_permission_sets
      + openbao_github_ci_resolver_permission_sets
      + openbao_github_router_snapshot_permission_sets }}
