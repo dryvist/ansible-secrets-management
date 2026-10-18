@@ -2,10 +2,9 @@
 # The GitHub token tiers are a privilege boundary expressed entirely in Jinja
 # loops over one shared list, so a set added for one identity silently reaches
 # every other policy whose loop does not exclude it. `github-mint` is the
-# dangerous one: it is attached to every apply-tier estate actor and selects by
-# REJECTING the admin tier, so any new tier is included by default. A write
-# grant landing there would hand repository write to identities that are only
-# ever meant to read, and nothing about the diff that added it would say so.
+# dangerous one: it is attached to every apply-tier estate actor, so it must
+# select the read tier explicitly. A write grant landing there would hand
+# repository write to identities that are only ever meant to read.
 #
 # Rendering is the only place this is observable: the declarations look correct
 # in isolation, and no converge assertion compares one policy against another.
@@ -290,8 +289,7 @@
           - _publisher_path not in _read_paths
         fail_msg: >-
           A tier other than docs-publisher grants the publisher's set.
-          github-mint selects by rejecting tiers, so a new write-bearing tier
-          is included there unless it is rejected explicitly.
+          github-mint must select only the read tier.
 
     - name: Assert the CI resolver set is exact, repository-scoped, and the only token path
       vars:
@@ -337,18 +335,24 @@
           - _repo_create_path not in _read_paths
         fail_msg: >-
           A tier other than github-repo-create grants administration:write.
-          github-mint selects by rejecting tiers, so a new tier is included
-          there by default unless it is rejected explicitly — this is the one
-          tier where that omission is worst, since administration:write is
-          the one permission GitHub requires to create or delete a repository.
+          github-mint must select only the read tier.
 
     - name: Assert the org-admin policy grants exactly its own set, and no other tier does
+      vars:
+        _mint_forbidden_set_pattern: >-
+          {{ '^' ~ openbao_github_mount ~ '/token/'
+             ~ '(runner-register-dryvist|exporter-dryvist|.*-full-automation'
+             ~ '|.*-repo-create|.*-org-admin|.*-org-secrets)$' }}
       ansible.builtin.assert:
         that:
           - _org_admin_paths == [_org_admin_path, openbao_github_mount ~ '/token']
           - _org_admin_path not in _mint_paths
           - _org_admin_path not in _read_paths
           - _org_admin_path not in _repo_create_paths
+          - >-
+            _mint_paths
+            | select('match', _mint_forbidden_set_pattern)
+            | list == []
           - >-
             'required_parameters = ["org_name", "permissions"]' in _org_admin_text
           - >-
@@ -360,9 +364,9 @@
           - >-
             '"repositories" = []' not in _org_admin_text
         fail_msg: >-
-          github-org-admin grants {{ _org_admin_paths }}, or another tier
-          grants organization_administration:write. It must grant the
-          dryvist-org-admin set and the parameter-pinned raw endpoint.
+          github-org-admin grants {{ _org_admin_paths }}, another tier grants
+          organization_administration:write, or github-mint contains an
+          excluded set. github-mint may grant read-tier sets only.
 
     - name: Assert everyday writes use the everyday mount and never the admin mount
       ansible.builtin.assert:

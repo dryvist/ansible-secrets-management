@@ -271,6 +271,18 @@
     - openbao_bootstrap_token is defined
     - openbao_github_engine_enabled | bool
 
+- name: Assert the org-secrets permission map is exactly organization_secrets:write
+  ansible.builtin.assert:
+    that:
+      - openbao_github_org_secrets_permissions.keys() | list == ['organization_secrets']
+      - openbao_github_org_secrets_permissions.organization_secrets == 'write'
+    fail_msg: >-
+      openbao_github_org_secrets_permissions must be exactly
+      {organization_secrets: write}; add a new tier instead of broadening it.
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_github_engine_enabled | bool
+
 # Runs on the controller (openbao_cli_host, resolved in init/02): one module
 # execution per declared permission set. Same CLI, same rc/stdout, so the
 # drift comparison below reads unchanged.

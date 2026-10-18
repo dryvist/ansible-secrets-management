@@ -18,7 +18,7 @@
 # identity, passing review and converging clean. (This exact invariant is
 # also asserted defensively in tasks/init/08-rbac-policies.yml; deriving here
 # makes the drift structurally impossible instead of only detected after the
-# fact.) Every one of the nine names below is unchanged by this derivation --
+# fact.) Every existing name is unchanged by this derivation --
 # proven in tests/test_terrakube_base_policies_derivation.py.
 openbao_terrakube_base_policies: >-
   {%- set _entries = [] -%}
@@ -98,8 +98,6 @@ openbao_base_policies_static:
     template: local-llm-policy.hcl.j2
   - name: "{{ openbao_local_llm_workstation_policy_name }}"
     template: local-llm-workstation-policy.hcl.j2
-  - name: "{{ openbao_tofu_state_workstation_policy_name }}"
-    template: tofu-state-workstation-policy.hcl.j2
   - name: github-agent-ci-fix
     template: github-agent-router-key-policy.hcl.j2
     path: "{{ openbao_kv_mount }}/data/apps/github-actions-ci-fix"
@@ -221,8 +219,8 @@ openbao_base_policies_static:
     template: slack-admin-policy.hcl.j2
   - name: "{{ openbao_slack_ops_policy_name }}"
     template: slack-ops-policy.hcl.j2
-  - name: "{{ openbao_disclosure_denylist_policy_name }}"
-    template: disclosure-denylist-read-policy.hcl.j2
+  - name: "{{ openbao_github_org_secrets_read_policy_name }}"
+    template: github-org-secrets-read-policy.hcl.j2
   - name: "{{ openbao_splunk_mcp_rotate_policy_name }}"
     template: splunk-mcp-rotate-policy.hcl.j2
   - name: "{{ openbao_secret_age_audit_policy_name }}"
