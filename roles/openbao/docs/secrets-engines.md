@@ -2,8 +2,10 @@
 
 ## Transit secrets engine (OpenTofu state encryption)
 
-Mounted at `transit/` with the `tofu-state` key (`aes256-gcm96`), created only
-when absent with export, plaintext backup, and deletion disabled.
+Mounted at `transit/` with `tofu-state` for the `terraform-apply` AppRole and
+`tofu-state-github-org-secrets` for the `github-org-secrets` workspace. Both
+`aes256-gcm96` keys are created only when absent with export, plaintext backup,
+and deletion disabled.
 
 ## AWS secrets engine (dynamic STS creds)
 

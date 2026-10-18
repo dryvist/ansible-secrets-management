@@ -108,12 +108,6 @@ openbao_base_approles_core:
   - name: "{{ openbao_local_llm_workstation_approle_name }}"
     policy: "{{ openbao_local_llm_workstation_policy_name }}"
     secret_id_num_uses: 100
-  # tofu-state-workstation: workstation OpenTofu state encryption (transit only).
-  # Reconcile-managed; the admin window mints one short-lived SecretID per run.
-  - name: "{{ openbao_tofu_state_workstation_approle_name }}"
-    policy: "{{ openbao_tofu_state_workstation_policy_name }}"
-    secret_id_ttl: "{{ openbao_approle_human_secret_id_ttl }}"
-    secret_id_num_uses: 1
   # agent-ssh-sign: workstation signing of non-root ai-agent SSH certificates
   # (automation-ai, 2h). No read policy. Token lives at most as long as one
   # certificate. 36h ttl (rotated-domain margin); 100 uses per secret_id.

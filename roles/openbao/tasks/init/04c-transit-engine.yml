@@ -55,3 +55,46 @@
   when:
     - openbao_bootstrap_token is defined
     - openbao_tofu_state_transit_key_check.status == 404
+
+- name: Check whether the GitHub org-secrets Transit key exists
+  ansible.builtin.uri:
+    url: >-
+      {{ openbao_cli_addr }}/v1/{{ openbao_transit_mount }}/keys/{{
+      openbao_github_org_secrets_state_transit_key }}
+    method: GET
+    headers:
+      X-Vault-Token: "{{ openbao_bootstrap_token }}"
+    status_code: [200, 404]
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
+  register: openbao_github_org_secrets_state_transit_key_check
+  no_log: true
+  changed_when: false
+  check_mode: false
+  when: openbao_bootstrap_token is defined
+
+- name: Create the GitHub org-secrets Transit key if absent
+  ansible.builtin.uri:
+    url: >-
+      {{ openbao_cli_addr }}/v1/{{ openbao_transit_mount }}/keys/{{
+      openbao_github_org_secrets_state_transit_key }}
+    method: POST
+    headers:
+      X-Vault-Token: "{{ openbao_bootstrap_token }}"
+    body_format: json
+    body:
+      type: aes256-gcm96
+      exportable: false
+      allow_plaintext_backup: false
+    status_code: [200, 204]
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
+  no_log: true
+  changed_when: true
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_github_org_secrets_state_transit_key_check.status == 404

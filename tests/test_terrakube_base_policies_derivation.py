@@ -1,5 +1,5 @@
 """openbao_terrakube_base_policies (roles/openbao/defaults/main/07c-base-policies.yml)
-generates the nine Terrakube workspace policy entries from
+generates each Terrakube workspace policy entry from
 openbao_terrakube_workspaces instead of nine hand-written rows that referenced
 it by list position. This proves the derivation reproduces, exactly, what the
 nine hardcoded rows it replaced produced: same names, same order, same

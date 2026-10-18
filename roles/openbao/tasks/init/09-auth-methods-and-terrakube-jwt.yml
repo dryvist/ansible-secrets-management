@@ -184,16 +184,7 @@
   ansible.builtin.command:
     cmd: "bao write auth/{{ openbao_terrakube_jwt_auth_path }}/role/terrakube-{{ item.0.name }} -"
     stdin: >-
-      {{ {'role_type': 'jwt',
-            'bound_audiences': [openbao_terrakube_jwt_audience],
-            'bound_claims': {'sub': _workspace_sub_claims},
-            'user_claim': 'sub',
-            'bound_claims_type': _workspace_bound_claims_type,
-            'policies': (['terrakube-' ~ item.0.name]
-                         + ([openbao_config_write_policy_name]
-                            if item.0.name in openbao_config_write_terrakube_workspaces
-                            else [])) | sort,
-            'token_ttl': openbao_terrakube_jwt_token_ttl} | to_json }}
+      {{ _terrakube_workspace_role | to_json }}
   environment:
     BAO_ADDR: "{{ openbao_cli_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
@@ -201,13 +192,10 @@
   become: "{{ openbao_cli_become }}"
   vars:
     ansible_become: "{{ openbao_cli_become }}"
-    _workspace_sub_claim: >-
-      {{ 'organization:' ~ openbao_terrakube_organization ~ ':workspace:' ~ item.0.name }}
-    _workspace_sub_claims: >-
-      {{ [_workspace_sub_claim, _workspace_sub_claim ~ '-*']
-         if item.0.name == 'tofu-github' else _workspace_sub_claim }}
-    _workspace_bound_claims_type: >-
-      {{ 'glob' if item.0.name == 'tofu-github' else 'string' }}
+    terrakube_workspace: "{{ item.0 }}"
+    _terrakube_workspace_role: >-
+      {{ lookup('ansible.builtin.template', 'terrakube-workspace-jwt-role.json.j2')
+         | from_json }}
   loop: "{{ openbao_terrakube_workspaces | zip(openbao_terrakube_jwt_role_reads.results | default([])) | list }}"
   loop_control:
     label: "{{ item.0.name }}"
@@ -222,19 +210,16 @@
          != [openbao_terrakube_jwt_audience]
       or (((item.1.stdout | default('{}') | from_json).data
            | default({}, true)).bound_claims | default({}, true)).sub | default('')
-         != _workspace_sub_claims
+         != _terrakube_workspace_role.bound_claims.sub
       or (((item.1.stdout | default('{}') | from_json).data
            | default({}, true)).bound_claims_type | default(''))
-         != _workspace_bound_claims_type
+         != _terrakube_workspace_role.bound_claims_type
       or (((item.1.stdout | default('{}') | from_json).data
            | default({}, true)).token_policies | default([]) | sort)
-         != ((['terrakube-' ~ item.0.name]
-              + ([openbao_config_write_policy_name]
-                 if item.0.name in openbao_config_write_terrakube_workspaces
-                 else [])) | sort)
+         != (_terrakube_workspace_role.policies | sort)
       or ((item.1.stdout | default('{}') | from_json).data
           | default({}, true)).token_ttl | default(0) | int
-         != (openbao_terrakube_jwt_token_ttl | regex_replace('m$', '') | int) * 60
+         != (_terrakube_workspace_role.token_ttl | regex_replace('m$', '') | int) * 60
 
 - name: Delete retired Terrakube JWT roles
   ansible.builtin.import_tasks: 09f-retired-terrakube-jwt-roles.yml

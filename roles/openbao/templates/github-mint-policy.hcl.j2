@@ -1,25 +1,17 @@
 {{ ansible_managed | comment }}
 # BASE CAPABILITY policy `github-mint` — actor-agnostic, mint-only. Grants a raw
-# token for reads with a fixed map. Admin-tier *-full-automation sets and the
-# engine's config/* + permissionset/* administration paths are ABSENT.
+# token for reads with a fixed map. Non-read permission sets and the engine's
+# config/* + permissionset/* administration paths are ABSENT.
 # Per-repo WRITE minting is the github-write identity's policy alone; an estate
 # identity that needs repo write gets its own parameter-pinned grant, never
-# this leaf widened. The publish tier is rejected here for that reason: its
-# sets carry a stored write permission map, so leaving it in would hand every
-# apply-tier actor the publisher's grant. The ci-resolver tier is rejected too;
-# its stored write set is reserved for one service. The repo-create tier is
-# rejected for the same reason and a sharper one: administration:write is the one
-# permission GitHub requires to create or delete a repository, so leaking it
-# to every apply-tier actor is strictly worse than leaking a per-repo write
-# grant. Attached (via token_policies) to the apply-tier actor roles; carries
-# no self-escalation path, so composing it with KV leaves is safe.
+# this leaf widened. Publish and ci-resolver sets carry stored write maps and
+# are reserved for their dedicated identities. The repo-create tier carries
+# administration:write, which GitHub requires to create or delete a repo.
+# Select only the read tier so any future write tier stays out by default.
+# Attached (via token_policies) to the apply-tier actor roles; carries no
+# self-escalation path, so composing it with KV leaves is safe.
 {% for permission_set in openbao_github_permission_sets
-   | rejectattr('tier', 'equalto', 'admin')
-   | rejectattr('tier', 'equalto', 'publish')
-   | rejectattr('tier', 'equalto', 'ci-resolver')
-   | rejectattr('tier', 'equalto', 'repo-create')
-   | rejectattr('tier', 'equalto', 'org-admin')
-   | rejectattr('tier', 'equalto', 'agents') %}
+   | selectattr('tier', 'equalto', 'read') %}
 path "{{ permission_set.mount }}/token/{{ permission_set.name }}" {
   capabilities = ["create", "update"]
 }
