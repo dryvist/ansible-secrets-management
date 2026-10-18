@@ -15,6 +15,7 @@ MOUNT_TASKS = ROOT / "roles/openbao/tasks/init/03-kv-mounts-and-seed-secrets.yml
 TRANSIT_TASKS = ROOT / "roles/openbao/tasks/init/04c-transit-engine.yml"
 TERRAFORM_APPLY_POLICY = ROOT / "roles/openbao/templates/terraform-apply-policy.hcl.j2"
 AI_ADMIN_POLICY = ROOT / "roles/openbao/templates/ai-admin-policy.hcl.j2"
+RECONCILE_POLICY = ROOT / "roles/openbao/templates/openbao-reconcile-policy.hcl.j2"
 POLICY_PATH_BLOCK = re.compile(
     r'path "([^\"]+)"\s*\{\s*capabilities\s*=\s*\[([^]]+)\]\s*\}',
     re.MULTILINE,
@@ -40,6 +41,10 @@ class TransitStateKeyIsDeclared(unittest.TestCase):
             self.defaults["openbao_transit_mount_description"], "OpenTofu state encryption"
         )
         self.assertEqual(self.defaults["openbao_tofu_state_transit_key"], "tofu-state")
+        self.assertEqual(
+            self.defaults["openbao_github_org_secrets_state_transit_key"],
+            "tofu-state-github-org-secrets",
+        )
 
     def test_engine_uses_the_existing_mount_probe_and_enable_pattern(self):
         task = _task(self.transit_tasks, "Enable the Transit engine for OpenTofu state encryption")
@@ -65,7 +70,55 @@ class TransitStateKeyIsDeclared(unittest.TestCase):
             "exportable": False,
             "allow_plaintext_backup": False,
         })
+        self.assertEqual(
+            check_uri["headers"]["X-Vault-Token"], "{{ openbao_bootstrap_token }}"
+        )
+        self.assertEqual(
+            create_uri["headers"]["X-Vault-Token"], "{{ openbao_bootstrap_token }}"
+        )
         self.assertIn("openbao_tofu_state_transit_key_check.status == 404", create["when"])
+        self.assertTrue(check["no_log"])
+        self.assertTrue(create["no_log"])
+
+    def test_only_the_org_secrets_workspace_policy_references_its_key(self):
+        for path in (TERRAFORM_APPLY_POLICY, AI_ADMIN_POLICY, RECONCILE_POLICY):
+            self.assertNotIn(
+                "openbao_github_org_secrets_state_transit_key",
+                path.read_text(encoding="utf-8"),
+            )
+
+    def test_github_org_secrets_key_uses_the_same_absent_only_creation_pattern(self):
+        check = _task(
+            self.transit_tasks,
+            "Check whether the GitHub org-secrets Transit key exists",
+        )
+        create = _task(
+            self.transit_tasks,
+            "Create the GitHub org-secrets Transit key if absent",
+        )
+        check_uri = check["ansible.builtin.uri"]
+        create_uri = create["ansible.builtin.uri"]
+
+        self.assertIn("openbao_github_org_secrets_state_transit_key", check_uri["url"])
+        self.assertEqual(check_uri["method"], "GET")
+        self.assertEqual(check_uri["status_code"], [200, 404])
+        self.assertIn("openbao_github_org_secrets_state_transit_key", create_uri["url"])
+        self.assertEqual(create_uri["method"], "POST")
+        self.assertEqual(
+            check_uri["headers"]["X-Vault-Token"], "{{ openbao_bootstrap_token }}"
+        )
+        self.assertEqual(
+            create_uri["headers"]["X-Vault-Token"], "{{ openbao_bootstrap_token }}"
+        )
+        self.assertEqual(create_uri["body"], {
+            "type": "aes256-gcm96",
+            "exportable": False,
+            "allow_plaintext_backup": False,
+        })
+        self.assertIn(
+            "openbao_github_org_secrets_state_transit_key_check.status == 404",
+            create["when"],
+        )
         self.assertTrue(check["no_log"])
         self.assertTrue(create["no_log"])
 

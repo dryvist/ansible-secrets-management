@@ -50,6 +50,7 @@ openbao_terrakube_workspaces:
          | map(attribute='name')
          | map('regex_replace', '^', openbao_github_mount ~ '/token/')
          | list }}
+    state_transit_key: "{{ openbao_github_org_secrets_state_transit_key }}"
     token_self_access: false
   - name: "{{ openbao_terrakube_network_workspace }}"
     # platform/object-storage: that workspace reads the published inventory and

@@ -45,6 +45,16 @@ path "{{ path }}" {
   capabilities = ["read"]
 }
 {% endfor %}
+{% if item.workspace.state_transit_key is defined %}
+
+path "{{ openbao_transit_mount }}/datakey/plaintext/{{ item.workspace.state_transit_key }}" {
+  capabilities = ["update"]
+}
+
+path "{{ openbao_transit_mount }}/decrypt/{{ item.workspace.state_transit_key }}" {
+  capabilities = ["update"]
+}
+{% endif %}
 {% for permission_set in item.workspace.github_mint | default([]) %}
 
 # Ephemeral GitHub App installation token, minted per run. Same capability

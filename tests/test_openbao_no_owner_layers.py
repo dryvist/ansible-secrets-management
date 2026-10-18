@@ -153,3 +153,18 @@ def test_retired_terrakube_prefix_spares_the_shared_tofu_github_identity():
     ]
     assert not re.match("^" + re.escape(prefix), "terrakube-github-org-secrets")
     assert "openbao_retired_terrakube_prefix | regex_escape" in _text(RETIRE_TASKS)
+
+
+def test_org_secrets_workspace_is_the_only_workspace_with_a_transit_key():
+    workspaces = yaml.safe_load(_text(TERRAKUBE))["openbao_terrakube_workspaces"]
+    (org_secrets,) = [
+        workspace
+        for workspace in workspaces
+        if workspace.get("name") == "{{ openbao_terrakube_org_secrets_workspace_name }}"
+    ]
+    assert org_secrets["state_transit_key"] == (
+        "{{ openbao_github_org_secrets_state_transit_key }}"
+    )
+    assert [workspace for workspace in workspaces if "state_transit_key" in workspace] == [
+        org_secrets
+    ]

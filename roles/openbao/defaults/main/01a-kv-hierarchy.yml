@@ -52,6 +52,7 @@ openbao_kv_tuned_mounts: >-
 openbao_transit_mount: transit
 openbao_transit_mount_description: OpenTofu state encryption
 openbao_tofu_state_transit_key: tofu-state
+openbao_github_org_secrets_state_transit_key: tofu-state-github-org-secrets
 # Legacy demo subtree the terraform-proxmox vault-secrets proof writes to; kept
 # writable by the terraform-apply policy so that read/write proof keeps working.
 openbao_homelab_path: homelab
