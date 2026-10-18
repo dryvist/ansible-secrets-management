@@ -130,13 +130,19 @@ openbao_disclosure_denylist_metadata:
   reader: "GitHub org secret DISCLOSURE_DENYLIST (org dryvist, visibility: all)"
   docs: "JacobPEvans/.github _disclosure-gate.yml"
   rotation: "manual -- edit the term list directly; no scheduled rotation"
-# Narrow read-only leaf (disclosure-denylist-read-policy.hcl.j2), registered
-# in openbao_base_policies (07c) but deliberately unattached to any AppRole:
-# reads today go through the admin tier's existing per-mount grant
-# (ai-admin-policy.hcl.j2 loops openbao_kv_mounts, which already covers every
-# secrets-external path). This leaf exists so a future GitHub-sync identity
-# scopes to exactly this one entry instead of inheriting break-glass.
-openbao_disclosure_denylist_policy_name: disclosure-denylist-read
+# TODO: Follow up in Vikunja project 44 to remove the legacy
+# platform/disclosure-denylist custom metadata after consumers use github-org.
+# The org-secrets Terraform root reads exactly these KV-v2 leaves and fields.
+openbao_github_org_secrets_mount: secrets-external
+openbao_github_org_disclosure_denylist_path: github-org/disclosure-denylist
+openbao_github_org_disclosure_denylist_field: terms
+openbao_github_org_gitleaks_path: github-org/gitleaks
+openbao_github_org_gitleaks_fields:
+  - private_config
+  - license_key
+# Dedicated read-only leaf for the org-secrets workspace, registered in
+# openbao_base_policies (07c) and attached only to its Terrakube JWT role.
+openbao_github_org_secrets_read_policy_name: github-org-secrets-read
 # apps — read-side AppRole for the shared-Postgres application tier
 # (openbao_secrets domain "apps": Nautobot, Zammad). apps-seed above is the
 # WRITER; this is the enumerated read-only consumer the converge logs in with
