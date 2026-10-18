@@ -1,4 +1,12 @@
 ---
+# Both maps are lazy role defaults; every per-AppRole loop below reads them many
+# times per item, so resolve them once into facts for the rest of the run.
+- name: Resolve the AppRole class and CLI parameter maps once
+  ansible.builtin.set_fact:
+    openbao_approle_cidr_class_map: "{{ openbao_approle_cidr_class_map }}"
+    openbao_approle_cli_parameters: "{{ openbao_approle_cli_parameters }}"
+  no_log: true
+
 # --- CIDR binding: fail on an empty class rather than create an unbound role --
 # Every declared AppRole resolves to a named CIDR class (see
 # 08b-cidr-and-unlock.yml). A class whose CIDRs were never supplied would silently
