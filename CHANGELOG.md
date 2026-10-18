@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.27.1](https://github.com/dryvist/ansible-secrets-management/compare/v0.27.0...v0.27.1) (2026-10-18)
+
+
+### Bug Fixes
+
+* **openbao:** keep the github-runner mount and policy declared without App credentials ([#227](https://github.com/dryvist/ansible-secrets-management/issues/227)) ([f910708](https://github.com/dryvist/ansible-secrets-management/commit/f91070814db2da88ebe6662c7c827444138a3c2b))
+* **openbao:** send the declared AppRole parameters with the existence read ([#229](https://github.com/dryvist/ansible-secrets-management/issues/229)) ([5681784](https://github.com/dryvist/ansible-secrets-management/commit/568178400bbc65307b69226296657c92b5dc752a))
+
+
+### Performance
+
+* **openbao:** resolve the AppRole parameter maps once per run ([#231](https://github.com/dryvist/ansible-secrets-management/issues/231)) ([f7335d4](https://github.com/dryvist/ansible-secrets-management/commit/f7335d40f72565b0cef3a2da895c1fa07a01544e))
+
 ## [0.27.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.26.0...v0.27.0) (2026-10-17)
 
 
