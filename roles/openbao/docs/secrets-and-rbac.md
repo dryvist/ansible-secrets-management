@@ -12,10 +12,10 @@ wildcard already granted on `secret/` would reach across it.
 | `secrets-external/` | Credentials for internet-reachable vendor APIs | Critical — exploitable by anyone, anywhere |
 | `config/` | Non-secret configuration: operator selections, tunables, thresholds, coordination facts | Nothing exploitable by construction |
 
-The `sandbox-agent-read` AppRole reads only `secret/apps/sandbox-agent` and
-mints from the `public-read` GitHub permission set. `sandbox-agent-write`
-reads that same leaf and mints from `public-write`. Neither role reads another
-KV path. Both require
+The `sandbox-agent-read` AppRole reads `secret/apps/sandbox-agent` and
+`secret/apps/sandbox-agent-router`, then mints from the `public-read` GitHub
+permission set. `sandbox-agent-write` reads both leaves and mints from
+`public-write`. These roles read no other KV paths. Both require
 `OPENBAO_SANDBOX_AGENT_CIDRS`, use 15-minute token limits, and have one-use
 15-minute SecretIDs. The `open-llm` dispatcher can mint wrapped SecretIDs for
 either role and reads the exact `secrets-external/zai-coding` leaf. Its internal
