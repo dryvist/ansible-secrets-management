@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.29.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.28.0...v0.29.0) (2026-10-18)
+
+
+### Features
+
+* **openbao:** scope GitHub org secrets to a Terrakube workspace ([#237](https://github.com/dryvist/ansible-secrets-management/issues/237)) ([c332c91](https://github.com/dryvist/ansible-secrets-management/commit/c332c91f860ab801f4cfdd32905dc0096ddbcb38))
+
 ## [0.28.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.27.1...v0.28.0) (2026-10-18)
 
 
