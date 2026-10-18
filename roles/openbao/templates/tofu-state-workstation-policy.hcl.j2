@@ -1,0 +1,11 @@
+{{ ansible_managed | comment }}
+# OpenBao policy for the tofu-state-workstation AppRole: workstation OpenTofu
+# state encryption with the dedicated Transit key.
+
+path "{{ openbao_transit_mount }}/datakey/plaintext/{{ openbao_tofu_state_transit_key }}" {
+  capabilities = ["update"]
+}
+
+path "{{ openbao_transit_mount }}/decrypt/{{ openbao_tofu_state_transit_key }}" {
+  capabilities = ["update"]
+}
