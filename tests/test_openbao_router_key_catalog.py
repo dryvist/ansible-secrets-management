@@ -130,6 +130,20 @@ def test_glance_tile_key_is_generated_and_readable_by_the_apps_reader():
     assert 'path "secret/data/apps/glance"' in _render_apps_policy({})
 
 
+def test_sandbox_agent_router_key_is_generated_and_readable_by_the_apps_reader():
+    generated = DEFAULTS_DATA["openbao_generated_app_secrets"]
+    excluded = EXCLUDED_DATA["openbao_apps_read_excluded_generated_apps"]
+    assert generated["sandbox-agent-router"] == ["sandbox_agent_router_llm_router_key"]
+    assert "sandbox-agent" not in generated
+    assert "sandbox-agent-router" not in excluded
+    assert "sandbox-agent-router" in _read_apps({})
+
+
+def test_sandbox_agent_is_excluded_from_the_apps_read_set():
+    assert "sandbox-agent" not in _read_apps({})
+    assert "sandbox-agent" in EXCLUDED_DATA["openbao_apps_read_excluded_generated_apps"]
+
+
 def test_router_catalog_entries_feed_generation_and_the_apps_read_paths():
     catalog = {"contract-fixture": ["contract_fixture_llm_router_key"]}
     seeded = _render(
