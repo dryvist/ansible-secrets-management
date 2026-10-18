@@ -166,6 +166,8 @@ openbao_local_llm_policy_name: local-llm
 openbao_local_llm_approle_name: local-llm
 openbao_local_llm_workstation_policy_name: local-llm-workstation
 openbao_local_llm_workstation_approle_name: local-llm-workstation
+openbao_tofu_state_workstation_policy_name: tofu-state-workstation
+openbao_tofu_state_workstation_approle_name: tofu-state-workstation
 openbao_agent_workstation_approle_name: agent-workstation
 openbao_herdr_hail_policy_name: herdr-hail
 openbao_herdr_hail_approle_name: herdr-hail

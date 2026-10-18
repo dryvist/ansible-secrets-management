@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.28.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.27.1...v0.28.0) (2026-10-18)
+
+
+### Features
+
+* **openbao:** add a tofu-state transit AppRole ([#234](https://github.com/dryvist/ansible-secrets-management/issues/234)) ([0127a07](https://github.com/dryvist/ansible-secrets-management/commit/0127a0782bc0f7814cd87604fc4bd7608edeaf06))
+* **openbao:** add a workstation-bound tofu-state transit AppRole ([0127a07](https://github.com/dryvist/ansible-secrets-management/commit/0127a0782bc0f7814cd87604fc4bd7608edeaf06))
+
 ## [0.27.1](https://github.com/dryvist/ansible-secrets-management/compare/v0.27.0...v0.27.1) (2026-10-18)
 
 
