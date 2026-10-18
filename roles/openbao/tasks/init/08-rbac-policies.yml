@@ -309,12 +309,12 @@
       {{ openbao_ungranted_policy_names | join(', ') }}. Every other declared
       policy was written above. Reconcile CANNOT widen its own grants --
       openbao-reconcile is in openbao_reconcile_excluded_policies by design --
-      so this only clears with one phone-approved policy-sync run. After
-      updating openbao-unlock to map this tier to its dedicated client, run:
-      doppler run -- openbao-unlock --via phone elevate-policy-sync -- sh -c
-      'export OPENBAO_PROVISIONING_TOKEN="$BAO_TOKEN"; exec ansible-playbook
-      -i inventory/hosts.yml playbooks/site.yml --tags openbao_rbac -e
-      openbao_reconcile_mode=true'
+      so this clears with one human-approved policy-sync run from the
+      controller: doppler run -- openbao-unlock --via yubikey
+      openbao-policy-sync -- bash -c 'export
+      OPENBAO_PROVISIONING_TOKEN="$BAO_TOKEN"; unset BAO_TOKEN VAULT_TOKEN;
+      exec scripts/run-ansible.sh playbooks/site.yml --tags openbao_rbac -e
+      "{\"openbao_reconcile_mode\": true}" --limit openbao_group,localhost'
   when:
     - openbao_bootstrap_token is defined
     - openbao_reconcile_mode | default(false)
