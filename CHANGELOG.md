@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.29.1](https://github.com/dryvist/ansible-secrets-management/compare/v0.29.0...v0.29.1) (2026-10-18)
+
+
+### Bug Fixes
+
+* **openbao:** print the working policy-sync command ([#240](https://github.com/dryvist/ansible-secrets-management/issues/240)) ([3356173](https://github.com/dryvist/ansible-secrets-management/commit/335617335c0a5dc03d36971fe6e953c9bb59f939))
+
 ## [0.29.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.28.0...v0.29.0) (2026-10-18)
 
 
