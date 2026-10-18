@@ -1,0 +1,13 @@
+{{ {'role_type': 'jwt',
+    'bound_audiences': [openbao_terrakube_jwt_audience],
+    'bound_claims': {
+      'sub': 'organization:' ~ openbao_terrakube_organization
+             ~ ':workspace:' ~ terrakube_workspace.name},
+    'user_claim': 'sub',
+    'bound_claims_type': 'string',
+    'policies': (['terrakube-' ~ terrakube_workspace.name]
+                 + (terrakube_workspace.additional_policies | default([]))
+                 + ([openbao_config_write_policy_name]
+                    if terrakube_workspace.name in openbao_config_write_terrakube_workspaces
+                    else [])) | sort,
+    'token_ttl': openbao_terrakube_jwt_token_ttl} | to_json }}

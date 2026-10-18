@@ -18,7 +18,7 @@
 # identity, passing review and converging clean. (This exact invariant is
 # also asserted defensively in tasks/init/08-rbac-policies.yml; deriving here
 # makes the drift structurally impossible instead of only detected after the
-# fact.) Every one of the nine names below is unchanged by this derivation --
+# fact.) Every existing name is unchanged by this derivation --
 # proven in tests/test_terrakube_base_policies_derivation.py.
 openbao_terrakube_base_policies: >-
   {%- set _entries = [] -%}

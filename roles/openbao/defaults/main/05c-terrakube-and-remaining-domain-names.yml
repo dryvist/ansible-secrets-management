@@ -10,6 +10,7 @@ openbao_terrakube_jwt_token_ttl: 90m
 # does not carry an `organization` key, so this is sourced directly here;
 # override in group_vars/host_vars for a different environment.
 openbao_terrakube_organization: dryvist
+openbao_terrakube_org_secrets_workspace_name: tofu-github-org-secrets
 # Environment-specific workspace names, read from the runtime environment
 # (secret store) rather than committed. Each is both the Terrakube workspace
 # name and, for the AWS one, its STS role name. Unset = the converge fails on
@@ -40,6 +41,16 @@ openbao_terrakube_workspaces:
     github_mint: [dryvist-full-automation]
     github_admin_raw: true
     kv_read: [infrastructure/tofu-github/private-overrides]
+  - name: "{{ openbao_terrakube_org_secrets_workspace_name }}"
+    # This dedicated workspace reads the scoped organization-secret source
+    # policy and only the configured org-secret permission-set endpoints.
+    additional_policies: ["{{ openbao_github_org_secrets_read_policy_name }}"]
+    api_read: >-
+      {{ openbao_github_org_secrets_permission_sets
+         | map(attribute='name')
+         | map('regex_replace', '^', openbao_github_mount ~ '/token/')
+         | list }}
+    token_self_access: false
   - name: "{{ openbao_terrakube_network_workspace }}"
     # platform/object-storage: that workspace reads the published inventory and
     # the desired-state object out of the store to derive its DNS records and
@@ -259,13 +270,15 @@ openbao_approle_audit_approle_name: approle-audit
 # see the template header for why a fourth credential would be the wrong shape.
 openbao_config_write_policy_name: config-write
 # Terrakube workspaces whose JWT role also carries config-write. Every declared
-# workspace by default, since Terrakube is named as a config author; narrowing
-# it is one edit here rather than a policy change. NOTE: Terrakube runs
+# workspace by default except the org-secrets workspace, which has no config
+# access; narrowing it is one edit here rather than a policy change. NOTE: Terrakube runs
 # VCS-driven, potentially untrusted plans, so this is the one config-write
 # grant whose blast radius is worth revisiting — it cannot reach a credential
 # mount, but it can rewrite config that other systems read.
 openbao_config_write_terrakube_workspaces: >-
-  {{ openbao_terrakube_workspaces | map(attribute='name') | list }}
+  {{ openbao_terrakube_workspaces
+     | rejectattr('name', 'equalto', openbao_terrakube_org_secrets_workspace_name)
+     | map(attribute='name') | list }}
 # ai-public: the fabric-brain runtime domain (secret/ai/public/*, field
 # active_model). Its OWN narrow read-only credential — NOT local-llm's broader
 # ai/* read — held by the hermes_agent / open_webui brain-sync timers to
