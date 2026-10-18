@@ -88,7 +88,6 @@ openbao_approle_class_map: >-
     'splunk-mcp-rotate': 'converge-automation',
     'terraform': 'converge-automation',
     'terraform-apply': 'converge-automation',
-    'tofu-state-workstation': 'operator-admin',
     'vikunja': 'service-runtime',
     'vikunja-mcp': 'service-runtime'
   } -%}
