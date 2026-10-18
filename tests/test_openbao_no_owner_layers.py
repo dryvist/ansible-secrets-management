@@ -29,10 +29,10 @@ def _text(path):
     return path.read_text(encoding="utf-8", errors="ignore")
 
 
-def _render_workspace_role(workspace_name, additional_policies=None):
+def _render_workspace_role_json(workspace_name, additional_policies=None):
     environment = Environment()
     environment.filters["to_json"] = json.dumps
-    rendered = environment.from_string(_text(JWT_ROLE_TEMPLATE)).render(
+    return environment.from_string(_text(JWT_ROLE_TEMPLATE)).render(
         openbao_terrakube_jwt_audience="openbao.workload.identity",
         openbao_terrakube_organization="dryvist",
         openbao_terrakube_jwt_token_ttl="90m",
@@ -43,7 +43,10 @@ def _render_workspace_role(workspace_name, additional_policies=None):
             "additional_policies": additional_policies or [],
         },
     )
-    return json.loads(rendered)
+
+
+def _render_workspace_role(workspace_name, additional_policies=None):
+    return json.loads(_render_workspace_role_json(workspace_name, additional_policies))
 
 
 def test_roles_have_no_github_installation_id_lists():
@@ -94,37 +97,59 @@ def test_org_secrets_workspace_is_separate_from_public_tofu_github():
     ]
 
 
-def test_public_and_org_secrets_jwt_roles_bind_exact_workspace_names():
+def test_public_and_org_secrets_jwt_roles_bind_the_expected_workspace_names():
     public_role = _render_workspace_role("tofu-github")
     org_secrets_role = _render_workspace_role(
-        "tofu-github-org-secrets", ["github-org-secrets-read"]
+        "github-org-secrets", ["github-org-secrets-read"]
     )
-    assert public_role["bound_claims"] == {"sub": "organization:dryvist:workspace:tofu-github"}
-    assert org_secrets_role["bound_claims"] == {
-        "sub": "organization:dryvist:workspace:tofu-github-org-secrets"
+    assert public_role["bound_claims"] == {
+        "sub": [
+            "organization:dryvist:workspace:tofu-github",
+            "organization:dryvist:workspace:tofu-github-*",
+        ]
     }
-    assert public_role["bound_claims_type"] == "string"
+    assert org_secrets_role["bound_claims"] == {
+        "sub": "organization:dryvist:workspace:github-org-secrets"
+    }
+    assert public_role["bound_claims_type"] == "glob"
     assert org_secrets_role["bound_claims_type"] == "string"
-    assert "-*" not in public_role["bound_claims"]["sub"]
-    assert public_role["bound_claims"]["sub"] != org_secrets_role["bound_claims"]["sub"]
+    assert isinstance(org_secrets_role["bound_claims"]["sub"], str)
     assert org_secrets_role["policies"] == [
         "github-org-secrets-read",
-        "terrakube-tofu-github-org-secrets",
+        "terrakube-github-org-secrets",
     ]
     assert "config-write" not in org_secrets_role["policies"]
     assert "terrakube-workspace-jwt-role.json.j2" in _text(JWT_TASKS)
 
+    assert _render_workspace_role_json("tofu-github") == json.dumps(
+        {
+            "role_type": "jwt",
+            "bound_audiences": ["openbao.workload.identity"],
+            "bound_claims": {
+                "sub": [
+                    "organization:dryvist:workspace:tofu-github",
+                    "organization:dryvist:workspace:tofu-github-*",
+                ]
+            },
+            "user_claim": "sub",
+            "bound_claims_type": "glob",
+            "policies": ["config-write", "terrakube-tofu-github"],
+            "token_ttl": "90m",
+        }
+    )
+
 
 def test_retired_terrakube_prefix_spares_the_shared_tofu_github_identity():
     prefix = yaml.safe_load(_text(RETIRED))["openbao_retired_terrakube_prefix"]
-    assert prefix == "terrakube-tofu-github-owner-"
+    assert prefix == "terrakube-tofu-github-"
     live = [
         "terrakube-tofu-github",
         "terrakube-tofu-github-owner-a",
-        "terrakube-tofu-github-org-secrets",
+        "terrakube-github-org-secrets",
         "terrakube-iac-platform",
     ]
     assert [name for name in live if re.match("^" + re.escape(prefix), name)] == [
         "terrakube-tofu-github-owner-a"
     ]
+    assert not re.match("^" + re.escape(prefix), "terrakube-github-org-secrets")
     assert "openbao_retired_terrakube_prefix | regex_escape" in _text(RETIRE_TASKS)

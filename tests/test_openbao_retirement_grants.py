@@ -17,7 +17,7 @@ def grants(retired_roles, retired_policies, transit_mount="transit", state_key="
         openbao_ssh_mount="ssh-client-ca", openbao_kv_mounts=[],
         openbao_github_mount="github", openbao_github_app_mounts=[],
         openbao_retired_approles=retired_roles, openbao_retired_policies=retired_policies,
-        openbao_retired_terrakube_prefix="terrakube-tofu-github-owner-",
+        openbao_retired_terrakube_prefix="terrakube-tofu-github-",
         openbao_terrakube_jwt_auth_path="terrakube",
         openbao_transit_mount=transit_mount,
         openbao_tofu_state_transit_key=state_key,
@@ -37,7 +37,7 @@ class RetirementGrants(unittest.TestCase):
         self.assertEqual(deleted, {
             "auth/approle/role/open-llm-workstation",
             "auth/approle/role/github-agents",
-            "auth/terrakube/role/terrakube-tofu-github-owner-*",
+            "auth/terrakube/role/terrakube-tofu-github-*",
             "sys/policies/acl/github-agents",
             "github-agents/permissionset/agents-write",
         })

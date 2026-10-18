@@ -10,7 +10,7 @@ openbao_terrakube_jwt_token_ttl: 90m
 # does not carry an `organization` key, so this is sourced directly here;
 # override in group_vars/host_vars for a different environment.
 openbao_terrakube_organization: dryvist
-openbao_terrakube_org_secrets_workspace_name: tofu-github-org-secrets
+openbao_terrakube_org_secrets_workspace_name: github-org-secrets
 # Environment-specific workspace names, read from the runtime environment
 # (secret store) rather than committed. Each is both the Terrakube workspace
 # name and, for the AWS one, its STS role name. Unset = the converge fails on
