@@ -145,8 +145,11 @@ path "sys/auth" {
 }
 
 # --- Engine content the converge seeds -----------------------------------
-# Updating keys/tofu-state cannot change exportability or deletion (those are under /config, not granted); reconcile cannot delete the key.
+# Updating a state key cannot change exportability or deletion (those are under /config, not granted); reconcile cannot delete a key.
 path "{{ openbao_transit_mount }}/keys/{{ openbao_tofu_state_transit_key }}" {
+  capabilities = ["read", "update"]
+}
+path "{{ openbao_transit_mount }}/keys/{{ openbao_github_org_secrets_state_transit_key }}" {
   capabilities = ["read", "update"]
 }
 {% for mount in openbao_kv_mounts | default([]) %}
