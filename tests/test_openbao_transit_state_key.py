@@ -80,12 +80,17 @@ class TransitStateKeyIsDeclared(unittest.TestCase):
         self.assertTrue(check["no_log"])
         self.assertTrue(create["no_log"])
 
-    def test_only_the_org_secrets_workspace_policy_references_its_key(self):
-        for path in (TERRAFORM_APPLY_POLICY, AI_ADMIN_POLICY, RECONCILE_POLICY):
+    def test_only_the_converge_policy_references_the_org_secrets_key(self):
+        for path in (TERRAFORM_APPLY_POLICY, AI_ADMIN_POLICY):
             self.assertNotIn(
                 "openbao_github_org_secrets_state_transit_key",
                 path.read_text(encoding="utf-8"),
             )
+        # The converge creates the key, so reconcile reads and updates it like the state key.
+        self.assertIn(
+            'keys/{{ openbao_github_org_secrets_state_transit_key }}" {\n  capabilities = ["read", "update"]',
+            RECONCILE_POLICY.read_text(encoding="utf-8"),
+        )
 
     def test_github_org_secrets_key_uses_the_same_absent_only_creation_pattern(self):
         check = _task(

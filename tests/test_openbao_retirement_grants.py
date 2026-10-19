@@ -8,7 +8,13 @@ ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE = ROOT / "roles/openbao/templates/openbao-reconcile-policy.hcl.j2"
 
 
-def grants(retired_roles, retired_policies, transit_mount="transit", state_key="tofu-state"):
+def grants(
+    retired_roles,
+    retired_policies,
+    transit_mount="transit",
+    state_key="tofu-state",
+    org_secrets_key="tofu-state-github-org-secrets",
+):
     env = Environment()
     env.filters["comment"] = lambda value: ""
     rendered = env.from_string(TEMPLATE.read_text()).render(
@@ -21,6 +27,7 @@ def grants(retired_roles, retired_policies, transit_mount="transit", state_key="
         openbao_terrakube_jwt_auth_path="terrakube",
         openbao_transit_mount=transit_mount,
         openbao_tofu_state_transit_key=state_key,
+        openbao_github_org_secrets_state_transit_key=org_secrets_key,
     )
     return {
         path: set(re.findall(r'"([^"]+)"', body))
@@ -56,11 +63,14 @@ class RetirementGrants(unittest.TestCase):
         self.assertEqual(policy["sys/mounts/transit"], {"read", "update"})
         self.assertEqual(policy["transit/keys/tofu-state"], {"read", "update"})
         self.assertEqual(
+            policy["transit/keys/tofu-state-github-org-secrets"], {"read", "update"}
+        )
+        self.assertEqual(
             {path for path in policy if path.startswith("sys/mounts/")},
             {"sys/mounts/transit"},
         )
         self.assertEqual(
             {path for path in policy if path.startswith("transit/")},
-            {"transit/keys/tofu-state"},
+            {"transit/keys/tofu-state", "transit/keys/tofu-state-github-org-secrets"},
         )
         self.assertEqual(policy["sys/mounts"], {"read", "list"})

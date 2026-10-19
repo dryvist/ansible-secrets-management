@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.30.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.29.1...v0.30.0) (2026-10-19)
+
+
+### Features
+
+* **openbao:** give the sandbox router key its own leaf ([#242](https://github.com/dryvist/ansible-secrets-management/issues/242)) ([de429e3](https://github.com/dryvist/ansible-secrets-management/commit/de429e32948d91b56c7296a821954a2254d15188))
+
+
+### Bug Fixes
+
+* **openbao:** grant reconcile the GitHub org-secrets Transit key ([#244](https://github.com/dryvist/ansible-secrets-management/issues/244)) ([cdb9c56](https://github.com/dryvist/ansible-secrets-management/commit/cdb9c569d013b70446fc8d73cf52f893f89e5d5a))
+
 ## [0.29.1](https://github.com/dryvist/ansible-secrets-management/compare/v0.29.0...v0.29.1) (2026-10-18)
 
 
