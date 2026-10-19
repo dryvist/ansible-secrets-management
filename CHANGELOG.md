@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.30.1](https://github.com/dryvist/ansible-secrets-management/compare/v0.30.0...v0.30.1) (2026-10-19)
+
+
+### Bug Fixes
+
+* **openbao:** add Semaphore reads for benchmark and sandbox-agent ([#247](https://github.com/dryvist/ansible-secrets-management/issues/247)) ([5cdaff4](https://github.com/dryvist/ansible-secrets-management/commit/5cdaff4b0367e8a254c33fdcd4ceea8cbcde5daf))
+* **openbao:** grant Semaphore reads for benchmark and sandbox-agent ([5cdaff4](https://github.com/dryvist/ansible-secrets-management/commit/5cdaff4b0367e8a254c33fdcd4ceea8cbcde5daf))
+
 ## [0.30.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.29.1...v0.30.0) (2026-10-19)
 
 
