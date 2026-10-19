@@ -59,6 +59,23 @@ path "{{ openbao_kv_mount }}/data/platform/ansible/env" {
   capabilities = ["read"]
 }
 
+# ansible-proxmox-ai's router secret prefetch consumes these two app entries.
+path "{{ openbao_kv_mount }}/data/apps/benchmark" {
+  capabilities = ["read"]
+}
+
+path "{{ openbao_kv_mount }}/metadata/apps/benchmark" {
+  capabilities = ["read", "list"]
+}
+
+path "{{ openbao_kv_mount }}/data/apps/sandbox-agent" {
+  capabilities = ["read"]
+}
+
+path "{{ openbao_kv_mount }}/metadata/apps/sandbox-agent" {
+  capabilities = ["read", "list"]
+}
+
 # Cribl pack discovery selects an org through the App installation. Pin its raw
 # request to the exact read map and forbid repository or installation selectors.
 path "{{ openbao_github_everyday_mount }}/token" {

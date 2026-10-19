@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import jinja2
 import yaml
 from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar, trust_as_template
@@ -71,6 +72,16 @@ def _unreadable(paths: list[str], read_apps: set[str], template_text: str) -> li
     return missing
 
 
+def _render_apps_policy(read_apps: set[str]) -> str:
+    environment = jinja2.Environment()
+    environment.filters["comment"] = str
+    return environment.from_string(POLICY_TEMPLATE.read_text(encoding="utf-8")).render(
+        ansible_managed="",
+        openbao_kv_mount="secret",
+        openbao_apps_read_apps=sorted(read_apps),
+    )
+
+
 def test_every_apps_domain_path_is_granted_to_the_apps_reader():
     read_apps = _read_apps(_yaml(NAMES_FILE))
     missing = _unreadable(_apps_domain_paths(), read_apps, POLICY_TEMPLATE.read_text(encoding="utf-8"))
@@ -79,6 +90,14 @@ def test_every_apps_domain_path_is_granted_to_the_apps_reader():
         "the domain fetch fails on the 403. Add the bucket to a seeding map or to "
         "openbao_apps_read_published_apps."
     )
+
+
+def test_benchmark_and_promoted_sandbox_agent_paths_render_in_apps_policy():
+    policy = _render_apps_policy(_read_apps(_yaml(NAMES_FILE)))
+
+    for app in ("benchmark", "sandbox-agent"):
+        assert f'path "secret/data/apps/{app}"' in policy
+        assert f'path "secret/metadata/apps/{app}"' in policy
 
 
 def test_a_published_only_bucket_is_missing_without_the_published_list():

@@ -11,6 +11,7 @@ from ansible.template import Templar, trust_as_template
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULTS = ROOT / "roles/openbao/defaults/main/01c-app-secrets-generated.yml"
 PATH_DEFAULTS = ROOT / "roles/openbao/defaults/main/01d-app-secret-paths.yml"
+PROMOTED_DEFAULTS = ROOT / "roles/openbao/defaults/main/01b-app-secrets.yml"
 OPENBAO_META = ROOT / "roles/openbao/meta/main.yml"
 READ_DEFAULTS = ROOT / "roles/openbao/defaults/main/05c-terrakube-and-remaining-domain-names.yml"
 EXCLUDED_DEFAULTS = ROOT / "roles/openbao/defaults/main/05h-cribl-edge-readers.yml"
@@ -22,6 +23,7 @@ APPS_POLICY = ROOT / "roles/openbao/templates/apps-policy.hcl.j2"
 
 DEFAULTS_DATA = yaml.safe_load(DEFAULTS.read_text(encoding="utf-8"))
 PATH_DEFAULTS_DATA = yaml.safe_load(PATH_DEFAULTS.read_text(encoding="utf-8"))
+PROMOTED_DATA = yaml.safe_load(PROMOTED_DEFAULTS.read_text(encoding="utf-8"))
 READ_DATA = yaml.safe_load(READ_DEFAULTS.read_text(encoding="utf-8"))
 EXCLUDED_DATA = yaml.safe_load(EXCLUDED_DEFAULTS.read_text(encoding="utf-8"))
 OPENBAO_META_DATA = yaml.safe_load(OPENBAO_META.read_text(encoding="utf-8"))
@@ -37,13 +39,13 @@ def _render(value, variables):
     return templar.template(trust_as_template(value))
 
 
-def _read_apps(router_catalog):
+def _read_apps(router_catalog, promoted_app_secrets=None):
     return _render(
         READ_DATA["openbao_apps_read_apps"],
         {
             "openbao_generated_app_secrets": DEFAULTS_DATA["openbao_generated_app_secrets"],
             "openbao_generated_app_secret_paths": PATH_DEFAULTS_DATA["openbao_generated_app_secret_paths"],
-            "openbao_promoted_app_secrets": {},
+            "openbao_promoted_app_secrets": promoted_app_secrets or {},
             "openbao_router_key_catalog": router_catalog,
             "openbao_apps_read_published_apps": READ_DATA["openbao_apps_read_published_apps"],
             "openbao_apps_read_excluded_generated_apps": EXCLUDED_DATA[
@@ -139,9 +141,11 @@ def test_sandbox_agent_router_key_is_generated_and_readable_by_the_apps_reader()
     assert "sandbox-agent-router" in _read_apps({})
 
 
-def test_sandbox_agent_is_excluded_from_the_apps_read_set():
+def test_sandbox_agent_promotion_is_readable_by_the_apps_reader():
     assert "sandbox-agent" not in _read_apps({})
-    assert "sandbox-agent" in EXCLUDED_DATA["openbao_apps_read_excluded_generated_apps"]
+    promoted_apps = PROMOTED_DATA["openbao_promoted_app_secrets"]
+    assert "sandbox-agent" in _read_apps({}, promoted_apps)
+    assert "ci-resolver" not in _read_apps({}, promoted_apps)
 
 
 def test_router_catalog_entries_feed_generation_and_the_apps_read_paths():
