@@ -1,4 +1,4 @@
-"""Sandbox policies render only the declared leaf and GitHub permission sets."""
+"""Sandbox policies render the declared leaves and GitHub permission sets."""
 
 from pathlib import Path
 import re
@@ -34,17 +34,29 @@ class SandboxAgentPolicies(unittest.TestCase):
                     re.search(r'path "secret/(?:data|metadata)/[^"*+]*[*+][^"]*"', rendered)
                 )
 
-    def test_read_policy_is_limited_to_the_sandbox_leaf_and_read_token_set(self):
+    def test_read_policy_reads_both_sandbox_leaves_and_the_read_token_set(self):
         rendered = _render(POLICIES[0])
-        self.assertIn('path "secret/data/apps/sandbox-agent"', rendered)
-        self.assertIn('path "github-agents/token/public-read"', rendered)
+        self.assertCountEqual(
+            re.findall(
+                r'path "([^"]+)" \{\s*capabilities = \[([^\]]+)\]\s*\}', rendered
+            ),
+            [
+                ("secret/data/apps/sandbox-agent", '"read"'),
+                ("secret/data/apps/sandbox-agent-router", '"read"'),
+                ("github-agents/token/public-read", '"create", "update"'),
+            ],
+        )
         self.assertNotIn('path "github-agents/token/public-write"', rendered)
 
-    def test_write_policy_reads_only_the_sandbox_leaf_and_mints_write_tokens(self):
+    def test_write_policy_reads_both_sandbox_leaves_and_mints_write_tokens(self):
         rendered = _render(POLICIES[1])
         self.assertCountEqual(
             re.findall(r'path "([^"]+)"', rendered),
-            ["secret/data/apps/sandbox-agent", "github-agents/token/public-write"],
+            [
+                "secret/data/apps/sandbox-agent",
+                "secret/data/apps/sandbox-agent-router",
+                "github-agents/token/public-write",
+            ],
         )
         self.assertCountEqual(
             re.findall(
@@ -53,6 +65,7 @@ class SandboxAgentPolicies(unittest.TestCase):
             ),
             [
                 ("secret/data/apps/sandbox-agent", '"read"'),
+                ("secret/data/apps/sandbox-agent-router", '"read"'),
                 ("github-agents/token/public-write", '"create", "update"'),
             ],
         )
