@@ -34,6 +34,17 @@
 {% for policy_name in managed_policies %}
 path "sys/policies/acl/{{ policy_name }}" {
   capabilities = ["create", "read", "update"]
+{% if policy_name == openbao_tofu_state_admin_policy_name %}
+  allowed_parameters = {
+    "policy" = [{{ (lookup('template', 'tofu-state-admin-policy.hcl.j2') | trim | regex_replace('$', '\n')) | tojson }}]
+  }
+  required_parameters = ["policy"]
+{% elif policy_name == openbao_github_mount_config_policy_name %}
+  allowed_parameters = {
+    "policy" = [{{ (lookup('template', 'github-mount-config-policy.hcl.j2') | trim | regex_replace('$', '\n')) | tojson }}]
+  }
+  required_parameters = ["policy"]
+{% endif %}
 }
 {% endfor %}
 # Retired names carry deletion only, without arbitrary policy administration.
@@ -92,6 +103,32 @@ path "auth/approle/role/{{ approle_name }}/policies" {
   required_parameters = ["token_policies"]
 }
 {% endfor %}
+{# These human-gated roles stay out of managed_approles; reconcile changes
+   only their policy attachments through the dedicated /policies endpoint. #}
+{% set admin_session_policies = openbao_approle_cli_parameters[
+    openbao_ai_admin_session_approle_name].token_policies.split(',') %}
+path "auth/approle/role/{{ openbao_ai_admin_session_approle_name }}" {
+  capabilities = ["read"]
+}
+path "auth/approle/role/{{ openbao_ai_admin_session_approle_name }}/policies" {
+  capabilities = ["update"]
+  allowed_parameters = {
+    "token_policies" = [{{ admin_session_policies | join(',') | tojson }}]
+  }
+  required_parameters = ["token_policies"]
+}
+{% set policy_sync_policies = openbao_approle_cli_parameters[
+    openbao_policy_sync_approle_name].token_policies.split(',') %}
+path "auth/approle/role/{{ openbao_policy_sync_approle_name }}" {
+  capabilities = ["read"]
+}
+path "auth/approle/role/{{ openbao_policy_sync_approle_name }}/policies" {
+  capabilities = ["update"]
+  allowed_parameters = {
+    "token_policies" = [{{ policy_sync_policies | join(',') | tojson }}]
+  }
+  required_parameters = ["token_policies"]
+}
 {% for approle_name in openbao_retired_approles | default([]) | reject('in', breakglass) %}
 path "auth/approle/role/{{ approle_name }}" {
   capabilities = ["read", "delete"]
