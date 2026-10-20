@@ -119,7 +119,7 @@ plans):
 | `ai-apply-<svc>` | `read-<svc>` | `write-<svc>` + `github-mint` | Task-scoped WRITE, one service; no standing secret_id; ≤1h[^ai-tiers] |
 | `ai-apply-all` | `read-write-all` | `read-write-all` + `github-mint` | Cross-domain WRITE rollup; no standing secret_id; ≤1h[^ai-tiers] |
 | `ai-admin` | all KV + policy/auth admin | policy/AppRole/token, all KV, AWS STS | Break-glass; human-gated; alerted[^ai-tiers] |
-| `ai-admin-session` | `ai-admin` | `ai-admin` + `tofu-state-admin` | Human-gated service session; state-key decrypt only on declared Transit paths[^ai-tiers] |
+| `ai-admin-session` | `ai-admin` | `ai-admin` + `tofu-state-admin` | Human-gated service-token session; 1h renewal / 8h explicit maximum; alerted[^ai-tiers] |
 | `elevate-trusted` (`auth/authelia`) | `human-unlock` | secret_id mint, human-gated tiers | Phone-approved; 5m[^elevate] |
 | `elevate-untrusted` (`auth/authelia`) | `human-unlock-untrusted` | secret_id mint, `ai-apply-<svc>` | Phone-approved, untrusted; 5m[^elevate] |
 | `snapshot` | `sys/storage/raft/snapshot` | — | least-priv backup identity |
