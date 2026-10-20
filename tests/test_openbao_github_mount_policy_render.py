@@ -132,9 +132,9 @@ def test_policy_renders_only_declared_mounts_and_constrained_paths():
 
     bodies = dict(stanzas)
     expected_capabilities = {
-        "sys/mounts/github-public": ["create", "update"],
-        "sys/mounts/github-empty": ["create", "update"],
-        "sys/mounts/github-sets": ["create", "update"],
+        "sys/mounts/github-public": ["update"],
+        "sys/mounts/github-empty": ["update"],
+        "sys/mounts/github-sets": ["update"],
         "github-public/config": ["create", "read", "update"],
         "github-empty/config": ["create", "read", "update"],
         "github-sets/config": ["create", "read", "update"],

@@ -2,7 +2,7 @@
 # Configure only the declared per-App GitHub mounts during a human-gated run.
 {% for gm in openbao_github_app_mounts | default([]) %}
 path "sys/mounts/{{ gm.mount }}" {
-  capabilities = ["create", "update"]
+  capabilities = ["update"]
 }
 
 path "{{ gm.mount }}/config" {
