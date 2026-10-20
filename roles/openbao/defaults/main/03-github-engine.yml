@@ -68,6 +68,23 @@ openbao_github_read_permissions:
 # one) — asserted verbatim in tasks/init/05-github-engine.yml.
 openbao_github_repo_create_permissions:
   administration: write
+# Personal-account write tier: a fixed App permission set, pinned to the
+# personal App's installation. It is declared only when that installation ID
+# is configured; the App's own grant remains the ceiling.
+openbao_github_personal_write_set_name: personal-write
+openbao_github_personal_write_permissions:
+  contents: write
+  pull_requests: write
+  workflows: write
+  checks: read
+  statuses: read
+  metadata: read
+openbao_github_personal_permission_sets: >-
+  {{ [{'name': openbao_github_personal_write_set_name,
+       'tier': 'write',
+       'installation_id': openbao_github_personal_installation_id,
+       'permissions': openbao_github_personal_write_permissions}]
+     if openbao_github_personal_installation_id | length > 0 else [] }}
 # org-admin tier: exactly one permission, organization-level. Org rulesets and
 # other organization settings; asserted verbatim like the repo-create map.
 openbao_github_org_admin_permissions:
@@ -239,4 +256,6 @@ openbao_github_permission_sets: >-
   {{ (openbao_github_admin_permission_sets
       | map('combine', {'mount': openbao_github_mount}) | list)
      + (openbao_github_read_permission_sets
-        | map('combine', {'mount': openbao_github_everyday_mount}) | list) }}
+        | map('combine', {'mount': openbao_github_everyday_mount}) | list)
+     + (openbao_github_personal_permission_sets
+        | map('combine', {'mount': openbao_github_personal_mount}) | list) }}

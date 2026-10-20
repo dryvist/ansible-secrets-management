@@ -38,6 +38,15 @@ path "{{ openbao_github_everyday_mount }}/token" {
   # Denying installation_id waits for the legacy helper removal step.
 }
 
+# Named write-tier permission sets are already pinned to their App installation
+# and fixed permission map, so the existing write identity can mint them only
+# at their explicit mount/set paths.
+{% for permission_set in openbao_github_permission_sets | selectattr('tier', 'equalto', 'write') %}
+path "{{ permission_set.mount }}/token/{{ permission_set.name }}" {
+  capabilities = ["create", "update"]
+}
+{% endfor %}
+
 # Write-lease lock records (claim/extend/release + metadata for
 # delete_version_after and CAS versioning). Scoped to the github-write lock
 # subtree only — no other KV path.
