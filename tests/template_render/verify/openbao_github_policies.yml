@@ -46,6 +46,26 @@
       ansible.builtin.include_vars:
         dir: ../../../roles/openbao/defaults/main
 
+    - name: Pin the personal App installation to the unconfigured case
+      ansible.builtin.set_fact:
+        openbao_github_personal_installation_id: ""
+
+    - name: Assert an unconfigured personal installation declares no mount or set
+      vars:
+        _personal_mounts: >-
+          {{ openbao_github_app_mounts
+             | selectattr('mount', 'equalto', openbao_github_personal_mount) | list }}
+        _personal_sets: >-
+          {{ openbao_github_permission_sets
+             | selectattr('name', 'equalto', openbao_github_personal_write_set_name) | list }}
+      ansible.builtin.assert:
+        that:
+          - openbao_github_personal_permission_sets == []
+          - _personal_mounts == []
+          - _personal_sets == []
+        fail_msg: >-
+          An unset personal installation ID must omit its mount and write set.
+
     - name: Pin runner App credentials to the unconfigured case
       ansible.builtin.set_fact:
         openbao_github_runner_app_id: ""
@@ -152,6 +172,12 @@
       register: _github_write_installation_raw
 
     - name: Assert installation scope renders the installation selector
+      vars:
+        _personal_write_path: >-
+          {{ openbao_github_personal_mount }}/token/{{ openbao_github_personal_write_set_name }}
+        _write_policy_paths: >-
+          {{ (_github_write_installation_raw.content | b64decode)
+             | regex_findall('(?m)^path "([^"]+)"') }}
       ansible.builtin.assert:
         that:
           - >-
@@ -160,6 +186,7 @@
           - >-
             'fixture-repo' not in
             (_github_write_installation_raw.content | b64decode)
+          - _personal_write_path not in _write_policy_paths
         fail_msg: Installation scope must leave repository selection to the GitHub installation.
 
     # set_fact, not task vars: include_vars sits ABOVE task vars in Ansible's
@@ -228,6 +255,10 @@
         openbao_github_docs_publisher_repos: [fixture-repo]
         openbao_github_ci_resolver_repos: [fixture-repo]
 
+    - name: Pin the personal App installation to the configured case
+      ansible.builtin.set_fact:
+        openbao_github_personal_installation_id: fixture-installation
+
     - name: Render the tier policies with a publisher repository configured
       ansible.builtin.template:
         src: "{{ _template_dir }}/{{ item }}.j2"
@@ -272,6 +303,49 @@
         _paths: >-
           {{ _tier_raw.results | map(attribute='content') | map('b64decode')
              | map('regex_findall', '(?m)^path "([^"]+)"') | list }}
+
+    - name: Assert the personal write set and its write-tier grant are exact
+      vars:
+        _personal_mounts: >-
+          {{ openbao_github_app_mounts
+             | selectattr('mount', 'equalto', openbao_github_personal_mount) | list }}
+        _personal_sets: "{{ openbao_github_personal_permission_sets }}"
+        _personal_policy_sets: >-
+          {{ openbao_github_permission_sets
+             | selectattr('name', 'equalto', openbao_github_personal_write_set_name) | list }}
+        _personal_write_path: >-
+          {{ openbao_github_personal_mount }}/token/{{ openbao_github_personal_write_set_name }}
+      ansible.builtin.assert:
+        that:
+          - _personal_sets | length == 1
+          - _personal_sets[0].name == openbao_github_personal_write_set_name
+          - _personal_sets[0].tier == 'write'
+          - _personal_sets[0].installation_id == openbao_github_personal_installation_id
+          - >-
+            _personal_sets[0].permissions
+            == {'contents': 'write', 'pull_requests': 'write',
+                'workflows': 'write', 'checks': 'read',
+                'statuses': 'read', 'metadata': 'read'}
+          - _personal_mounts | length == 1
+          - _personal_mounts[0].permission_sets == _personal_sets
+          - _personal_mounts[0].app_id == openbao_github_personal_app_id
+          - _personal_mounts[0].private_key == openbao_github_personal_app_private_key
+          - _personal_policy_sets | length == 1
+          - _personal_policy_sets[0].mount == openbao_github_personal_mount
+          - _write_paths | select('equalto', _personal_write_path) | list | length == 1
+          - _personal_write_path not in _mint_paths
+          - _personal_write_path not in _read_paths
+          - _personal_write_path not in _repo_create_paths
+          - _personal_write_path not in _org_admin_paths
+          - _personal_write_path not in _publisher_paths
+          - _personal_write_path not in _ci_resolver_paths
+          - _personal_write_path not in _open_llm_paths
+          - _personal_write_path not in _ai_public_paths
+          - _personal_write_path not in _ai_orchestrator_paths
+        fail_msg: >-
+          The personal write set must remain installation-pinned and be
+          granted by the existing write-tier policy without leaking to
+          another consumer tier.
 
     - name: Assert the publisher policy grants exactly its own set
       ansible.builtin.assert:
