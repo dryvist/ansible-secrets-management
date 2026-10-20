@@ -140,7 +140,7 @@ def test_capability_probes_run_during_check_mode():
         if CAPABILITY_PROBE in _command(task)
     ]
 
-    assert len(probes) == 3
+    assert len(probes) == 4
     for task in probes:
         assert task.get("changed_when") is False
         assert task.get("check_mode") is False

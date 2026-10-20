@@ -1,0 +1,153 @@
+---
+# These roles stay outside the managed AppRole set. Reconcile changes only
+# their token_policies through the dedicated /policies endpoint.
+- name: Resolve the desired policy attachments for the human-gated AppRoles
+  ansible.builtin.set_fact:
+    openbao_human_gated_approle_policy_updates:
+      - name: "{{ openbao_ai_admin_session_approle_name }}"
+        role_path: "auth/approle/role/{{ openbao_ai_admin_session_approle_name }}"
+        policies_path: "auth/approle/role/{{ openbao_ai_admin_session_approle_name }}/policies"
+        token_policies: >-
+          {{ openbao_approle_cli_parameters[openbao_ai_admin_session_approle_name]
+             .token_policies.split(',') }}
+      - name: "{{ openbao_policy_sync_approle_name }}"
+        role_path: "auth/approle/role/{{ openbao_policy_sync_approle_name }}"
+        policies_path: "auth/approle/role/{{ openbao_policy_sync_approle_name }}/policies"
+        token_policies: >-
+          {{ openbao_approle_cli_parameters[openbao_policy_sync_approle_name]
+             .token_policies.split(',') }}
+  changed_when: false
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_reconcile_mode | default(false) | bool
+
+- name: Ask whether this identity may reconcile the human-gated AppRole policies
+  ansible.builtin.command:
+    cmd: >-
+      bao write -format=json sys/capabilities-self
+      {{ openbao_human_gated_approle_policy_updates
+         | map(attribute='role_path')
+         | map('regex_replace', '^', 'paths=') | join(' ') }}
+      {{ openbao_human_gated_approle_policy_updates
+         | map(attribute='policies_path')
+         | map('regex_replace', '^', 'paths=') | join(' ') }}
+  environment:
+    BAO_ADDR: "{{ openbao_cli_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
+  register: openbao_human_gated_approle_policy_caps_raw
+  no_log: true
+  check_mode: false
+  changed_when: false
+  failed_when: false
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_reconcile_mode | default(false) | bool
+
+- name: Fail if the human-gated AppRole capability probe failed
+  ansible.builtin.fail:
+    msg: >-
+      The capability probe for the human-gated AppRole paths failed with rc
+      {{ openbao_human_gated_approle_policy_caps_raw.rc | default('unknown') }};
+      reconcile did not read or change either role.
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_reconcile_mode | default(false) | bool
+    - (openbao_human_gated_approle_policy_caps_raw.rc | default(1)) != 0
+
+- name: Resolve capabilities for the human-gated AppRole paths
+  ansible.builtin.set_fact:
+    openbao_human_gated_approle_policy_caps: >-
+      {{ (_body.get('data', {}) | combine(_body)) | dict2items
+         | selectattr('key', 'in', _requested_paths) | items2dict }}
+    openbao_human_gated_approle_policy_path_names: "{{ _requested_paths }}"
+  vars:
+    _body: "{{ openbao_human_gated_approle_policy_caps_raw.stdout | from_json }}"
+    _requested_paths: >-
+      {{ (openbao_human_gated_approle_policy_updates | map(attribute='role_path') | list)
+         + (openbao_human_gated_approle_policy_updates | map(attribute='policies_path') | list) }}
+  changed_when: false
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_reconcile_mode | default(false) | bool
+    - (openbao_human_gated_approle_policy_caps_raw.rc | default(1)) == 0
+
+- name: Fail if the human-gated AppRole capability probe omitted a requested path
+  ansible.builtin.fail:
+    msg: >-
+      The capability probe did not return every human-gated AppRole path:
+      expected {{ openbao_human_gated_approle_policy_path_names | join(', ') }};
+      received {{ openbao_human_gated_approle_policy_caps.keys() | list | join(', ') }}.
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_reconcile_mode | default(false) | bool
+    - openbao_human_gated_approle_policy_caps | length != openbao_human_gated_approle_policy_path_names | length
+
+- name: Read each human-gated AppRole before reconciling token_policies
+  ansible.builtin.command:
+    cmd: "bao read -format=json {{ item.role_path }}"
+  environment:
+    BAO_ADDR: "{{ openbao_cli_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
+  loop: "{{ openbao_human_gated_approle_policy_updates }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: openbao_human_gated_approle_policy_reads
+  no_log: true
+  changed_when: false
+  check_mode: false
+  failed_when: false
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_reconcile_mode | default(false) | bool
+    - "'read' in openbao_human_gated_approle_policy_caps.get(item.role_path, [])"
+
+- name: Fail if a granted human-gated AppRole read was denied
+  ansible.builtin.fail:
+    msg: >-
+      A granted AppRole read failed for
+      {{ _denied | map(attribute='item.name') | join(', ') }}; no AppRole was
+      updated.
+  vars:
+    _denied: >-
+      {{ openbao_human_gated_approle_policy_reads.results | default([])
+         | selectattr('rc', 'defined') | rejectattr('rc', 'equalto', 0) | list }}
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_reconcile_mode | default(false) | bool
+    - _denied | length > 0
+
+- name: Reconcile token_policies on the human-gated AppRoles
+  ansible.builtin.command:
+    cmd: >-
+      bao write {{ item.0.policies_path }}
+      token_policies={{ item.0.token_policies | join(',') }}
+  environment:
+    BAO_ADDR: "{{ openbao_cli_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
+  loop: >-
+    {{ openbao_human_gated_approle_policy_updates
+       | zip(openbao_human_gated_approle_policy_reads.results | default([])) | list }}
+  loop_control:
+    label: "{{ item.0.name }}"
+  no_log: true
+  changed_when: true
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_reconcile_mode | default(false) | bool
+    - "'update' in openbao_human_gated_approle_policy_caps.get(item.0.policies_path, [])"
+    - (item.1.rc | default(1)) == 0
+    - >-
+      ((item.1.stdout | from_json).data.token_policies | default([]) | sort)
+      != (item.0.token_policies | sort)

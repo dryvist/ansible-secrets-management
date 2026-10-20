@@ -163,6 +163,10 @@ openbao_base_policies_static:
     template: github-work-admin-policy.hcl.j2
   - name: "{{ openbao_reconcile_policy_name }}"
     template: openbao-reconcile-policy.hcl.j2
+  - name: "{{ openbao_tofu_state_admin_policy_name }}"
+    template: tofu-state-admin-policy.hcl.j2
+  - name: "{{ openbao_github_mount_config_policy_name }}"
+    template: github-mount-config-policy.hcl.j2
   - name: "{{ openbao_policy_sync_policy_name }}"
     template: policy-sync-policy.hcl.j2
   - name: "{{ openbao_policy_sync_unlock_policy_name }}"

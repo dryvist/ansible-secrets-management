@@ -195,6 +195,8 @@ openbao_github_oidc_docs_token_ttl: 10m
 openbao_github_oidc_docs_token_max_ttl: 15m
 openbao_reconcile_policy_name: openbao-reconcile
 openbao_reconcile_approle_name: openbao-reconcile
+openbao_tofu_state_admin_policy_name: tofu-state-admin
+openbao_github_mount_config_policy_name: github-mount-config
 # approle-issuer — the ONLY identity that may mint an AppRole secret_id.
 #
 # Split out of openbao-reconcile because those are two different powers wearing
