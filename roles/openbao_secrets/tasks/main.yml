@@ -1,6 +1,6 @@
 ---
 # Driver: loops openbao_secrets_domains, fetching each domain's KV subtree via
-# its OWN AppRole (see fetch_domain.yml) and accumulating the results into
+# its configured AppRole (see fetch_domain.yml) and accumulating the results into
 # openbao_secrets_by_domain, keyed by domain name. Runs ONCE on the
 # controller (delegate_to localhost, run_once); the calling playbook then
 # publishes each domain's dict into its own `bao_<domain>_secrets` fact per

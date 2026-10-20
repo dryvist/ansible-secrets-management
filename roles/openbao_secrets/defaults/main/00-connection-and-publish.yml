@@ -8,9 +8,9 @@
 #     {{ bao_<domain>_secrets.X | default(undef(), true)
 #        | mandatory('X missing: OpenBao fetch did not supply it') }}
 #
-# Each domain authenticates with its OWN least-privilege AppRole (see
-# terraform-proxmox docs/SECRETS_HIERARCHY.md) rather than one broad shared
-# identity — a domain's credentials only ever unlock that domain's KV subtree.
+# Each domain authenticates with its configured least-privilege AppRole (see
+# terraform-proxmox docs/SECRETS_HIERARCHY.md). `credential_domain` defaults to
+# the domain name and may explicitly share an existing credential identity.
 #
 # FAILS LOUD. A fetch that cannot happen is an error, never an empty value:
 #   - No OpenBao endpoint configured at all (BAO_ADDR unset AND no openbao-tagged
@@ -22,10 +22,10 @@
 #   - A domain whose role_id/secret_id envs are missing: the role FAILS, unless
 #     that domain is named in `openbao_secrets_optional_domains` — the documented
 #     opt-out for migrating one domain at a time.
-#   - A KV read that errors: the role FAILS, naming the path. The ONE tolerated
-#     case is a 404 on a path declared `optional: true` in its mapping form —
-#     see openbao_secrets_optional_domains below. A 403 means the credential is
-#     wrong, not the secret absent, and always fails.
+#   - A KV read that errors: the role FAILS, naming the path. The ONE per-path
+#     tolerated case is a 404 on a path declared `optional: true` in its mapping
+#     form. A 403 still fails the read gate; a domain whose every path is
+#     optional isolates any fetch failure and returns an empty result.
 #
 # Under --check the login and the KV reads run FOR REAL (check_mode: false —
 # they change no state), so a check run resolves genuine values and templates
@@ -53,9 +53,10 @@ openbao_secrets_kv_mount: secret
 #   - mount: secret          # optional, defaults to openbao_secrets_kv_mount
 #     path: apps/foo/vendor
 #     optional: true
-# A 404 on such a path is skipped with a visible warning naming it; a 403 and
-# every other error still fail. A bare string path is always REQUIRED, so a 404
-# on one fails the play — an undeclared-but-expected key is a real defect.
+# A 404 on such a path is skipped with a visible warning naming it. A 403
+# still fails the read gate; only a domain whose every path is optional can
+# isolate that failure. A bare string path is always REQUIRED, so a 404 on one
+# fails the play — an undeclared-but-expected key is a real defect.
 # A domain
 # listed here may have no role_id/secret_id in the environment and is skipped
 # with a warning instead of failing the play — the migration escape hatch for
@@ -95,12 +96,10 @@ openbao_secrets_publish_secret_id: >-
   {{ lookup('env', 'CONVERGE_SECRET_ID')
      | default(lookup('env', 'OPENBAO_APPROLE_ANSIBLE_SECRET_ID'), true) }}
 
-# One entry per resource-domain identity this Ansible converge fetches for.
-# Each domain's role_id/secret_id come from its own env vars — sourced from
-# the operator's keychain-backed resolver on macOS, or a root-only systemd
-# credential on Linux (never a shared/broad credential). Add a domain here as
-# new consumer roles are wired to read bao-first; each needs a matching
-# AppRole + policy in roles/openbao's `openbao_approles`/`openbao_policies`.
+# One entry per resource domain this Ansible converge fetches for. Its
+# role_id/secret_id use the `credential_domain` env pair (or the domain name
+# by default), sourced from the operator's keychain-backed resolver on macOS
+# or a root-only systemd credential on Linux.
 
 # Alert-hub topic URL a failed AppRole login in an all-optional domain is paged
 # to (tasks/login_gate.yml). Empty when ingress_domain is unset, which skips

@@ -1,0 +1,35 @@
+---
+# The production failure handler keeps an all-optional domain empty and lets
+# later domains continue after a denied read.
+- name: Verify all-optional domain read failure isolation
+  hosts: localhost
+  gather_facts: false
+  vars:
+    openbao_domain:
+      name: postgres_backup_s3
+      paths:
+        - path: rustfs/dryvist-homelab-backups/rw
+          optional: true
+    openbao_secrets_domain_all_optional: true
+  tasks:
+    - name: Initialize the fixture result
+      ansible.builtin.set_fact:
+        openbao_secrets_by_domain: {}
+        openbao_secrets_isolated_failures: []
+
+    - name: Exercise the production fetch failure handler
+      block:
+        - name: Simulate a denied optional path read
+          ansible.builtin.fail:
+            msg: "Forbidden: Permission Denied to the optional KV path."
+      rescue:
+        - name: Isolate the optional domain failure
+          ansible.builtin.include_tasks: ../../roles/openbao_secrets/tasks/isolate_domain_failure.yml
+
+    - name: Assert the optional domain is empty and the run continued
+      ansible.builtin.assert:
+        that:
+          - hostvars['localhost'].openbao_secrets_by_domain['postgres_backup_s3'] == {}
+          - hostvars['localhost'].openbao_secrets_isolated_failures | length == 1
+        success_msg: "Denied read was recorded, returned empty, and did not fail the run"
+        quiet: true
