@@ -5,10 +5,10 @@
 # JacobPEvans/.github/.github/workflows/_ansible-ci.yml so lint runs identically
 # across the dryvist Ansible repositories.
 #
-# Molecule stays local. The shared workflow runs lint only (molecule: false),
-# and this wrapper's molecule job consumes the scenario filter exported by the
-# shared workflow, so there is one change-detection definition. The local
-# "Merge Gate" aggregates every job.
+# Molecule stays local. The shared CI workflow runs lint only (molecule: false),
+# while a parallel changes call runs the same filter. Molecule consumes its
+# scenario output; other local jobs retain their existing CI dependencies. The
+# local "Merge Gate" aggregates every job.
 #
 # Lint, Role tests and Molecule restore the Galaxy content cache under the key
 # ansible-galaxy-v2-<os>-<hash of requirements.yml>. Runs on pushes to develop
@@ -45,23 +45,30 @@ jobs:
       # The only scenario is openbao. Its filter lists the roles its converge
       # play includes plus the scenario directory. A change that matches no
       # filter widens to every scenario, per the shared workflow's rule.
-      molecule_scenario_filters: |
+      molecule_scenario_filters: &molecule_scenario_filters |
         openbao:
           - 'roles/openbao/**'
           - 'molecule/openbao/**'
 
+  changes:
+    name: Detect Changes
+    uses: JacobPEvans/.github/.github/workflows/_ansible-changes.yml@v1
+    with:
+      molecule: false
+      molecule_scenario_filters: *molecule_scenario_filters
+
   molecule:
     name: Molecule
-    needs: ci
+    needs: changes
     # v1.11 reports molecule=true with an empty scenario list when no
     # scenario's files changed; an empty matrix would fail the job.
     if: >-
-      ${{ needs.ci.outputs.molecule == 'true' &&
-      needs.ci.outputs.molecule_scenarios != '[]' &&
-      needs.ci.outputs.tiny != 'true' }}
+      ${{ needs.changes.outputs.molecule == 'true' &&
+      needs.changes.outputs.molecule_scenarios != '[]' &&
+      needs.changes.outputs.tiny != 'true' }}
     uses: ./.github/workflows/_molecule.yml
     with:
-      scenarios: ${{ needs.ci.outputs.molecule_scenarios }}
+      scenarios: ${{ needs.changes.outputs.molecule_scenarios }}
 
   # Role tests moved from the consuming repository, run with the same
   # invocations that repository used: the verify playbooks, then pytest.
@@ -137,7 +144,7 @@ jobs:
 
   gate:
     name: Merge Gate
-    needs: [ci, molecule, tests]
+    needs: [ci, changes, molecule, tests]
     if: ${{ always() && !cancelled() }}
     runs-on: ubuntu-latest
     steps:
