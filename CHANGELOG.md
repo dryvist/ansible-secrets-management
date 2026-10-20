@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.33.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.32.0...v0.33.0) (2026-10-20)
+
+
+### Features
+
+* **openbao_secrets:** add PostgreSQL backup S3 domain ([#272](https://github.com/dryvist/ansible-secrets-management/issues/272)) ([eb0646a](https://github.com/dryvist/ansible-secrets-management/commit/eb0646a752c2fc6be41ed78273d59cb224358966))
+
 ## [0.32.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.31.4...v0.32.0) (2026-10-20)
 
 
