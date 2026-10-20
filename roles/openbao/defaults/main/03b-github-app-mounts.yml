@@ -174,6 +174,16 @@ openbao_github_work_permission_sets: >-
       | map('combine', {'installation_id': openbao_github_work_installation_id}) | list)
      if openbao_github_work_installation_id | length > 0 else [] }}
 
+# The user-owned App has one fixed write set and exists only once its
+# installation ID is supplied through the env document.
+openbao_github_personal_mount: github-personal
+openbao_github_personal_installation_id: >-
+  {{ openbao_platform_env['OPENBAO_GITHUB_PERSONAL_INSTALLATION_ID'] | default('', true) }}
+openbao_github_personal_app_id: >-
+  {{ lookup('env', 'OPENBAO_GITHUB_PERSONAL_APP_ID') | default('', true) }}
+openbao_github_personal_app_private_key: >-
+  {{ lookup('env', 'OPENBAO_GITHUB_PERSONAL_APP_PRIVATE_KEY') | default('', true) }}
+
 # Enterprise Apps use their own installation as the token ceiling. They have
 # no permission sets; their policies pin the raw token endpoint to one
 # installation ID. Each mount, like github-work, is declared only once its
@@ -231,6 +241,11 @@ openbao_github_app_mounts: >-
           'private_key': lookup('env', 'OPENBAO_GITHUB_WORK_PRIVATE_KEY') | default('', true),
           'permission_sets': openbao_github_work_permission_sets}]
         if openbao_github_work_permission_sets | length > 0 else [])
+     + ([{'mount': openbao_github_personal_mount,
+          'app_id': openbao_github_personal_app_id,
+          'private_key': openbao_github_personal_app_private_key,
+          'permission_sets': openbao_github_personal_permission_sets}]
+        if openbao_github_personal_installation_id | length > 0 else [])
      + openbao_github_enterprise_app_mounts
      + openbao_github_runner_app_mounts }}
 

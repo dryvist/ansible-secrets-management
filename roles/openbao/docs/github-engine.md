@@ -18,6 +18,7 @@ configuration, so each App's own grant caps every token its mount mints:
 | `github-agents` | agents | none: `open-llm` uses the raw `github-agents/token` with caller-selected org and repository fields |
 | `github-hermes` | hermes | `hermes-{review,author}-{public,private}`, split by repository visibility |
 | `github-work` | work | `work-read`, `work-write` and operator-gated `work-admin`, all pinned to the work installation; no administration |
+| `github-personal` | user-owned App | `personal-write`, pinned to its configured installation |
 | `github-enterprise-read` | read-only Enterprise App | none: raw token endpoint, pinned to its installation |
 | `github-enterprise` | admin Enterprise App | none: raw token endpoint, pinned to its installation |
 | `github-runner` | runner App | none: raw token endpoint accepts only `org_name` |
@@ -51,6 +52,13 @@ Token access is tiered; the tier IS the privilege boundary:
   selectors. Realm policies pin their own repository lists by name, not the
   installation, so a scoped identity can also mint for a same-named repository
   in any installation of the App.
+- **Personal write (`personal-write`)** — `github-personal/token/personal-write`:
+  fixed to its installation with `contents`, `pull_requests`, and `workflows`
+  write plus `checks`, `statuses`, and `metadata` read. The set has no
+  repository list, so GitHub's installation selection is its repository
+  boundary. The existing `github-write` policy grants this named path;
+  `github-mint` remains limited to read-tier sets, and `ai-orchestrator`
+  excludes write-tier sets.
 - **publish (`docs-publisher`)** — `github-admin/token/docs-publisher`: one
   repository, `contents: write` + `pull_requests: write`, all three stored in
   the set. The repository list comes from the iac secret store; with none
@@ -80,8 +88,8 @@ Token access is tiered; the tier IS the privilege boundary:
   a `personal-repo-create` counterpart is not shipped: GitHub App installation
   tokens cannot call `POST /user/repos` (creating a repository under a user
   account needs a user-to-server OAuth token, not an App installation token),
-  so unless the personal account becomes an organization, a personal set would
-  mint a token with no reachable endpoint.
+  so unless the personal account becomes an organization, a personal
+  repo-create set would mint a token with no reachable endpoint.
 
   Sequence to create a repository and then push to it: mint
   `github-admin/token/dryvist-repo-create`, `POST /orgs/dryvist/repos`, select the
@@ -172,3 +180,11 @@ the config read with `app_id: 0`, which must trigger first configuration, not
 the drift refusal (issue #1079). A live acceptance run must issue and revoke
 one token from each permission set — and prove an off-allowlist `github/token`
 request is denied — before the engine is considered deployed.
+
+The `github-personal` mount uses
+`OPENBAO_GITHUB_PERSONAL_APP_ID` and
+`OPENBAO_GITHUB_PERSONAL_APP_PRIVATE_KEY` from the one-time environment. Its
+installation ID comes from `OPENBAO_GITHUB_PERSONAL_INSTALLATION_ID` in the
+env document, and the installation owner must be present in
+`OPENBAO_GITHUB_APP_INSTALL_ALLOWLIST`. The mount and `personal-write` set are
+omitted while that installation ID is empty.
