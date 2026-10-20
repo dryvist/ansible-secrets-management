@@ -94,6 +94,9 @@
     cmd: >-
       bao write -format=json sys/capabilities-self
       paths=sys/policies/acl/{{ openbao_reconcile_policy_name }}
+      {{ openbao_github_app_mounts | default([])
+         | map(attribute='mount')
+         | map('regex_replace', '^', 'paths=sys/mounts/') | join(' ') }}
   environment:
     BAO_ADDR: "{{ openbao_cli_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
@@ -109,6 +112,16 @@
   when:
     - openbao_bootstrap_token is defined
     - openbao_reconcile_mode | default(false)
+
+- name: Resolve the policy-sync capability response
+  ansible.builtin.set_fact:
+    openbao_policy_sync_capability_map: "{{ _body.get('data', {}) | combine(_body) }}"
+  vars:
+    _body: "{{ openbao_policy_sync_caps.stdout | default('{}') | from_json }}"
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_reconcile_mode | default(false)
+    - (openbao_policy_sync_caps.rc | default(1)) == 0
 
 - name: Sync the reconcile policy from the declared set (policy-sync)
   ansible.builtin.command:

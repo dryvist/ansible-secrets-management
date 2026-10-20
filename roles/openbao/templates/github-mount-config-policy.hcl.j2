@@ -1,0 +1,92 @@
+{{ ansible_managed | comment }}
+# Configure only the declared per-App GitHub mounts during a human-gated run.
+{% for gm in openbao_github_app_mounts | default([]) %}
+path "sys/mounts/{{ gm.mount }}" {
+  capabilities = ["update"]
+}
+
+path "{{ gm.mount }}/config" {
+  capabilities = ["create", "read", "update"]
+  allowed_parameters = {
+    # App identity is checked by the human-gated mount task; keep credential
+    # values out of this committed policy body.
+    "app_id" = []
+    "prv_key" = []
+    "exclude_repository_metadata" = [true]
+  }
+}
+
+{% set public_orgs = gm.permission_sets | default([])
+    | selectattr('public_repos_of', 'defined')
+    | map(attribute='public_repos_of') | unique | list %}
+{% set private_installation_ids = gm.permission_sets | default([])
+    | selectattr('private_repos_of', 'defined')
+    | map(attribute='installation_id') | unique | list %}
+{% if public_orgs | length > 0 or private_installation_ids | length > 0 %}
+path "{{ gm.mount }}/token" {
+  capabilities = ["create", "update"]
+  allowed_parameters = {
+{% if public_orgs | length > 0 %}
+    "org_name" = {{ public_orgs | tojson }}
+{% endif %}
+{% if private_installation_ids | length > 0 %}
+    "installation_id" = [
+{% for installation_id in private_installation_ids %}
+      {{ installation_id | int | string | tojson }}{{ "," if not loop.last else "" }}
+{% endfor %}
+    ]
+{% endif %}
+    "permissions" = [{ "metadata" = "read" }]
+  }
+}
+{% endif %}
+{% for permission_set in gm.permission_sets | default([]) %}
+
+path "{{ gm.mount }}/permissionset/{{ permission_set.name }}" {
+  capabilities = ["create", "read", "update"]
+  allowed_parameters = {
+    "installation_id" = [{{ permission_set.installation_id | int | string | tojson }}]
+    "permissions" = [{
+{% for permission, access in permission_set.permissions | dictsort %}
+      {{ permission | tojson }} = {{ access | tojson }}
+{% endfor %}
+    }]
+{% if permission_set.public_repos_of is defined or permission_set.private_repos_of is defined %}
+    "repositories" = []
+{% elif permission_set.repositories is defined %}
+    "repositories" = [{{ permission_set.repositories | tojson }}]
+{% endif %}
+  }
+}
+{% endfor %}
+
+path "{{ gm.mount }}/permissionset" {
+  capabilities = ["list"]
+}
+
+path "{{ gm.mount }}/permissionset/*" {
+  capabilities = ["delete"]
+}
+{% endfor %}
+{% set lease_ids = [] %}
+{% for gm in openbao_github_app_mounts | default([]) %}
+{% set public_orgs = gm.permission_sets | default([])
+    | selectattr('public_repos_of', 'defined')
+    | map(attribute='public_repos_of') | unique | list %}
+{% set private_installation_ids = gm.permission_sets | default([])
+    | selectattr('private_repos_of', 'defined')
+    | map(attribute='installation_id') | unique | list %}
+{% if public_orgs | length > 0 or private_installation_ids | length > 0 %}
+{% set _ = lease_ids.append(gm.mount ~ '/token/*') %}
+{% endif %}
+{% endfor %}
+{% if lease_ids | length > 0 %}
+
+path "sys/leases/revoke" {
+  capabilities = ["update"]
+  allowed_parameters = {
+    "lease_id" = {{ lease_ids | tojson }}
+  }
+  required_parameters = ["lease_id"]
+}
+{% endif %}

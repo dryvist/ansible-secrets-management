@@ -52,7 +52,7 @@
       X-Vault-Token: "{{ openbao_bootstrap_token }}"
     body_format: json
     body:
-      app_id: "{{ gm.app_id | int }}"
+      app_id: "{{ gm.app_id | int | string }}"
       prv_key: "{{ gm.private_key }}"
       exclude_repository_metadata: true
     status_code:
@@ -168,7 +168,7 @@
       X-Vault-Token: "{{ openbao_bootstrap_token }}"
     body_format: json
     body:
-      installation_id: "{{ item.installation_id | int }}"
+      installation_id: "{{ item.installation_id | int | string }}"
       permissions:
         metadata: read
   delegate_to: "{{ openbao_cli_host }}"
@@ -246,7 +246,7 @@
       X-Vault-Token: "{{ openbao_bootstrap_token }}"
     body_format: json
     body: >-
-      {{ {'installation_id': item.0.installation_id | int,
+      {{ {'installation_id': item.0.installation_id | int | string,
           'permissions': item.0.permissions}
          | combine({'repositories': item.0.repositories}
                    if item.0.repositories is defined else {}) }}

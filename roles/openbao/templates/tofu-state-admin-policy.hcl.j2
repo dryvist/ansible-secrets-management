@@ -1,0 +1,9 @@
+{{ ansible_managed | comment }}
+# Decrypt the declared OpenTofu state key without extending the admin policy.
+path "{{ openbao_transit_mount }}/datakey/plaintext/{{ openbao_tofu_state_transit_key }}" {
+  capabilities = ["update"]
+}
+
+path "{{ openbao_transit_mount }}/decrypt/{{ openbao_tofu_state_transit_key }}" {
+  capabilities = ["update"]
+}

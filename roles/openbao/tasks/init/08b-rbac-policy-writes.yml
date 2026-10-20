@@ -133,6 +133,7 @@
   ansible.builtin.command:
     cmd: "bao policy write {{ item.name }} -"
     stdin: "{{ (openbao_rendered_policy_map | default({}))[item.name] }}"
+    stdin_add_newline: true
   environment:
     BAO_ADDR: "{{ openbao_cli_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"

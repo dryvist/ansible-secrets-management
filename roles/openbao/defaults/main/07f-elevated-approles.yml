@@ -44,11 +44,15 @@ openbao_base_approles_elevated:
     manage_secret_id: false
     secret_id_ttl: "{{ openbao_ai_elevated_secret_id_ttl }}"
     secret_id_num_uses: 1
-  # ai-admin-session: same human-gated, alerted policy for the renewable
-  # service-token session; the explicit maximum bounds it to eight hours, and
-  # ai-admin-guard keeps it from extending or re-minting itself.
+  # ai-admin-session: the human-gated, alerted policy and the narrow
+  # OpenTofu state-key policy for the renewable service-token session; the
+  # explicit maximum bounds it to eight hours, and ai-admin-guard keeps it
+  # from extending or re-minting itself.
   - name: "{{ openbao_ai_admin_session_approle_name }}"
-    token_policies: ["{{ openbao_ai_admin_policy_name }}", "{{ openbao_ai_admin_guard_policy_name }}"]
+    token_policies:
+      - "{{ openbao_ai_admin_policy_name }}"
+      - "{{ openbao_ai_admin_guard_policy_name }}"
+      - "{{ openbao_tofu_state_admin_policy_name }}"
     token_ttl: "{{ openbao_ai_admin_session_token_ttl }}"
     token_max_ttl: "{{ openbao_ai_admin_session_token_max_ttl }}"
     token_explicit_max_ttl: "{{ openbao_ai_admin_session_token_explicit_max_ttl }}"
