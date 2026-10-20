@@ -286,7 +286,8 @@
 
 # Both human-gated administrator roles attach the standalone ai-admin policy,
 # never composed base leaves. The session role adds the ai-admin-guard deny
-# overlay and has a service token and an 8h cap.
+# overlay and the tofu-state-admin state-key grant, and has a service token
+# and an 8h cap.
 - name: Assert the administrator roles use the standalone policy, the guard and bounded session type
   vars:
     admin_role: "{{ openbao_approles | selectattr('name', 'equalto', 'ai-admin') | first }}"
@@ -297,7 +298,7 @@
       - admin_role.policy | default('') == 'ai-admin'
       - admin_role.token_policies is not defined
       - session_role.policy is not defined
-      - session_role.token_policies == ['ai-admin', 'ai-admin-guard']
+      - session_role.token_policies == ['ai-admin', 'ai-admin-guard', 'tofu-state-admin']
       - session_role.token_type == 'service'
       - session_role.token_ttl == '1h'
       - session_role.token_max_ttl == '8h'
