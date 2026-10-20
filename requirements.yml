@@ -1,7 +1,7 @@
 ---
 collections:
   - name: amazon.aws
-    version: ">=9.0.0"  # RustFS inventory resolver: s3_object
+    version: ">=11.3.0"  # RustFS inventory resolver: s3_object
 
   - name: ansible.utils
     version: ">=2.10.0"
