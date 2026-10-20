@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.31.2](https://github.com/dryvist/ansible-secrets-management/compare/v0.31.1...v0.31.2) (2026-10-20)
+
+
+### Bug Fixes
+
+* **deps:** require amazon.aws 11.3.0 or newer ([#259](https://github.com/dryvist/ansible-secrets-management/issues/259)) ([b900e5c](https://github.com/dryvist/ansible-secrets-management/commit/b900e5cefec98c29a160e2fd38024f3bf4b7f72b))
+* **openbao:** filter per-call env fields ([#257](https://github.com/dryvist/ansible-secrets-management/issues/257)) ([00adbce](https://github.com/dryvist/ansible-secrets-management/commit/00adbce890584a5450255cad91892c12c850831c))
+
 ## [0.31.1](https://github.com/dryvist/ansible-secrets-management/compare/v0.31.0...v0.31.1) (2026-10-20)
 
 
