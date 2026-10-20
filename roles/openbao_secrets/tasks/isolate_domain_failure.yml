@@ -1,0 +1,43 @@
+---
+# Only a domain whose every path is optional can isolate a fetch failure.
+# Record it and publish an empty result; a required path still fails loudly.
+- name: Record and continue past an isolated failure for {{ openbao_domain.name }}
+  ansible.builtin.set_fact:
+    openbao_secrets_isolated_failures: >-
+      {{ (hostvars['localhost'].openbao_secrets_isolated_failures | default([]))
+         + [openbao_domain.name ~ ': ' ~
+            (ansible_failed_result.msg
+             | default(ansible_failed_result.login.msg
+                        | default('fetch failed', true), true))] }}
+  delegate_to: localhost
+  delegate_facts: true
+  when: openbao_secrets_domain_all_optional
+
+- name: Publish the empty result for an isolated domain failure
+  ansible.builtin.set_fact:
+    openbao_secrets_by_domain: >-
+      {{ hostvars['localhost'].openbao_secrets_by_domain | default({})
+         | combine({openbao_domain.name: {}}) }}
+  delegate_to: localhost
+  delegate_facts: true
+  when: openbao_secrets_domain_all_optional
+
+- name: Warn that the fetch failed and was isolated for {{ openbao_domain.name }}
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: the {{ openbao_domain.name }} domain failed to fetch
+      (every one of its paths is declared optional, so this is isolated
+      rather than aborting the run): {{
+      ansible_failed_result.msg | default(ansible_failed_result.login.msg
+      | default('fetch failed', true), true) }}. Its result is empty.
+  when: openbao_secrets_domain_all_optional
+
+- name: Re-raise because a required path prevents isolation for {{ openbao_domain.name }}
+  ansible.builtin.fail:
+    msg: >-
+      {{ ansible_failed_result.msg
+         | default(ansible_failed_result.login.msg | default('fetch failed', true), true) }}
+      ({{ openbao_domain.name }} has at least one path that is not declared
+      optional, so this domain's failure cannot be isolated — its consumers
+      cannot distinguish a missing credential from a live one.)
+  when: not openbao_secrets_domain_all_optional

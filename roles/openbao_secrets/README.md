@@ -1,8 +1,8 @@
 # openbao_secrets
 
-A controller-side **pre-play** that logs in to OpenBao **once per
-resource-domain identity** (each with its own least-privilege AppRole) and
-reads that domain's KV subtree into a per-domain fact,
+A controller-side **pre-play** that logs in to OpenBao for each resource
+domain using its configured AppRole credentials and reads that domain's KV
+subtree into a per-domain fact,
 `bao_<domain>_secrets` (hyphens become underscores, e.g. `local-cloud` ->
 `bao_local_cloud_secrets`). Consumer roles then resolve their secrets
 **from OpenBao only, failing loudly when the value is absent or empty**:
@@ -34,17 +34,19 @@ The layout is aligned to what `roles/openbao` bootstraps — do not invent paths
 a policy can't read:
 
 - **KV mount**: `secret` (KV v2).
-- **One AppRole per domain**, not one shared identity — a domain's
-  credentials only ever unlock that domain's own KV subtree. See
-  `tofu-proxmox` `docs/SECRETS_HIERARCHY.md` for the full RBAC table.
+- **AppRole credentials are explicit**: `credential_domain` defaults to the
+  domain name and can name an existing credential pair when a separate result
+  domain shares an AppRole. The AppRole policy still grants only its intended
+  paths. See `tofu-proxmox` `docs/SECRETS_HIERARCHY.md` for the full RBAC table.
 - **Seeding**: `roles/openbao` seeds **no** values; it creates only the mount,
   policies, and AppRoles. So a domain's paths yield keys only once a writer
   populates them. A path that errors fails the play naming it — including a
   404, because an undeclared-but-expected key is a real defect. The one
   exception is a path given the mapping form with `optional: true`, whose 404
-  is skipped with a visible warning; a 403 (wrong credential, not an absent
-  secret) always fails. Login and reads run with `check_mode: false`, so a
-  `--check` run resolves real values instead of blanks.
+  is skipped with a visible warning. A 403 still fails the read gate, but a
+  domain whose every path is optional isolates any fetch failure and publishes
+  an empty result. Login and reads run with `check_mode: false`, so a `--check`
+  run resolves real values instead of blanks.
 
 ## Installation
 
@@ -61,7 +63,7 @@ it from a pre-fetch play — no Galaxy install needed:
 
 ## Usage
 
-Set `BAO_ADDR` plus each domain's `OPENBAO_APPROLE_<DOMAIN>_ROLE_ID` /
+Set `BAO_ADDR` plus each credential domain's `OPENBAO_APPROLE_<DOMAIN>_ROLE_ID` /
 `_SECRET_ID` (see [Inputs (env)](#inputs-env)), then run through the normal
 wrapper:
 
@@ -97,6 +99,9 @@ server-side quorum HA needs a fourth node and is out of scope.
 | `local-llm` | `OPENBAO_APPROLE_LOCAL_LLM_ROLE_ID` / `_SECRET_ID` | `ai/*` (router/llm-large/qdrant/open-webui/hermes) | LLM serving roles |
 | `clickhouse` | `OPENBAO_APPROLE_CLICKHOUSE_ROLE_ID` / `_SECRET_ID` | `ai/clickhouse` | clickhouse_docker |
 | `apps` | `OPENBAO_APPROLE_APPS_ROLE_ID` / `_SECRET_ID` | configured `apps/*` paths; `core/client` in the Authelia controller-side override | app roles |
+| `postgres_backup_s3` | `OPENBAO_APPROLE_APPS_ROLE_ID` / `_SECRET_ID` | `rustfs/dryvist-homelab-backups/rw` | `postgres_group`, `postgres_ai_group` |
+
+The PostgreSQL backup path is optional and reuses the `apps` credential pair.
 
 The `apps` default path list leaves `core/client` out because it can use the
 `apps-workstation` issuer, whose shared policy does not grant that document.
@@ -105,11 +110,12 @@ The Authelia consuming play must override the `apps` domain paths to include
 it directly. That path has its own exact read policy, also attached to the
 `bao-elevate-client` AppRole.
 
-Each pair is derived from the domain name (upper-cased, non-alphanumerics ->
-`_`) -- the same formula every other AppRole credential helper in this
-estate uses, so a new domain needs no new env-var declaration anywhere. A
-legacy `<DOMAIN>_VAULT_ROLE_ID` / `_SECRET_ID` pair (this role's pre-rotation
-shape) is tried second, so an unmigrated converge wrapper keeps working.
+Each pair is derived from `credential_domain`, or the domain name when it is
+unset (upper-cased, non-alphanumerics -> `_`) -- the same formula every other
+AppRole credential helper in this estate uses, so a new domain needs no new
+env-var declaration anywhere. The legacy `<CREDENTIAL_DOMAIN>_VAULT_ROLE_ID` /
+`_SECRET_ID` pair (this role's pre-rotation shape) is tried second, so an
+unmigrated converge wrapper keeps working.
 An `OPERATOR_VAULT_ROLE_ID` / `_SECRET_ID` pair is tried last: one operator
 identity whose policies cover every domain.
 
@@ -128,10 +134,10 @@ All readable path keys for a domain are merged flat into that domain's
 | Env var | Purpose |
 | --- | --- |
 | `BAO_ADDR` | OpenBao ingress URL. Unset **and** no openbao-tagged node ⇒ no-op (pre-migration case). Set but unreachable ⇒ fail. |
-| `OPENBAO_APPROLE_<DOMAIN>_ROLE_ID` / `_SECRET_ID` | That domain's AppRole creds. Unset ⇒ fail, unless in `openbao_secrets_optional_domains`. |
+| `OPENBAO_APPROLE_<DOMAIN>_ROLE_ID` / `_SECRET_ID` | Credential-domain pair; missing creds need data domain in `openbao_secrets_optional_domains`. |
 
-A legacy `<DOMAIN>_VAULT_ROLE_ID` / `_SECRET_ID` pair is also accepted, tried
-second -- see [Domains fetched](#domains-fetched-openbao_secrets_domains).
+A legacy `<CREDENTIAL_DOMAIN>_VAULT_ROLE_ID` / `_SECRET_ID` pair is also
+accepted, tried second -- see [Domains fetched](#domains-fetched-openbao_secrets_domains).
 
 On macOS these are sourced from the operator's dedicated `openbao.keychain-db`
 keychain (72h auto-lock — the keychain's lock state is the access boundary,

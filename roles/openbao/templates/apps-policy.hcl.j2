@@ -27,3 +27,8 @@ path "{{ openbao_kv_mount }}/data/infrastructure/unifi" {
 path "{{ openbao_kv_mount }}/metadata/infrastructure/unifi" {
   capabilities = ["read"]
 }
+
+# Read-only access for the PostgreSQL backup credential domain.
+path "{{ openbao_kv_mount }}/data/rustfs/dryvist-homelab-backups/rw" {
+  capabilities = ["read"]
+}

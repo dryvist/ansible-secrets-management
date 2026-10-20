@@ -7,27 +7,11 @@
 # the documented opt-out that lets an operator migrate one domain at a time.
 # Skipping silently is what let a whole domain resolve to {} and every consumer
 # render an empty credential. Per PATH, a 404 fails too unless that path is
-# declared `optional: true` in its mapping form; a 403 always fails.
+# declared `optional: true` in its mapping form. A 403 still fails the read
+# gate, but the domain rescue isolates it when every path is optional.
 
-# The env-var shape is derived from the domain name, not stored per-domain:
-# it is the SAME OPENBAO_APPROLE_<NAME>_{ROLE,SECRET}_ID convention every
-# other AppRole credential helper in this estate already uses (see
-# roles/openbao/tasks/init/10b-approle-secret-ids.yml and
-# playbooks/verify-approle-ttls.yml) — one formula, not a literal per domain
-# that could drift from it. `<NAME>_VAULT_{ROLE,SECRET}_ID` (this role's
-# pre-existing shape) is tried second, so a converge wrapper that has not
-# been migrated yet keeps working; drop the fallback once every consumer's
-# env is confirmed rewritten to the new names (the rotation playbook does
-# that rewrite). OPERATOR_VAULT_{ROLE,SECRET}_ID is tried last: one operator
-# identity whose policies cover every domain, used when neither per-domain
-# pair is set.
-- name: Resolve role_id/secret_id from env for {{ openbao_domain.name }}
-  ansible.builtin.set_fact:
-    openbao_secrets_domain_env_new_prefix: >-
-      OPENBAO_APPROLE_{{ openbao_domain.name | upper | regex_replace('[^A-Z0-9]', '_') }}
-    openbao_secrets_domain_env_legacy_prefix: >-
-      {{ openbao_domain.name | upper | regex_replace('[^A-Z0-9]', '_') }}_VAULT
-  no_log: true
+- name: Resolve role_id/secret_id for {{ openbao_domain.name }}
+  ansible.builtin.include_tasks: resolve_domain_app_role.yml
 
 - name: Resolve whether a workstation issuer pair is present for {{ openbao_domain.name }}
   ansible.builtin.set_fact:
@@ -37,22 +21,6 @@
     openbao_secrets_domain_issuer_available: >-
       {{ lookup('env', 'OPENBAO_APPROLE_APPROLE_ISSUER_ROLE_ID') | length > 0
          and lookup('env', 'OPENBAO_APPROLE_APPROLE_ISSUER_SECRET_ID') | length > 0 }}
-  no_log: true
-
-- name: Resolve role_id/secret_id values, new name, then legacy, then the operator pair for {{ openbao_domain.name }}
-  ansible.builtin.set_fact:
-    openbao_secrets_domain_role_id: >-
-      {{ lookup('env', openbao_secrets_domain_env_new_prefix ~ '_ROLE_ID')
-         | default(lookup('env', openbao_secrets_domain_env_legacy_prefix ~ '_ROLE_ID'), true)
-         | default(lookup('env', 'OPERATOR_VAULT_ROLE_ID')
-                   if openbao_domain.name in openbao_secrets_operator_domains
-                   else '', true) }}
-    openbao_secrets_domain_secret_id: >-
-      {{ lookup('env', openbao_secrets_domain_env_new_prefix ~ '_SECRET_ID')
-         | default(lookup('env', openbao_secrets_domain_env_legacy_prefix ~ '_SECRET_ID'), true)
-         | default(lookup('env', 'OPERATOR_VAULT_SECRET_ID')
-                   if openbao_domain.name in openbao_secrets_operator_domains
-                   else '', true) }}
   no_log: true
 
 - name: Decide the login path for {{ openbao_domain.name }}
@@ -242,48 +210,8 @@
                      | combine({ openbao_domain.name: openbao_secrets_domain_merged }) }}
               delegate_facts: true
       rescue:
-        # Only a domain whose EVERY declared path is already marked
-        # `optional: true` may isolate a failure here — such a domain has no
-        # consumer that requires it to resolve at all, by its own
-        # declaration, so a dead secret_id or a CIDR refusal degrades it to
-        # "nothing from this domain this run" instead of aborting the whole
-        # controller-level fetch loop. A domain with even one required path
-        # re-raises: its consumers cannot tell a real credential apart from
-        # a silently-skipped one.
-        - name: Record and continue past an isolated failure for {{ openbao_domain.name }}
-          ansible.builtin.set_fact:
-            openbao_secrets_isolated_failures: >-
-              {{ (hostvars['localhost'].openbao_secrets_isolated_failures | default([]))
-                 + [openbao_domain.name ~ ': ' ~
-                    (ansible_failed_result.msg
-                     | default(ansible_failed_result.login.msg
-                                | default('fetch failed', true), true))] }}
-          delegate_to: localhost
-          delegate_facts: true
-          no_log: false
-          when: openbao_secrets_domain_all_optional
-
-        - name: Warn that the fetch failed and was isolated for {{ openbao_domain.name }}
-          ansible.builtin.debug:
-            msg: >-
-              WARNING: the {{ openbao_domain.name }} domain failed to fetch
-              (every one of its paths is declared optional, so this is
-              isolated rather than aborting the run): {{
-              ansible_failed_result.msg | default(ansible_failed_result.login.msg
-              | default('fetch failed', true), true) }}. Its consumers
-              resolve nothing from OpenBao on this run.
-          when: openbao_secrets_domain_all_optional
-
-        - name: Re-raise because a required path prevents isolation for {{ openbao_domain.name }}
-          ansible.builtin.fail:
-            msg: >-
-              {{ ansible_failed_result.msg
-                 | default(ansible_failed_result.login.msg | default('fetch failed', true), true) }}
-              ({{ openbao_domain.name }} has at least one path that is not
-              declared optional, so this domain's failure cannot be isolated
-              — its consumers cannot distinguish a missing credential from a
-              live one.)
-          when: not openbao_secrets_domain_all_optional
+        - name: Handle a failed fetch for {{ openbao_domain.name }}
+          ansible.builtin.include_tasks: isolate_domain_failure.yml
       always:
         - name: Revoke the per-call token for {{ openbao_domain.name }}
           ansible.builtin.uri:
