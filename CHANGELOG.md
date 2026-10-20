@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.31.3](https://github.com/dryvist/ansible-secrets-management/compare/v0.31.2...v0.31.3) (2026-10-20)
+
+
+### Bug Fixes
+
+* **openbao_secrets:** skip credential publishing in check mode ([#262](https://github.com/dryvist/ansible-secrets-management/issues/262)) ([5b64b13](https://github.com/dryvist/ansible-secrets-management/commit/5b64b13b47c88dd8448bb7df12772d95c1133840))
+
 ## [0.31.2](https://github.com/dryvist/ansible-secrets-management/compare/v0.31.1...v0.31.2) (2026-10-20)
 
 

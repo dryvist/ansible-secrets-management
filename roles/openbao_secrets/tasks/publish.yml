@@ -84,8 +84,21 @@
              else 'publish AppRole credentials missing from the environment' }}.
       when: not (openbao_secrets_publish_ready | bool)
 
+    # vault_login does not log in under --check (it returns an empty token), so
+    # the read-before-write below would fail with no token; say so instead.
+    - name: Note that credential publishing is not evaluated in check mode
+      ansible.builtin.debug:
+        msg: >-
+          '{{ openbao_secrets_publish_app }}' credentials are not published in
+          check mode. Run without --check to publish them.
+      when:
+        - openbao_secrets_publish_ready | bool
+        - ansible_check_mode
+
     - name: Write the credentials
-      when: openbao_secrets_publish_ready | bool
+      when:
+        - openbao_secrets_publish_ready | bool
+        - not ansible_check_mode
       block:
         - name: Log in with the publish AppRole
           community.hashi_vault.vault_login:
