@@ -76,6 +76,13 @@ path "{{ openbao_kv_mount }}/metadata/apps/sandbox-agent" {
   capabilities = ["read", "list"]
 }
 
+# The Nautobot drift report reads its dedicated pipeline token. Keep this exact
+# leaf on the Semaphore delta; it does not need the optional sync-write token.
+# Call site: ansible-proxmox-apps playbooks/nautobot-drift.yml.
+path "{{ openbao_kv_mount }}/data/apps/nautobot/pipeline" {
+  capabilities = ["read"]
+}
+
 # Cribl pack discovery selects an org through the App installation. Pin its raw
 # request to the exact read map and forbid repository or installation selectors.
 path "{{ openbao_github_everyday_mount }}/token" {

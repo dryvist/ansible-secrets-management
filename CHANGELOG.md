@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.31.1](https://github.com/dryvist/ansible-secrets-management/compare/v0.31.0...v0.31.1) (2026-10-20)
+
+
+### Bug Fixes
+
+* **openbao:** scope Semaphore policy read access ([#255](https://github.com/dryvist/ansible-secrets-management/issues/255)) ([62de769](https://github.com/dryvist/ansible-secrets-management/commit/62de7690ac022582d1fcb9e9d9320090b532c8da))
+
 ## [0.31.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.30.1...v0.31.0) (2026-10-20)
 
 

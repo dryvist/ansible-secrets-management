@@ -24,6 +24,9 @@
     _names: "{{ _block | map(attribute='name') | list }}"
     _login: "{{ _block | selectattr('name', 'search', '^Prove the new pair authenticates') | first }}"
     _lookup: "{{ _block | selectattr('name', 'search', '^Prove the new secret_id is live') | first }}"
+    _env_builder: >-
+      {{ _block | selectattr('name', 'search', '^Build the env document') | first }}
+    _env_expression: "{{ _env_builder['ansible.builtin.set_fact'].rotate_env_new_data }}"
     _env_document_tasks: >-
       {{ _block
          | selectattr(
@@ -59,17 +62,34 @@
           - not (rotate_proof_by_lookup | bool)
         fail_msg: apps has no address binding the rotation host fails; it must prove by login.
 
-    - name: Assert per-call reconcile stays outside scheduled rotation
+    - name: Assert per-call identities stay outside stored-secret catalogs
       ansible.builtin.assert:
         that:
+          - openbao_flow_lock_approle_name not in openbao_secrets_domain_approle_names
+          - openbao_flow_lock_approle_name not in openbao_host_secret_zero_approle_names
+          - openbao_flow_lock_approle_name not in openbao_rotate_doppler_sync_domains
+          - openbao_flow_lock_approle_name not in openbao_approle_rotation_lookup_proof_names
+          - openbao_flow_lock_approle_name not in openbao_approle_secret_id_ttl_overrides
           - openbao_reconcile_approle_name not in openbao_secrets_domain_approle_names
           - openbao_reconcile_approle_name not in openbao_host_secret_zero_approle_names
           - openbao_reconcile_approle_name not in openbao_rotate_doppler_sync_domains
           - openbao_reconcile_approle_name not in openbao_approle_rotation_lookup_proof_names
           - openbao_reconcile_approle_name not in openbao_approle_secret_id_ttl_overrides
         fail_msg: >-
-          Reconcile uses per-call credentials and must not enter scheduled
-          rotation, stored-secret publication, or lookup-proof catalogs.
+          Flow-lock and reconcile use per-call credentials and must not enter
+          scheduled rotation, stored-secret publication, or lookup-proof catalogs.
+
+    - name: Assert stale per-call pairs are removed from the shared env document
+      ansible.builtin.assert:
+        that:
+          - _env_expression is search('OPENBAO_APPROLE_FLOW_LOCK_ROLE_ID')
+          - _env_expression is search('OPENBAO_APPROLE_FLOW_LOCK_SECRET_ID')
+          - _env_expression is search('OPENBAO_APPROLE_OPENBAO_RECONCILE_ROLE_ID')
+          - _env_expression is search('OPENBAO_APPROLE_OPENBAO_RECONCILE_SECRET_ID')
+          - _env_expression is search("rejectattr\('key', 'in'")
+        fail_msg: >-
+          Per-call flow-lock and reconcile credentials must not be retained in
+          the shared runner env document when a domain is rotated.
 
     - name: Assert the login and lookup proofs key off the same decision
       ansible.builtin.assert:
