@@ -1,6 +1,7 @@
 """Per-App GitHub grants render only declared paths and request values."""
 
 import json
+import os
 import re
 from pathlib import Path
 
@@ -12,6 +13,20 @@ from ansible.template import Templar, trust_as_template
 ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE = ROOT / "roles/openbao/templates/github-mount-config-policy.hcl.j2"
 MOUNT_TASK = ROOT / "roles/openbao/tasks/init/05b-github-app-mount.yml"
+APP_ENVIRONMENT = {
+    "github-public": (
+        "OPENBAO_GITHUB_EVERYDAY_APP_ID",
+        "OPENBAO_GITHUB_EVERYDAY_APP_PRIVATE_KEY",
+    ),
+    "github-empty": (
+        "OPENBAO_GITHUB_AGENTS_APP_ID",
+        "OPENBAO_GITHUB_AGENTS_APP_PRIVATE_KEY",
+    ),
+    "github-sets": (
+        "OPENBAO_GITHUB_HERMES_APP_ID",
+        "OPENBAO_GITHUB_HERMES_APP_PRIVATE_KEY",
+    ),
+}
 
 
 def _stanzas(policy):
@@ -119,8 +134,8 @@ def test_policy_renders_only_declared_mounts_and_constrained_paths():
         "sys/mounts/github-empty": ["create", "update"],
         "sys/mounts/github-sets": ["create", "update"],
         "github-public/config": ["create", "read", "update"],
-        "github-empty/config": ["read"],
-        "github-sets/config": ["read"],
+        "github-empty/config": ["create", "read", "update"],
+        "github-sets/config": ["create", "read", "update"],
         "github-public/token": ["create", "update"],
         "github-public/permissionset/public-read": ["create", "read", "update"],
         "github-public/permissionset/private-read": ["create", "read", "update"],
@@ -143,12 +158,14 @@ def test_policy_renders_only_declared_mounts_and_constrained_paths():
         "prv_key",
         "exclude_repository_metadata",
     ]
-    assert '"app_id" = ["101"]' in bodies["github-public/config"]
+    assert '"app_id" = []' in bodies["github-public/config"]
     assert '"prv_key" = []' in bodies["github-public/config"]
     assert '"exclude_repository_metadata" = [true]' in bodies["github-public/config"]
     assert "required_parameters" not in bodies["github-public/config"]
-    assert "allowed_parameters" not in bodies["github-empty/config"]
-    assert "allowed_parameters" not in bodies["github-sets/config"]
+    for mount in ("github-public", "github-empty", "github-sets"):
+        assert '"app_id" = []' in bodies[f"{mount}/config"]
+        assert '"prv_key" = []' in bodies[f"{mount}/config"]
+        assert '"exclude_repository_metadata" = [true]' in bodies[f"{mount}/config"]
 
     token = bodies["github-public/token"]
     assert _allowed_parameter_keys(token) == ["org_name", "installation_id", "permissions"]
@@ -182,6 +199,35 @@ def test_policy_renders_only_declared_mounts_and_constrained_paths():
     leases = bodies["sys/leases/revoke"]
     assert _allowed_parameter_keys(leases) == ["lease_id"]
     assert '"lease_id" = ["github-public/token/*"]' in leases
+
+
+def test_config_policy_text_is_independent_of_app_environment(monkeypatch):
+    env_names = [name for pair in APP_ENVIRONMENT.values() for name in pair]
+
+    def render_from_environment():
+        mounts = _fixture_mounts()
+        for mount in mounts:
+            app_id_env, private_key_env = APP_ENVIRONMENT[mount["mount"]]
+            mount["app_id"] = os.environ.get(app_id_env, "")
+            mount["private_key"] = os.environ.get(private_key_env, "")
+        return _render({"ansible_managed": "Ansible managed", "openbao_github_app_mounts": mounts})
+
+    for name in env_names:
+        monkeypatch.delenv(name, raising=False)
+    unset = render_from_environment()
+
+    for index, (app_id_env, private_key_env) in enumerate(APP_ENVIRONMENT.values(), start=1):
+        monkeypatch.setenv(app_id_env, str(100 + index))
+        monkeypatch.setenv(private_key_env, f"fixture-private-key-{index}")
+    set_values = render_from_environment()
+
+    for index, (app_id_env, private_key_env) in enumerate(APP_ENVIRONMENT.values(), start=1):
+        monkeypatch.setenv(app_id_env, str(200 + index))
+        monkeypatch.setenv(private_key_env, f"different-private-key-{index}")
+    different_values = render_from_environment()
+
+    assert unset == set_values == different_values
+    assert all(secret not in unset for secret in ("fixture-private-key", "different-private-key"))
 
 
 def test_mount_task_touches_only_declared_permission_set_names():

@@ -1,6 +1,7 @@
 """Rendered reconcile ACLs stay outside credentials it can mint or carry."""
 
 import json
+import os
 import re
 from pathlib import Path
 
@@ -121,6 +122,78 @@ def _role_policies(role):
     if "token_policies" in role:
         return set(role["token_policies"])
     return {role["policy"]}
+
+
+def test_github_policy_pin_stanza_is_independent_of_app_environment(
+    rendered_defaults, monkeypatch
+):
+    values, _approles, _policies = rendered_defaults
+    mounts = _templar(_trust(values)).template(
+        _trust(values["openbao_github_app_mounts"])
+    )
+    credentials = {
+        "github": (
+            "OPENBAO_GITHUB_EVERYDAY_APP_ID",
+            "OPENBAO_GITHUB_EVERYDAY_APP_PRIVATE_KEY",
+        ),
+        "github-agents": (
+            "OPENBAO_GITHUB_AGENTS_APP_ID",
+            "OPENBAO_GITHUB_AGENTS_APP_PRIVATE_KEY",
+        ),
+        "github-hermes": (
+            "OPENBAO_GITHUB_HERMES_APP_ID",
+            "OPENBAO_GITHUB_HERMES_APP_PRIVATE_KEY",
+        ),
+        "github-work": (
+            "OPENBAO_GITHUB_WORK_APP_ID",
+            "OPENBAO_GITHUB_WORK_PRIVATE_KEY",
+        ),
+        "github-personal": (
+            "OPENBAO_GITHUB_PERSONAL_APP_ID",
+            "OPENBAO_GITHUB_PERSONAL_APP_PRIVATE_KEY",
+        ),
+        "github-enterprise-read": (
+            "OPENBAO_GITHUB_ENTERPRISE_READ_APP_ID",
+            "OPENBAO_GITHUB_ENTERPRISE_READ_PRIVATE_KEY",
+        ),
+        "github-enterprise": (
+            "OPENBAO_GITHUB_ENTERPRISE_APP_ID",
+            "OPENBAO_GITHUB_ENTERPRISE_PRIVATE_KEY",
+        ),
+        "github-runner": ("OPENBAO_GITHUB_RUNNER_APP_ID", "OPENBAO_GITHUB_RUNNER_APP_PRIVATE_KEY"),
+    }
+    env_names = [name for pair in credentials.values() for name in pair]
+
+    def render_pin():
+        context = dict(values)
+        context["openbao_github_app_mounts"] = [
+            {
+                **mount,
+                "app_id": os.environ.get(credentials[mount["mount"]][0], ""),
+                "private_key": os.environ.get(credentials[mount["mount"]][1], ""),
+            }
+            for mount in mounts
+        ]
+        stanzas = dict(_stanzas(_render(RECONCILE, context)))
+        return stanzas["sys/policies/acl/github-mount-config"]
+
+    for name in env_names:
+        monkeypatch.delenv(name, raising=False)
+    unset = render_pin()
+
+    for index, (app_id_env, private_key_env) in enumerate(credentials.values(), start=1):
+        monkeypatch.setenv(app_id_env, str(100 + index))
+        monkeypatch.setenv(private_key_env, f"fixture-private-key-{index}")
+    set_values = render_pin()
+
+    for index, (app_id_env, private_key_env) in enumerate(credentials.values(), start=1):
+        monkeypatch.setenv(app_id_env, str(200 + index))
+        monkeypatch.setenv(private_key_env, f"different-private-key-{index}")
+    different_values = render_pin()
+
+    assert unset == set_values == different_values
+    assert "fixture-private-key" not in unset
+    assert "different-private-key" not in unset
 
 
 def _allowed_parameters(body):

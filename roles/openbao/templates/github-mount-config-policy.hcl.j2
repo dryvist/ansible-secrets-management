@@ -6,18 +6,14 @@ path "sys/mounts/{{ gm.mount }}" {
 }
 
 path "{{ gm.mount }}/config" {
-{% if gm.app_id | default('', true) | string | length > 0
-      and gm.private_key | default('', true) | string | length > 0 %}
   capabilities = ["create", "read", "update"]
   allowed_parameters = {
-    "app_id" = [{{ gm.app_id | int | string | tojson }}]
-    # The key is supplied at runtime and is intentionally the only unpinned value.
+    # App identity is checked by the human-gated mount task; keep credential
+    # values out of this committed policy body.
+    "app_id" = []
     "prv_key" = []
     "exclude_repository_metadata" = [true]
   }
-{% else %}
-  capabilities = ["read"]
-{% endif %}
 }
 
 {% set public_orgs = gm.permission_sets | default([])
