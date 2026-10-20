@@ -140,6 +140,8 @@
       no_log: true
       when: rotate_env_document_enabled | bool
 
+    # Flow-lock and reconcile now use issuer-minted per-call secret_ids. Prune
+    # historical copies whenever the shared document is next written.
     - name: Build the env document with this domain's pair rotated
       ansible.builtin.set_fact:
         rotate_env_new_data: >-
@@ -149,7 +151,14 @@
                   (rotate_new_prefix ~ '_SECRET_ID'): rotate_new_secret_id.json.data.secret_id,
                 }))
              | dict2items
-             | rejectattr('key', 'in', [rotate_legacy_prefix ~ '_ROLE_ID', rotate_legacy_prefix ~ '_SECRET_ID'])
+             | rejectattr('key', 'in', [
+                 rotate_legacy_prefix ~ '_ROLE_ID',
+                 rotate_legacy_prefix ~ '_SECRET_ID',
+                 'OPENBAO_APPROLE_FLOW_LOCK_ROLE_ID',
+                 'OPENBAO_APPROLE_FLOW_LOCK_SECRET_ID',
+                 'OPENBAO_APPROLE_OPENBAO_RECONCILE_ROLE_ID',
+                 'OPENBAO_APPROLE_OPENBAO_RECONCILE_SECRET_ID',
+               ])
              | items2dict }}
       no_log: true
       when: rotate_env_document_enabled | bool
