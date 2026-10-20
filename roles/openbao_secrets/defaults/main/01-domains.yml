@@ -1,9 +1,8 @@
 ---
 # Each domain's AppRole env-var pair is DERIVED (fetch_domain.yml), not
-# listed here: OPENBAO_APPROLE_<NAME>_{ROLE,SECRET}_ID, name upper-cased
-# with non-alphanumerics -> '_' -- the same formula every other AppRole
-# credential helper in this estate already uses. A legacy
-# <NAME>_VAULT_{ROLE,SECRET}_ID pair is tried second for migration safety.
+# listed here: OPENBAO_APPROLE_<CREDENTIAL_DOMAIN>_{ROLE,SECRET}_ID, where
+# credential_domain defaults to name, upper-cased with non-alphanumerics -> '_'.
+# A legacy <CREDENTIAL_DOMAIN>_VAULT_{ROLE,SECRET}_ID pair is tried second.
 # Domains declaring workstation_issuer_role use the per-call issuer client
 # when the approle-issuer pair is set and flow-lock resolves on the
 # controller; every other caller keeps its stored pair (tasks/login_path.yml).
@@ -177,6 +176,15 @@ openbao_secrets_domains:
       # so this reuses the domain already fetched for cribl_stream_group
       # rather than minting a dedicated AppRole for one controller URL.
       - infrastructure/unifi
+  - name: postgres_backup_s3
+    credential_domain: apps
+    paths:
+      # pgBackRest consumes AWS_ENDPOINT_URL, AWS_ACCESS_KEY_ID, and
+      # AWS_SECRET_ACCESS_KEY from this record; AWS_REGION is also returned
+      # and the consumer retains its existing region default. Keep the data
+      # domain separate while reusing the apps AppRole credentials.
+      - path: rustfs/dryvist-homelab-backups/rw
+        optional: true
   - name: ntfy
     paths:
       # Slack incoming-webhook URLs keyed by topic, for the ntfy alert hub's

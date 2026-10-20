@@ -1,4 +1,4 @@
-"""Every path the `apps` secrets domain reads is readable by the `apps` policy.
+"""Every path read with the `apps` AppRole is readable by the `apps` policy.
 
 roles/openbao_secrets reads each path of the `apps` domain with the `apps`
 AppRole. A path the policy denies answers 403, and classify_reads.yml fails
@@ -61,6 +61,13 @@ def _apps_domain_paths() -> list[str]:
     raise AssertionError("no `apps` domain in openbao_secrets_domains")
 
 
+def _domain(name: str) -> dict:
+    for domain in _yaml(DOMAINS_FILE)["openbao_secrets_domains"]:
+        if domain["name"] == name:
+            return domain
+    raise AssertionError(f"no `{name}` domain in openbao_secrets_domains")
+
+
 def _unreadable(paths: list[str], read_apps: set[str], template_text: str) -> list[str]:
     missing = []
     for path in paths:
@@ -111,3 +118,22 @@ def test_a_published_only_bucket_is_missing_without_the_published_list():
 def test_the_ci_resolver_bucket_is_not_granted_to_the_apps_reader():
     assert "ci-resolver" in _yaml(PROMOTED_FILE)["openbao_promoted_app_secrets"]
     assert "ci-resolver" not in _read_apps(_yaml(NAMES_FILE))
+
+
+def test_postgres_backup_domain_reuses_apps_credentials_and_is_optional():
+    domain = _domain("postgres_backup_s3")
+
+    assert domain["credential_domain"] == "apps"
+    assert domain["paths"] == [
+        {"path": "rustfs/dryvist-homelab-backups/rw", "optional": True}
+    ]
+
+
+def test_postgres_backup_path_has_one_exact_read_grant():
+    policy = _render_apps_policy(_read_apps(_yaml(NAMES_FILE)))
+
+    assert (
+        'path "secret/data/rustfs/dryvist-homelab-backups/rw" {\n'
+        '  capabilities = ["read"]\n}'
+    ) in policy
+    assert 'path "secret/data/rustfs/*"' not in policy

@@ -30,6 +30,7 @@ The roles read these names from the consuming playbook, inventory, or environmen
 - `ingress_domain`.
 - The `PROXMOX_SUBDOMAIN` environment variable.
 - `bao_apps_secrets`, a keyed secret map.
+- `bao_postgres_backup_s3_secrets`, a keyed secret map.
 
 ## Roles
 
