@@ -167,9 +167,19 @@ the request. The existing
 Estate identities (`ai-apply-*`, `ai-orchestrator`) attach the `github-mint`
 capability policy, which grants the read-tier sets only. Raw token endpoints
 are limited to `github-write`, `github-write-scoped`, `open-llm`, the two
-parameter-pinned Enterprise tier policies, and break-glass `ai-admin`. Nothing
-but the converge edits permission sets or
-engine configuration. AWS remains separately mounted and authorized:
+parameter-pinned Enterprise tier policies, break-glass `ai-admin`, and
+`github-mount-config` on the declared per-App mounts. That last policy is
+attached only to the human-gated `openbao-policy-sync` AppRole. It permits
+metadata-read token requests with `org_name` or `installation_id` pinned to the
+declared repository-enumeration inputs, exact declared permission-set writes,
+and revocation only for leases under those mounts' token paths. It can list
+permission sets and delete undeclared sets; deletion removes a set's minting
+power. It does not permit repository selectors. The reconcile policy pins this
+policy's body and the role's complete `token_policies` list; an existing
+policy-sync token cannot use the new mount grants until the role is updated and
+a fresh human-gated token is issued. The mount include remains capability-gated,
+so unattended reconcile does not configure per-App mounts. AWS remains
+separately mounted and authorized:
 `terraform-apply` can mint `aws/sts/tf-proxmox`, but has no GitHub-engine grant.
 
 First configuration requires `OPENBAO_GITHUB_APP_ID`,
