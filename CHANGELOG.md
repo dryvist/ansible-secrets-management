@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.32.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.31.4...v0.32.0) (2026-10-20)
+
+
+### Features
+
+* **openbao:** pinned reconcile attachments for two human-gated roles ([#269](https://github.com/dryvist/ansible-secrets-management/issues/269)) ([b23e670](https://github.com/dryvist/ansible-secrets-management/commit/b23e67028dfb88c178d8cd07dce60f4fe222aec8))
+
 ## [0.31.4](https://github.com/dryvist/ansible-secrets-management/compare/v0.31.3...v0.31.4) (2026-10-20)
 
 
