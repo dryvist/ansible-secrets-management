@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.31.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.30.1...v0.31.0) (2026-10-20)
+
+
+### Features
+
+* **openbao:** add a github-personal App mount with one write set ([#251](https://github.com/dryvist/ansible-secrets-management/issues/251)) ([96bcd1d](https://github.com/dryvist/ansible-secrets-management/commit/96bcd1d1d45fb5ac6ed636afb7cd2e56df2e3aac))
+
+
+### Bug Fixes
+
+* **openbao:** grant apps reader published buckets ([#249](https://github.com/dryvist/ansible-secrets-management/issues/249)) ([674e6be](https://github.com/dryvist/ansible-secrets-management/commit/674e6be6b77a5b1225a7af896666faad77a7a576))
+
 ## [0.30.1](https://github.com/dryvist/ansible-secrets-management/compare/v0.30.0...v0.30.1) (2026-10-19)
 
 
