@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.31.4](https://github.com/dryvist/ansible-secrets-management/compare/v0.31.3...v0.31.4) (2026-10-20)
+
+
+### Bug Fixes
+
+* **openbao:** register the telemetry exporter identity ([#265](https://github.com/dryvist/ansible-secrets-management/issues/265)) ([a303737](https://github.com/dryvist/ansible-secrets-management/commit/a303737c5e2714c1b2999de35c7e095f1974d8e7))
+
 ## [0.31.3](https://github.com/dryvist/ansible-secrets-management/compare/v0.31.2...v0.31.3) (2026-10-20)
 
 
