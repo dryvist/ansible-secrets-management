@@ -133,6 +133,7 @@ openbao_approle_secret_id_ttl_overrides_base:
   splunk-mcp-rotate: "0s"
   secret-age-audit: "0s"
   github-runner: "0s"
+  github-exporter: "0s"
 openbao_approle_secret_id_ttl_overrides: >-
   {{ openbao_approle_secret_id_ttl_overrides_base
      | combine(dict(openbao_roster_agent_valid_names
@@ -159,6 +160,7 @@ openbao_approle_secret_id_num_uses_overrides:
   splunk-mcp-rotate: 0  # splunk-mcp rotator timer, redeemed per run
   secret-age-audit: 0  # secret-age timer, redeemed per run
   github-runner: 0  # runner bao agent, redeemed per job
+  github-exporter: 0  # Cribl token proxy agent can reauthenticate with the standing secret_id
   slack-admin: 0  # slack-admin rotator timer, redeemed per run
   slack-ops: 0  # workstation Slack helper, redeemed per call
   # github-read / github-write moved to their 07b declarations, next to the
