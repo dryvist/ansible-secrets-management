@@ -19,6 +19,18 @@ def grants(
     env.filters["comment"] = lambda value: ""
     rendered = env.from_string(TEMPLATE.read_text()).render(
         ansible_managed="", openbao_reconcile_excluded_policies=["ai-admin", "openbao-reconcile"],
+        openbao_tofu_state_admin_policy_name="tofu-state-admin",
+        openbao_github_mount_config_policy_name="github-mount-config",
+        openbao_ai_admin_session_approle_name="ai-admin-session",
+        openbao_policy_sync_approle_name="openbao-policy-sync",
+        openbao_approle_cli_parameters={
+            "ai-admin-session": {
+                "token_policies": "ai-admin,ai-admin-guard,tofu-state-admin"
+            },
+            "openbao-policy-sync": {
+                "token_policies": "openbao-reconcile,policy-sync,github-mount-config"
+            },
+        },
         openbao_policies=[], openbao_approles=[], openbao_ssh_roles=[],
         openbao_ssh_mount="ssh-client-ca", openbao_kv_mounts=[],
         openbao_github_mount="github", openbao_github_app_mounts=[],

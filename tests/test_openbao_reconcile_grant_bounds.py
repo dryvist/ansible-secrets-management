@@ -16,6 +16,7 @@ RECONCILE = TEMPLATES / "openbao-reconcile-policy.hcl.j2"
 ISSUER = TEMPLATES / "approle-issuer-policy.hcl.j2"
 POLICY_SYNC_UNLOCK = TEMPLATES / "policy-sync-unlock-policy.hcl.j2"
 APPROLE_TASKS = ROOT / "roles/openbao/tasks/init/10-approles.yml"
+POLICY_WRITE_TASKS = ROOT / "roles/openbao/tasks/init/08b-rbac-policy-writes.yml"
 TTL_TASKS = ROOT / "roles/openbao/tasks/init/10c-approle-ttl-bounds.yml"
 ELEVATION_TASKS = ROOT / "roles/openbao/tasks/init/09e-authelia-elevation.yml"
 
@@ -98,7 +99,9 @@ def _render(template, values, *, policy_exclusions=None):
     context = dict(values)
     if policy_exclusions is not None:
         context["openbao_reconcile_policy_excluded_names"] = policy_exclusions
-    return _templar(_trust(context)).template(
+    templar = _templar(_trust(context))
+    templar._loader.set_basedir(str(ROOT / "roles" / "openbao"))
+    return templar.template(
         trust_as_template(template.read_text(encoding="utf-8"))
     )
 
@@ -121,12 +124,46 @@ def _role_policies(role):
 
 
 def _allowed_parameters(body):
-    match = re.search(r"allowed_parameters\s*=\s*\{([^}]*)\}", body, re.DOTALL)
+    match = re.search(r"allowed_parameters\s*=\s*\{", body)
     assert match, "managed AppRole path has no allowed_parameters"
-    return {
-        name: json.loads(value)
-        for name, value in re.findall(r'"([^"]+)"\s*=\s*(\[[^\n]*\])', match.group(1))
-    }
+    start = match.end()
+    depth = 1
+    in_string = False
+    escaped = False
+    for end, char in enumerate(body[start:]):
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+        elif char == '"':
+            in_string = True
+        elif char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                contents = body[start : start + end]
+                break
+    else:
+        raise AssertionError("allowed_parameters block is not closed")
+
+    allowed = {}
+    decoder = json.JSONDecoder()
+    position = 0
+    while position < len(contents):
+        entry = re.match(r'\s*"([^"]+)"\s*=\s*', contents[position:])
+        if not entry:
+            assert contents[position:].strip() == ""
+            break
+        name = entry.group(1)
+        value_start = position + entry.end()
+        value, value_length = decoder.raw_decode(contents[value_start:])
+        allowed[name] = value
+        position = value_start + value_length
+    return allowed
 
 
 def _task(path, name):
@@ -388,3 +425,147 @@ def test_policy_sync_elevation_role_has_one_policy_and_workstation_bounds(render
     assert payload["token_bound_cidrs"] == workstation_class
     for field in ("token_ttl", "token_max_ttl"):
         assert payload[field] == trusted_payload[field]
+
+
+def test_tofu_state_admin_policy_contains_only_the_two_state_key_paths(rendered_defaults):
+    values, _approles, policies = rendered_defaults
+    policy_name = values["openbao_tofu_state_admin_policy_name"]
+    assert {
+        "name": policy_name,
+        "template": "tofu-state-admin-policy.hcl.j2",
+    } in policies
+
+    rendered = _render(TEMPLATES / "tofu-state-admin-policy.hcl.j2", values)
+    admin = _render(TEMPLATES / "ai-admin-policy.hcl.j2", values)
+    expected = {
+        path
+        for path, _body in _stanzas(admin)
+        if path in {
+            f"{values['openbao_transit_mount']}/datakey/plaintext/{values['openbao_tofu_state_transit_key']}",
+            f"{values['openbao_transit_mount']}/decrypt/{values['openbao_tofu_state_transit_key']}",
+        }
+    }
+    actual = []
+    for path, body in _stanzas(rendered):
+        capabilities = re.search(r"capabilities\s*=\s*\[([^]]*)\]", body)
+        assert capabilities, path
+        actual.append((path, tuple(re.findall(r'"([^"]+)"', capabilities.group(1)))))
+    assert actual == [
+        (f"{values['openbao_transit_mount']}/datakey/plaintext/{values['openbao_tofu_state_transit_key']}", ("update",)),
+        (f"{values['openbao_transit_mount']}/decrypt/{values['openbao_tofu_state_transit_key']}", ("update",)),
+    ]
+    assert {path for path, _capabilities in actual} == expected
+
+
+def test_reconcile_pins_the_two_human_gated_policy_bodies_and_attachments(rendered_defaults):
+    values, approles, policies = rendered_defaults
+    reconcile = _render(RECONCILE, values)
+    policy_entries = {
+        entry["name"]: entry for entry in policies
+        if entry["name"] in {
+            values["openbao_tofu_state_admin_policy_name"],
+            values["openbao_github_mount_config_policy_name"],
+        }
+    }
+    assert policy_entries == {
+        values["openbao_tofu_state_admin_policy_name"]: {
+            "name": values["openbao_tofu_state_admin_policy_name"],
+            "template": "tofu-state-admin-policy.hcl.j2",
+        },
+        values["openbao_github_mount_config_policy_name"]: {
+            "name": values["openbao_github_mount_config_policy_name"],
+            "template": "github-mount-config-policy.hcl.j2",
+        },
+    }
+
+    for policy_name, template_name in (
+        (values["openbao_tofu_state_admin_policy_name"], "tofu-state-admin-policy.hcl.j2"),
+        (values["openbao_github_mount_config_policy_name"], "github-mount-config-policy.hcl.j2"),
+    ):
+        path = f"sys/policies/acl/{policy_name}"
+        body = next(body for candidate, body in _stanzas(reconcile) if candidate == path)
+        # lookup('template') | trim removes the template terminator; the
+        # command module's explicit stdin_add_newline appends one byte before
+        # bao receives the policy body.
+        policy_text = _render(TEMPLATES / template_name, values).strip() + "\n"
+        assert _allowed_parameters(body) == {
+            "policy": [policy_text]
+        }
+        required = re.search(
+            r"(?m)^\s*required_parameters\s*=\s*(\[[^\n]*\])\s*$", body
+        )
+        assert required
+        assert json.loads(required.group(1)) == ["policy"]
+
+    policy_write_tasks = yaml.safe_load(POLICY_WRITE_TASKS.read_text(encoding="utf-8"))
+    policy_write = next(
+        task for task in policy_write_tasks
+        if task.get("name") == "Write the RBAC policies that are missing or changed"
+    )
+    assert policy_write["ansible.builtin.command"]["stdin_add_newline"] is True
+
+    expected_roles = {
+        values["openbao_ai_admin_session_approle_name"]: values[
+            "openbao_approle_cli_parameters"
+        ][values["openbao_ai_admin_session_approle_name"]]["token_policies"].split(","),
+        values["openbao_policy_sync_approle_name"]: values[
+            "openbao_approle_cli_parameters"
+        ][values["openbao_policy_sync_approle_name"]]["token_policies"].split(","),
+    }
+    assert values["openbao_tofu_state_admin_policy_name"] in expected_roles[
+        values["openbao_ai_admin_session_approle_name"]
+    ]
+    assert values["openbao_github_mount_config_policy_name"] in expected_roles[
+        values["openbao_policy_sync_approle_name"]
+    ]
+    role_declarations = {role["name"]: role for role in approles}
+    assert values["openbao_ai_admin_session_approle_name"] in (
+        values["openbao_reconcile_excluded_policies"]
+    )
+    assert values["openbao_policy_sync_policy_name"] in (
+        values["openbao_reconcile_excluded_policies"]
+    )
+    managed_approle_names = {
+        role["name"] for role in approles
+        if "manage_secret_id" not in role
+        and role["name"] not in values["openbao_reconcile_excluded_policies"]
+    }
+    for role_name, expected_policies in expected_roles.items():
+        assert role_declarations[role_name]["manage_secret_id"] is False
+        assert role_name not in managed_approle_names
+        role_path = f"auth/approle/role/{role_name}"
+        role_body = next(body for path, body in _stanzas(reconcile) if path == role_path)
+        role_caps = re.search(r"capabilities\s*=\s*(\[[^\]]*\])", role_body)
+        assert role_caps and json.loads(role_caps.group(1)) == ["read"]
+
+        policies_path = f"{role_path}/policies"
+        policies_body = next(
+            body for path, body in _stanzas(reconcile) if path == policies_path
+        )
+        policy_caps = re.search(r"capabilities\s*=\s*(\[[^\]]*\])", policies_body)
+        assert policy_caps and json.loads(policy_caps.group(1)) == ["update"]
+        assert _allowed_parameters(policies_body) == {
+            "token_policies": [",".join(expected_policies)]
+        }
+        required = re.search(
+            r"(?m)^\s*required_parameters\s*=\s*(\[[^\n]*\])\s*$",
+            policies_body,
+        )
+        assert required and json.loads(required.group(1)) == ["token_policies"]
+
+
+def test_reconcile_does_not_grant_per_app_mount_configuration(rendered_defaults):
+    values, _approles, _policies = rendered_defaults
+    per_app_mounts = [
+        {"mount": "github-public"},
+        {"mount": "github-private"},
+    ]
+    context = dict(values, openbao_github_app_mounts=per_app_mounts)
+    reconcile = _render(RECONCILE, context)
+    paths = {path for path, _body in _stanzas(reconcile)}
+
+    assert f"{values['openbao_github_mount']}/permissionset/*" in paths
+    assert "github-agents/permissionset/agents-write" in paths
+    for mount in per_app_mounts:
+        assert f"{mount['mount']}/permissionset/*" in paths
+    assert not any(path.startswith("sys/mounts/github-") for path in paths)
