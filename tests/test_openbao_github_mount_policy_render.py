@@ -13,6 +13,7 @@ from ansible.template import Templar, trust_as_template
 ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE = ROOT / "roles/openbao/templates/github-mount-config-policy.hcl.j2"
 MOUNT_TASK = ROOT / "roles/openbao/tasks/init/05b-github-app-mount.yml"
+PERMISSION_SET_TASK = "Reconcile the permission sets on mount {{ gm.mount }}"
 APP_ENVIRONMENT = {
     "github-public": (
         "OPENBAO_GITHUB_EVERYDAY_APP_ID",
@@ -92,6 +93,7 @@ def _fixture_mounts():
                     "name": "static-set",
                     "installation_id": "404",
                     "permissions": {"contents": "read"},
+                    "repositories": ["state"],
                 },
             ],
         },
@@ -179,10 +181,15 @@ def test_policy_renders_only_declared_mounts_and_constrained_paths():
     assert "github-sets/token" not in paths
 
     public_set = bodies["github-public/permissionset/public-read"]
-    assert _allowed_parameter_keys(public_set) == ["installation_id", "permissions"]
+    assert _allowed_parameter_keys(public_set) == [
+        "installation_id",
+        "permissions",
+        "repositories",
+    ]
     assert "required_parameters" not in public_set
     assert '"installation_id" = ["202"]' in public_set
     assert '"permissions" = [{\n      "contents" = "read"\n    }]' in public_set
+    assert '"repositories" = []' in public_set
 
     private_set = bodies["github-public/permissionset/private-read"]
     assert _allowed_parameter_keys(private_set) == [
@@ -192,9 +199,11 @@ def test_policy_renders_only_declared_mounts_and_constrained_paths():
     ]
     assert '"installation_id" = ["303"]' in private_set
     assert '"permissions" = [{\n      "metadata" = "read"\n    }]' in private_set
-    assert '"repositories" = [["state"]]' in private_set
+    assert '"repositories" = []' in private_set
     assert "required_parameters" not in private_set
-    assert '"installation_id" = ["404"]' in bodies["github-sets/permissionset/static-set"]
+    static_set = bodies["github-sets/permissionset/static-set"]
+    assert '"installation_id" = ["404"]' in static_set
+    assert '"repositories" = [["state"]]' in static_set
 
     leases = bodies["sys/leases/revoke"]
     assert _allowed_parameter_keys(leases) == ["lease_id"]
@@ -228,6 +237,61 @@ def test_config_policy_text_is_independent_of_app_environment(monkeypatch):
 
     assert unset == set_values == different_values
     assert all(secret not in unset for secret in ("fixture-private-key", "different-private-key"))
+
+
+def test_permission_set_policy_matches_task_bodies_for_each_set_kind():
+    mounts = _fixture_mounts()
+    resolved_sets = {
+        "public-read": {
+            **mounts[0]["permission_sets"][0],
+            "repositories": ["fixture-a", "fixture-b"],
+        },
+        "private-read": {
+            **mounts[0]["permission_sets"][1],
+            "repositories": ["fixture-a", "fixture-b"],
+        },
+        "static-set": mounts[2]["permission_sets"][0],
+    }
+    policy = _render({"ansible_managed": "Ansible managed", "openbao_github_app_mounts": mounts})
+    stanzas = dict(_stanzas(policy))
+    tasks = yaml.safe_load(MOUNT_TASK.read_text(encoding="utf-8"))
+    task = next(item for item in tasks if item.get("name") == PERMISSION_SET_TASK)
+    body_template = task["ansible.builtin.uri"]["body"]
+    expected_bodies = {
+        "public-read": {
+            "installation_id": "202",
+            "permissions": {"contents": "read"},
+            "repositories": ["fixture-a", "fixture-b"],
+        },
+        "private-read": {
+            "installation_id": "303",
+            "permissions": {"metadata": "read"},
+            "repositories": ["fixture-a", "fixture-b"],
+        },
+        "static-set": {
+            "installation_id": "404",
+            "permissions": {"contents": "read"},
+            "repositories": ["state"],
+        },
+    }
+
+    for name, resolved_set in resolved_sets.items():
+        templar = Templar(loader=DataLoader())
+        templar.available_variables = {"item": (resolved_set, {})}
+        task_body = templar.template(trust_as_template(body_template))
+        assert task_body == expected_bodies[name]
+        path = (
+            "github-public/permissionset/"
+            + name
+            if name != "static-set"
+            else "github-sets/permissionset/static-set"
+        )
+        stanza = stanzas[path]
+        assert '"repositories"' in stanza
+        if name == "static-set":
+            assert '"repositories" = [["state"]]' in stanza
+        else:
+            assert '"repositories" = []' in stanza
 
 
 def test_mount_task_touches_only_declared_permission_set_names():

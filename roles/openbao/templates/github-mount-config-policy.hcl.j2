@@ -51,7 +51,9 @@ path "{{ gm.mount }}/permissionset/{{ permission_set.name }}" {
       {{ permission | tojson }} = {{ access | tojson }}
 {% endfor %}
     }]
-{% if permission_set.repositories is defined %}
+{% if permission_set.public_repos_of is defined or permission_set.private_repos_of is defined %}
+    "repositories" = []
+{% elif permission_set.repositories is defined %}
     "repositories" = [{{ permission_set.repositories | tojson }}]
 {% endif %}
   }
