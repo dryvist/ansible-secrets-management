@@ -198,6 +198,7 @@ openbao_host_secret_zero_approle_names:
   - "{{ openbao_terraform_approle_name }}"
   - "{{ openbao_approle_audit_approle_name }}"
   - "{{ openbao_approle_issuer_approle_name }}"
+  - "{{ openbao_github_exporter_approle_name }}"
   - iac-platform-deploy
 # Every scheduled-rotation AppRole, by name; approle-secret-id-rotate-policy.hcl.j2
 # scopes its secret-id mint/destroy grants to this one list.
