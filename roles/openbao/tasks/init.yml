@@ -147,6 +147,7 @@
     _policy_sync_capabilities: "{{ openbao_policy_sync_capability_map | default({}) }}"
     _policy_sync_update_paths: >-
       {{ _policy_sync_capabilities | dict2items
+         | selectattr('key', 'in', _per_app_mount_paths)
          | selectattr('value', 'contains', 'update') | map(attribute='key') | list }}
     _per_app_mount_paths: >-
       {{ openbao_github_app_mounts | default([]) | map(attribute='mount')
