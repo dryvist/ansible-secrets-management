@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.34.1](https://github.com/dryvist/ansible-secrets-management/compare/v0.34.0...v0.34.1) (2026-10-21)
+
+
+### Bug Fixes
+
+* **openbao:** read only mount paths from the policy-sync capability map ([#286](https://github.com/dryvist/ansible-secrets-management/issues/286)) ([ff12323](https://github.com/dryvist/ansible-secrets-management/commit/ff12323dc29dbec37a56ffc53479c4ab6fa60c75))
+
 ## [0.34.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.33.3...v0.34.0) (2026-10-21)
 
 
