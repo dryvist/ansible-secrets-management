@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.35.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.34.1...v0.35.0) (2026-10-21)
+
+
+### Features
+
+* **openbao:** derive the github-work read set and mint write from the App grant ([#289](https://github.com/dryvist/ansible-secrets-management/issues/289)) ([05a5e4a](https://github.com/dryvist/ansible-secrets-management/commit/05a5e4a226f317dffa86bb481cd728da065f6124))
+
 ## [0.34.1](https://github.com/dryvist/ansible-secrets-management/compare/v0.34.0...v0.34.1) (2026-10-21)
 
 
