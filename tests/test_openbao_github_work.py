@@ -1,4 +1,4 @@
-"""The github-work verification pins all permission sets and their policies."""
+"""The github-work verification pins its raw-endpoint policies and AppRoles."""
 
 import subprocess
 from pathlib import Path
@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PLAYBOOK = ROOT / "tests/template_render/verify/openbao_github_work.yml"
 
 
-def test_github_work_permission_sets(tmp_path):
+def test_github_work_policies(tmp_path):
     result = subprocess.run(
         [
             "ansible-playbook",

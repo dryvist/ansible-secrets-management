@@ -1,11 +1,9 @@
 ---
-# The github-work mount: three sets, three policies, three AppRoles, and the converge
-# checks (roles/openbao/tasks/init/05b-github-app-set-checks.yml) run against
-# fixture responses. Each policy must grant exactly its own work set path and
-# neither the other set nor the raw endpoint; the sets must carry the declared
-# maps with no administration; the admin AppRole must use the human-unlock
-# single-use posture.
-- name: Render and verify the github-work mount, sets, policies and AppRoles
+# The github-work mount: no declared sets, a derived `read` set, two policies
+# and two AppRoles. Read mints only the derived set, so it can never mint
+# write; write must name repositories and sends no map, so it carries the App's
+# own grant. Neither policy reaches any other path.
+- name: Render and verify the github-work mount, policies and AppRoles
   hosts: localhost
   connection: local
   gather_facts: false
@@ -14,43 +12,24 @@
     ansible_become: false
     _fixture_dir: "{{ render_tmp }}"
     _template_dir: "../../../roles/openbao/templates"
-    _checks: ../../../roles/openbao/tasks/init/05b-github-app-set-checks.yml
     ansible_managed: "test fixture"
-    _read:
-      contents: read
-      metadata: read
-      pull_requests: read
-      issues: read
-      actions: read
-      checks: read
-    _write:
-      contents: write
-      pull_requests: write
-      issues: write
-      actions: read
-      checks: read
-      metadata: read
-    _admin:
-      contents: write
-      workflows: write
-      repository_creation: write
-      pull_requests: write
-      issues: write
-      actions: read
-      checks: read
-      metadata: read
-    _administration_keys: [administration, organization_administration]
-    _empty_fixture: {results: []}
+    # A grant-reading token's permissions: write and write-only grants alike.
+    _grant_fixture:
+      json:
+        data:
+          permissions:
+            contents: write
+            pull_requests: write
+            workflows: write
+            metadata: read
+            checks: read
     _work_policies:
       - policy: "{{ openbao_github_work_read_policy_name }}"
         template: github-work-read-policy.hcl.j2
-        set_name: work-read
+        tier: read
       - policy: "{{ openbao_github_work_write_policy_name }}"
         template: github-work-write-policy.hcl.j2
-        set_name: work-write
-      - policy: "{{ openbao_github_work_admin_policy_name }}"
-        template: github-work-admin-policy.hcl.j2
-        set_name: work-admin
+        tier: write
     _work_approles:
       - approle: "{{ openbao_github_work_read_approle_name }}"
         policy: "{{ openbao_github_work_read_policy_name }}"
@@ -59,7 +38,6 @@
     _work_secret_id_paths:
       - "auth/approle/role/{{ openbao_github_work_read_approle_name }}/secret-id"
       - "auth/approle/role/{{ openbao_github_work_write_approle_name }}/secret-id"
-      - "auth/approle/role/{{ openbao_github_work_admin_approle_name }}/secret-id"
 
   tasks:
     - name: Load the openbao role defaults
@@ -74,10 +52,9 @@
         openbao_terrakube_network_workspace: example-network
         openbao_terrakube_aws_workspace: example-aws
 
-    - name: Assert no installation ID yields no sets, no mount and no policy
+    - name: Assert no installation ID yields no mount and no policy
       ansible.builtin.assert:
         that:
-          - openbao_github_work_permission_sets == []
           - openbao_github_work_mount not in (openbao_github_app_mounts | map(attribute='mount') | list)
           - >-
             _work_policies | map(attribute='policy')
@@ -88,127 +65,63 @@
       ansible.builtin.set_fact:
         openbao_github_work_installation_id: "1"
 
-    - name: Assert a configured installation declares the mount, policies and all three sets
+    - name: Assert a configured installation declares the mount with no sets, and both policies
+      vars:
+        _mount: >-
+          {{ openbao_github_app_mounts | selectattr('mount', 'equalto', openbao_github_work_mount) | first }}
       ansible.builtin.assert:
         that:
-          - openbao_github_work_mount in (openbao_github_app_mounts | map(attribute='mount') | list)
+          - _mount.permission_sets == []
+          - _mount.derive_read
+          - _mount.installation_id == openbao_github_work_installation_id
+        quiet: true
+
+    - name: Assert the derived read map is the standard read list cut to the grant, all read
+      vars:
+        openbao_github_app_mount_grant: "{{ _grant_fixture }}"
+      ansible.builtin.assert:
+        that:
+          - >-
+            openbao_github_app_mount_read_permissions
+            == {'checks': 'read', 'contents': 'read', 'metadata': 'read', 'pull_requests': 'read'}
           - >-
             _work_policies | map(attribute='policy')
             | reject('in', openbao_policies | map(attribute='name') | list) | list == []
-          - >-
-            (openbao_github_work_permission_sets | items2dict(key_name='name', value_name='permissions'))
-            == {'work-read': _read, 'work-write': _write, 'work-admin': _admin}
-          - >-
-            (openbao_github_work_permission_sets | map(attribute='installation_id') | unique | list)
-            == [openbao_github_work_installation_id]
-          - openbao_github_work_permission_sets | selectattr('repositories', 'defined') | list == []
-        quiet: true
-
-    - name: Assert the work sets carry no administration or secrets
-      ansible.builtin.assert:
-        that:
-          - >-
-            (openbao_github_work_permission_sets | map(attribute='permissions') | map('dict2items')
-             | flatten | selectattr('key', 'in', _administration_keys + ['secrets']) | list) == []
-          - "'workflows' not in (openbao_github_work_write_permissions | list)"
-          - openbao_github_work_admin_permissions.workflows == 'write'
-          - openbao_github_work_admin_permissions.repository_creation == 'write'
-          - "'repository_creation' not in (openbao_github_work_write_permissions | list)"
         quiet: true
 
     - name: Render the work policies
       ansible.builtin.template:
         src: "{{ _template_dir }}/{{ item.template }}"
-        dest: "{{ _fixture_dir }}/{{ item.set_name }}-policy.hcl"
+        dest: "{{ _fixture_dir }}/work-{{ item.tier }}-policy.hcl"
         mode: "0644"
       loop: "{{ _work_policies }}"
 
     - name: Read the rendered work policies
       ansible.builtin.slurp:
-        src: "{{ _fixture_dir }}/{{ item.set_name }}-policy.hcl"
+        src: "{{ _fixture_dir }}/work-{{ item.tier }}-policy.hcl"
       loop: "{{ _work_policies }}"
       register: _work_policy_raw
 
-    - name: Assert each work policy grants exactly its own work set and no other path
+    - name: Assert read mints only the derived set and write names repositories with no map
       vars:
         _m: "{{ openbao_github_work_mount }}"
-        _work_read_text: "{{ _work_policy_raw.results[0].content | b64decode }}"
-        _work_write_text: "{{ _work_policy_raw.results[1].content | b64decode }}"
-        _work_admin_text: "{{ _work_policy_raw.results[2].content | b64decode }}"
-        _work_read_policy_paths: >-
-          {{ _work_read_text | regex_findall('(?m)^path "([^"]+)"') }}
-        _work_write_policy_paths: >-
-          {{ _work_write_text | regex_findall('(?m)^path "([^"]+)"') }}
-        _work_admin_policy_paths: >-
-          {{ _work_admin_text | regex_findall('(?m)^path "([^"]+)"') }}
+        _read_text: "{{ _work_policy_raw.results[0].content | b64decode }}"
+        _write_text: "{{ _work_policy_raw.results[1].content | b64decode }}"
       ansible.builtin.assert:
         that:
-          - _work_read_policy_paths == [_m ~ '/token/work-read']
-          - _work_write_policy_paths == [_m ~ '/token/work-write']
-          - _work_admin_policy_paths == [_m ~ '/token/work-admin']
-          - _m ~ '/token' not in (_work_read_policy_paths + _work_write_policy_paths + _work_admin_policy_paths)
-          - _work_read_text is not search('administration')
-          - _work_write_text is not search('administration')
-          - _work_admin_text is not search('administration')
-          - (_work_read_text | regex_findall('capabilities = (.*)') | select('search', 'list|delete|sudo') | list) == []
+          - (_read_text | regex_findall('(?m)^path "([^"]+)"')) == [_m ~ '/token/read']
+          - (_write_text | regex_findall('(?m)^path "([^"]+)"')) == [_m ~ '/token']
+          - _write_text is search('required_parameters = \\["org_name", "repositories"\\]')
+          - _write_text is not search('"permissions"')
+          - _write_text is search('"installation_id" = \\[\\]')
+          - (_read_text ~ _write_text) is not search('administration')
           - >-
-            (_work_write_text | regex_findall('capabilities = (.*)')
-             | select('search', 'list|delete|sudo') | list) == []
-          - >-
-            (_work_admin_text | regex_findall('capabilities = (.*)')
-             | select('search', 'list|delete|sudo') | list) == []
+            ((_read_text ~ _write_text) | regex_findall('capabilities = (.*)')
+             | select('search', 'read|list|delete|sudo') | list) == []
         fail_msg: >-
-          The work policies grant {{ _work_read_policy_paths }} (read),
-          {{ _work_write_policy_paths }} (write) and {{ _work_admin_policy_paths }}
-          (admin). Each must grant exactly its own work set on {{ _m }}, with no
-          raw token path and no list, delete or sudo capability.
+          github-work-read must grant only {{ _m }}/token/read and github-work-write
+          must require repositories and send no map on {{ _m }}/token.
         quiet: true
-
-    - name: Assert the work sets hold their declared maps and resolve to the whole installation
-      ansible.builtin.include_tasks: "{{ _checks }}"
-      vars:
-        gm:
-          mount: "{{ openbao_github_work_mount }}"
-          permission_sets: "{{ openbao_github_work_permission_sets }}"
-        openbao_github_app_mount_public_repos: "{{ _empty_fixture }}"
-        openbao_github_app_mount_private_repos: "{{ _empty_fixture }}"
-
-    - name: Assert the resolved work sets keep their maps and carry no repository list
-      ansible.builtin.assert:
-        that:
-          - >-
-            (openbao_github_app_mount_sets | items2dict(key_name='name', value_name='permissions'))
-            == {'work-read': _read, 'work-write': _write, 'work-admin': _admin}
-          - openbao_github_app_mount_sets | selectattr('repositories', 'defined') | list == []
-        quiet: true
-
-    - name: Refuse an administration grant on a work set
-      vars:
-        _bad_sets: >-
-          {{ openbao_github_work_permission_sets | selectattr('name', 'equalto', 'work-read') | list
-             | map('combine', {'permissions': _read | combine({'administration': 'write'})}) | list }}
-      block:
-        - name: Reset the resolved set list
-          ansible.builtin.set_fact:
-            openbao_github_app_mount_sets: []
-            _refused: false
-        - name: Run the converge checks with an administration grant on a work set
-          ansible.builtin.include_tasks: "{{ _checks }}"
-          vars:
-            gm:
-              mount: "{{ openbao_github_work_mount }}"
-              permission_sets: "{{ _bad_sets }}"
-            openbao_github_app_mount_public_repos: "{{ _empty_fixture }}"
-            openbao_github_app_mount_private_repos: "{{ _empty_fixture }}"
-      rescue:
-        - name: Record the refusal
-          ansible.builtin.set_fact:
-            _refused: true
-      always:
-        - name: Assert the converge checks refused the administration grant
-          ansible.builtin.assert:
-            that: _refused | bool
-            quiet: true
 
     - name: Assert each work AppRole is human-minted, workstation-bound and capped at one hour
       vars:
@@ -227,32 +140,15 @@
         quiet: true
       loop: "{{ _work_approles }}"
 
-    - name: Assert github-work-admin is operator-gated like github-admin
-      vars:
-        _role: >-
-          {{ openbao_approles
-             | selectattr('name', 'equalto', openbao_github_work_admin_approle_name) | first }}
+    - name: Assert github-work and github-work-admin are retired and no longer declared
       ansible.builtin.assert:
         that:
-          - _role.policy == openbao_github_work_admin_policy_name
-          - _role.manage_secret_id is defined and not _role.manage_secret_id
-          - _role.token_ttl == openbao_ai_admin_token_ttl
-          - _role.token_max_ttl == openbao_ai_admin_token_ttl
-          - _role.secret_id_ttl == openbao_ai_elevated_secret_id_ttl
-          - _role.secret_id_num_uses == 1
-          - openbao_approle_cidr_class_map[openbao_github_work_admin_approle_name] == 'workstation'
-          - openbao_approle_class_map[openbao_github_work_admin_approle_name] == 'operator-admin'
-          - openbao_github_work_admin_approle_name not in openbao_rotate_doppler_sync_domains
+          - "item in openbao_retired_approles"
+          - "item in openbao_retired_policies"
+          - "item not in (openbao_approles | map(attribute='name') | list)"
+          - "item not in (openbao_policies | map(attribute='name') | list)"
         quiet: true
-
-    - name: Assert github-work is retired and no longer declared
-      ansible.builtin.assert:
-        that:
-          - "'github-work' in openbao_retired_approles"
-          - "'github-work' in openbao_retired_policies"
-          - "'github-work' not in (openbao_approles | map(attribute='name') | list)"
-          - "'github-work' not in (openbao_policies | map(attribute='name') | list)"
-        quiet: true
+      loop: [github-work, github-work-admin]
 
     - name: Render the human-unlock and approle-issuer policies
       ansible.builtin.template:
