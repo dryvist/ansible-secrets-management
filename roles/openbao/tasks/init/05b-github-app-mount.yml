@@ -261,6 +261,20 @@
     - gm.derive_read | default(false)
     - openbao_github_app_mount_grant.json.lease_id | default('', true) | length > 0
 
+- name: "Assert the derived read set is read-only and inside the standard list on mount {{ gm.mount }}"
+  ansible.builtin.assert:
+    that:
+      - openbao_github_app_mount_read_permissions | length > 0
+      - >-
+        openbao_github_app_mount_read_permissions.keys()
+        | difference(openbao_github_read_permissions.keys()) | list == []
+      - openbao_github_app_mount_read_permissions.values() | unique | list == ['read']
+    fail_msg: >-
+      {{ gm.mount }}/permissionset/read must hold only standard-list permissions
+      at read; derived {{ openbao_github_app_mount_read_permissions }}.
+    quiet: true
+  when: gm.derive_read | default(false)
+
 - name: "Add the derived read set on mount {{ gm.mount }}"
   ansible.builtin.set_fact:
     openbao_github_app_mount_sets: >-
