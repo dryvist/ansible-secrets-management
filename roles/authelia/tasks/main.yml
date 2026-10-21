@@ -255,6 +255,7 @@
   vars:
     ansible_become: false
   run_once: true
+  check_mode: false
 
 - name: Extract the Authelia binary on controller
   ansible.builtin.unarchive:
@@ -272,6 +273,7 @@
   vars:
     ansible_become: false
   run_once: true
+  check_mode: false
 
 - name: Copy the Authelia binary to the target
   ansible.builtin.copy:
