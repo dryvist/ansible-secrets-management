@@ -49,6 +49,8 @@ openbao_secrets_domains:
       - apps/media/plex
       - apps/media/prowlarr
       - apps/media/qbittorrent
+      - apps/media/sortarr
+      - apps/media/autobrr
   - name: apps
     # Keep core/client out of this shared path list: its exact read policy is
     # attached to the apps AppRole, not apps-workstation. The Authelia play
@@ -77,6 +79,9 @@ openbao_secrets_domains:
       # (app-namespaced, matches the postgres + vikunja_group consumers) plus the
       # MCP svc-account passwords + API tokens. Merged flat into bao_apps_secrets.
       - apps/vikunja
+      # OpenProject's stable Rails signing key is promoted into this path and
+      # read by its app role from the prefetched apps domain.
+      - apps/openproject
       # MCP gateway (IBM mcp-context-forge) — single HTTP/SSE endpoint every
       # MCP client reaches. SQLite-backed, no shared Postgres cluster, so no
       # db_password field. Fields generated at source by roles/openbao

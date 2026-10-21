@@ -120,6 +120,23 @@ def test_idrac_console_user_paths_have_exact_reads_and_expected_optional_state()
     assert 'path "secret/data/apps/idrac-kvm-*"' not in policy
 
 
+def test_media_domain_prefetches_sortarr_and_autobrr_paths():
+    media_paths = [
+        item["path"] if isinstance(item, dict) else item
+        for item in _domain("media")["paths"]
+    ]
+
+    assert "apps/media/sortarr" in media_paths
+    assert "apps/media/autobrr" in media_paths
+
+
+def test_openproject_secret_is_promoted_and_prefetched():
+    assert "apps/openproject" in _apps_domain_paths()
+    assert _yaml(PROMOTED_FILE)["openbao_promoted_app_secrets"]["openproject"] == {
+        "openproject_secret_key_base": "OPENPROJECT_SECRET_KEY_BASE"
+    }
+
+
 def test_benchmark_and_promoted_sandbox_agent_paths_render_in_apps_policy():
     policy = _render_apps_policy(_read_apps(_yaml(NAMES_FILE)))
 
