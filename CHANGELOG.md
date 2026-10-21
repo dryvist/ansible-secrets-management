@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.33.3](https://github.com/dryvist/ansible-secrets-management/compare/v0.33.2...v0.33.3) (2026-10-21)
+
+
+### Bug Fixes
+
+* **openbao:** run the reconcile credential chain in check mode ([#281](https://github.com/dryvist/ansible-secrets-management/issues/281)) ([30e43e7](https://github.com/dryvist/ansible-secrets-management/commit/30e43e7fcc953338c22d2ef93dfe92ccc433627a))
+
 ## [0.33.2](https://github.com/dryvist/ansible-secrets-management/compare/v0.33.1...v0.33.2) (2026-10-21)
 
 
