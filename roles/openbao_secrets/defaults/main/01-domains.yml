@@ -96,6 +96,12 @@ openbao_secrets_domains:
       # ansible-proxmox-ai by roles/llm_router — one field, both ends, so the
       # two cannot drift.
       - apps/llm-router
+      # Console-account fields are target-prefixed to avoid collisions in the
+      # apps domain's flat merge. The in-service target is required; the other
+      # remains optional until enabled by an operator.
+      - apps/idrac-kvm-r410
+      - path: apps/idrac-kvm-r710
+        optional: true
       # Metrics scraper's router bearer (prometheus_llm_router_key, generated
       # at source by openbao_generated_app_secrets.prometheus). Consumed here
       # by inventory/group_vars/prometheus_group.yml; the same field is

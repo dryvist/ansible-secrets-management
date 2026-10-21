@@ -172,6 +172,9 @@ openbao_apps_approle_name: apps
 # fails the whole domain fetch, even for a path declared optional.
 openbao_apps_read_published_apps:
   - pve-exporter
+  # Dedicated console credentials written by the operator-attended BMC role.
+  - idrac-kvm-r410
+  - idrac-kvm-r710
   # ansible-proxmox-ai consumes this for its optional llm_router GPU benchmark key.
   - benchmark
 openbao_apps_read_apps: >-
