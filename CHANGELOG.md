@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.33.1](https://github.com/dryvist/ansible-secrets-management/compare/v0.33.0...v0.33.1) (2026-10-21)
+
+
+### Bug Fixes
+
+* **authelia:** run controller-side staging under check mode ([#276](https://github.com/dryvist/ansible-secrets-management/issues/276)) ([eee1cce](https://github.com/dryvist/ansible-secrets-management/commit/eee1cce2530b58fe3f8dc39490aa95c79ee48589))
+
 ## [0.33.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.32.0...v0.33.0) (2026-10-20)
 
 
