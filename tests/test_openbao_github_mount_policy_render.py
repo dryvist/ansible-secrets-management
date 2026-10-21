@@ -325,3 +325,34 @@ def test_mount_task_sends_numeric_github_ids_as_strings():
     assert "'installation_id': item.0.installation_id | int | string" in (
         permission_sets["ansible.builtin.uri"]["body"]
     )
+
+
+def test_derive_read_mount_grants_only_its_pinned_mint_and_read_set():
+    mount = {
+        "mount": "github-derived",
+        "app_id": "105",
+        "private_key": "",
+        "permission_sets": [],
+        "derive_read": True,
+        "installation_id": "505",
+    }
+    rendered = _render({"ansible_managed": "Ansible managed", "openbao_github_app_mounts": [mount]})
+    bodies = dict(_stanzas(rendered))
+
+    assert set(bodies) == {
+        "sys/mounts/github-derived",
+        "github-derived/config",
+        "github-derived/token",
+        "github-derived/permissionset/read",
+        "github-derived/permissionset",
+        "github-derived/permissionset/*",
+        "sys/leases/revoke",
+    }
+    token = bodies["github-derived/token"]
+    assert _allowed_parameter_keys(token) == ["installation_id"]
+    assert '"installation_id" = ["505"]' in token
+    assert 'required_parameters = ["installation_id"]' in token
+    read_set = bodies["github-derived/permissionset/read"]
+    assert _allowed_parameter_keys(read_set) == ["installation_id", "permissions"]
+    assert '"installation_id" = ["505"]' in read_set
+    assert '"lease_id" = ["github-derived/token/*"]' in bodies["sys/leases/revoke"]

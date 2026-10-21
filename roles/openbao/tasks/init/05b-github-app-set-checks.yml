@@ -1,5 +1,5 @@
 ---
-# Assert the hermes and work set maps verbatim, resolve each set's repository
+# Assert the hermes set maps verbatim, resolve each set's repository
 # list from the reads in 05b-github-app-mount.yml (openbao_github_app_mount_public_repos /
 # _private_repos) and refuse an unbounded, truncated or visibility-crossing
 # list. Separate file so the
@@ -55,28 +55,6 @@
   loop_control:
     label: "{{ item.name }}"
   when: gm.mount == openbao_github_hermes_mount
-
-- name: "Assert the work sets hold exactly their declared maps on mount {{ gm.mount }}"
-  ansible.builtin.assert:
-    that:
-      - >-
-        openbao_github_work_write_permissions
-        == {'contents': 'write', 'pull_requests': 'write', 'issues': 'write',
-            'actions': 'read', 'checks': 'read', 'metadata': 'read'}
-      - >-
-        openbao_github_work_admin_permissions
-        == {'contents': 'write', 'workflows': 'write', 'repository_creation': 'write',
-            'pull_requests': 'write',
-            'issues': 'write', 'actions': 'read', 'checks': 'read', 'metadata': 'read'}
-      - item.permissions == openbao_github_work_set_permissions.get(item.name, {})
-    fail_msg: >-
-      {{ gm.mount }}/permissionset/{{ item.name }} must carry exactly
-      {{ openbao_github_work_set_permissions.get(item.name, {}) }}.
-    quiet: true
-  loop: "{{ gm.permission_sets }}"
-  loop_control:
-    label: "{{ item.name }}"
-  when: gm.mount == openbao_github_work_mount
 
 - name: "Assert the sandbox sets are public-only and narrowly permissioned on mount {{ gm.mount }}"
   ansible.builtin.assert:

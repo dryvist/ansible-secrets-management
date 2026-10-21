@@ -44,9 +44,10 @@ openbao_github_jpe_splunk_installation_id: >-
   {{ openbao_platform_env['OPENBAO_GITHUB_ADMIN_JPE_SPLUNK_INSTALLATION_ID'] | default('', true) }}
 openbao_github_jpe_openbao_plugin_secrets_installation_id: >-
   {{ openbao_platform_env['OPENBAO_GITHUB_ADMIN_JPE_OPENBAO_PLUGIN_SECRETS_INSTALLATION_ID'] | default('', true) }}
-# Read-tier permission map: what a group-scoped read token may do. Applied to
-# ALL repos of the installation (no repositories list on the read sets — the
-# blast radius of a leaked read token is "can read", not "can change").
+# The standard read list: the one place a read tier's permissions are named.
+# Applied to ALL repos of the installation (no repositories list on the read
+# sets — the blast radius of a leaked read token is "can read", not "can
+# change"). A derive_read mount's `read` set is this list cut to its App's grant.
 openbao_github_read_permissions:
   contents: read
   metadata: read

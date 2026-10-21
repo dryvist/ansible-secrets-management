@@ -39,6 +39,25 @@ path "{{ gm.mount }}/token" {
     "permissions" = [{ "metadata" = "read" }]
   }
 }
+{% elif gm.derive_read | default(false) %}
+# derive_read: one unconstrained mint on the mount's own installation to read
+# its grant, and the derived `read` set. The converge asserts that set holds
+# only standard-list permissions at read before it writes it.
+path "{{ gm.mount }}/token" {
+  capabilities = ["create", "update"]
+  required_parameters = ["installation_id"]
+  allowed_parameters = {
+    "installation_id" = [{{ gm.installation_id | int | string | tojson }}]
+  }
+}
+
+path "{{ gm.mount }}/permissionset/read" {
+  capabilities = ["create", "read", "update"]
+  allowed_parameters = {
+    "installation_id" = [{{ gm.installation_id | int | string | tojson }}]
+    "permissions" = []
+  }
+}
 {% endif %}
 {% for permission_set in gm.permission_sets | default([]) %}
 
@@ -76,7 +95,8 @@ path "{{ gm.mount }}/permissionset/*" {
 {% set private_installation_ids = gm.permission_sets | default([])
     | selectattr('private_repos_of', 'defined')
     | map(attribute='installation_id') | unique | list %}
-{% if public_orgs | length > 0 or private_installation_ids | length > 0 %}
+{% if public_orgs | length > 0 or private_installation_ids | length > 0
+      or gm.derive_read | default(false) %}
 {% set _ = lease_ids.append(gm.mount ~ '/token/*') %}
 {% endif %}
 {% endfor %}

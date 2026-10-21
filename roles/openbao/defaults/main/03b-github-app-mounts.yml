@@ -9,8 +9,7 @@
 #   github         everyday read/write
 #   github-agents  untrusted-tier public read/write, scoped by its installation
 #   github-hermes  review and allowlisted authoring, split by repository visibility
-#   github-work    read, write and operator-gated workflow write over one
-#                  installation, no administration
+#   github-work    read and App-grant write over one installation, no sets
 #   github-enterprise-read  human-gated raw-token read tier
 #   github-enterprise       human-gated raw-token admin tier
 #   github-enterprise-owner human-gated stored owner token, readable by the admin tiers only
@@ -134,45 +133,13 @@ openbao_github_hermes_permission_sets: >-
          if openbao_github_hermes_author_private_repos | length > 0 else []))
      if openbao_github_hermes_installation_id | length > 0 else [] }}
 
-# github-work: one installation, a read set and a write set, neither holding
-# administration. Its mount follows the hermes shape: no installation ID means
-# no sets, and an empty set list means no mount and no policy.
+# github-work: one installation and no declared sets. Read mints the derived
+# `read` set (derive_read below); write mints the raw token endpoint with no
+# permissions, so the App's own grant is its only ceiling. No installation ID
+# means no mount and no policy.
 openbao_github_work_mount: github-work
 openbao_github_work_installation_id: >-
   {{ openbao_platform_env['OPENBAO_GITHUB_WORK_INSTALLATION_ID'] | default('', true) }}
-openbao_github_work_read_permissions:
-  contents: read
-  metadata: read
-  pull_requests: read
-  issues: read
-  actions: read
-  checks: read
-openbao_github_work_write_permissions:
-  contents: write
-  pull_requests: write
-  issues: write
-  actions: read
-  checks: read
-  metadata: read
-openbao_github_work_admin_permissions:
-  contents: write
-  workflows: write
-  repository_creation: write
-  pull_requests: write
-  issues: write
-  actions: read
-  checks: read
-  metadata: read
-# Each set's map is asserted verbatim in 05b-github-app-set-checks.yml.
-openbao_github_work_set_permissions:
-  work-read: "{{ openbao_github_work_read_permissions }}"
-  work-write: "{{ openbao_github_work_write_permissions }}"
-  work-admin: "{{ openbao_github_work_admin_permissions }}"
-openbao_github_work_permission_sets: >-
-  {{ (openbao_github_work_set_permissions
-      | dict2items(key_name='name', value_name='permissions')
-      | map('combine', {'installation_id': openbao_github_work_installation_id}) | list)
-     if openbao_github_work_installation_id | length > 0 else [] }}
 
 # The user-owned App has one fixed write set and exists only once its
 # installation ID is supplied through the env document.
@@ -229,6 +196,13 @@ openbao_github_app_mounts_base:
     app_id: "{{ lookup('env', 'OPENBAO_GITHUB_AGENTS_APP_ID') | default('', true) }}"
     private_key: "{{ lookup('env', 'OPENBAO_GITHUB_AGENTS_APP_PRIVATE_KEY') | default('', true) }}"
     permission_sets: "{{ openbao_github_agents_permission_sets }}"
+# The derived read map for the derive_read mount being reconciled: the
+# standard read list cut to the grant-reading token's permissions
+# (05b-github-app-mount.yml).
+openbao_github_app_mount_read_permissions: >-
+  {{ openbao_github_read_permissions | dict2items
+     | selectattr('key', 'in', openbao_github_app_mount_grant.json.data.permissions)
+     | items2dict }}
 openbao_github_app_mounts: >-
   {{ openbao_github_app_mounts_base
      + ([{'mount': openbao_github_hermes_mount,
@@ -239,8 +213,10 @@ openbao_github_app_mounts: >-
      + ([{'mount': openbao_github_work_mount,
           'app_id': lookup('env', 'OPENBAO_GITHUB_WORK_APP_ID') | default('', true),
           'private_key': lookup('env', 'OPENBAO_GITHUB_WORK_PRIVATE_KEY') | default('', true),
-          'permission_sets': openbao_github_work_permission_sets}]
-        if openbao_github_work_permission_sets | length > 0 else [])
+          'permission_sets': [],
+          'derive_read': true,
+          'installation_id': openbao_github_work_installation_id}]
+        if openbao_github_work_installation_id | length > 0 else [])
      + ([{'mount': openbao_github_personal_mount,
           'app_id': openbao_github_personal_app_id,
           'private_key': openbao_github_personal_app_private_key,
