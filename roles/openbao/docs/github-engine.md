@@ -17,11 +17,18 @@ configuration, so each App's own grant caps every token its mount mints:
 | `github-admin` | admin | admin, repo-create, docs-publisher, ci-resolver, runner, exporter |
 | `github-agents` | agents | none: `open-llm` uses the raw `github-agents/token` with caller-selected org and repository fields |
 | `github-hermes` | hermes | `hermes-{review,author}-{public,private}`, split by repository visibility |
-| `github-work` | work | `work-read`, `work-write` and operator-gated `work-admin`, all pinned to the work installation; no administration |
+| `github-work` | work | a derived `read` set and the raw token endpoint for write; the App's grant is the only write ceiling |
 | `github-personal` | user-owned App | `personal-write`, pinned to its configured installation |
 | `github-enterprise-read` | read-only Enterprise App | none: raw token endpoint, pinned to its installation |
 | `github-enterprise` | admin Enterprise App | none: raw token endpoint, pinned to its installation |
 | `github-runner` | runner App | none: raw token endpoint accepts only `org_name` |
+
+The tier convention, followed by `github-work` and by any mount that moves to
+it: read and write tiers list no permissions of their own. Read is a set derived
+from the one standard read list (`derive_read` on the mount), and write is the
+raw endpoint with the App's own grant. Single-purpose sets (repo-create,
+docs-publisher, ci-resolver, runner, exporter and the like) keep their explicit
+maps.
 
 The Enterprise owner token is stored separately in the `github-enterprise-owner`
 KV v2 mount. The human-unlock login can create or replace it; only the admin
@@ -119,19 +126,15 @@ Token access is tiered; the tier IS the privilege boundary:
   `aws/sts/hermes-webhook-consumer` when that role's ARN is configured. The
   `tofu-github` Terrakube workspace reads the HMAC secret from that path and
   the Function URL from `config/apps/hermes-webhook`.
-- **work (`github-work-read`, `github-work-write`, `github-work-admin`)** —
-  `github-work/token/work-read`, `github-work/token/work-write` and
-  `github-work/token/work-admin`, each pinned to the work installation and
-  granted by its own policy and AppRole. `work-write` holds
-  `contents: write`, `pull_requests: write` and `issues: write`, with
-  `actions`, `checks` and `metadata` read; it has no `workflows` or
-  `repository_creation` permission.
-  `work-admin` has that exact map plus `workflows: write` and
-  `repository_creation: write` (forking into the work organisation), with no
-  `administration` or `secrets`; it is operator-gated with a response-wrapped,
-  single-use secret_id with a 15m TTL and a one-hour token maximum. No work
-  policy grants another set or the raw `github-work/token` endpoint. The read
-  and write AppRoles have a 1h token cap.
+- **work (`github-work-read`, `github-work-write`)** — one App, no declared
+  sets. `github-work-read` mints only `github-work/token/read`, a set the
+  converge derives on each run: the standard read list
+  (`openbao_github_read_permissions`) cut to the permissions the installation
+  actually grants, all at read. A set path ignores request bodies, so every read
+  mint is read. `github-work-write` mints the raw `github-work/token` endpoint;
+  it must name `org_name` and `repositories` and may not send `permissions` or
+  `installation_id`, so a write token carries exactly the App's grant for the
+  named repositories. Both AppRoles have a 1h token cap.
 - **Enterprise read (`github-enterprise-read`)** — the raw
   `github-enterprise-read/token` endpoint, pinned to the one configured
   installation ID. Its App has no permission sets; the App grant supplies the

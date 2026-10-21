@@ -84,15 +84,11 @@ openbao_packer_approle_name: packer
 #                                              standing ambient identity, like
 #                                              github-write, so repo creation
 #                                              needs no per-call human unlock
-#   github-work-read  -> github-work/token/work-read   one installation; read
-#                                              set only; workstation identity
-#   github-work-write -> github-work/token/work-write  one installation; write
-#                                              set; workstation identity,
+#   github-work-read  -> github-work/token  the pinned read map only;
+#                                              workstation identity
+#   github-work-write -> github-work/token  named repositories, the App's own
+#                                              grant; workstation identity,
 #                                              each use sudo/Touch-ID gated
-#   github-work-admin -> github-work/token/work-admin  one installation; same
-#                                              write map plus workflows:write
-#                                              and repository_creation:write;
-#                                              human-gated single-use identity
 #   github-enterprise-read -> github-enterprise-read/token  one pinned
 #                                              installation; human-gated
 #   github-enterprise-admin -> github-enterprise/token      one pinned
@@ -121,8 +117,6 @@ openbao_github_work_read_policy_name: github-work-read
 openbao_github_work_read_approle_name: github-work-read
 openbao_github_work_write_policy_name: github-work-write
 openbao_github_work_write_approle_name: github-work-write
-openbao_github_work_admin_policy_name: github-work-admin
-openbao_github_work_admin_approle_name: github-work-admin
 openbao_github_enterprise_read_policy_name: github-enterprise-read
 openbao_github_enterprise_read_approle_name: github-enterprise-read
 openbao_github_enterprise_admin_policy_name: github-enterprise-admin
