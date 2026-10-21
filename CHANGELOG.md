@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.33.2](https://github.com/dryvist/ansible-secrets-management/compare/v0.33.1...v0.33.2) (2026-10-21)
+
+
+### Bug Fixes
+
+* split webhook workspace access by mount ([#275](https://github.com/dryvist/ansible-secrets-management/issues/275)) ([8373dab](https://github.com/dryvist/ansible-secrets-management/commit/8373dab34d31e40471b595f369dca6a621c0131d))
+
 ## [0.33.1](https://github.com/dryvist/ansible-secrets-management/compare/v0.33.0...v0.33.1) (2026-10-21)
 
 
