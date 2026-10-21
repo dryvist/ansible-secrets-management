@@ -88,6 +88,9 @@
 # ansible_become: false because a delegated task inherits the PLAY's become
 # regardless of any task-level setting, and would otherwise try to escalate on
 # the control node.
+#
+# check_mode: false on this chain: under --check vault_login returns an empty
+# token, and the preview's check_mode: false reads below need a real one.
 - name: Authenticate to the AppRole issuer for routine reconciliation
   community.hashi_vault.vault_login:
     url: "{{ openbao_reconcile_addr }}"
@@ -99,6 +102,7 @@
     ansible_become: false
   register: openbao_reconcile_issuer_login
   no_log: true
+  check_mode: false
   ignore_errors: true
   when:
     - openbao_status.initialized
@@ -126,6 +130,7 @@
     ansible_become: false
   register: openbao_reconcile_role_id_read
   no_log: true
+  check_mode: false
   when:
     - openbao_status.initialized
     - openbao_provisioning_token | length == 0
@@ -142,6 +147,7 @@
     ansible_become: false
   register: openbao_reconcile_secret_id_mint
   no_log: true
+  check_mode: false
   when:
     - openbao_status.initialized
     - openbao_provisioning_token | length == 0
@@ -157,6 +163,7 @@
     ansible_become: false
   register: openbao_reconcile_login
   no_log: true
+  check_mode: false
   ignore_errors: true
   when:
     - openbao_status.initialized
@@ -189,6 +196,7 @@
         and 'failed to find accessor entry for secret_id_accessor'
         not in (openbao_reconcile_destroy.content | default('')))
   no_log: true
+  check_mode: false
   when:
     - openbao_status.initialized
     - openbao_provisioning_token | length == 0
