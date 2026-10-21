@@ -40,8 +40,9 @@ openbao_aws_hermes_webhook_consumer_role_name: hermes-webhook-consumer
 openbao_aws_hermes_webhook_consumer_role_arn: >-
   {{ lookup('env', 'OPENBAO_AWS_HERMES_WEBHOOK_CONSUMER_ROLE_ARN') | default('', true) }}
 openbao_aws_hermes_webhook_consumer_sts_ttl: 15m
-# Webhook endpoint leaf (keys function_url, hmac_secret): written by the AWS
-# Terrakube workspace, read by the hermes-private AppRole.
+# Webhook values use this subpath in separate mounts: the HMAC secret in
+# secrets-external and the Function URL in config. The AWS workspace writes
+# both; tofu-github reads both and hermes-private reads only the HMAC secret.
 openbao_hermes_webhook_kv_path: apps/hermes-webhook
 # The base-user key OpenBao uses to call sts:AssumeRole. Minted via an
 # independent admin path (never the key being rotated out), seeded from Doppler

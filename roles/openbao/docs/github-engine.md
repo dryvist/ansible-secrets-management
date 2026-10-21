@@ -115,9 +115,10 @@ Token access is tiered; the tier IS the privilege boundary:
   declares no set. `hermes-public` mints only the two public sets,
   `hermes-private` only the two private sets; both are machine-class AppRoles
   with a 15m token. The converge asserts each map verbatim. `hermes-private`
-  also reads `secret/apps/hermes-webhook` (written by the AWS Terrakube
-  workspace) and mints `aws/sts/hermes-webhook-consumer` when that role's ARN
-  is configured.
+  reads the HMAC secret from `secrets-external/apps/hermes-webhook` and mints
+  `aws/sts/hermes-webhook-consumer` when that role's ARN is configured. The
+  `tofu-github` Terrakube workspace reads the HMAC secret from that path and
+  the Function URL from `config/apps/hermes-webhook`.
 - **work (`github-work-read`, `github-work-write`, `github-work-admin`)** —
   `github-work/token/work-read`, `github-work/token/work-write` and
   `github-work/token/work-admin`, each pinned to the work installation and

@@ -30,10 +30,8 @@ openbao_terrakube_workspaces:
     kv_read: [platform/terrakube/main, apps/authelia]
   - name: tofu-github
     # Mints an installation token per run instead of reading a stored one. The
-    # workspace previously read a static GITHUB_TOKEN out of KV
-    # (infrastructure/github, on both mounts); that value expired and every plan
-    # failed with `401 Bad credentials`, which is the failure mode a stored PAT
-    # has and an engine-minted token does not.
+    # workspace also reads the webhook HMAC and Function URL from their
+    # exposure-specific mounts.
     #
     # Keep the existing set grant during the expand/contract migration. The
     # raw admin endpoint below selects any installed org by name and uses the
@@ -41,6 +39,8 @@ openbao_terrakube_workspaces:
     github_mint: [dryvist-full-automation]
     github_admin_raw: true
     kv_read: [infrastructure/tofu-github/private-overrides]
+    kv_read_external: ["{{ openbao_hermes_webhook_kv_path }}"]
+    kv_read_config: ["{{ openbao_hermes_webhook_kv_path }}"]
   - name: "{{ openbao_terrakube_org_secrets_workspace_name }}"
     # This dedicated workspace reads the scoped organization-secret source
     # policy and only the configured org-secret permission-set endpoints.
@@ -60,8 +60,9 @@ openbao_terrakube_workspaces:
     kv_read: [infrastructure/unifi, platform/object-storage]
   - name: "{{ openbao_terrakube_aws_workspace }}"
     api_update: ["aws/sts/{{ openbao_terrakube_aws_workspace }}"]
-    # The webhook endpoint leaf (02-aws-and-plugins.yml).
-    kv_write: ["{{ openbao_hermes_webhook_kv_path }}"]
+    # The webhook HMAC and Function URL use separate exposure-specific mounts.
+    kv_write_external: ["{{ openbao_hermes_webhook_kv_path }}"]
+    kv_write_config: ["{{ openbao_hermes_webhook_kv_path }}"]
   - name: tofu-runs-on
     api_update: [aws/sts/tofu-runs-on]
   - name: tofu-proxmox
@@ -270,15 +271,14 @@ openbao_approle_audit_approle_name: approle-audit
 # author config (OpenTofu / Ansible / Terrakube), never a standalone AppRole —
 # see the template header for why a fourth credential would be the wrong shape.
 openbao_config_write_policy_name: config-write
-# Terrakube workspaces whose JWT role also carries config-write. Every declared
-# workspace by default except the org-secrets workspace, which has no config
-# access; narrowing it is one edit here rather than a policy change. NOTE: Terrakube runs
-# VCS-driven, potentially untrusted plans, so this is the one config-write
-# grant whose blast radius is worth revisiting — it cannot reach a credential
-# mount, but it can rewrite config that other systems read.
+# Terrakube workspaces whose JWT role also carries config-write. The webhook
+# producer and consumer use path-scoped config grants instead; the org-secrets
+# workspace has no config access.
 openbao_config_write_terrakube_workspaces: >-
   {{ openbao_terrakube_workspaces
      | rejectattr('name', 'equalto', openbao_terrakube_org_secrets_workspace_name)
+     | rejectattr('name', 'equalto', 'tofu-github')
+     | rejectattr('name', 'equalto', openbao_terrakube_aws_workspace | default('', true))
      | map(attribute='name') | list }}
 # ai-public: the fabric-brain runtime domain (secret/ai/public/*, field
 # active_model). Its OWN narrow read-only credential — NOT local-llm's broader

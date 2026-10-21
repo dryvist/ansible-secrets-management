@@ -169,7 +169,7 @@
           - >-
             _paths[1] == [_m ~ '/token/hermes-review-private', _m ~ '/token/hermes-read-public',
                           _m ~ '/token/hermes-author-private',
-                          openbao_kv_mount ~ '/data/' ~ openbao_hermes_webhook_kv_path,
+                          'secrets-external/data/' ~ openbao_hermes_webhook_kv_path,
                           openbao_aws_mount ~ '/sts/' ~ openbao_aws_hermes_webhook_consumer_role_name]
           - _m ~ '/token' not in (_paths[0] + _paths[1])
           - (_paths[0] + _paths[2:] | flatten) | select('search', 'hermes-webhook') | list == []
