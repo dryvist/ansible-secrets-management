@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.36.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.35.0...v0.36.0) (2026-10-21)
+
+
+### Features
+
+* **openbao:** grant apps reads for console credentials ([#291](https://github.com/dryvist/ansible-secrets-management/issues/291)) ([a8afda3](https://github.com/dryvist/ansible-secrets-management/commit/a8afda3e558d5cfc3dd1c827703de4fcb1348a59))
+
+
+### Bug Fixes
+
+* **openbao:** let policy sync derive a mount's read set ([#292](https://github.com/dryvist/ansible-secrets-management/issues/292)) ([3b0941f](https://github.com/dryvist/ansible-secrets-management/commit/3b0941f89fc9e70c8548437a6e6cfbad817cface))
+
 ## [0.35.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.34.1...v0.35.0) (2026-10-21)
 
 
