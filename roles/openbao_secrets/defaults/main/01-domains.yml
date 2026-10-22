@@ -203,6 +203,14 @@ openbao_secrets_domains:
       # domain separate while reusing the apps AppRole credentials.
       - path: rustfs/dryvist-homelab-backups/rw
         optional: true
+  - name: homebox_backup_s3
+    credential_domain: apps
+    paths:
+      # Own domain so its AWS_* fields stay under their own key in
+      # openbao_secrets_by_domain, apart from postgres_backup_s3. Reuses the
+      # apps AppRole credentials. optional: true -- the keys are seeded later.
+      - path: rustfs/dryvist-homebox-backups/rw
+        optional: true
   - name: ntfy
     paths:
       # Slack incoming-webhook URLs keyed by topic, for the ntfy alert hub's

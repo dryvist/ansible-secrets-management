@@ -105,6 +105,7 @@ def _matches_apps_reader_contract(policy: str, apps: set[str]) -> bool:
         ("secret/data/infrastructure/unifi", ("read",)),
         ("secret/metadata/infrastructure/unifi", ("read",)),
         ("secret/data/rustfs/dryvist-homelab-backups/rw", ("read",)),
+        ("secret/data/rustfs/dryvist-homebox-backups/rw", ("read",)),
     }
     return sorted(_grants(policy)) == sorted(expected)
 
