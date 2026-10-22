@@ -79,6 +79,12 @@ openbao_secrets_domains:
       # (app-namespaced, matches the postgres + vikunja_group consumers) plus the
       # MCP svc-account passwords + API tokens. Merged flat into bao_apps_secrets.
       - apps/vikunja
+      # Homebox inventory app. Fields are app-namespaced (homebox_db_password,
+      # homebox_restic_password) for the flat merge into bao_apps_secrets.
+      # Seeded once by the operator, so optional: true -- a not-yet-seeded 404
+      # must not fail the whole apps prefetch.
+      - path: apps/homebox
+        optional: true
       # OpenProject's stable Rails signing key is promoted into this path and
       # read by its app role from the prefetched apps domain.
       - apps/openproject
