@@ -79,6 +79,12 @@ openbao_secrets_domains:
       # (app-namespaced, matches the postgres + vikunja_group consumers) plus the
       # MCP svc-account passwords + API tokens. Merged flat into bao_apps_secrets.
       - apps/vikunja
+      # Homebox inventory app. Fields are app-namespaced (homebox_db_password,
+      # homebox_restic_password) for the flat merge into bao_apps_secrets.
+      # Seeded once by the operator, so optional: true -- a not-yet-seeded 404
+      # must not fail the whole apps prefetch.
+      - path: apps/homebox
+        optional: true
       # OpenProject's stable Rails signing key is promoted into this path and
       # read by its app role from the prefetched apps domain.
       - apps/openproject
@@ -196,6 +202,14 @@ openbao_secrets_domains:
       # and the consumer retains its existing region default. Keep the data
       # domain separate while reusing the apps AppRole credentials.
       - path: rustfs/dryvist-homelab-backups/rw
+        optional: true
+  - name: homebox_backup_s3
+    credential_domain: apps
+    paths:
+      # Own domain so its AWS_* fields stay under their own key in
+      # openbao_secrets_by_domain, apart from postgres_backup_s3. Reuses the
+      # apps AppRole credentials. optional: true -- the keys are seeded later.
+      - path: rustfs/dryvist-homebox-backups/rw
         optional: true
   - name: ntfy
     paths:
