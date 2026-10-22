@@ -99,7 +99,7 @@ def test_every_apps_domain_path_is_granted_to_the_apps_reader():
     )
 
 
-def test_idrac_console_user_paths_have_exact_reads_and_expected_optional_state():
+def test_idrac_console_user_paths_are_optional_and_have_exact_reads():
     paths = _domain("apps")["paths"]
     console_paths = {
         item["path"] if isinstance(item, dict) else item: item
@@ -107,11 +107,13 @@ def test_idrac_console_user_paths_have_exact_reads_and_expected_optional_state()
         if (item["path"] if isinstance(item, dict) else item).startswith("apps/idrac-kvm-")
     }
     assert set(console_paths) == {"apps/idrac-kvm-r410", "apps/idrac-kvm-r710"}
-    assert console_paths["apps/idrac-kvm-r410"] == "apps/idrac-kvm-r410"
-    assert console_paths["apps/idrac-kvm-r710"] == {
-        "path": "apps/idrac-kvm-r710",
-        "optional": True,
+    assert console_paths == {
+        "apps/idrac-kvm-r410": {"path": "apps/idrac-kvm-r410", "optional": True},
+        "apps/idrac-kvm-r710": {"path": "apps/idrac-kvm-r710", "optional": True},
     }
+
+    promoted_apps = _yaml(PROMOTED_FILE)["openbao_promoted_app_secrets"]
+    assert not {"idrac-kvm-r410", "idrac-kvm-r710"} & set(promoted_apps)
 
     policy = _render_apps_policy(_read_apps(_yaml(NAMES_FILE)))
     for app in ("idrac-kvm-r410", "idrac-kvm-r710"):

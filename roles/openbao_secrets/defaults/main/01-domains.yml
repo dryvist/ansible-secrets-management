@@ -102,9 +102,10 @@ openbao_secrets_domains:
       # two cannot drift.
       - apps/llm-router
       # Console-account fields are target-prefixed to avoid collisions in the
-      # apps domain's flat merge. The in-service target is required; the other
-      # remains optional until enabled by an operator.
-      - apps/idrac-kvm-r410
+      # apps domain's flat merge. Both target paths are optional and may be
+      # absent until their target is enabled.
+      - path: apps/idrac-kvm-r410
+        optional: true
       - path: apps/idrac-kvm-r710
         optional: true
       # Metrics scraper's router bearer (prometheus_llm_router_key, generated
