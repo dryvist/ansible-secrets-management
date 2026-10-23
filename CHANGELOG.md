@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.38.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.37.0...v0.38.0) (2026-10-23)
+
+
+### Features
+
+* **openbao-secrets:** declare homebox API key pepper field ([#303](https://github.com/dryvist/ansible-secrets-management/issues/303)) ([809f05b](https://github.com/dryvist/ansible-secrets-management/commit/809f05b64bfe8e86ce365c88d91764462e8f4840))
+* **openbao-secrets:** declare homebox app secrets and backup read path ([#299](https://github.com/dryvist/ansible-secrets-management/issues/299)) ([493f90f](https://github.com/dryvist/ansible-secrets-management/commit/493f90f1150b047ef2633b5f151c16705c41da88))
+* **openbao-secrets:** declare homebox Backblaze B2 backup domain ([#300](https://github.com/dryvist/ansible-secrets-management/issues/300)) ([8ade271](https://github.com/dryvist/ansible-secrets-management/commit/8ade2714e97f2034ee8227e480d3c1382a432645))
+
+
+### Bug Fixes
+
+* make console credential paths optional ([#298](https://github.com/dryvist/ansible-secrets-management/issues/298)) ([d953d7c](https://github.com/dryvist/ansible-secrets-management/commit/d953d7c0e32e685b90694ef7f0b5ce03ddf48529))
+* make console secret paths optional ([d953d7c](https://github.com/dryvist/ansible-secrets-management/commit/d953d7c0e32e685b90694ef7f0b5ce03ddf48529))
+* **openbao-secrets:** declare media and OpenProject paths ([#297](https://github.com/dryvist/ansible-secrets-management/issues/297)) ([8c45a6d](https://github.com/dryvist/ansible-secrets-management/commit/8c45a6d70e09e4a00adafede1627ccff02913be3))
+
 ## [0.37.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.36.0...v0.37.0) (2026-10-21)
 
 
