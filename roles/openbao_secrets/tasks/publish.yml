@@ -108,6 +108,7 @@
             secret_id: "{{ openbao_secrets_publish_secret_id }}"
             validate_certs: "{{ openbao_secrets_validate_certs }}"
           register: openbao_secrets_publish_login
+          changed_when: false
           no_log: true
 
         # Read-before-write so a single-field publish cannot drop sibling keys.
