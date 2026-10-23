@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.39.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.38.0...v0.39.0) (2026-10-23)
+
+
+### Features
+
+* **openbao:** give ai-apply roles the union CIDR class ([#304](https://github.com/dryvist/ansible-secrets-management/issues/304)) ([9e38dbd](https://github.com/dryvist/ansible-secrets-management/commit/9e38dbd7e141abaedc30e0807545b83428996bc0))
+
+
+### Bug Fixes
+
+* grant read access to required media paths ([#302](https://github.com/dryvist/ansible-secrets-management/issues/302)) ([80f19c0](https://github.com/dryvist/ansible-secrets-management/commit/80f19c00cf3d83fe04f66d6f31325184f0162b64))
+
 ## [0.38.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.37.0...v0.38.0) (2026-10-23)
 
 
