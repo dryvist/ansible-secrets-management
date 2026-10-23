@@ -63,6 +63,8 @@ openbao_base_policies_static:
     template: packer-policy.hcl.j2
   - name: "{{ openbao_azure_iac_admin_policy_name }}"
     template: azure-iac-admin-policy.hcl.j2
+  - name: "{{ openbao_backblaze_admin_policy_name }}"
+    template: backblaze-admin-policy.hcl.j2
   - name: "{{ openbao_ansible_converge_policy_name }}"
     template: ansible-converge-policy.hcl.j2
   # Placed next to ansible-converge because it is that policy's delta, not an

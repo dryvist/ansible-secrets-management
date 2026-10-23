@@ -97,6 +97,9 @@ jobs:
       - name: Install Ansible, pytest, PyYAML and Jinja2
         run: uv pip install --system 'ansible-core>=2.16' pytest pyyaml jinja2
 
+      - name: Verify the Backblaze account-admin identity
+        run: python3 -m pytest -q tests/test_openbao_backblaze_admin_identity.py
+
       - name: Verify the rendered Authelia configuration with Authelia's validator
         run: ansible-playbook -i localhost, -c local tests/authelia_validate_config/verify.yml
 

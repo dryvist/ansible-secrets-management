@@ -111,6 +111,7 @@ openbao_approle_cidr_class_overrides:
   approle-issuer: machine_or_workstation
   # Azure IaC admin credentials are only ever read from the operator's machine.
   azure-iac-admin: workstation
+  backblaze-admin: workstation
   # Routine reconciliation runs from both the execution plane and workstation.
   # Keep both sources in the credential's declared address class.
   openbao-reconcile: machine_or_workstation
