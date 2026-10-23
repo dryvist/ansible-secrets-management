@@ -177,3 +177,28 @@ def test_postgres_backup_path_has_one_exact_read_grant():
         '  capabilities = ["read"]\n}'
     ) in policy
     assert 'path "secret/data/rustfs/*"' not in policy
+
+
+def test_homebox_backblaze_domain_reuses_apps_credentials_and_is_optional():
+    domain = _domain("homebox_backup_b2")
+
+    assert domain["credential_domain"] == "apps"
+    assert domain["paths"] == [
+        {
+            "mount": "secrets-external",
+            "path": "backblaze/dryvist-homebox-backups/rw",
+            "optional": True,
+        }
+    ]
+
+
+def test_homebox_backblaze_path_has_exact_external_grants_and_no_wildcard():
+    policy = _render_apps_policy(_read_apps(_yaml(NAMES_FILE)))
+
+    for kind in ("data", "metadata"):
+        assert (
+            f'path "secrets-external/{kind}/backblaze/dryvist-homebox-backups/rw" {{\n'
+            '  capabilities = ["read"]\n}'
+        ) in policy
+    assert 'path "secrets-external/data/backblaze/*"' not in policy
+    assert 'path "secrets-external/metadata/backblaze/*"' not in policy
