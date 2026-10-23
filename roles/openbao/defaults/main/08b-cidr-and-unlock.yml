@@ -166,6 +166,14 @@ openbao_roster_agent_cidr_classes: >-
   {{ dict(openbao_roster_agent_valid_names
           | zip(['machine_or_workstation']
                * (openbao_roster_agent_valid_names | length))) }}
+# ai-apply-<svc> roles (one per openbao_ai_domains entry, plus ai-apply-all) are
+# the human-gated write tier. The operator unlocks them from the workstation with
+# openbao-unlock, so they resolve to the union class. That class is a superset of
+# the machine default, so no existing holder loses access.
+openbao_ai_apply_cidr_classes: >-
+  {{ dict((openbao_ai_apply_approles | map(attribute='name') | list + ['ai-apply-all'])
+          | zip(['machine_or_workstation']
+               * ((openbao_ai_apply_approles | length) + 1))) }}
 # Every declared role's class, defaults filled in and then overridden — so a
 # lookup never has to cope with a missing key. (`map('extract', dict, default)`
 # does NOT take a default: it raises on the first name absent from the override
@@ -178,7 +186,8 @@ openbao_approle_cidr_class_map: >-
      | combine(openbao_approle_cidr_class_overrides)
      | combine(openbao_github_write_scope_cidr_classes)
      | combine(openbao_roster_agent_cidr_classes)
-     | combine(openbao_roster_key_reader_cidr_classes) }}
+     | combine(openbao_roster_key_reader_cidr_classes)
+     | combine(openbao_ai_apply_cidr_classes) }}
 # Exact strings passed by `bao write ... key=value`; keep these shared by the
 # reconcile writer and its ACL so neither side can change independently.
 openbao_approle_cli_parameters: >-

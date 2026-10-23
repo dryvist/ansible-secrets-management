@@ -95,6 +95,18 @@ class TestCidrClassMap(unittest.TestCase):
         class_map = _render("openbao_approle_cidr_class_map", self.variables)
         self.assertEqual(class_map["openbao-reconcile"], "machine_or_workstation")
 
+    def test_ai_apply_roles_resolve_to_the_union_class(self):
+        # Generated from openbao_ai_domains ([ai, apps]) plus ai-apply-all.
+        class_map = _render("openbao_approle_cidr_class_map", self.variables)
+        for name in ("ai-apply-ai", "ai-apply-apps", "ai-apply-all"):
+            with self.subTest(role=name):
+                self.assertEqual(class_map[name], "machine_or_workstation")
+
+    def test_ai_admin_keeps_the_workstation_class(self):
+        # The ai-apply derivation must not reach the admin tier.
+        class_map = _render("openbao_approle_cidr_class_map", self.variables)
+        self.assertEqual(class_map["ai-admin"], "workstation")
+
     def test_flow_lock_mints_only_short_lived_single_use_secret_ids(self):
         role = next(
             role
