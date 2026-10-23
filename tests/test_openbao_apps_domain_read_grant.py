@@ -99,7 +99,7 @@ def test_every_apps_domain_path_is_granted_to_the_apps_reader():
     )
 
 
-def test_idrac_console_user_paths_have_exact_reads_and_expected_optional_state():
+def test_idrac_console_user_paths_are_optional_and_have_exact_reads():
     paths = _domain("apps")["paths"]
     console_paths = {
         item["path"] if isinstance(item, dict) else item: item
@@ -107,17 +107,36 @@ def test_idrac_console_user_paths_have_exact_reads_and_expected_optional_state()
         if (item["path"] if isinstance(item, dict) else item).startswith("apps/idrac-kvm-")
     }
     assert set(console_paths) == {"apps/idrac-kvm-r410", "apps/idrac-kvm-r710"}
-    assert console_paths["apps/idrac-kvm-r410"] == "apps/idrac-kvm-r410"
-    assert console_paths["apps/idrac-kvm-r710"] == {
-        "path": "apps/idrac-kvm-r710",
-        "optional": True,
+    assert console_paths == {
+        "apps/idrac-kvm-r410": {"path": "apps/idrac-kvm-r410", "optional": True},
+        "apps/idrac-kvm-r710": {"path": "apps/idrac-kvm-r710", "optional": True},
     }
+
+    promoted_apps = _yaml(PROMOTED_FILE)["openbao_promoted_app_secrets"]
+    assert not {"idrac-kvm-r410", "idrac-kvm-r710"} & set(promoted_apps)
 
     policy = _render_apps_policy(_read_apps(_yaml(NAMES_FILE)))
     for app in ("idrac-kvm-r410", "idrac-kvm-r710"):
         assert f'path "secret/data/apps/{app}" {{\n  capabilities = ["read"]\n}}' in policy
         assert f'path "secret/metadata/apps/{app}" {{\n  capabilities = ["read", "list"]\n}}' in policy
     assert 'path "secret/data/apps/idrac-kvm-*"' not in policy
+
+
+def test_media_domain_prefetches_sortarr_and_autobrr_paths():
+    media_paths = [
+        item["path"] if isinstance(item, dict) else item
+        for item in _domain("media")["paths"]
+    ]
+
+    assert "apps/media/sortarr" in media_paths
+    assert "apps/media/autobrr" in media_paths
+
+
+def test_openproject_secret_is_promoted_and_prefetched():
+    assert "apps/openproject" in _apps_domain_paths()
+    assert _yaml(PROMOTED_FILE)["openbao_promoted_app_secrets"]["openproject"] == {
+        "openproject_secret_key_base": "OPENPROJECT_SECRET_KEY_BASE"
+    }
 
 
 def test_benchmark_and_promoted_sandbox_agent_paths_render_in_apps_policy():
@@ -158,3 +177,28 @@ def test_postgres_backup_path_has_one_exact_read_grant():
         '  capabilities = ["read"]\n}'
     ) in policy
     assert 'path "secret/data/rustfs/*"' not in policy
+
+
+def test_homebox_backblaze_domain_reuses_apps_credentials_and_is_optional():
+    domain = _domain("homebox_backup_b2")
+
+    assert domain["credential_domain"] == "apps"
+    assert domain["paths"] == [
+        {
+            "mount": "secrets-external",
+            "path": "backblaze/dryvist-homebox-backups/rw",
+            "optional": True,
+        }
+    ]
+
+
+def test_homebox_backblaze_path_has_exact_external_grants_and_no_wildcard():
+    policy = _render_apps_policy(_read_apps(_yaml(NAMES_FILE)))
+
+    for kind in ("data", "metadata"):
+        assert (
+            f'path "secrets-external/{kind}/backblaze/dryvist-homebox-backups/rw" {{\n'
+            '  capabilities = ["read"]\n}'
+        ) in policy
+    assert 'path "secrets-external/data/backblaze/*"' not in policy
+    assert 'path "secrets-external/metadata/backblaze/*"' not in policy

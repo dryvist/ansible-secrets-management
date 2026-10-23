@@ -49,6 +49,8 @@ openbao_secrets_domains:
       - apps/media/plex
       - apps/media/prowlarr
       - apps/media/qbittorrent
+      - apps/media/sortarr
+      - apps/media/autobrr
   - name: apps
     # Keep core/client out of this shared path list: its exact read policy is
     # attached to the apps AppRole, not apps-workstation. The Authelia play
@@ -77,6 +79,15 @@ openbao_secrets_domains:
       # (app-namespaced, matches the postgres + vikunja_group consumers) plus the
       # MCP svc-account passwords + API tokens. Merged flat into bao_apps_secrets.
       - apps/vikunja
+      # Homebox inventory app. Fields are app-namespaced (homebox_db_password,
+      # homebox_restic_password) for the flat merge into bao_apps_secrets.
+      # Seeded once by the operator, so optional: true -- a not-yet-seeded 404
+      # must not fail the whole apps prefetch.
+      - path: apps/homebox
+        optional: true
+      # OpenProject's stable Rails signing key is promoted into this path and
+      # read by its app role from the prefetched apps domain.
+      - apps/openproject
       # MCP gateway (IBM mcp-context-forge) — single HTTP/SSE endpoint every
       # MCP client reaches. SQLite-backed, no shared Postgres cluster, so no
       # db_password field. Fields generated at source by roles/openbao
@@ -97,9 +108,10 @@ openbao_secrets_domains:
       # two cannot drift.
       - apps/llm-router
       # Console-account fields are target-prefixed to avoid collisions in the
-      # apps domain's flat merge. The in-service target is required; the other
-      # remains optional until enabled by an operator.
-      - apps/idrac-kvm-r410
+      # apps domain's flat merge. Both target paths are optional and may be
+      # absent until their target is enabled.
+      - path: apps/idrac-kvm-r410
+        optional: true
       - path: apps/idrac-kvm-r710
         optional: true
       # Metrics scraper's router bearer (prometheus_llm_router_key, generated
@@ -190,6 +202,24 @@ openbao_secrets_domains:
       # and the consumer retains its existing region default. Keep the data
       # domain separate while reusing the apps AppRole credentials.
       - path: rustfs/dryvist-homelab-backups/rw
+        optional: true
+  - name: homebox_backup_s3
+    credential_domain: apps
+    paths:
+      # Own domain so its AWS_* fields stay under their own key in
+      # openbao_secrets_by_domain, apart from postgres_backup_s3. Reuses the
+      # apps AppRole credentials. optional: true -- the keys are seeded later.
+      - path: rustfs/dryvist-homebox-backups/rw
+        optional: true
+  - name: homebox_backup_b2
+    credential_domain: apps
+    paths:
+      # Backblaze B2 keys for the Homebox backup bucket. Internet-reachable SaaS
+      # credentials, so they live on secrets-external. Read with the apps reader
+      # through an exact-path grant (apps-policy.hcl.j2). optional: true -- the
+      # keys are created and seeded by the bucket step, not here.
+      - mount: secrets-external
+        path: backblaze/dryvist-homebox-backups/rw
         optional: true
   - name: ntfy
     paths:
