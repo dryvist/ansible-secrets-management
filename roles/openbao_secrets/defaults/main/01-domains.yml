@@ -51,6 +51,8 @@ openbao_secrets_domains:
       - apps/media/qbittorrent
       - apps/media/sortarr
       - apps/media/autobrr
+      - apps/media/autobrr-private
+      - apps/media/autobrr-priority
   - name: apps
     # Keep core/client out of this shared path list: its exact read policy is
     # attached to the apps AppRole, not apps-workstation. The Authelia play
