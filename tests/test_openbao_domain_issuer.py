@@ -7,6 +7,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
 FETCH_DOMAIN = ROOT / "roles/openbao_secrets/tasks/fetch_domain.yml"
+PUBLISH = ROOT / "roles/openbao_secrets/tasks/publish.yml"
 DOMAINS = ROOT / "roles/openbao_secrets/defaults/main/01-domains.yml"
 
 
@@ -56,6 +57,7 @@ def test_domain_login_uses_the_parameterized_issuer_command_and_keeps_tokens_sec
     assert mint["when"] == "openbao_secrets_domain_use_issuer | bool"
     assert mint["no_log"] is True
     assert mint["check_mode"] is False
+    assert mint["changed_when"] is False
     assert stored_login["when"] == "not (openbao_secrets_domain_use_issuer | bool)"
     assert kv_read["community.hashi_vault.vault_kv2_get"]["token"] == (
         "{{ openbao_secrets_domain_token }}"
@@ -65,6 +67,20 @@ def test_domain_login_uses_the_parameterized_issuer_command_and_keeps_tokens_sec
         "openbao_secrets_domain_use_issuer | bool",
         "openbao_secrets_domain_token is defined",
         "openbao_secrets_domain_token | length > 0",
+    ]
+
+
+def test_approle_logins_report_unchanged():
+    login_tasks = []
+    for task_file in (FETCH_DOMAIN, PUBLISH):
+        tasks = list(_tasks(yaml.safe_load(task_file.read_text())))
+        login_tasks.extend(
+            task for task in tasks if "community.hashi_vault.vault_login" in task
+        )
+
+    assert login_tasks
+    assert all(task.get("changed_when") is False for task in login_tasks), [
+        task["name"] for task in login_tasks if task.get("changed_when") is not False
     ]
 
 
