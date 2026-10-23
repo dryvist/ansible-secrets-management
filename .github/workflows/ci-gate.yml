@@ -74,8 +74,8 @@ jobs:
   # invocations that repository used: the verify playbooks, then pytest.
   tests:
     name: Role tests
-    needs: ci
-    if: ${{ needs.ci.outputs.tiny != 'true' }}
+    needs: changes
+    if: ${{ needs.changes.outputs.tiny != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: ${{ github.event_name == 'pull_request' && 5 || 10 }}
     permissions:
