@@ -211,6 +211,16 @@ openbao_secrets_domains:
       # apps AppRole credentials. optional: true -- the keys are seeded later.
       - path: rustfs/dryvist-homebox-backups/rw
         optional: true
+  - name: homebox_backup_b2
+    credential_domain: apps
+    paths:
+      # Backblaze B2 keys for the Homebox backup bucket. Internet-reachable SaaS
+      # credentials, so they live on secrets-external. Read with the apps reader
+      # through an exact-path grant (apps-policy.hcl.j2). optional: true -- the
+      # keys are created and seeded by the bucket step, not here.
+      - mount: secrets-external
+        path: backblaze/dryvist-homebox-backups/rw
+        optional: true
   - name: ntfy
     paths:
       # Slack incoming-webhook URLs keyed by topic, for the ntfy alert hub's

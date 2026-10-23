@@ -37,3 +37,14 @@ path "{{ openbao_kv_mount }}/data/rustfs/dryvist-homelab-backups/rw" {
 path "{{ openbao_kv_mount }}/data/rustfs/dryvist-homebox-backups/rw" {
   capabilities = ["read"]
 }
+
+# Exact-path read on the external-SaaS mount for the Homebox Backblaze B2 keys
+# (homebox_backup_b2). Literal mount name, not openbao_kv_mount, and no wildcard:
+# the apps reader gains nothing else on secrets-external.
+path "secrets-external/data/backblaze/dryvist-homebox-backups/rw" {
+  capabilities = ["read"]
+}
+
+path "secrets-external/metadata/backblaze/dryvist-homebox-backups/rw" {
+  capabilities = ["read"]
+}
