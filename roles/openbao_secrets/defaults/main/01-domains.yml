@@ -80,7 +80,9 @@ openbao_secrets_domains:
       # MCP svc-account passwords + API tokens. Merged flat into bao_apps_secrets.
       - apps/vikunja
       # Homebox inventory app. Fields are app-namespaced (homebox_db_password,
-      # homebox_restic_password) for the flat merge into bao_apps_secrets.
+      # homebox_restic_password, homebox_api_key_pepper) for the flat merge into
+      # bao_apps_secrets. homebox_api_key_pepper is consumed as
+      # HBOX_AUTH_API_KEY_PEPPER: a random 64-character alphanumeric value.
       # Seeded once by the operator, so optional: true -- a not-yet-seeded 404
       # must not fail the whole apps prefetch.
       - path: apps/homebox
