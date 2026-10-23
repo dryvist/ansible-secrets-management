@@ -27,6 +27,7 @@ PROMOTED_FILE = DEFAULTS / "01b-app-secrets.yml"
 CRIBL_EDGE_FILE = DEFAULTS / "05h-cribl-edge-readers.yml"
 DOMAINS_FILE = ROOT / "roles" / "openbao_secrets" / "defaults" / "main" / "01-domains.yml"
 POLICY_TEMPLATE = ROOT / "roles" / "openbao" / "templates" / "apps-policy.hcl.j2"
+MEDIA_POLICY_TEMPLATE = ROOT / "roles" / "openbao" / "templates" / "media-policy.hcl.j2"
 
 
 def _yaml(path: Path) -> dict:
@@ -68,6 +69,13 @@ def _domain(name: str) -> dict:
     raise AssertionError(f"no `{name}` domain in openbao_secrets_domains")
 
 
+def _media_domain_paths() -> list[str]:
+    return [
+        item["path"] if isinstance(item, dict) else item
+        for item in _domain("media")["paths"]
+    ]
+
+
 def _unreadable(paths: list[str], read_apps: set[str], template_text: str) -> list[str]:
     missing = []
     for path in paths:
@@ -86,6 +94,15 @@ def _render_apps_policy(read_apps: set[str]) -> str:
         ansible_managed="",
         openbao_kv_mount="secret",
         openbao_apps_read_apps=sorted(read_apps),
+    )
+
+
+def _render_media_policy() -> str:
+    environment = jinja2.Environment()
+    environment.filters["comment"] = str
+    return environment.from_string(MEDIA_POLICY_TEMPLATE.read_text(encoding="utf-8")).render(
+        ansible_managed="",
+        openbao_kv_mount="secret",
     )
 
 
@@ -123,13 +140,22 @@ def test_idrac_console_user_paths_are_optional_and_have_exact_reads():
 
 
 def test_media_domain_prefetches_sortarr_and_autobrr_paths():
-    media_paths = [
-        item["path"] if isinstance(item, dict) else item
-        for item in _domain("media")["paths"]
-    ]
+    media_paths = _media_domain_paths()
 
     assert "apps/media/sortarr" in media_paths
     assert "apps/media/autobrr" in media_paths
+    assert "apps/media/autobrr-private" in media_paths
+    assert "apps/media/autobrr-priority" in media_paths
+
+
+def test_every_media_domain_path_has_a_media_reader_grant():
+    media_paths = _media_domain_paths()
+    policy = _render_media_policy()
+    read_grant = 'path "secret/data/apps/media/*" {\n  capabilities = ["read"]\n}'
+
+    assert media_paths
+    assert all(path.startswith("apps/media/") for path in media_paths)
+    assert read_grant in policy
 
 
 def test_openproject_secret_is_promoted_and_prefetched():

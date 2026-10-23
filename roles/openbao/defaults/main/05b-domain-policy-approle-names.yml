@@ -62,6 +62,8 @@ openbao_ai_sessions_backup_approle_name: ai-sessions-backup
 # Windows local Administrator credential; writes nothing anywhere.
 openbao_packer_policy_name: packer
 openbao_packer_approle_name: packer
+openbao_backblaze_admin_policy_name: backblaze-admin
+openbao_backblaze_admin_approle_name: backblaze-admin
 # GitHub token tiers for the workstation git/gh path — engine-minted App
 # installation tokens, NEVER stored PATs (there is no secret/github/* KV path;
 # see the plugins-first rule). nix-darwin's

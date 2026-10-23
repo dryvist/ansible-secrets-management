@@ -120,6 +120,7 @@
             secret_id: "{{ openbao_secrets_domain_secret_id }}"
             validate_certs: "{{ openbao_secrets_validate_certs }}"
           register: openbao_secrets_domain_login
+          changed_when: false
           # Reads only. vault_login declares check-mode support but short-circuits
           # to a null client_token, which makes every downstream read fail and every
           # domain merge empty — a --check run then looks exactly like a missing

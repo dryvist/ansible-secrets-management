@@ -74,8 +74,8 @@ jobs:
   # invocations that repository used: the verify playbooks, then pytest.
   tests:
     name: Role tests
-    needs: ci
-    if: ${{ needs.ci.outputs.tiny != 'true' }}
+    needs: changes
+    if: ${{ needs.changes.outputs.tiny != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: ${{ github.event_name == 'pull_request' && 5 || 10 }}
     permissions:
@@ -96,6 +96,9 @@ jobs:
 
       - name: Install Ansible, pytest, PyYAML and Jinja2
         run: uv pip install --system 'ansible-core>=2.16' pytest pyyaml jinja2
+
+      - name: Verify the Backblaze account-admin identity
+        run: python3 -m pytest -q tests/test_openbao_backblaze_admin_identity.py
 
       - name: Verify the rendered Authelia configuration with Authelia's validator
         run: ansible-playbook -i localhost, -c local tests/authelia_validate_config/verify.yml
