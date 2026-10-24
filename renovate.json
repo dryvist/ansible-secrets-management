@@ -29,6 +29,17 @@
       "depNameTemplate": "openbao/openbao-plugins",
       "extractVersionTemplate": "^secrets-azure-v(?<version>.*)$",
       "versioningTemplate": "semver"
+    },
+    {
+      "customType": "regex",
+      "description": "Track the pinned Docker image digest in the openbao Molecule scenario.",
+      "managerFilePatterns": [
+        "/^molecule/openbao/molecule\\.ya?ml$/"
+      ],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s+image:\\s*(?:>-\\s*\\n\\s+)?mirror\\.gcr\\.io/geerlingguy/docker-debian12-ansible:(?<currentValue>[^@\\s]+)@(?<currentDigest>sha256:[A-Fa-f0-9]{64})"
+      ],
+      "versioningTemplate": "docker"
     }
   ]
 }
