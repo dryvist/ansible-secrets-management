@@ -134,6 +134,10 @@ openbao_secrets_domains:
       # never be regenerated). App-namespaced for the flat bao_apps_secrets
       # merge. Consumed by inventory/group_vars/{n8n_group,postgres_group}.yml.
       - apps/n8n
+      # Hatchet batch-job scheduler: DB + admin + cookie fields (generated at
+      # source, 01c) and the three encryption keysets (promoted, 01b). Consumed
+      # by inventory/group_vars/hatchet_group.yml in ansible-proxmox-apps.
+      - apps/hatchet
       # Homarr dashboard: its own admin service account, API key and — most
       # importantly — homarr_encryption_key, which is PROMOTED, not generated.
       # That key decrypts every stored integration credential; regenerating it
