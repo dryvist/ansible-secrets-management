@@ -50,7 +50,6 @@ jobs:
           - 'roles/openbao/**'
           - 'molecule/openbao/**'
           - '.github/workflows/ci-gate.yml'
-          - '.github/scripts/discover-molecule-scenarios.sh'
 
   changes:
     name: Detect Changes
@@ -71,16 +70,19 @@ jobs:
     uses: JacobPEvans/.github/.github/workflows/_molecule.yml@v1
     with:
       scenarios: ${{ needs.changes.outputs.molecule_scenarios }}
-      scenario_discovery: repo_script
-      scenario_discovery_script: .github/scripts/discover-molecule-scenarios.sh
+      scenario_discovery: directories
+      scenario_require_molecule_yml: true
       scenario_name_profile: lower_underscore
       runner_label: ubuntu-latest
       discover_timeout_minutes: 360
+      pull_request_discover_timeout_minutes: 1
       timeout_minutes: 360
+      pull_request_timeout_minutes: 7
       python_version: "3.14"
       python_install_mode: uv_packages
       uv_cache: false
       ansible_home_mode: shared
+      molecule_roles_path: roles
       galaxy_cache_enabled: true
       galaxy_cache_prefix: ansible-galaxy-v2-
       galaxy_install_mode: requirements
