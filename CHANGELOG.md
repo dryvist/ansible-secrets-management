@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.40.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.39.0...v0.40.0) (2026-10-25)
+
+
+### Features
+
+* add Backblaze admin identity ([#309](https://github.com/dryvist/ansible-secrets-management/issues/309)) ([d0892cf](https://github.com/dryvist/ansible-secrets-management/commit/d0892cf9fd9b02243a8c93021adaa54441f99b34))
+* **openbao:** add the ClickHouse ingest writer secret and its reader domain ([#317](https://github.com/dryvist/ansible-secrets-management/issues/317)) ([0e03fdd](https://github.com/dryvist/ansible-secrets-management/commit/0e03fdd45e37ed1dc37f5c1b980e2cfc4f11a905))
+* **openbao:** declare the Hatchet app secrets ([#315](https://github.com/dryvist/ansible-secrets-management/issues/315)) ([c0150ed](https://github.com/dryvist/ansible-secrets-management/commit/c0150eddee27eda361698e314fc71372ad21ac04))
+* **openbao:** seed gateway key leaves and policies for registry callers ([#316](https://github.com/dryvist/ansible-secrets-management/issues/316)) ([ad54478](https://github.com/dryvist/ansible-secrets-management/commit/ad54478ffdc56a86e585f6454fed0873394d98b8))
+
+
+### Bug Fixes
+
+* report AppRole logins as unchanged ([#310](https://github.com/dryvist/ansible-secrets-management/issues/310)) ([283c659](https://github.com/dryvist/ansible-secrets-management/commit/283c659fc955c59b1cbdbf0a59ad448fa7ec564e))
+* scope Homebox API access through Authelia ([#313](https://github.com/dryvist/ansible-secrets-management/issues/313)) ([fcf551f](https://github.com/dryvist/ansible-secrets-management/commit/fcf551f1b490701e69646274218ce313e22aa70d))
+* use the shared Molecule workflow ([#314](https://github.com/dryvist/ansible-secrets-management/issues/314)) ([ee5caf6](https://github.com/dryvist/ansible-secrets-management/commit/ee5caf6067bcef487db47e972080a9986489576e))
+
 ## [0.39.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.38.0...v0.39.0) (2026-10-23)
 
 
