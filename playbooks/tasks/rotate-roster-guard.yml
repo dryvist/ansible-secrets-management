@@ -13,13 +13,14 @@
 
 - name: Capture live roster key-reader AppRoles
   ansible.builtin.set_fact:
-    rotate_roster_guard_live_approle_names: >-
+    rotate_roster_guard_live_roster_owned_approle_names: >-
       {{ rotate_roster_guard_probe_results
-         | selectattr('status', 'equalto', 200) | map(attribute='name') | list }}
+         | selectattr('status', 'equalto', 200)
+         | selectattr('name', 'equalto', openbao_roster_router_key_reader_name)
+         | map(attribute='name') | list }}
 
-# The shared key readers exist only while the roster has agents. When neither
-# reader is live, the empty roster remains the default and rotation continues.
-- name: Load the agent roster when a shared key reader is live
+# The caller-registry gateway reader can be live with an empty roster, so it does not trigger the inventory gate.
+- name: Load the agent roster when a roster-owned key reader is live
   ansible.builtin.include_role:
     name: dryvist.homelab.inventory_resolve
   vars:
@@ -30,11 +31,11 @@
       {{ rotate_roster_guard_inventory_path
          | default(lookup('env', 'TOFU_INVENTORY_PATH'), true) }}
   register: rotate_roster_guard_inventory_load
-  when: rotate_roster_guard_live_approle_names | length > 0
+  when: rotate_roster_guard_live_roster_owned_approle_names | length > 0
 
 - name: Refuse to rotate when live roster AppRoles are absent from inventory
   vars:
-    _live_reader_approle_names: "{{ rotate_roster_guard_live_approle_names }}"
+    _live_reader_approle_names: "{{ rotate_roster_guard_live_roster_owned_approle_names }}"
   ansible.builtin.assert:
     that:
       - _live_reader_approle_names | length == 0
