@@ -163,13 +163,14 @@ def test_ssh_user_roles_view_excludes_host_cert():
     read instead of the full table. Render it for real against the LIVE
     table (which includes host-cert) and prove the crash molecule hit is
     gone: items2dict over the filtered view must not raise, and it must
-    contain exactly the pre-existing four principal-bearing roles."""
+    contain exactly the principal-bearing roles."""
     user_roles = _render_user_roles(LIVE_SSH_ROLES)
 
     names = {entry["name"] for entry in user_roles}
     assert "host-cert" not in names
     assert names == {
         "automation-ai",
+        "automation-ai-diag",
         "automation-ansible",
         "automation-semaphore",
         "ci-runner",
@@ -180,6 +181,20 @@ def test_ssh_user_roles_view_excludes_host_cert():
     # includes a principal-less entry.
     by_name = {entry["name"]: entry["principal"] for entry in user_roles}
     assert by_name["automation-ai"] == "ai-agent"
+    assert by_name["automation-ai-diag"] == "ai-diag"
+
+
+def test_exec_only_roles_share_one_body_and_diag_is_short_lived_and_ptyless():
+    """The exec-channel-only roles are one anchored body with per-role
+    overrides, so a new one cannot drift in extensions; the trusted-AI
+    diagnostic role is the shortest-lived cert and never gets a pty."""
+    by_name = {r["name"]: r for r in LIVE_SSH_ROLES}
+    for name in ("automation-ansible", "automation-semaphore", "ci-runner", "automation-ai-diag"):
+        assert by_name[name]["extensions"] == {}, name
+    diag = by_name["automation-ai-diag"]
+    assert diag["ttl"] == 900
+    assert diag["ttl"] == min(r["ttl"] for r in LIVE_SSH_ROLES if "principal" in r)
+    assert diag["principal"] not in {"ansible", "semaphore", "ai-agent", "root", "*"}
 
 
 def test_ssh_user_roles_view_keeps_a_future_explicit_user_cert_type():
@@ -219,6 +234,7 @@ def test_ssh_sign_policies_never_include_a_standalone_host_cert_leaf():
     # The pre-existing user-cert leaves are still derived, unchanged.
     assert set(names) == {
         "ssh-sign-automation-ai",
+        "ssh-sign-automation-ai-diag",
         "ssh-sign-automation-ansible",
         "ssh-sign-automation-semaphore",
         "ssh-sign-ci-runner",

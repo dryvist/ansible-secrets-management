@@ -12,6 +12,12 @@
 openbao_ssh_engine_enabled: true
 # Workstation AppRole that signs automation-ai certificates only.
 openbao_agent_ssh_sign_approle_name: agent-ssh-sign
+# The openbao_ssh_roles names that AppRole may sign. Its token policies are
+# derived from this list (07b), so a new trusted-AI identity adds a name here
+# and nothing else.
+openbao_agent_ssh_sign_roles:
+  - automation-ai
+  - automation-ai-diag
 openbao_ssh_mount: ssh-client-ca
 # CA key type per the ADR. If the deployed OpenBao rejects key_type on
 # config/ca, the converge fails loudly — override to '' to generate the
@@ -46,6 +52,16 @@ openbao_ssh_roles:
     name: ci-runner
     principal: ci
     ttl: 1800
+  # Trusted-AI diagnostic access: a non-root, read-only account on the hosts
+  # that opt in (principal -> account -> sudo allowlist is host-side data in
+  # ansible-proxmox's local_identities). 15 minutes, the shortest cert here.
+  # Another trusted identity or host class is one more entry like this one
+  # plus its name in openbao_agent_ssh_sign_roles; the ssh-sign-<role> policy
+  # leaf is derived (07a), never hand-written.
+  - <<: *ssh_exec_only
+    name: automation-ai-diag
+    principal: ai-diag
+    ttl: 900
   # HOST certificates for estate guests, signed under the same CA keypair as
   # the user-cert roles above. cert_type distinguishes the two shapes the
   # role-reconcile task renders (init/07-ssh-ca-engine.yml) — this entry has
