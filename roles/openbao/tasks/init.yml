@@ -20,6 +20,11 @@
 # written into the repo or onto a target host, and the `bao` invocations that
 # touch them run with no_log: true.
 
+- name: Reject caller IDs that also belong to the tofu roster
+  ansible.builtin.import_tasks: init/00-caller-roster-collision-guard.yml
+  tags:
+    - always
+
 # Tagged `always`: every phase below reads openbao_bootstrap_token /
 # openbao_cli_host / openbao_cli_addr, all resolved here. A scoped run
 # (e.g. `--tags openbao_rbac`) that skipped this phase would leave
