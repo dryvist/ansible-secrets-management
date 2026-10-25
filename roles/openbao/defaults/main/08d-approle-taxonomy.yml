@@ -33,6 +33,7 @@ openbao_approle_class_map: >-
     'bao-elevate-client': 'service-runtime',
     'ci-resolver': 'service-runtime',
     'clickhouse': 'service-runtime',
+    'clickhouse-ingest': 'service-runtime',
     'config-read': 'service-runtime',
     'cribl-edge-mac-a': 'service-runtime',
     'cribl-edge-mac-b': 'service-runtime',
