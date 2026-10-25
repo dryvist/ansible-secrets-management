@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.42.1](https://github.com/dryvist/ansible-secrets-management/compare/v0.42.0...v0.42.1) (2026-10-25)
+
+
+### Bug Fixes
+
+* **openbao:** adopt a roster owner marker when the same agent becomes a caller ([#328](https://github.com/dryvist/ansible-secrets-management/issues/328)) ([42b1c93](https://github.com/dryvist/ansible-secrets-management/commit/42b1c93a204b5e84467e1a9e22aa176a3c602376))
+
 ## [0.42.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.41.1...v0.42.0) (2026-10-25)
 
 
