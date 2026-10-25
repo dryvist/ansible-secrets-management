@@ -65,12 +65,18 @@
       path "{{ openbao_kv_mount }}/metadata/ai/clickhouse" {
         capabilities = ["read"]
       }
+      path "{{ openbao_kv_mount }}/data/ai/clickhouse-ingest" {
+        capabilities = ["read"]
+      }
+      path "{{ openbao_kv_mount }}/metadata/ai/clickhouse-ingest" {
+        capabilities = ["read"]
+      }
   ansible.builtin.assert:
     that:
       - clickhouse_policy == (clickhouse_expected_policy | regex_replace('\s+', ''))
     fail_msg: >-
-      The ClickHouse policy must grant only read on the exact ai/clickhouse
-      data and metadata paths, with no listing or additional stanzas.
+      The ClickHouse policy must grant only read on the exact ai/clickhouse and
+      ai/clickhouse-ingest data and metadata paths, with no listing or additional stanzas.
 
 - name: Assert the broad local-llm read grant cannot reach the ClickHouse leaf
   vars:
@@ -117,3 +123,101 @@
     fail_msg: >-
       ClickHouse must generate the four normal password fields at ai/clickhouse,
       with no apps/clickhouse grant or duplicate apps leaf.
+
+- name: Assert the ClickHouse ingest writer password is one generated field at its own leaf
+  vars:
+    llm_router_key_catalog_facts:
+      openbao_router_key_catalog: {}
+    clickhouse_ingest_fields: [CRIBL_PASSWORD]
+    clickhouse_ingest_domains: >-
+      {{ clickhouse_domain_defaults.openbao_secrets_domains
+         | selectattr('name', 'equalto', 'clickhouse-ingest') | list }}
+  ansible.builtin.assert:
+    that:
+      - openbao_generated_app_secrets['clickhouse-ingest'] == clickhouse_ingest_fields
+      - openbao_seeded_generated_app_secrets['clickhouse-ingest'] == clickhouse_ingest_fields
+      - openbao_generated_app_secret_paths['clickhouse-ingest'] == 'ai/clickhouse-ingest'
+      - "'clickhouse-ingest' not in openbao_apps_read_apps"
+      - "'clickhouse-ingest' not in openbao_roster_agent_apps_leaf_names"
+      - clickhouse_ingest_domains | length == 1
+      - clickhouse_ingest_domains[0].paths == ['ai/clickhouse-ingest']
+      - openbao_clickhouse_ingest_policy_name == 'clickhouse-ingest'
+      - openbao_clickhouse_ingest_approle_name == 'clickhouse-ingest'
+      - openbao_approles | selectattr('name', 'equalto', 'clickhouse-ingest') | list | length == 1
+      - >-
+        (openbao_approles | selectattr('name', 'equalto', 'clickhouse-ingest') | list | first).policy
+        == 'clickhouse-ingest'
+      - openbao_base_policies_static | selectattr('name', 'equalto', 'clickhouse-ingest')
+        | map(attribute='template') | list == ['clickhouse-ingest-policy.hcl.j2']
+      - openbao_approle_cidr_class_map['clickhouse-ingest'] == 'machine_or_workstation'
+      - openbao_approle_secret_id_ttl_overrides['clickhouse-ingest'] == openbao_rotated_domain_secret_id_ttl
+      - openbao_clickhouse_ingest_approle_name in openbao_secrets_domain_approle_names
+    fail_msg: >-
+      clickhouse-ingest must be one generated CRIBL_PASSWORD field at ai/clickhouse-ingest,
+      one domain, one AppRole on its own policy, on the shared machine_or_workstation
+      class and rotated TTL.
+
+- name: Assert the ClickHouse ingest policy is read-only on exactly its data and metadata
+  vars:
+    ansible_managed: test fixture
+    clickhouse_ingest_policy: >-
+      {{ lookup('template', playbook_dir ~ '/../../roles/openbao/templates/clickhouse-ingest-policy.hcl.j2')
+         | regex_replace('(?m)^\s*#.*$', '') | regex_replace('\s+', '') }}
+    clickhouse_ingest_expected_policy: |
+      path "{{ openbao_kv_mount }}/data/ai/clickhouse-ingest" {
+        capabilities = ["read"]
+      }
+      path "{{ openbao_kv_mount }}/metadata/ai/clickhouse-ingest" {
+        capabilities = ["read"]
+      }
+  ansible.builtin.assert:
+    that:
+      - clickhouse_ingest_policy == (clickhouse_ingest_expected_policy | regex_replace('\s+', ''))
+    fail_msg: >-
+      The clickhouse-ingest policy must grant only read on the exact
+      ai/clickhouse-ingest data and metadata paths.
+
+- name: Assert the ClickHouse leaves are readable only through the intended policy templates
+  vars:
+    clickhouse_ingest_grep: >-
+      {{ playbook_dir ~ '/../../roles/openbao/templates' }}
+  ansible.builtin.command:
+    argv: [grep, -rl, 'ai/clickhouse-ingest', '{{ clickhouse_ingest_grep }}']
+  register: clickhouse_ingest_templates
+  changed_when: false
+  check_mode: false
+
+- name: Assert the ingest leaf is named only by the two readers and the local-llm deny
+  vars:
+    clickhouse_ingest_named: >-
+      {{ clickhouse_ingest_templates.stdout_lines | map('basename') | sort | list }}
+  ansible.builtin.assert:
+    that:
+      - >-
+        clickhouse_ingest_named == [
+          'clickhouse-ingest-policy.hcl.j2', 'clickhouse-policy.hcl.j2', 'local-llm-policy.hcl.j2']
+      - openbao_generated_app_secret_paths['clickhouse-ingest'] is match('^ai/')
+      - >-
+        (clickhouse_domain_defaults.openbao_secrets_domains
+         | selectattr('name', 'equalto', 'clickhouse-ingest') | first).paths
+        | select('match', '^apps/') | list == []
+    fail_msg: >-
+      ai/clickhouse-ingest must be named only by the clickhouse-ingest reader, the
+      clickhouse reader and the local-llm deny, and must never create an apps/ leaf.
+
+- name: Assert local-llm still denies the ClickHouse leaves
+  vars:
+    ansible_managed: test fixture
+    local_llm_policy: >-
+      {{ lookup('template', playbook_dir ~ '/../../roles/openbao/templates/local-llm-policy.hcl.j2')
+         | regex_replace('(?m)^\s*#.*$', '') | regex_replace('\s+', '') }}
+  ansible.builtin.assert:
+    that:
+      - >-
+        ('path"' ~ openbao_kv_mount ~ '/data/ai/clickhouse-ingest"{capabilities=["deny"]}')
+        in local_llm_policy
+      - >-
+        ('path"' ~ openbao_kv_mount ~ '/metadata/ai/clickhouse-ingest"{capabilities=["deny"]}')
+        in local_llm_policy
+    fail_msg: >-
+      The local-llm policy must deny the exact ai/clickhouse-ingest data and metadata paths.
