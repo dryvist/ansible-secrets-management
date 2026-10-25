@@ -255,11 +255,15 @@
         row: >-
           {{ openbao_approles
              | selectattr('name', 'equalto', openbao_agent_ssh_sign_approle_name) | first }}
-        cert_ttl: >-
-          {{ (openbao_ssh_roles | selectattr('name', 'equalto', 'automation-ai') | first).ttl }}
+        signed_roles: >-
+          {{ openbao_ssh_roles | selectattr('name', 'in', openbao_agent_ssh_sign_roles) | list }}
+        cert_ttl: "{{ signed_roles | map(attribute='ttl') | max }}"
       ansible.builtin.assert:
         that:
-          - row.token_policies == ['ssh-sign-automation-ai']
+          - signed_roles | length == openbao_agent_ssh_sign_roles | length
+          - >-
+            row.token_policies ==
+            (openbao_agent_ssh_sign_roles | map('regex_replace', '^', 'ssh-sign-') | list)
           - row.policy is not defined
           - (row.secret_id_num_uses | int) > 0
           - >-
@@ -271,9 +275,9 @@
           - openbao_agent_ssh_sign_approle_name in openbao_secrets_domain_approle_names
           - openbao_agent_ssh_sign_approle_name in openbao_rotate_doppler_sync_domains
         fail_msg: >-
-          agent-ssh-sign must carry exactly ssh-sign-automation-ai, a finite
-          rotated secret_id republished to Doppler, and a token no longer than
-          the automation-ai certificate.
+          agent-ssh-sign must carry exactly the ssh-sign leaves of
+          openbao_agent_ssh_sign_roles, a finite rotated secret_id republished
+          to Doppler, and a token no longer than its longest certificate.
 
     - name: The automation identity stays workstation-bound and scheduled
       vars:

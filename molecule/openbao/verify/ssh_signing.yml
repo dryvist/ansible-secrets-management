@@ -16,12 +16,14 @@
       - openbao_ssh_mount == 'ssh-client-ca'
       - >-
         ssh_roles_by_name == {'automation-ai': 'ai-agent',
+                              'automation-ai-diag': 'ai-diag',
                               'automation-ansible': 'ansible',
                               'automation-semaphore': 'semaphore',
                               'ci-runner': 'ci'}
       - (openbao_ssh_roles | selectattr('name', 'equalto', 'automation-ai') | first).ttl == 7200
       - (openbao_ssh_roles | selectattr('name', 'equalto', 'automation-ansible') | first).ttl == 7200
       - (openbao_ssh_roles | selectattr('name', 'equalto', 'ci-runner') | first).ttl == 1800
+      - (openbao_ssh_roles | selectattr('name', 'equalto', 'automation-ai-diag') | first).ttl == 900
       # No wildcard principals, ever (documented upstream wildcard bug +
       # per-principal-class design). User-cert-only: a host-cert role has no
       # principal to check.
@@ -49,6 +51,7 @@
         (openbao_ssh_roles | selectattr('name', 'equalto', 'automation-ai') | first).extensions.keys()
         | list == ['permit-pty']
       - "(openbao_ssh_roles | selectattr('name', 'equalto', 'automation-ansible') | first).extensions == {}"
+      - "(openbao_ssh_roles | selectattr('name', 'equalto', 'automation-ai-diag') | first).extensions == {}"
       - "(openbao_ssh_roles | selectattr('name', 'equalto', 'ci-runner') | first).extensions == {}"
     fail_msg: "SSH role extensions drifted (agent-forwarding or pty leaked into a non-interactive role)"
 
