@@ -27,7 +27,10 @@ openbao_ssh_roles:
     principal: ai-agent
     ttl: 7200
     extensions: { "permit-pty": "" }
-  - name: automation-ansible
+  # Shared body of every exec-channel-only user-cert role below: no extensions
+  # (no pty, no agent forwarding), 2h. A role overrides only what differs.
+  - &ssh_exec_only
+    name: automation-ansible
     principal: ansible
     ttl: 7200
     extensions: {}
@@ -36,14 +39,13 @@ openbao_ssh_roles:
   # and so revoking one does not revoke the other. Same 7200 TTL as
   # automation-ansible and for the same reason: a full converge that outlives
   # its own certificate fails on every host remaining after the expiry.
-  - name: automation-semaphore
+  - <<: *ssh_exec_only
+    name: automation-semaphore
     principal: semaphore
-    ttl: 7200
-    extensions: {}
-  - name: ci-runner
+  - <<: *ssh_exec_only
+    name: ci-runner
     principal: ci
     ttl: 1800
-    extensions: {}
   # HOST certificates for estate guests, signed under the same CA keypair as
   # the user-cert roles above. cert_type distinguishes the two shapes the
   # role-reconcile task renders (init/07-ssh-ca-engine.yml) — this entry has
