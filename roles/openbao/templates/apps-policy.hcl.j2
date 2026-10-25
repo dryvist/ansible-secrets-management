@@ -48,3 +48,13 @@ path "secrets-external/data/backblaze/dryvist-homebox-backups/rw" {
 path "secrets-external/metadata/backblaze/dryvist-homebox-backups/rw" {
   capabilities = ["read"]
 }
+
+# Same shape for the Nautobot Backblaze B2 keys (nautobot_backup_b2): one bucket,
+# one exact path, no wildcard.
+path "secrets-external/data/backblaze/dryvist-nautobot-backups/rw" {
+  capabilities = ["read"]
+}
+
+path "secrets-external/metadata/backblaze/dryvist-nautobot-backups/rw" {
+  capabilities = ["read"]
+}

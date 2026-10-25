@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.44.1](https://github.com/dryvist/ansible-secrets-management/compare/v0.44.0...v0.44.1) (2026-10-25)
+
+
+### Bug Fixes
+
+* **openbao:** gate rotation inventory loading on the roster-owned key reader only ([#337](https://github.com/dryvist/ansible-secrets-management/issues/337)) ([58f7315](https://github.com/dryvist/ansible-secrets-management/commit/58f731531448a3fb11823ff34a0af21bbafcca02))
+
 ## [0.44.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.43.0...v0.44.0) (2026-10-25)
 
 

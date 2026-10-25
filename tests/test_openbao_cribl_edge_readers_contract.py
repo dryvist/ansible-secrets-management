@@ -108,6 +108,8 @@ def _matches_apps_reader_contract(policy: str, apps: set[str]) -> bool:
         ("secret/data/rustfs/dryvist-homebox-backups/rw", ("read",)),
         ("secrets-external/data/backblaze/dryvist-homebox-backups/rw", ("read",)),
         ("secrets-external/metadata/backblaze/dryvist-homebox-backups/rw", ("read",)),
+        ("secrets-external/data/backblaze/dryvist-nautobot-backups/rw", ("read",)),
+        ("secrets-external/metadata/backblaze/dryvist-nautobot-backups/rw", ("read",)),
     }
     return sorted(_grants(policy)) == sorted(expected)
 

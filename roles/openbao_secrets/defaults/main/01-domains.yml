@@ -244,6 +244,17 @@ openbao_secrets_domains:
       - mount: secrets-external
         path: backblaze/dryvist-homebox-backups/rw
         optional: true
+  - name: nautobot_backup_b2
+    credential_domain: apps
+    paths:
+      # Backblaze B2 keys for the Nautobot backup bucket, a bucket of its own
+      # with a key limited to it. Internet-reachable SaaS credentials, so they
+      # live on secrets-external. Read with the apps reader through an
+      # exact-path grant (apps-policy.hcl.j2). optional: true -- the keys are
+      # created and seeded by the bucket step, not here.
+      - mount: secrets-external
+        path: backblaze/dryvist-nautobot-backups/rw
+        optional: true
   - name: ntfy
     paths:
       # Slack incoming-webhook URLs keyed by topic, for the ntfy alert hub's
