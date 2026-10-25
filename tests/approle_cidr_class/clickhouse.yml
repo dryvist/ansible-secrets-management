@@ -22,7 +22,7 @@
       - clickhouse_roles | length == 1
       - clickhouse_policies | length == 1
       - clickhouse_domains | length == 1
-      - clickhouse_domains[0].paths == ['ai/clickhouse']
+      - clickhouse_domains[0].paths == ['ai/clickhouse', 'ai/clickhouse-ingest']
       - clickhouse_policies[0].template == 'clickhouse-policy.hcl.j2'
       - clickhouse_roles[0].policy == openbao_clickhouse_policy_name
       - clickhouse_roles[0].token_policies is not defined
@@ -141,6 +141,14 @@
       - "'clickhouse-ingest' not in openbao_roster_agent_apps_leaf_names"
       - clickhouse_ingest_domains | length == 1
       - clickhouse_ingest_domains[0].paths == ['ai/clickhouse-ingest']
+      # The clickhouse domain fetches the ingest leaf, so the ClickHouse host resolves
+      # CRIBL_PASSWORD from the same leaf its policy grants.
+      - >-
+        'ai/clickhouse-ingest' in (clickhouse_domain_defaults.openbao_secrets_domains
+        | selectattr('name', 'equalto', 'clickhouse') | first).paths
+      - >-
+        openbao_generated_app_secret_paths['clickhouse-ingest'] in (clickhouse_domain_defaults.openbao_secrets_domains
+        | selectattr('name', 'equalto', 'clickhouse') | first).paths
       - openbao_clickhouse_ingest_policy_name == 'clickhouse-ingest'
       - openbao_clickhouse_ingest_approle_name == 'clickhouse-ingest'
       - openbao_approles | selectattr('name', 'equalto', 'clickhouse-ingest') | list | length == 1
@@ -183,6 +191,9 @@
       {{ playbook_dir ~ '/../../roles/openbao/templates' }}
   ansible.builtin.command:
     argv: [grep, -rl, 'ai/clickhouse-ingest', '{{ clickhouse_ingest_grep }}']
+  # The templates live on the controller; under Molecule the target is a container without them.
+  delegate_to: localhost
+  become: false
   register: clickhouse_ingest_templates
   changed_when: false
   check_mode: false
