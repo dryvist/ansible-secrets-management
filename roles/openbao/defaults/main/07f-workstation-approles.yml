@@ -55,6 +55,16 @@ openbao_workstation_approles:
     secret_id_num_uses: "{{ openbao_approle_per_call_secret_id_num_uses }}"
     token_ttl: 15m
     token_max_ttl: 15m
+  # Backblaze's console only offers the static master application key; no
+  # OpenBao engine can mint it. Rotation is due 2027-04-23 per this KV v2
+  # entry's `custom_metadata.rotate_by`.
+  - name: "{{ openbao_backblaze_admin_approle_name }}"
+    policy: "{{ openbao_backblaze_admin_policy_name }}"
+    secret_id_issuance: per_call
+    secret_id_ttl: "{{ openbao_approle_per_call_secret_id_ttl }}"
+    secret_id_num_uses: "{{ openbao_approle_per_call_secret_id_num_uses }}"
+    token_ttl: 15m
+    token_max_ttl: 15m
   # openbao-node-converge: the converge identity for the OpenBao-node play
   # (`--tags openbao` on `openbao_group`) — the single converge still run from
   # a workstation, because its inputs are the seal key and the provisioning
@@ -176,4 +186,4 @@ openbao_roster_key_reader_approles: >-
         'policy': openbao_roster_router_key_reader_name, 'secret_id_num_uses': 0},
        {'name': openbao_roster_gateway_key_reader_name,
         'policy': openbao_roster_gateway_key_reader_name, 'secret_id_num_uses': 0}]
-      if openbao_roster_agent_valid_names | length > 0 else []) }}
+     | selectattr('name', 'in', openbao_roster_key_reader_approle_names) | list) }}

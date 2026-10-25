@@ -50,17 +50,53 @@ openbao_roster_agent_invalid_names: >-
 openbao_roster_agent_valid_names: >-
   {{ openbao_ai_agents.keys() | list | reject('in', openbao_roster_agent_invalid_names) | list }}
 
-# Dedicated shared key-family readers for all valid roster agents.
+# Caller IDs come from the released homelab-contracts registry role. The
+# default keeps the role defaults renderable in isolated template tests.
+openbao_agent_caller_ids: "{{ (agent_callers_registry | default({})).keys() | list | sort }}"
+openbao_agent_caller_roster_collisions: >-
+  {{ openbao_agent_caller_ids
+     | select('in', openbao_ai_agents.keys() | list) | list | sort }}
+
+# Registry callers own only apps/<caller>-gw, with no AppRole or other leaf.
+openbao_caller_gateway_generated_app_secrets: >-
+  {%- set _secrets = {} -%}
+  {%- for caller in openbao_agent_caller_ids -%}
+  {%- set _field = caller | replace('-', '_') -%}
+  {%- set _ = _secrets.update({caller ~ '-gw': [_field ~ '_agentgateway_key']}) -%}
+  {%- endfor -%}
+  {{ _secrets }}
+
+openbao_caller_gateway_leaf_metadata: >-
+  {%- set _metadata = {} -%}
+  {%- for caller in openbao_agent_caller_ids -%}
+  {%- set _ = _metadata.update({caller ~ '-gw': {'managed-by': 'agent-caller:' ~ caller}}) -%}
+  {%- endfor -%}
+  {{ _metadata }}
+
+openbao_caller_gateway_key_policy_prefix: caller-gateway-key-
+openbao_caller_gateway_key_policies: >-
+  {%- set _entries = [] -%}
+  {%- for caller in openbao_agent_caller_ids -%}
+  {%- set _ = _entries.append({'name': openbao_caller_gateway_key_policy_prefix ~ caller,
+      'template': 'caller-gateway-key-policy.hcl.j2', 'caller': caller}) -%}
+  {%- endfor -%}
+  {{ _entries }}
+
+# Dedicated shared key-family readers for all valid roster agents. The gateway
+# reader also reads every registry caller's apps/<caller>-gw leaf.
 openbao_roster_router_key_reader_name: llm-router-agent-keys
 openbao_roster_gateway_key_reader_name: agentgateway-agent-keys
+# The router reader needs a valid roster agent; the gateway reader needs a
+# roster agent or a registry caller. 07c and 07f declare exactly these names.
 openbao_roster_key_reader_approle_names: >-
-  {{ ([openbao_roster_router_key_reader_name, openbao_roster_gateway_key_reader_name]
-      if openbao_roster_agent_valid_names | length > 0 else []) }}
-# With no valid agent both readers are retired, so a roster that shrinks to
-# zero deletes them (init/10d, 08b) instead of failing on undeclared-live roles.
+  {{ ([openbao_roster_router_key_reader_name] if openbao_roster_agent_valid_names | length > 0 else [])
+     + ([openbao_roster_gateway_key_reader_name]
+        if (openbao_roster_agent_valid_names + openbao_agent_caller_ids) | length > 0 else []) }}
+# An undeclared reader is retired, so one whose sources shrink to zero is
+# deleted (init/10d, 08b) instead of failing on undeclared-live roles.
 openbao_roster_key_reader_retired_names: >-
-  {{ [] if openbao_roster_agent_valid_names | length > 0
-     else [openbao_roster_router_key_reader_name, openbao_roster_gateway_key_reader_name] }}
+  {{ [openbao_roster_router_key_reader_name, openbao_roster_gateway_key_reader_name]
+     | reject('in', openbao_roster_key_reader_approle_names) | list }}
 openbao_roster_owned_mcp_deny_retired_names: >-
   {{ [] if openbao_roster_owned_slug_names | length > 0
      else [openbao_roster_owned_mcp_deny_policy_name] }}

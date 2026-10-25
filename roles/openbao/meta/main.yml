@@ -15,6 +15,9 @@ galaxy_info:
     - secrets
     - raft
 dependencies:
+  - role: dryvist.homelab.agent_callers
+    tags:
+      - always
   - role: dryvist.homelab.llm_router_key_catalog
     tags:
       - always

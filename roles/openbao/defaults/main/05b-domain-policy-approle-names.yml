@@ -28,6 +28,7 @@
 #                      ai/saas/* carve-out (paid-SaaS provider keys)
 #   local-llm-workstation — workstation reads; read-only, exact secret/ai/llm
 #   clickhouse       — read-only, exact secret/ai/clickhouse
+#   clickhouse-ingest — read-only, exact secret/ai/clickhouse-ingest
 #   ai-saas-<provider> — exact read leaf for one paid-SaaS provider entry at
 #                      secret/ai/saas/<provider>. Each entry supplies one
 #                      provider-level API key to LiteLLM. The local-llm role
@@ -62,6 +63,8 @@ openbao_ai_sessions_backup_approle_name: ai-sessions-backup
 # Windows local Administrator credential; writes nothing anywhere.
 openbao_packer_policy_name: packer
 openbao_packer_approle_name: packer
+openbao_backblaze_admin_policy_name: backblaze-admin
+openbao_backblaze_admin_approle_name: backblaze-admin
 # GitHub token tiers for the workstation git/gh path — engine-minted App
 # installation tokens, NEVER stored PATs (there is no secret/github/* KV path;
 # see the plugins-first rule). nix-darwin's

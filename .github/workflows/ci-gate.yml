@@ -5,10 +5,10 @@
 # JacobPEvans/.github/.github/workflows/_ansible-ci.yml so lint runs identically
 # across the dryvist Ansible repositories.
 #
-# Molecule stays local. The shared CI workflow runs lint only (molecule: false),
-# while a parallel changes call runs the same filter. Molecule consumes its
-# scenario output; other local jobs retain their existing CI dependencies. The
-# local "Merge Gate" aggregates every job.
+# Molecule uses the shared execution workflow. The shared Ansible CI workflow
+# runs lint only (molecule: false), while a parallel changes call runs the same
+# filter. Molecule consumes its scenario output; other local jobs retain their
+# existing CI dependencies. The local "Merge Gate" aggregates every job.
 #
 # Lint, Role tests and Molecule restore the Galaxy content cache under the key
 # ansible-galaxy-v2-<os>-<hash of requirements.yml>. Runs on pushes to develop
@@ -40,15 +40,16 @@ jobs:
       pull-requests: read
     uses: JacobPEvans/.github/.github/workflows/_ansible-ci.yml@v1
     with:
-      # Molecule is owned locally (see header); the shared workflow runs lint only.
+      # Molecule runs in the shared workflow below; this shared workflow runs lint only.
       molecule: false
       # The only scenario is openbao. Its filter lists the roles its converge
-      # play includes plus the scenario directory. A change that matches no
-      # filter widens to every scenario, per the shared workflow's rule.
+      # play includes, the scenario directory, and the workflow/discovery files
+      # that select and execute the scenario.
       molecule_scenario_filters: &molecule_scenario_filters |
         openbao:
           - 'roles/openbao/**'
           - 'molecule/openbao/**'
+          - '.github/workflows/ci-gate.yml'
 
   changes:
     name: Detect Changes
@@ -66,16 +67,42 @@ jobs:
       ${{ needs.changes.outputs.molecule == 'true' &&
       needs.changes.outputs.molecule_scenarios != '[]' &&
       needs.changes.outputs.tiny != 'true' }}
-    uses: ./.github/workflows/_molecule.yml
+    uses: JacobPEvans/.github/.github/workflows/_molecule.yml@v1
     with:
       scenarios: ${{ needs.changes.outputs.molecule_scenarios }}
+      scenario_discovery: directories
+      scenario_require_molecule_yml: true
+      scenario_name_profile: lower_underscore
+      runner_label: ubuntu-latest
+      discover_timeout_minutes: 360
+      pull_request_discover_timeout_minutes: 1
+      timeout_minutes: 360
+      pull_request_timeout_minutes: 7
+      python_version: "3.14"
+      python_install_mode: uv_packages
+      uv_cache: false
+      ansible_home_mode: shared
+      molecule_roles_path: roles
+      galaxy_cache_enabled: true
+      galaxy_cache_prefix: ansible-galaxy-v2-
+      galaxy_install_mode: requirements
+      galaxy_retry_attempts: 1
+      galaxy_retry_wait_seconds: 0
+      galaxy_step_timeout_minutes: 360
+      galaxy_server_timeout_seconds: 60
+      galaxy_refresh_contracts_v5: on_cache_hit
+      fail_fast: false
+      docker_timeout_seconds: 180
+      molecule_args: --destroy never
+      molecule_workdir_mode: repo_root
+      molecule_scenario_arg: matrix
 
   # Role tests moved from the consuming repository, run with the same
   # invocations that repository used: the verify playbooks, then pytest.
   tests:
     name: Role tests
-    needs: ci
-    if: ${{ needs.ci.outputs.tiny != 'true' }}
+    needs: changes
+    if: ${{ needs.changes.outputs.tiny != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: ${{ github.event_name == 'pull_request' && 5 || 10 }}
     permissions:
@@ -96,6 +123,9 @@ jobs:
 
       - name: Install Ansible, pytest, PyYAML and Jinja2
         run: uv pip install --system 'ansible-core>=2.16' pytest pyyaml jinja2
+
+      - name: Verify the Backblaze account-admin identity
+        run: python3 -m pytest -q tests/test_openbao_backblaze_admin_identity.py
 
       - name: Verify the rendered Authelia configuration with Authelia's validator
         run: ansible-playbook -i localhost, -c local tests/authelia_validate_config/verify.yml

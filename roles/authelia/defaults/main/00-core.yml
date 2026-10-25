@@ -84,6 +84,8 @@ authelia_wall_kiosk_domains: >-
 authelia_api_bypass_default_resource: "^/api(?:/.*)?$"
 authelia_api_bypass_domains:
   - domain: "zammad.{{ authelia_cookie_domain }}"
+  - domain: "homebox.{{ authelia_cookie_domain }}"
+    resource: "^/api/"
   # Langfuse serves OTLP trace ingestion under /api/public and its NextAuth
   # browser session routes under /api/auth. Narrowed to /api/public so
   # collectors can deliver spans while the console's auth surface stays gated.

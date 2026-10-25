@@ -1,0 +1,6 @@
+{{ ansible_managed | comment }}
+# OpenBao policy for the Backblaze account-admin AppRole.
+
+path "secrets-external/data/backblaze/main/admin" {
+  capabilities = ["read"]
+}

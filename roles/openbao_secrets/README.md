@@ -98,6 +98,7 @@ server-side quorum HA needs a fourth node and is out of scope.
 | `media` | `OPENBAO_APPROLE_MEDIA_ROLE_ID` / `_SECRET_ID` | `apps/media` | *arr/qBittorrent/Plex roles |
 | `local-llm` | `OPENBAO_APPROLE_LOCAL_LLM_ROLE_ID` / `_SECRET_ID` | `ai/*` (router/llm-large/qdrant/open-webui/hermes) | LLM serving roles |
 | `clickhouse` | `OPENBAO_APPROLE_CLICKHOUSE_ROLE_ID` / `_SECRET_ID` | `ai/clickhouse` | clickhouse_docker |
+| `clickhouse-ingest` | `OPENBAO_APPROLE_CLICKHOUSE_INGEST_ROLE_ID` / `_SECRET_ID` | `ai/clickhouse-ingest` | ClickHouse ingest writer |
 | `apps` | `OPENBAO_APPROLE_APPS_ROLE_ID` / `_SECRET_ID` | configured `apps/*` paths; `core/client` in the Authelia controller-side override | app roles |
 | `postgres_backup_s3` | `OPENBAO_APPROLE_APPS_ROLE_ID` / `_SECRET_ID` | `rustfs/dryvist-homelab-backups/rw` | `postgres_group`, `postgres_ai_group` |
 | `homebox_backup_s3` | `OPENBAO_APPROLE_APPS_ROLE_ID` / `_SECRET_ID` | `rustfs/dryvist-homebox-backups/rw` | Homebox backup job |
