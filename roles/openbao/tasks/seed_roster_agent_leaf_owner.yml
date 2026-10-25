@@ -44,4 +44,6 @@
     ansible_become: "{{ openbao_cli_become }}"
   changed_when: true
   no_log: true
-  when: not (openbao_seed_leaf_exists | bool)
+  when: >-
+    not (openbao_seed_leaf_exists | bool)
+    or (openbao_seed_leaf_owner_migrate | bool)
