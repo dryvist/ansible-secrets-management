@@ -28,6 +28,7 @@
 #                      ai/saas/* carve-out (paid-SaaS provider keys)
 #   local-llm-workstation — workstation reads; read-only, exact secret/ai/llm
 #   clickhouse       — read-only, exact secret/ai/clickhouse
+#   clickhouse-ingest — read-only, exact secret/ai/clickhouse-ingest
 #   ai-saas-<provider> — exact read leaf for one paid-SaaS provider entry at
 #                      secret/ai/saas/<provider>. Each entry supplies one
 #                      provider-level API key to LiteLLM. The local-llm role
