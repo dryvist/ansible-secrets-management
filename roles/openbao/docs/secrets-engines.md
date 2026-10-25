@@ -164,7 +164,10 @@ apparatus; the block is enable + write-once CA + add-if-missing roles.
   (`openbao_ssh_roles`): `automation-ai` (principal `ai-agent`, 2h,
   `permit-pty`), `automation-ansible` (`ansible`, 2h, no extensions),
   `automation-semaphore` (`semaphore`, 2h, no extensions),
-  `ci-runner` (`ci`, 30m, no extensions). TTLs are declared in seconds so the
+  `ci-runner` (`ci`, 30m, no extensions), `automation-ai-diag` (`ai-diag`,
+  15m, no extensions: the trusted-AI read-only diagnostic identity). The
+  exec-only roles share one YAML-anchored body; a new one overrides only
+  name, principal and ttl. TTLs are declared in seconds so the
   reconcile can compare them against the API without normalizing.
   `ttl == max_ttl`; a sign request may shorten a cert's life, never extend it.
   Principals are always explicit — never `*`.
@@ -177,7 +180,9 @@ apparatus; the block is enable + write-once CA + add-if-missing roles.
 - One `ssh-sign-<role>` policy leaf per **user-cert** role
   (`openbao_ssh_user_roles`; host-cert gets no leaf of its own) grants
   exactly that role's `sign/` endpoint: `automation-ai` → `ai-elevated` +
-  every `ai-apply-*`; `automation-ansible` → `ansible-converge` only;
+  every `ai-apply-*`; `automation-ai` and `automation-ai-diag` → the
+  `agent-ssh-sign` workstation signer (its policies derive from
+  `openbao_agent_ssh_sign_roles`); `automation-ansible` → `ansible-converge` only;
   `automation-semaphore` → `semaphore` only; `ci-runner` unattached. Host
   certs get no `ssh-sign-host-cert` policy (a new name needs a privileged
   provisioning run) — `openbao_ssh_host_cert_signer_roles`

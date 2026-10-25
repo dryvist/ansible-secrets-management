@@ -142,9 +142,17 @@ openbao_seed_leaf_stored_metadata: >-
   {{ ((openbao_seed_leaf_metadata.stdout | default('{}', true) | from_json).data.custom_metadata
       | default({}, true))
      if openbao_seed_leaf_exists | bool else {} }}
+openbao_seed_leaf_owner_migrate: >-
+  {%- set _expected_owner = (openbao_seed_owner_metadata | default({}, true)).get('managed-by', '') | string -%}
+  {%- set _stored_owner = (openbao_seed_leaf_stored_metadata | default({}, true)).get('managed-by', '') | string -%}
+  {{ (openbao_seed_leaf_exists | bool)
+     and _expected_owner.startswith('agent-caller:')
+     and (_expected_owner.split('agent-caller:', 1)[1] | length > 0)
+     and _stored_owner == ('roster-agent:' ~ _expected_owner.split('agent-caller:', 1)[1]) }}
 openbao_seed_leaf_owner_conflict: >-
   {{ (openbao_seed_leaf_exists | bool)
-     and openbao_seed_leaf_stored_metadata != openbao_seed_owner_metadata }}
+     and openbao_seed_leaf_stored_metadata != openbao_seed_owner_metadata
+     and not (openbao_seed_leaf_owner_migrate | bool) }}
 
 openbao_roster_agent_owned_slugs: >-
   {%- set _entries = [] -%}
