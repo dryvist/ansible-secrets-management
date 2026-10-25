@@ -1,6 +1,6 @@
 ---
 # playbooks/openbao-rotate-approles.yml also republishes the workstation
-# domains' rotated pairs into Doppler (the eight below), so a workstation
+# domains' rotated pairs into Doppler, so a workstation
 # never sees a stale role_id/secret_id after a rotation run. `ntfy` is
 # deliberately excluded: it has no workstation consumer, only plane-side
 # ones already reading secret/platform/ansible/env directly. `local-llm` is
@@ -30,17 +30,20 @@ openbao_rotate_doppler_config: >-
 # lives at a top-level root outside the ai/apps/platform read-leaf catalogs,
 # and must exist here before the next rotator run.
 openbao_rotate_doppler_token_kv_path: rotator/doppler-sync-token
-openbao_rotate_doppler_sync_domains:
-  - apps
-  - local-llm-workstation
-  - agent-ssh-sign
-  - agent-workstation
-  - media
-  - monitoring
-  - local-cloud
-  - observability
-  - "{{ openbao_herdr_hail_approle_name }}"
-  - "{{ openbao_bao_elevate_client_approle_name }}"
+openbao_rotate_doppler_sync_domains: >-
+  {{ ['apps',
+      'local-llm-workstation',
+      'agent-ssh-sign',
+      'agent-workstation',
+      'media',
+      'monitoring',
+      'local-cloud',
+      'observability',
+      openbao_herdr_hail_approle_name,
+      openbao_bao_elevate_client_approle_name]
+     + ([openbao_roster_gateway_key_reader_name]
+        if openbao_roster_gateway_key_reader_name in openbao_roster_key_reader_approle_names
+        else []) }}
 # These domains publish their pair only to Doppler. All other domains keep the
 # existing env-document read/write/destroy-lookup behavior by default.
 openbao_rotate_doppler_only_domains:
