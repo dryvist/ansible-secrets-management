@@ -260,6 +260,7 @@ openbao_secrets_domains:
   - name: clickhouse
     paths:
       - ai/clickhouse  # APP_PASSWORD, GRAFANA_PASSWORD, HYPERDX_PASSWORD, SPLUNK_PASSWORD
+      - ai/clickhouse-ingest  # CRIBL_PASSWORD (ClickHouse ingest writer)
   - name: clickhouse-ingest
     paths:
       - ai/clickhouse-ingest  # CRIBL_PASSWORD (ClickHouse ingest writer)
