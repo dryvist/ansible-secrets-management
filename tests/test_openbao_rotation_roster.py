@@ -20,6 +20,7 @@ class RotationRosterGuard(unittest.TestCase):
         for case in (
             "no_readers",
             "empty_roster",
+            "gateway_empty_roster",
             "one_agent",
             "forbidden_reader",
             "unresolvable_inventory",
