@@ -134,6 +134,10 @@ openbao_secrets_domains:
       # never be regenerated). App-namespaced for the flat bao_apps_secrets
       # merge. Consumed by inventory/group_vars/{n8n_group,postgres_group}.yml.
       - apps/n8n
+      # Hatchet batch-job scheduler: DB + admin + cookie fields (generated at
+      # source, 01c) and the three encryption keysets (promoted, 01b). Consumed
+      # by inventory/group_vars/hatchet_group.yml in ansible-proxmox-apps.
+      - apps/hatchet
       # Homarr dashboard: its own admin service account, API key and — most
       # importantly — homarr_encryption_key, which is PROMOTED, not generated.
       # That key decrypts every stored integration credential; regenerating it
@@ -256,6 +260,10 @@ openbao_secrets_domains:
   - name: clickhouse
     paths:
       - ai/clickhouse  # APP_PASSWORD, GRAFANA_PASSWORD, HYPERDX_PASSWORD, SPLUNK_PASSWORD
+      - ai/clickhouse-ingest  # CRIBL_PASSWORD (ClickHouse ingest writer)
+  - name: clickhouse-ingest
+    paths:
+      - ai/clickhouse-ingest  # CRIBL_PASSWORD (ClickHouse ingest writer)
 
 # `community.hashi_vault.vault_kv2_get` distinguishes the two cases cleanly in
 # its own failure message, and only this one means the path is genuinely absent:

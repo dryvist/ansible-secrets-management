@@ -819,3 +819,168 @@
           - "'token_policies/policies=' in openbao_roster_live_approle_conflicts[0]"
           - "'other' in openbao_roster_live_approle_conflicts[0]"
         quiet: true
+
+    - name: Load the released homelab-contracts caller registry
+      ansible.builtin.include_role:
+        name: dryvist.homelab.agent_callers
+
+    - name: Clear the roster so only registry callers remain
+      ansible.builtin.set_fact:
+        openbao_ai_agents: {}
+
+    - name: Assert registry callers alone keep only the gateway reader
+      ansible.builtin.assert:
+        that:
+          - openbao_roster_agent_valid_names == []
+          - openbao_roster_key_reader_approle_names == ['agentgateway-agent-keys']
+          - openbao_roster_key_reader_retired_names == ['llm-router-agent-keys']
+          - openbao_roster_key_reader_approles | map(attribute='name') | list == ['agentgateway-agent-keys']
+          - openbao_roster_key_reader_policies | map(attribute='name') | list == ['agentgateway-agent-keys']
+        quiet: true
+
+    - name: Set an independent roster agent for shared reader policy checks
+      ansible.builtin.set_fact:
+        openbao_ai_agents:
+          gateway-reader: {}
+
+    - name: Assert each caller has only its gateway key seed leaf
+      ansible.builtin.assert:
+        that:
+          - >-
+            openbao_caller_gateway_generated_app_secrets[item ~ '-gw']
+            == [(item | replace('-', '_')) ~ '_agentgateway_key']
+          - >-
+            openbao_caller_gateway_leaf_metadata[item ~ '-gw']
+            == {'managed-by': 'agent-caller:' ~ item}
+        quiet: true
+      loop: "{{ openbao_agent_caller_ids }}"
+      loop_control:
+        label: "{{ item }}"
+
+    - name: Assert registry caller seed and policy inputs cover only caller gateway leaves
+      ansible.builtin.assert:
+        that:
+          - openbao_agent_caller_ids == agent_callers_registry.keys() | list | sort
+          - >-
+            openbao_caller_gateway_generated_app_secrets.keys() | list | sort
+            == openbao_agent_caller_ids | map('regex_replace', '$', '-gw') | list | sort
+          - openbao_caller_gateway_key_policies | length == openbao_agent_caller_ids | length
+          - >-
+            openbao_caller_gateway_key_policies | map(attribute='name') | list | sort
+            == openbao_agent_caller_ids
+               | map('regex_replace', '^', openbao_caller_gateway_key_policy_prefix) | list | sort
+          - >-
+            openbao_policies
+            | selectattr('name', 'in', openbao_caller_gateway_key_policies | map(attribute='name') | list)
+            | sort(attribute='name') == openbao_caller_gateway_key_policies | sort(attribute='name')
+          - openbao_agent_caller_roster_collisions == []
+          - openbao_roster_agent_approles | map(attribute='name') | list == ['gateway-reader']
+          - openbao_roster_agent_policies | map(attribute='name') | list == ['gateway-reader']
+          - openbao_roster_key_reader_approle_names == ['llm-router-agent-keys', 'agentgateway-agent-keys']
+          - openbao_roster_key_reader_retired_names == []
+          - >-
+            openbao_roster_key_reader_policies ==
+            [{'name': 'llm-router-agent-keys', 'template': 'llm-router-agent-keys-policy.hcl.j2'},
+             {'name': 'agentgateway-agent-keys', 'template': 'agentgateway-agent-keys-policy.hcl.j2'}]
+          - >-
+            openbao_roster_key_reader_approles | map(attribute='name') | list
+            == ['llm-router-agent-keys', 'agentgateway-agent-keys']
+        quiet: true
+
+    - name: Render one read-only policy for every caller gateway key
+      ansible.builtin.template:
+        src: "{{ _template_dir }}/caller-gateway-key-policy.hcl.j2"
+        dest: "{{ _fixture_dir }}/caller-gateway-key-{{ item.caller }}.hcl"
+        mode: "0644"
+      loop: "{{ openbao_caller_gateway_key_policies }}"
+      loop_control:
+        label: "{{ item.caller }}"
+
+    - name: Read each rendered caller gateway key policy
+      ansible.builtin.slurp:
+        src: "{{ _fixture_dir }}/caller-gateway-key-{{ item.caller }}.hcl"
+      loop: "{{ openbao_caller_gateway_key_policies }}"
+      loop_control:
+        label: "{{ item.caller }}"
+      register: _caller_gateway_key_policies
+
+    - name: Assert each caller policy reads only its own gateway leaf
+      vars:
+        _caller: "{{ item.item.caller }}"
+        _hcl: "{{ item.content | b64decode }}"
+        _paths: "{{ _hcl | regex_findall('(?m)^path \"([^\"]+)\"') | sort }}"
+        _capabilities: "{{ _hcl | regex_findall('(?m)^  capabilities = \\[(.*)\\]$') }}"
+      ansible.builtin.assert:
+        that:
+          - >-
+            _paths == [openbao_kv_mount ~ '/data/apps/' ~ _caller ~ '-gw',
+                       openbao_kv_mount ~ '/metadata/apps/' ~ _caller ~ '-gw'] | sort
+          - _capabilities == ['"read"', '"read", "list"']
+          - "'*' not in _hcl"
+        fail_msg: "Caller {{ _caller }} must read only its own gateway key leaf."
+        quiet: true
+      loop: "{{ _caller_gateway_key_policies.results }}"
+      loop_control:
+        label: "{{ item.item.caller }}"
+
+    - name: Render the gateway reader for registry callers
+      ansible.builtin.template:
+        src: "{{ _template_dir }}/agentgateway-agent-keys-policy.hcl.j2"
+        dest: "{{ _fixture_dir }}/agentgateway-callers.hcl"
+        mode: "0644"
+
+    - name: Read the gateway reader policy for registry callers
+      ansible.builtin.slurp:
+        src: "{{ _fixture_dir }}/agentgateway-callers.hcl"
+      register: _caller_gateway_reader_policy
+
+    - name: Assert the gateway reader grants only registry caller gateway leaves
+      vars:
+        _gateway_reader_hcl: "{{ _caller_gateway_reader_policy.content | b64decode }}"
+        # Double-quoted so each value stays a list: a folded scalar is a string,
+        # and its length is a character count.
+        _gateway_reader_paths: "{{ _gateway_reader_hcl | regex_findall('(?m)^path \"([^\"]+)\"') | sort }}"
+        _expected_gateway_reader_paths: "{{ ((openbao_roster_agent_valid_names | map('regex_replace', '$', '-gw')
+                | map('regex_replace', '^', openbao_kv_mount ~ '/data/apps/') | list)
+              + (openbao_roster_agent_valid_names | map('regex_replace', '$', '-gw')
+                 | map('regex_replace', '^', openbao_kv_mount ~ '/metadata/apps/') | list)
+              + (openbao_agent_caller_ids | map('regex_replace', '$', '-gw')
+                 | map('regex_replace', '^', openbao_kv_mount ~ '/data/apps/') | list)
+              + (openbao_agent_caller_ids | map('regex_replace', '$', '-gw')
+                 | map('regex_replace', '^', openbao_kv_mount ~ '/metadata/apps/') | list)) | sort }}"
+        _gateway_reader_capabilities: "{{ _gateway_reader_hcl | regex_findall('(?m)^  capabilities = \\[(.*)\\]$') }}"
+      ansible.builtin.assert:
+        that:
+          - _gateway_reader_paths == _expected_gateway_reader_paths
+          - >-
+            _gateway_reader_capabilities | length
+            == 2 * (openbao_agent_caller_ids | length + openbao_roster_agent_valid_names | length)
+          - _gateway_reader_capabilities | reject('in', ['"read"', '"read", "list"']) | list == []
+          - "'*' not in _gateway_reader_hcl"
+          - openbao_roster_agent_valid_names == ['gateway-reader']
+        fail_msg: The gateway reader policy includes a path outside caller gateway key leaves.
+        quiet: true
+
+    - name: Set one registered caller as an invalid second owner
+      ansible.builtin.set_fact:
+        openbao_ai_agents: "{{ dict(openbao_agent_caller_ids[:1] | zip([{}])) }}"
+        _caller_roster_guard_refused: false
+        _caller_roster_guard_message: ""
+
+    - name: Catch the production caller-roster collision guard refusal
+      block:
+        - name: Run the caller-roster collision guard
+          ansible.builtin.include_tasks: ../../../roles/openbao/tasks/init/00-caller-roster-collision-guard.yml
+      rescue:
+        - name: Record the caller-roster guard refusal
+          ansible.builtin.set_fact:
+            _caller_roster_guard_refused: true
+            _caller_roster_guard_message: "{{ ansible_failed_result.msg }}"
+
+    - name: Assert a caller-roster collision fails closed
+      ansible.builtin.assert:
+        that:
+          - _caller_roster_guard_refused | default(false) | bool
+          - openbao_agent_caller_roster_collisions == openbao_agent_caller_ids[:1]
+          - "'exactly one owner' in _caller_roster_guard_message"
+        quiet: true

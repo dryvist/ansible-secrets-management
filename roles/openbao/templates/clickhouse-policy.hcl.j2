@@ -7,3 +7,11 @@ path "{{ openbao_kv_mount }}/data/ai/clickhouse" {
 path "{{ openbao_kv_mount }}/metadata/ai/clickhouse" {
   capabilities = ["read"]
 }
+
+# Read-only on the ingest writer password. The clickhouse-ingest AppRole is its other reader.
+path "{{ openbao_kv_mount }}/data/ai/clickhouse-ingest" {
+  capabilities = ["read"]
+}
+path "{{ openbao_kv_mount }}/metadata/ai/clickhouse-ingest" {
+  capabilities = ["read"]
+}

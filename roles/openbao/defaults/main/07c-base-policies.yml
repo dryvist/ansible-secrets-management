@@ -28,11 +28,11 @@ openbao_terrakube_base_policies: >-
   {%- endfor -%}
   {{ _entries }}
 
-# Declared only with a valid roster agent, like the reader AppRoles (07f).
+# Declared per openbao_roster_key_reader_approle_names (05k), like the reader AppRoles (07f).
 openbao_roster_key_reader_policies: >-
-  {{ ([{'name': openbao_roster_router_key_reader_name, 'template': 'llm-router-agent-keys-policy.hcl.j2'},
-       {'name': openbao_roster_gateway_key_reader_name, 'template': 'agentgateway-agent-keys-policy.hcl.j2'}]
-      if openbao_roster_agent_valid_names | length > 0 else []) }}
+  {{ [{'name': openbao_roster_router_key_reader_name, 'template': 'llm-router-agent-keys-policy.hcl.j2'},
+      {'name': openbao_roster_gateway_key_reader_name, 'template': 'agentgateway-agent-keys-policy.hcl.j2'}]
+     | selectattr('name', 'in', openbao_roster_key_reader_approle_names) | list }}
 
 # Only roster-owned MCP credentials need the owner-only deny overlay.
 openbao_roster_owned_mcp_deny_policies: >-
@@ -219,6 +219,8 @@ openbao_base_policies_static:
     template: ai-runner-policy.hcl.j2
   - name: "{{ openbao_clickhouse_policy_name }}"
     template: clickhouse-policy.hcl.j2
+  - name: "{{ openbao_clickhouse_ingest_policy_name }}"
+    template: clickhouse-ingest-policy.hcl.j2
   - name: "{{ openbao_slack_admin_policy_name }}"
     template: slack-admin-policy.hcl.j2
   - name: "{{ openbao_slack_ops_policy_name }}"
@@ -300,5 +302,6 @@ openbao_policies: >-
       + openbao_ai_api_key_policies
       + openbao_github_write_scope_policies
       + openbao_roster_agent_policies + openbao_roster_key_reader_policies
+      + openbao_caller_gateway_key_policies
       + [{'name': 'proxman', 'template': 'proxman-policy.hcl.j2'}])
      | rejectattr('name', 'in', openbao_policies_without_inputs) | list }}

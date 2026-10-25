@@ -172,6 +172,20 @@
              | selectattr('domain', 'search', 'zammad')
              | first }}
 
+    - name: Assert Homebox bypasses only its API path
+      ansible.builtin.assert:
+        that:
+          - _homebox_rule.resources == ['^/api/']
+        fail_msg: >-
+          Homebox bypass is not scoped to /api/ (got
+          {{ _homebox_rule.resources }})
+      vars:
+        _homebox_rule: >-
+          {{ _authelia_rules
+             | selectattr('policy', 'eq', 'bypass')
+             | selectattr('domain', 'search', 'homebox')
+             | first }}
+
     - name: Assert Semaphore bypasses only its machine-consumed API paths
       ansible.builtin.assert:
         that:

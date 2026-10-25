@@ -1,0 +1,9 @@
+---
+- name: Assert caller IDs have one owner across registry and tofu roster
+  ansible.builtin.assert:
+    that: openbao_agent_caller_roster_collisions | length == 0
+    fail_msg: >-
+      Caller IDs must have exactly one owner; these IDs appear in both the
+      homelab-contracts registry and tofu roster:
+      {{ openbao_agent_caller_roster_collisions | join(', ') }}.
+    quiet: true

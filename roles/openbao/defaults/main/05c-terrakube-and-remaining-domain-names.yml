@@ -217,6 +217,7 @@ openbao_secrets_domain_approle_names: >-
       openbao_apps_approle_name,
       openbao_local_llm_approle_name,
       openbao_clickhouse_approle_name,
+      openbao_clickhouse_ingest_approle_name,
       openbao_local_llm_workstation_approle_name]
      + openbao_cribl_edge_mac_approle_names
      + openbao_roster_agent_valid_names

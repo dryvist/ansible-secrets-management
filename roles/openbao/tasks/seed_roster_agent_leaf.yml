@@ -1,7 +1,7 @@
 ---
-# Seeds one roster agent key leaf (apps/<agent> or apps/<agent>-gw). Its KV
-# custom metadata names the owning agent. This file does its own token and owner
-# checks, so the result does not depend on task order or on 08a running.
+# Seeds one roster agent or registry caller key leaf (apps/<agent> or
+# apps/<agent>-gw). Its KV custom metadata names the owner. This file does its own
+# token and owner checks, so the result does not depend on task order or on 08a running.
 - name: Skip the roster key leaf seed in check mode
   ansible.builtin.debug:
     msg: >-

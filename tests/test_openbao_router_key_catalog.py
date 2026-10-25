@@ -106,9 +106,9 @@ def test_public_router_key_entries_remain_literal_and_allowlisted():
     assert DEFAULTS_DATA["openbao_router_key_catalog"] == (
         "{{ llm_router_key_catalog_facts.openbao_router_key_catalog }}"
     )
-    assert OPENBAO_META_DATA["dependencies"] == [
-        {"role": "dryvist.homelab.llm_router_key_catalog", "tags": ["always"]}
-    ]
+    assert {"role": "dryvist.homelab.llm_router_key_catalog", "tags": ["always"]} in (
+        OPENBAO_META_DATA["dependencies"]
+    )
     generated = DEFAULTS_DATA["openbao_generated_app_secrets"]
     assert generated["agy"] == ["agy_llm_router_key"]
     assert generated["hermes-private"] == ["hermes_private_llm_router_key"]
