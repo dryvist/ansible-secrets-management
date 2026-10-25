@@ -63,3 +63,10 @@
     state: restarted
     daemon_reload: true
   when: ansible_virtualization_type | default('') != 'docker'
+
+- name: Restart openbao secret-age approle timer
+  ansible.builtin.systemd:
+    name: "{{ openbao_secret_age_approle_service_name }}.timer"
+    state: restarted
+    daemon_reload: true
+  when: ansible_virtualization_type | default('') != 'docker'

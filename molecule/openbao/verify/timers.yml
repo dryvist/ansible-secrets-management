@@ -172,6 +172,8 @@
     - /etc/systemd/system/openbao-secret-age.service
     - /etc/systemd/system/openbao-secret-age.timer
     - /etc/rsyslog.d/21-openbao-secret-age.conf
+    - /etc/systemd/system/openbao-secret-age-approle.service
+    - /etc/systemd/system/openbao-secret-age-approle.timer
   register: bao_secret_age_files
 
 - name: Assert the secret-age auditor's script, env, service, timer, and rsyslog conf all rendered

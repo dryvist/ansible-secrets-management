@@ -21,6 +21,16 @@
   ansible.builtin.set_fact:
     fixture_dir: "{{ _tmp.path }}"
 
+# The declared AppRoles the rendered script checks. ghost-role is declared
+# standing but absent from the stub's live role list, so it always alerts.
+- name: Declare the fixture's AppRoles (standing, inert, and declared-but-missing)
+  ansible.builtin.set_fact:
+    openbao_approles:
+      - name: test-role
+      - name: empty-role
+        manage_secret_id: false
+      - name: ghost-role
+
 - name: Render the actual openbao-secret-age.sh.j2 script
   ansible.builtin.template:
     src: "{{ _template_dir }}/openbao-secret-age.sh.j2"
@@ -48,6 +58,16 @@
 - name: Compute a fresh timestamp (well within target_days)
   ansible.builtin.command: date -u -d "-5 days" +%Y-%m-%dT%H:%M:%SZ
   register: _fresh_ts
+  changed_when: false
+
+- name: Compute a secret_id expiration inside the 12h warning window
+  ansible.builtin.command: date -u -d "+6 hours" +%Y-%m-%dT%H:%M:%SZ
+  register: _near_expiry_ts
+  changed_when: false
+
+- name: Compute a secret_id expiration well outside the 12h warning window
+  ansible.builtin.command: date -u -d "+30 days" +%Y-%m-%dT%H:%M:%SZ
+  register: _safe_expiry_ts
   changed_when: false
 
 # Stubs the sys/leader unauthenticated read, and logs every ntfy POST
@@ -142,9 +162,22 @@
         "list -format=json auth/approle/role/empty-role/secret-id")
           echo '{}'; exit 2 ;;
         "list -format=json auth/approle/role/test-role/secret-id")
+          # SIMULATE_NO_SECRET_ID=1: test-role has no secret_id at all (absent).
+          if [ "${SIMULATE_NO_SECRET_ID:-0}" = "1" ]; then
+            echo '{}'; exit 2
+          fi
           echo '["accessor1"]' ;;
         "write -format=json auth/approle/role/test-role/secret-id-accessor/lookup secret_id_accessor=accessor1")
-          echo '{"data":{"creation_time":"{{ _overdue_ts.stdout }}"}}' ;;
+          # SIMULATE_EXPIRY picks the secret_id's expiration_time: never (Go zero
+          # time, the default), near (inside 12h), finite (30d out), or empty.
+          case "${SIMULATE_EXPIRY:-never}" in
+            near) exp="{{ _near_expiry_ts.stdout }}" ;;
+            finite) exp="{{ _safe_expiry_ts.stdout }}" ;;
+            empty) exp="" ;;
+            *) exp="0001-01-01T00:00:00Z" ;;
+          esac
+          jq -n --arg c "{{ _overdue_ts.stdout }}" --arg e "${exp}" \
+            '{data:{creation_time:$c, expiration_time:$e}}' ;;
         *)
           echo "stub bao: unhandled args: ${args}" >&2
           exit 1 ;;
