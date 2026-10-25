@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.45.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.44.1...v0.45.0) (2026-10-25)
+
+
+### Features
+
+* **openbao:** add the nautobot_backup_b2 record and its apps grant ([#341](https://github.com/dryvist/ansible-secrets-management/issues/341)) ([b34b143](https://github.com/dryvist/ansible-secrets-management/commit/b34b14335df1a4dfe7f2bc9983fb9bc25ad48066))
+
 ## [0.44.1](https://github.com/dryvist/ansible-secrets-management/compare/v0.44.0...v0.44.1) (2026-10-25)
 
 
