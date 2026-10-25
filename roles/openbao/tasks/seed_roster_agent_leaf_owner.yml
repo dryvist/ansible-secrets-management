@@ -23,12 +23,17 @@
   tags:
     - openbao_kv_seed
 
+# A merge-patch, not a POST: the reconcile policy grants `patch` on
+# metadata/* (confined to custom_metadata) and deliberately withholds
+# create/update there, because a full metadata write carries the
+# version-destroy knobs. A POST is a 403 for that identity.
 - name: Mark the absent roster key leaf with its owner
   ansible.builtin.uri:
     url: "{{ openbao_cli_addr }}/v1/{{ openbao_kv_mount }}/metadata/apps/{{ openbao_seed_app }}"
-    method: POST
+    method: PATCH
     headers:
       X-Vault-Token: "{{ openbao_bootstrap_token }}"
+      Content-Type: application/merge-patch+json
     body_format: json
     body:
       custom_metadata: "{{ openbao_seed_owner_metadata }}"
