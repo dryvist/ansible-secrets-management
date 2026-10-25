@@ -141,6 +141,13 @@ def test_sandbox_agent_router_key_is_generated_and_readable_by_the_apps_reader()
     assert "sandbox-agent-router" in _read_apps({})
 
 
+def test_lane_walk_probe_key_is_generated_and_readable_by_the_apps_reader():
+    generated = DEFAULTS_DATA["openbao_generated_app_secrets"]
+    assert generated["lane-walk-probe"] == ["lane_walk_probe_llm_router_key"]
+    assert "lane-walk-probe" in _read_apps({})
+    assert 'path "secret/data/apps/lane-walk-probe"' in _render_apps_policy({})
+
+
 def test_sandbox_agent_promotion_is_readable_by_the_apps_reader():
     assert "sandbox-agent" not in _read_apps({})
     promoted_apps = PROMOTED_DATA["openbao_promoted_app_secrets"]
