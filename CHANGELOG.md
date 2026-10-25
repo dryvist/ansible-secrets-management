@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.42.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.41.1...v0.42.0) (2026-10-25)
+
+
+### Features
+
+* **openbao:** generate the lane-walk probe router key ([#326](https://github.com/dryvist/ansible-secrets-management/issues/326)) ([073970b](https://github.com/dryvist/ansible-secrets-management/commit/073970bbfa27b66e700868e232be5bb4b6239297))
+
 ## [0.41.1](https://github.com/dryvist/ansible-secrets-management/compare/v0.41.0...v0.41.1) (2026-10-25)
 
 
