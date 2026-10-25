@@ -260,6 +260,9 @@ openbao_secrets_domains:
   - name: clickhouse
     paths:
       - ai/clickhouse  # APP_PASSWORD, GRAFANA_PASSWORD, HYPERDX_PASSWORD, SPLUNK_PASSWORD
+  - name: clickhouse-ingest
+    paths:
+      - ai/clickhouse-ingest  # CRIBL_PASSWORD (ClickHouse ingest writer)
 
 # `community.hashi_vault.vault_kv2_get` distinguishes the two cases cleanly in
 # its own failure message, and only this one means the path is genuinely absent:
