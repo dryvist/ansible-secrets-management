@@ -179,8 +179,6 @@ openbao_apps_read_published_apps:
   - benchmark
   # Homebox inventory credentials, seeded once by the operator (no converge publishes them).
   - homebox
-  # Service-generated API credential the fan-control role publishes.
-  - fan-control-write
 openbao_apps_read_apps: >-
   {{ ((openbao_generated_app_secrets.keys()
        | reject('in', openbao_generated_app_secret_paths | default({})) | list)
