@@ -265,6 +265,10 @@ openbao_secrets_domains:
       - ai/langflow    # LANGFLOW_{SUPERUSER,SUPERUSER_PASSWORD,DB_PASSWORD}
       - ai/llm-router  # LLM_ROUTER_REDIS_PASSWORD (router spend-store AUTH)
       - ai/dify        # DIFY_SECRET_KEY
+      # Optional until the publisher writes its scoped JWT.
+      - path: ai/mcp/qdrant  # QDRANT_MEMORY_MCP_JWT
+        optional: true
+      - ai/mcp/vikunja # VIKUNJA_MCP_URL, VIKUNJA_MCP_TOKEN_RO/_RW
   - name: clickhouse
     paths:
       - ai/clickhouse  # APP_PASSWORD, GRAFANA_PASSWORD, HYPERDX_PASSWORD, SPLUNK_PASSWORD
