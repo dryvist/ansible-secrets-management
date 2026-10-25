@@ -278,8 +278,6 @@ openbao_credential_publish_apps:
   - open-llm
   # The service-generated API credential used by the fan-control role.
   - fan-control-write
-  # Splunk service-account fields the splunk-mcp rotator authenticates with.
-  - splunk-rotator
 
 # Policies whose template emits a `path` stanza only for a configured input.
 # With that input unset the mount they govern is not created either (see
