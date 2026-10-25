@@ -202,6 +202,8 @@ openbao_secrets_domains:
       # so this reuses the domain already fetched for cribl_stream_group
       # rather than minting a dedicated AppRole for one controller URL.
       - infrastructure/unifi
+      # SMB share account fields (generated at source by openbao_generated_app_secrets.nas).
+      - apps/nas
   - name: postgres_backup_s3
     credential_domain: apps
     paths:
