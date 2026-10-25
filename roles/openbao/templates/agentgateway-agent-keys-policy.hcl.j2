@@ -1,11 +1,20 @@
 {{ ansible_managed | comment }}
-# Read each roster agent's agent gateway key.
+# Read roster and registered caller agent gateway keys.
 {% for agent in openbao_roster_agent_valid_names %}
 path "{{ openbao_kv_mount }}/data/apps/{{ agent }}-gw" {
   capabilities = ["read"]
 }
 
 path "{{ openbao_kv_mount }}/metadata/apps/{{ agent }}-gw" {
+  capabilities = ["read", "list"]
+}
+{% endfor %}
+{% for caller in openbao_agent_caller_ids %}
+path "{{ openbao_kv_mount }}/data/apps/{{ caller }}-gw" {
+  capabilities = ["read"]
+}
+
+path "{{ openbao_kv_mount }}/metadata/apps/{{ caller }}-gw" {
   capabilities = ["read", "list"]
 }
 {% endfor %}
