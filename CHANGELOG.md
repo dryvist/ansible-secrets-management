@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.44.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.43.0...v0.44.0) (2026-10-25)
+
+
+### Features
+
+* **openbao_secrets:** declare consumer domain paths ([#335](https://github.com/dryvist/ansible-secrets-management/issues/335)) ([9dc2b10](https://github.com/dryvist/ansible-secrets-management/commit/9dc2b10914fc7c96ec904d223d9c1feb0103c9eb))
+
 ## [0.43.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.42.1...v0.43.0) (2026-10-25)
 
 
