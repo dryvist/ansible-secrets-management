@@ -202,6 +202,21 @@ openbao_secrets_domains:
       # so this reuses the domain already fetched for cribl_stream_group
       # rather than minting a dedicated AppRole for one controller URL.
       - infrastructure/unifi
+      # SMB share account fields (generated at source by openbao_generated_app_secrets.nas).
+      - apps/nas
+      # hermes-ui companion service: workspace password and mission-control auth pair.
+      - apps/hermes-ui
+      # Router caller keys: generated at source (openbao_generated_app_secrets) or
+      # published (openbao_apps_read_published_apps). optional: true -- a not-yet-seeded
+      # 404 must not fail the whole apps prefetch.
+      - path: apps/github-actions-oss
+        optional: true
+      - path: apps/benchmark
+        optional: true
+      - path: apps/hermes-orchestrator
+        optional: true
+      - path: apps/docs-router-snapshot
+        optional: true
   - name: postgres_backup_s3
     credential_domain: apps
     paths:
@@ -257,6 +272,16 @@ openbao_secrets_domains:
                        #   roles/phoenix_docker); the same path also holds the
                        #   guest's own bootstrap secrets, read only over there.
       - ai/langflow    # LANGFLOW_{SUPERUSER,SUPERUSER_PASSWORD,DB_PASSWORD}
+      - ai/llm-router  # LLM_ROUTER_REDIS_PASSWORD (router spend-store AUTH)
+      - ai/dify        # DIFY_SECRET_KEY
+      # Optional until the publisher writes its scoped JWT.
+      - path: ai/mcp/qdrant  # QDRANT_MEMORY_MCP_JWT
+        optional: true
+      - ai/mcp/vikunja # VIKUNJA_MCP_URL, VIKUNJA_MCP_TOKEN_RO/_RW
+      - ai/mcp/zammad  # ZAMMAD_MCP_URL, ZAMMAD_MCP_TOKEN
+      # Read-only IPAM/DCIM token, published opt-in; an absent token is skipped.
+      - path: ai/mcp/nautobot  # NAUTOBOT_MCP_URL, NAUTOBOT_MCP_TOKEN
+        optional: true
   - name: clickhouse
     paths:
       - ai/clickhouse  # APP_PASSWORD, GRAFANA_PASSWORD, HYPERDX_PASSWORD, SPLUNK_PASSWORD
