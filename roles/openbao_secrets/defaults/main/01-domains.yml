@@ -204,10 +204,6 @@ openbao_secrets_domains:
       - infrastructure/unifi
       # SMB share account fields (generated at source by openbao_generated_app_secrets.nas).
       - apps/nas
-      # Fan-control API credential. optional: true -- the path exists only once the
-      # fan-control role has published it, so a 404 must not fail the whole apps prefetch.
-      - path: apps/fan-control-write
-        optional: true
       # hermes-ui companion service: workspace password and mission-control auth pair.
       - apps/hermes-ui
       # Router caller keys: generated at source (openbao_generated_app_secrets) or
