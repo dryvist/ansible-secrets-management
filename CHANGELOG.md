@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.41.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.40.0...v0.41.0) (2026-10-25)
+
+
+### Features
+
+* **openbao:** sync the gateway key reader pair to Doppler while callers exist ([#320](https://github.com/dryvist/ansible-secrets-management/issues/320)) ([2fd4a88](https://github.com/dryvist/ansible-secrets-management/commit/2fd4a88f7cdb5c2f5fe4a6d675b71304d99ad4f9))
+
 ## [0.40.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.39.0...v0.40.0) (2026-10-25)
 
 
