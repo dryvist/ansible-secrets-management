@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.43.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.42.1...v0.43.0) (2026-10-25)
+
+
+### Features
+
+* add a short-lived read-only SSH diagnostic identity for trusted AI ([#331](https://github.com/dryvist/ansible-secrets-management/issues/331)) ([dfa4130](https://github.com/dryvist/ansible-secrets-management/commit/dfa41304833e2b31d9654adc1e24afc2934774d1))
+
 ## [0.42.1](https://github.com/dryvist/ansible-secrets-management/compare/v0.42.0...v0.42.1) (2026-10-25)
 
 
