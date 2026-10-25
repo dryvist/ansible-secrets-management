@@ -168,6 +168,11 @@ openbao_base_approles_elevated:
   - name: "{{ openbao_clickhouse_approle_name }}"
     policy: "{{ openbao_clickhouse_policy_name }}"
     secret_id_num_uses: 0
+  # clickhouse-ingest: prefetch identity for the ingest writer password. Same shared
+  # rotated TTL and machine_or_workstation class as clickhouse.
+  - name: "{{ openbao_clickhouse_ingest_approle_name }}"
+    policy: "{{ openbao_clickhouse_ingest_policy_name }}"
+    secret_id_num_uses: 0
   - name: "{{ openbao_slack_admin_approle_name }}"
     policy: "{{ openbao_slack_admin_policy_name }}"
     token_ttl: "{{ openbao_slack_admin_token_ttl }}"
