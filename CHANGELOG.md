@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.41.1](https://github.com/dryvist/ansible-secrets-management/compare/v0.41.0...v0.41.1) (2026-10-25)
+
+
+### Bug Fixes
+
+* **openbao:** mark roster leaf owners with a metadata merge-patch ([#323](https://github.com/dryvist/ansible-secrets-management/issues/323)) ([dafd409](https://github.com/dryvist/ansible-secrets-management/commit/dafd409f291256f8572c0f288d1243ffbb2391ed))
+
 ## [0.41.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.40.0...v0.41.0) (2026-10-25)
 
 
