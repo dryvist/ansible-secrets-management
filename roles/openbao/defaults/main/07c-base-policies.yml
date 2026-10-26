@@ -244,6 +244,8 @@ openbao_base_policies_static:
     template: github-enterprise-read-policy.hcl.j2
   - name: "{{ openbao_github_enterprise_admin_policy_name }}"
     template: github-enterprise-admin-policy.hcl.j2
+  - name: "{{ openbao_nautobot_token_publisher_policy_name }}"
+    template: nautobot-token-publisher-policy.hcl.j2
 # Full policy set = the static base above + the base read-/write-/github-mint
 # capability leaves generated from openbao_ai_domains + the ssh-sign-<role>
 # leaves generated from openbao_ssh_roles. init.yml renders this list.

@@ -124,6 +124,8 @@ openbao_github_enterprise_read_policy_name: github-enterprise-read
 openbao_github_enterprise_read_approle_name: github-enterprise-read
 openbao_github_enterprise_admin_policy_name: github-enterprise-admin
 openbao_github_enterprise_admin_approle_name: github-enterprise-admin
+openbao_nautobot_token_publisher_policy_name: nautobot-token-publisher
+openbao_nautobot_token_publisher_approle_name: nautobot-token-publisher
 # docs-publisher: the documentation publisher's own identity. Mints exactly
 # one repository-scoped write set and nothing else — it holds no read set, no
 # raw token path and no lock subtree, so a leaked secret-zero can open a pull
