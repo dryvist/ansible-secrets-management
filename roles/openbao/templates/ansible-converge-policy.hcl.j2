@@ -102,6 +102,26 @@ path "{{ openbao_kv_mount }}/metadata/ai/mcp/vikunja" {
   capabilities = ["read"]
 }
 
+# Exact-path exception (Homebox API key): converge publishes the minted key here.
+path "{{ openbao_kv_mount }}/data/homebox/main/rw" {
+  capabilities = ["create", "update", "read"]
+}
+
+path "{{ openbao_kv_mount }}/metadata/homebox/main/rw" {
+  capabilities = ["read"]
+}
+
+# Exact-path exception (PBS API token): the PBS role publishes the token used by
+# ansible-proxmox to register PBS storage. Keep the writer grant on this secret
+# only; the shared ansible-converge identity also reads it during PVE converge.
+path "{{ openbao_kv_mount }}/data/platform/pbs/pve-nodes" {
+  capabilities = ["create", "read", "update"]
+}
+
+path "{{ openbao_kv_mount }}/metadata/platform/pbs/pve-nodes" {
+  capabilities = ["read"]
+}
+
 # Exact-path exception (dispatch-queue token): the vikunja role publishes the
 # queue poller's narrow token here. Same create/update/read on the SINGLE
 # secret — not a wildcard.
