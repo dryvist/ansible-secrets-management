@@ -106,6 +106,8 @@ def _matches_apps_reader_contract(policy: str, apps: set[str]) -> bool:
         ("secret/metadata/infrastructure/unifi", ("read",)),
         ("secret/data/rustfs/dryvist-homelab-backups/rw", ("read",)),
         ("secret/data/rustfs/dryvist-homebox-backups/rw", ("read",)),
+        ("secret/data/homebox/main/rw", ("read",)),
+        ("secret/metadata/homebox/main/rw", ("read",)),
         ("secrets-external/data/backblaze/dryvist-homebox-backups/rw", ("read",)),
         ("secrets-external/metadata/backblaze/dryvist-homebox-backups/rw", ("read",)),
         ("secrets-external/data/backblaze/dryvist-nautobot-backups/rw", ("read",)),
