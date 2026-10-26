@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.46.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.45.1...v0.46.0) (2026-10-26)
+
+
+### Features
+
+* **openbao:** grant the Homebox service API key path ([#348](https://github.com/dryvist/ansible-secrets-management/issues/348)) ([c28040f](https://github.com/dryvist/ansible-secrets-management/commit/c28040f8fc3e2c52eaaae17950e79cd0ee06fa60))
+
+
+### Bug Fixes
+
+* **rotation:** load the caller registry so the gateway key reader rotates ([#346](https://github.com/dryvist/ansible-secrets-management/issues/346)) ([d6e20c0](https://github.com/dryvist/ansible-secrets-management/commit/d6e20c0d1f50485274a37e16d0bd61b1114f602a))
+
 ## [0.45.1](https://github.com/dryvist/ansible-secrets-management/compare/v0.45.0...v0.45.1) (2026-10-26)
 
 
