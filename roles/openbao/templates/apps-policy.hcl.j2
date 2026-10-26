@@ -28,6 +28,15 @@ path "{{ openbao_kv_mount }}/metadata/infrastructure/unifi" {
   capabilities = ["read"]
 }
 
+# Read-only access for the Homebox service API key.
+path "{{ openbao_kv_mount }}/data/homebox/main/rw" {
+  capabilities = ["read"]
+}
+
+path "{{ openbao_kv_mount }}/metadata/homebox/main/rw" {
+  capabilities = ["read"]
+}
+
 # Read-only access for the PostgreSQL backup credential domain.
 path "{{ openbao_kv_mount }}/data/rustfs/dryvist-homelab-backups/rw" {
   capabilities = ["read"]
