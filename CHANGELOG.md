@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.45.1](https://github.com/dryvist/ansible-secrets-management/compare/v0.45.0...v0.45.1) (2026-10-26)
+
+
+### Bug Fixes
+
+* track dependency pins with Renovate ([#312](https://github.com/dryvist/ansible-secrets-management/issues/312)) ([5058819](https://github.com/dryvist/ansible-secrets-management/commit/50588197d9d2d44cb62ab3f1899420abf96e61d0))
+
 ## [0.45.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.44.1...v0.45.0) (2026-10-25)
 
 
