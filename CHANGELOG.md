@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.47.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.46.0...v0.47.0) (2026-10-26)
+
+
+### Features
+
+* **openbao:** add the inert nautobot-token-publisher AppRole and policy ([#352](https://github.com/dryvist/ansible-secrets-management/issues/352)) ([6e34592](https://github.com/dryvist/ansible-secrets-management/commit/6e345927353c491862ce25fbfef53749415b3245))
+* **openbao:** grant the PBS API token path to the converge identity ([#350](https://github.com/dryvist/ansible-secrets-management/issues/350)) ([f2fe33f](https://github.com/dryvist/ansible-secrets-management/commit/f2fe33f364ade5ff4c6f5b09d33cad4cc336be20))
+
 ## [0.46.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.45.1...v0.46.0) (2026-10-26)
 
 
