@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.47.1](https://github.com/dryvist/ansible-secrets-management/compare/v0.47.0...v0.47.1) (2026-10-26)
+
+
+### Bug Fixes
+
+* **openbao:** bind nautobot-token-publisher to the workstation CIDR class ([#355](https://github.com/dryvist/ansible-secrets-management/issues/355)) ([3b29b03](https://github.com/dryvist/ansible-secrets-management/commit/3b29b03ce863fee829f1cf3bced32e057a2661da))
+
 ## [0.47.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.46.0...v0.47.0) (2026-10-26)
 
 
