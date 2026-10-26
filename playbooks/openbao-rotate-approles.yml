@@ -92,6 +92,15 @@
     # rotation never touches these identities.
     bootstrap_seed_only: false
 
+  # The harness caller registry, loaded the way roles/openbao's meta dependency
+  # loads it. Without it openbao_agent_caller_ids is empty here, so the
+  # agentgateway-agent-keys reader drops out of openbao_secrets_domain_approle_names
+  # whenever no roster agent exists, and its pair is never written to the env document.
+  pre_tasks:
+    - name: Load the harness caller registry for the reader domain list
+      ansible.builtin.include_role:
+        name: dryvist.homelab.agent_callers
+
   tasks:
     - name: Decide which auth mode this run supplies
       ansible.builtin.set_fact:
