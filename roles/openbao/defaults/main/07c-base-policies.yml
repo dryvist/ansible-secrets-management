@@ -263,6 +263,8 @@ openbao_credential_publish_apps:
   - nautobot
   - healthchecks
   - n8n
+  - grafana
+  - status-stack
   - sortarr
   # Homarr publishes back its API key (issued by the app, so it cannot be
   # seeded) and its integration-secret encryption key. The latter is exactly

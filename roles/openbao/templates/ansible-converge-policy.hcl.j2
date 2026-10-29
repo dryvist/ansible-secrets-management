@@ -6,8 +6,8 @@ path "{{ openbao_kv_mount }}/data/{{ openbao_proxman_secret_path }}" {
 # OpenBao policy for the ansible-converge AppRole — config-management pulls
 # (was "ansible"). ENUMERATED exact paths only: there is deliberately NO
 # platform/* or apps/* wildcard, and no access to the infra kernel
-# (secret/infra/*). The exact-path MCP publication grants below are the only
-# write exceptions.
+# (secret/infra/*). The narrow exact-path publication and seed grants below
+# are the only write exceptions.
 #
 # THE LIST BELOW IS THE CONSUMER INVENTORY. Every entry is a KV path that a
 # converge actually reads with THIS AppRole's token, and each names the reading
@@ -130,6 +130,46 @@ path "{{ openbao_kv_mount }}/data/ai/vikunja" {
 }
 
 path "{{ openbao_kv_mount }}/metadata/ai/vikunja" {
+  capabilities = ["read"]
+}
+
+# Langfuse's runtime service seed writes only this exact record.
+path "{{ openbao_kv_mount }}/data/ai/langfuse" {
+  capabilities = ["create", "update", "read"]
+}
+
+# Read KV v2 metadata for the same Langfuse record only.
+path "{{ openbao_kv_mount }}/metadata/ai/langfuse" {
+  capabilities = ["read"]
+}
+
+# Langflow's service seed writes only this exact record.
+path "{{ openbao_kv_mount }}/data/ai/langflow" {
+  capabilities = ["create", "update", "read"]
+}
+
+# Read KV v2 metadata for the same Langflow record only.
+path "{{ openbao_kv_mount }}/metadata/ai/langflow" {
+  capabilities = ["read"]
+}
+
+# Phoenix's service seed writes only this exact record.
+path "{{ openbao_kv_mount }}/data/ai/phoenix" {
+  capabilities = ["create", "update", "read"]
+}
+
+# Read KV v2 metadata for the same Phoenix record only.
+path "{{ openbao_kv_mount }}/metadata/ai/phoenix" {
+  capabilities = ["read"]
+}
+
+# Dify's service seed writes only this exact record.
+path "{{ openbao_kv_mount }}/data/ai/dify" {
+  capabilities = ["create", "update", "read"]
+}
+
+# Read KV v2 metadata for the same Dify record only.
+path "{{ openbao_kv_mount }}/metadata/ai/dify" {
   capabilities = ["read"]
 }
 
