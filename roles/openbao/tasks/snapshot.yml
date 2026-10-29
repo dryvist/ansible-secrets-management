@@ -6,6 +6,13 @@
 # (see the guard in main.yml), so a first-bootstrap converge stays green.
 # The script leader-gates at runtime, so this deploys identically on all nodes.
 
+- name: Install the shared OpenBao AppRole CLI
+  ansible.builtin.include_role:
+    name: dryvist.homelab.bao_approle_cli
+    apply:
+      tags:
+        - openbao_snapshot
+
 - name: Create the OpenBao snapshot staging directory
   ansible.builtin.file:
     path: "{{ openbao_snapshot_dir }}"
