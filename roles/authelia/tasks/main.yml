@@ -35,46 +35,12 @@
   loop_control:
     label: "{{ item.path }}"
 
-# --- Service secrets: generate-at-source, no shared store --------------------
-# force:false = create-if-absent; an existing secret is never rewritten, so
-# converges stay stable and the storage encryption key (immutable once the
-# SQLite db exists) can never be clobbered. Lives on the persistent mount.
-- name: Generate service secrets (create-if-absent, guest-local)
-  ansible.builtin.copy:
-    content: "{{ lookup('community.general.random_string', length=64, special=false) }}"
-    dest: "{{ item.value }}"
-    force: false
-    owner: "{{ authelia_user }}"
-    group: "{{ authelia_group }}"
-    mode: "0600"
-  loop: "{{ authelia_secret_files | dict2items }}"
-  loop_control:
-    label: "{{ item.value }}"
-  no_log: true
-
-- name: Generate the OIDC signing key (create-if-absent, guest-local)
-  ansible.builtin.command:
-    argv:
-      - runuser
-      - -u
-      - "{{ authelia_user }}"
-      - --
-      - openssl
-      - genpkey
-      - -algorithm
-      - RSA
-      - -out
-      - "{{ authelia_oidc_jwks_key_file }}"
-      - -pkeyopt
-      - rsa_keygen_bits:2048
-    creates: "{{ authelia_oidc_jwks_key_file }}"
-  # Minimal Proxmox LXC templates do not include sudo. PCT already executes the
-  # module as guest root, so use util-linux runuser for the one de-escalated
-  # process instead of Ansible become_user (which would require guest sudo).
-  become: false
-  vars:
-    ansible_become: false
-  no_log: true
+# --- Service secrets: OpenBao is authoritative, the guest files are copies ---
+# Read the guest copies, seed the missing OpenBao fields through the shared
+# generate-if-absent contract, then reconcile the copies. The storage encryption
+# key is immutable once the SQLite database exists; see service_secrets.yml.
+- name: Read, seed and reconcile the Authelia service secrets
+  ansible.builtin.import_tasks: service_secrets.yml
 
 - name: Enforce OIDC signing key permissions
   ansible.builtin.file:
@@ -92,51 +58,6 @@
     - "{{ authelia_oidc_jwks_key_file }}"
   register: authelia_oidc_secret_files
   no_log: true
-
-# Back the generated secrets up into OpenBao. These are create-if-absent and
-# guest-local, so the guest holds the only copy. The storage encryption key is
-# the one that matters most: it is immutable once the SQLite database exists,
-# and losing it makes that database unreadable rather than merely resettable.
-- name: Read the generated secrets for publishing
-  ansible.builtin.slurp:
-    src: "{{ item.value }}"
-  loop: >-
-    {{ (authelia_secret_files
-        | combine({'oidc_jwks_private_key': authelia_oidc_jwks_key_file}))
-       | dict2items }}
-  loop_control:
-    label: "{{ item.key }}"
-  register: authelia_publish_blobs
-  failed_when: false
-  no_log: true
-
-- name: Assemble the publish payload
-  ansible.builtin.set_fact:
-    authelia_publish_data: >-
-      {{ authelia_publish_data | default({}, true)
-         | combine({item.item.key: (item.content | b64decode | trim)}) }}
-  loop: "{{ authelia_publish_blobs.results }}"
-  loop_control:
-    label: "{{ item.item.key }}"
-  when: item.content is defined
-  no_log: true
-
-- name: Publish the generated Authelia secrets to OpenBao
-  ansible.builtin.include_role:
-    name: dryvist.homelab.openbao_secrets
-    tasks_from: publish.yml
-  vars:
-    openbao_secrets_bao_addr: "{{ lookup('env', 'BAO_ADDR') | default('', true) }}"
-    openbao_secrets_kv_mount: secret
-    openbao_secrets_publish_app: authelia
-    openbao_secrets_publish_reason: (service secrets; storage key is unrecoverable if lost)
-    openbao_secrets_publish_data: "{{ authelia_publish_data | default({}, true) }}"
-    openbao_secrets_publish_role_id: >-
-      {{ lookup('env', 'CONVERGE_ROLE_ID')
-         | default(lookup('env', 'OPENBAO_APPROLE_ANSIBLE_ROLE_ID'), true) }}
-    openbao_secrets_publish_secret_id: >-
-      {{ lookup('env', 'CONVERGE_SECRET_ID')
-         | default(lookup('env', 'OPENBAO_APPROLE_ANSIBLE_SECRET_ID'), true) }}
 
 - name: Decode OIDC secrets for the protected config render
   ansible.builtin.set_fact:

@@ -190,11 +190,11 @@ authelia_service_users:
 # then re-converge in a fresh process so this role picks up the new value.
 authelia_service_users_rotate_passwords: false
 
-# --- Service secrets: generated at the source, no shared store ---------------
-# JWT / session / storage-encryption secrets have no second consumer, so per
-# the workspace generate-at-source rule they are generated-if-absent on the
-# guest's persistent mount and fed to Authelia via *_FILE env vars. They never
-# touch Doppler, OpenBao, or the rendered config.
+# --- Service secrets: OpenBao is authoritative, the guest holds copies -------
+# The JWT / session / storage-encryption secrets and the OIDC signing key live in
+# OpenBao at secret/apps/authelia (tasks/service_secrets.yml). The files below
+# are guest copies on the persistent mount, fed to Authelia via *_FILE env vars.
+# They are never rendered into the config.
 authelia_secrets_dir: "{{ authelia_data_dir }}/secrets"
 authelia_secret_files:
   jwt_secret: "{{ authelia_secrets_dir }}/jwt_secret"

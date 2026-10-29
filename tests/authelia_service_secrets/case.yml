@@ -1,0 +1,122 @@
+---
+# One reconcile case, run from verify.yml with verify_case and verify_root set.
+
+- name: Point the Authelia secret variables at this case's directory
+  ansible.builtin.set_fact:
+    verify_dir: "{{ verify_root.path }}/{{ verify_case.name }}"
+    authelia_user: "{{ verify_owner }}"
+    authelia_group: "{{ verify_group }}"
+  no_log: true
+
+- name: Create the case's secrets directory
+  ansible.builtin.file:
+    path: "{{ verify_dir }}"
+    state: directory
+    mode: "0700"
+
+- name: Write the guest copies this case starts with
+  ansible.builtin.copy:
+    content: "{{ item.value }}"
+    dest: "{{ verify_dir }}/{{ item.key }}"
+    mode: "0600"
+  loop: "{{ verify_case.guest | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  no_log: true
+
+- name: Set the Authelia secret paths for this case
+  ansible.builtin.set_fact:
+    authelia_secrets_dir: "{{ verify_dir }}"
+    authelia_secret_files:
+      jwt_secret: "{{ verify_dir }}/jwt_secret"
+      session_secret: "{{ verify_dir }}/session_secret"
+      storage_key: "{{ verify_dir }}/storage_key"
+      oidc_hmac_secret: "{{ verify_dir }}/oidc_hmac_secret"
+    authelia_oidc_jwks_key_file: "{{ verify_dir }}/oidc_jwks_private_key"
+  no_log: true
+
+- name: Stat the jwt copy before the reconcile
+  ansible.builtin.stat:
+    path: "{{ verify_dir }}/jwt_secret"
+  register: verify_jwt_before
+
+- name: Read and declare the guest copies
+  ansible.builtin.import_tasks: ../../roles/authelia/tasks/service_secrets_read.yml
+
+# The shared seed returns, for each declared field, the OpenBao value when one exists,
+# else the caller value, else a generated one. This is that result, without OpenBao.
+- name: Start the stubbed seed result
+  ansible.builtin.set_fact:
+    authelia_seed_result: {}
+  no_log: true
+
+- name: Stub the seed result for each declared field
+  ansible.builtin.set_fact:
+    authelia_seed_result: >-
+      {{ authelia_seed_result | combine({item.name: (verify_case.kv[item.name]
+           if item.name in verify_case.kv
+           else (item.value if item.value | length > 0 else 'generated-' ~ item.name))}) }}
+  loop: "{{ authelia_seed_fields }}"
+  loop_control:
+    label: "{{ item.name }}"
+  no_log: true
+
+- name: Reconcile the guest copies
+  block:
+    - name: Run the reconcile step
+      ansible.builtin.include_tasks: ../../roles/authelia/tasks/service_secrets_reconcile.yml
+  rescue:
+    - name: Record that the reconcile failed
+      ansible.builtin.set_fact:
+        verify_failed: true
+        verify_failure_msg: "{{ ansible_failed_result.msg | default('') }}"
+
+- name: Read the jwt copy after the reconcile
+  ansible.builtin.slurp:
+    src: "{{ verify_dir }}/jwt_secret"
+  register: verify_jwt_after
+  no_log: true
+
+- name: Stat the jwt and session copies after the reconcile
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - "{{ verify_dir }}/jwt_secret"
+    - "{{ verify_dir }}/session_secret"
+  register: verify_after_stat
+
+- name: Read the signing key copy after a passing reconcile
+  ansible.builtin.slurp:
+    src: "{{ authelia_oidc_jwks_key_file }}"
+  register: verify_jwks_after
+  when: not verify_case.expect_fail
+  no_log: true
+
+- name: Assert the case outcome
+  ansible.builtin.assert:
+    that:
+      - (verify_failed | default(false) | bool) == verify_case.expect_fail
+      - (verify_jwt_after.content | b64decode) == verify_case.expect_jwt
+      - verify_after_stat.results[0].stat.mode == '0600'
+      - verify_after_stat.results[1].stat.exists == (not verify_case.expect_fail)
+      - verify_case.expect_fail or (verify_jwks_after.content | b64decode).startswith('-----BEGIN')
+      - >-
+        'jwt_secret' not in verify_case.guest
+        or verify_after_stat.results[0].stat.inode == verify_jwt_before.stat.inode
+    fail_msg: "Reconcile case {{ verify_case.name }} did not match its expected outcome."
+  no_log: true
+
+- name: Assert a failing reconcile names only the field and does not leak either value
+  ansible.builtin.assert:
+    that:
+      - "'jwt_secret' in verify_failure_msg"
+      - "'guest-jwt' not in verify_failure_msg"
+      - "'kv-jwt' not in verify_failure_msg"
+    fail_msg: "The mismatch failure must name the field and no value."
+  when: verify_case.expect_fail
+  no_log: true
+
+- name: Clear the per-case failure record
+  ansible.builtin.set_fact:
+    verify_failed: false
+    verify_failure_msg: ""
