@@ -1,7 +1,7 @@
 ---
 # Behavioral verification for the alert-once latch in
 # roles/openbao/templates/openbao-rotate.sh.j2. Runs the rendered
-# generic+splunk-mcp script against a stub `curl` on PATH:
+# generic+splunk-mcp script against stub `curl` and `bao-approle` on PATH:
 #
 #   1. two failing runs in a row send exactly one ntfy alert, and the second
 #      still pings the healthchecks /fail endpoint;
@@ -66,8 +66,8 @@
         mode: "0755"
 
     # Logs each URL with the Tags header, so an alert and a resolved message
-    # are told apart. Login fails while STUB_LOGIN_FAIL is set; otherwise the
-    # rotation stamp is fresh and the script exits 0 without rotating.
+    # are told apart. The rotation stamp is fresh, so a healthy run exits 0
+    # without rotating.
     - name: Install the stub curl
       ansible.builtin.copy:
         dest: "{{ fixture_dir }}/bin/curl"
@@ -79,14 +79,22 @@
           for a in "$@"; do case "${a}" in Tags:*) tags="${a}" ;; esac; done
           printf '%s %s\n' "${url}" "${tags}" >> "${STUB_CALL_LOG}"
           case "${url}" in
-            */auth/approle/login)
-              [ -z "${STUB_LOGIN_FAIL:-}" ] || exit 22
-              echo '{"auth":{"client_token":"test-vault-token"}}'
-              ;;
             */metadata/ai/mcp/splunk)
               echo "{\"data\":{\"custom_metadata\":{\"rotated_SPLUNK_MCP_TOKEN\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}}}"
               ;;
           esac
+
+    # Stands in for the shared bao-approle CLI. Login fails while
+    # STUB_LOGIN_FAIL is set.
+    - name: Install the stub bao-approle
+      ansible.builtin.copy:
+        dest: "{{ fixture_dir }}/bin/bao-approle"
+        mode: "0755"
+        content: |
+          #!/usr/bin/env bash
+          [ "${1:-}" = login ] || exit 64
+          [ -z "${STUB_LOGIN_FAIL:-}" ] || exit 22
+          echo test-vault-token
 
     - name: Run the script twice with a failing login, then twice healthy
       ansible.builtin.command: "{{ fixture_dir }}/rotate.sh"

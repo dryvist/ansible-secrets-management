@@ -67,9 +67,9 @@ recover_on_success() {
 }
 trap recover_on_success EXIT
 
-# Without this, a missing curl/jq reads as "AppRole login failed", which
-# points at the credential rather than at the missing package.
-# requires: curl jq date
+# Without this, a missing bao-approle/curl/jq reads as "AppRole login failed",
+# which points at the credential rather than at the missing package.
+# requires: bao-approle curl jq date
 require_binaries() {
   local missing=""
   for _bin in $(sed -n 's/^# requires: //p' "$0"); do
@@ -89,13 +89,11 @@ epoch_of() { date -u -d "$1" +%s 2>/dev/null; }
 
 # AppRole login for this rotator's identity; prints the client_token.
 bao_login() {
-  local resp token
-  resp="$(curl -sf --max-time 10 -X POST \
-    -d "{\"role_id\":\"${ROLE_ID}\",\"secret_id\":\"${SECRET_ID}\"}" \
-    "${BAO_ADDR}/v1/auth/approle/login")" || return 1
-  token="$(json "${resp}" '.auth.client_token')"
-  [ -n "${token}" ] || return 1
-  printf '%s' "${token}"
+  BAO_ADDR="${BAO_ADDR}" \
+    BAO_APPROLE_ROLE_ID="${ROLE_ID}" \
+    BAO_APPROLE_SECRET_ID="${SECRET_ID}" \
+    FLOW_LOCK_API_MAX_TIME=10 \
+    bao-approle login 2>/dev/null || return 1
 }
 
 # Prints the raw OpenBao response for the rotator's own KV-v2 entry.
