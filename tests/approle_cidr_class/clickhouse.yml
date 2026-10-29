@@ -3,7 +3,7 @@
 # Included by the AppRole class check and Molecule's RBAC verification.
 - name: Load the domain catalog for the ClickHouse contract
   ansible.builtin.include_vars:
-    file: "{{ playbook_dir }}/../../roles/openbao_secrets/defaults/main/01-domains.yml"
+    file: "{{ playbook_dir }}/../../playbooks/group_vars/all/openbao_secrets.yml"
     name: clickhouse_domain_defaults
 
 - name: Assert the ClickHouse domain, policy registration and standing AppRole agree

@@ -1,9 +1,7 @@
 """Every path read with the `apps` AppRole is readable by the `apps` policy.
 
-roles/openbao_secrets reads each path of the `apps` domain with the `apps`
-AppRole. A path the policy denies answers 403, and classify_reads.yml fails
-the whole domain on any 403, `optional: true` included (optional only
-tolerates a 404). The policy's per-app grants come from
+The repo-owned domain catalog assigns each path to the `apps` AppRole.
+The policy must grant each declared path. Its per-app grants come from
 openbao_apps_read_apps (roles/openbao/defaults/main/05c-...), rendered here
 from the real expression with the real seeding maps; infrastructure/unifi is
 granted directly by apps-policy.hcl.j2.
@@ -26,7 +24,7 @@ GENERATED_FILE = DEFAULTS / "01c-app-secrets-generated.yml"
 GENERATED_PATHS_FILE = DEFAULTS / "01d-app-secret-paths.yml"
 PROMOTED_FILE = DEFAULTS / "01b-app-secrets.yml"
 CRIBL_EDGE_FILE = DEFAULTS / "05h-cribl-edge-readers.yml"
-DOMAINS_FILE = ROOT / "roles" / "openbao_secrets" / "defaults" / "main" / "01-domains.yml"
+DOMAINS_FILE = ROOT / "playbooks" / "group_vars" / "all" / "openbao_secrets.yml"
 POLICY_TEMPLATE = ROOT / "roles" / "openbao" / "templates" / "apps-policy.hcl.j2"
 MEDIA_POLICY_TEMPLATE = ROOT / "roles" / "openbao" / "templates" / "media-policy.hcl.j2"
 
