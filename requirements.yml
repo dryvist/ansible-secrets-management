@@ -19,7 +19,7 @@ collections:
     version: "7.1.0"
 
   # Renovate follows the current v5 release; breaking changes ship as v6.
-  # renovate: datasource=git-refs depName=https://github.com/dryvist/homelab-contracts.git currentValue=v5.19.2
+  # renovate: datasource=git-refs depName=https://github.com/dryvist/homelab-contracts.git currentValue=v5.36.0
   - name: https://github.com/dryvist/homelab-contracts.git#/ansible/
     type: git
-    version: de3be0f0eb5034805b6bdff88415e46d0e5272fd
+    version: v5.36.0

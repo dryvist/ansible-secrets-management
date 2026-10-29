@@ -15,9 +15,8 @@
 #     ambient OPENBAO_APPROLE_APPROLE_SECRET_ID_ROTATE_SCHEDULED_ROLE_ID /
 #     _SECRET_ID (the standing approle-secret-id-rotate-scheduled AppRole,
 #     delivered through the same platform/ansible/env document every other
-#     machine identity's secret-zero already rides -- see
-#     roles/openbao_secrets/README.md "Inputs (env)"). No -e needed; every
-#     domain rotates each run.
+#     machine identity's secret-zero already rides. No -e needed; every domain
+#     rotates each run.
 #
 #   Semaphore template spec for the scheduled path: a template running this
 #   playbook every 12h, environment sourced from the same env-document

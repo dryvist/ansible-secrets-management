@@ -10,6 +10,8 @@ Authelia role, and the OpenBao voter-health role.
 
 `requirements.yml` lists the collection dependencies. The `openbao` role consumes the
 `llm_router_key_catalog` role from the `dryvist.homelab` collection, following its v5 major tag.
+The `authelia` role seeds its service secrets through the shared
+`dryvist.homelab.openbao_secrets` role pinned in `requirements.yml`.
 
 ```sh
 ansible-galaxy install -r requirements.yml --force
@@ -37,8 +39,7 @@ The roles read these names from the consuming playbook, inventory, or environmen
 | Role | Purpose |
 | --- | --- |
 | `openbao` | Installs and configures an OpenBao Raft cluster member, then provisions the KV mount, secret hierarchy, policies, and AppRoles. |
-| `authelia` | Configures the Authelia SSO provider. |
-| `openbao_secrets` | Reads each resource-domain KV subtree into a per-domain fact through that domain's AppRole. |
+| `authelia` | Configures the Authelia SSO provider and seeds its service secrets into OpenBao. |
 | `openbao_voter_health` | Samples each Raft voter's health endpoints and sends one event per voter per cycle. |
 
 ## Layout

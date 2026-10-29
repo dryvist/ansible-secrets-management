@@ -57,21 +57,22 @@ converges use Doppler-wrapped Ansible invocations, which provide the runtime
 environment to those lookups. They do not set either Ansible role flag. No
 tracked vars file enables the gates.
 
-## Secrets — generated at the source, no shared store
+## Secrets — OpenBao is authoritative, the guest holds copies
 
-Per the workspace generate-at-source rule, NONE of Authelia's secrets live in
-Doppler, SOPS, or OpenBao — they have no second consumer:
-
-- **JWT / session / storage-encryption secrets**: generated-if-absent on the
-  guest's persistent secrets directory and fed to the process via
-  `AUTHELIA_*_FILE` env vars in the systemd unit. Never rendered into config.
-  The storage encryption key is immutable once the database exists — the
-  create-if-absent write can never clobber it.
-- **Bootstrap password**: generated on first converge (same pattern as the
-  traefik dashboard credentials), persisted root-only at
-  `/etc/authelia/.bootstrap_password` for one-time retrieval. Read it once,
-  optionally keep it in your personal password manager (Bitwarden), and it
-  effectively retires after passkey registration. AI agents never need it —
+- **JWT / session / storage-encryption secrets and the OIDC signing key**: stored
+  at `secret/apps/authelia` in OpenBao. The shared `seed_generated` task seeds
+  any missing field with the converge token from the controller, and it never
+  replaces a stored field. A guest copy in the secrets directory is fed to the
+  process via `AUTHELIA_*_FILE` env vars in the systemd unit, and is never
+  rendered into config. A missing copy is written from OpenBao. A copy that
+  differs from OpenBao fails the converge and changes nothing. The storage
+  encryption key is immutable once the database exists.
+- **Bootstrap password**: stored at `secret/apps/authelia` in OpenBao as
+  `bootstrap_password`. The shared `seed_generated` task creates the field only
+  when absent and keeps an existing value. On the first run, while `users.yml`
+  is absent, the role writes the value root-only at
+  `/etc/authelia/.bootstrap_password` as `username:password` for one-time
+  retrieval. It is removed after passkey registration. AI agents never need it —
   machine endpoints are excluded from the SSO gate and keep their own tokens.
 
 ## Installation
@@ -96,9 +97,10 @@ per-route by the tofu-owned `sso` flag, not in this repo.
 ## Password rotation
 
 `users.yml` is seeded once (create-if-absent — the salted hash would differ
-every render). To rotate: delete `/etc/authelia/users.yml` and
-`/etc/authelia/.bootstrap_password` on the guest and re-converge; a fresh
-password is generated and persisted.
+every render). To rotate: remove `bootstrap_password` from OpenBao, delete
+`/etc/authelia/users.yml` and `/etc/authelia/.bootstrap_password` on the guest,
+and re-converge; a fresh password is generated in OpenBao and written to the
+guest copy on that first-run converge.
 
 ## First-time setup
 

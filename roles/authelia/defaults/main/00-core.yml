@@ -158,9 +158,9 @@ authelia_session_remember_me: "1w"
 # --- Users ---------------------------------------------------------------------
 # File backend, seeded once (create-if-absent — the live users.yml is never
 # overwritten, it accumulates WebAuthn state via the portal). The bootstrap
-# password is generated on the host at first converge (never in Doppler /
-# OpenBao — see the generate-at-source rule in AGENTS.md) and persisted
-# root-only for one-time retrieval; day-to-day login is the passkey.
+# password is stored in OpenBao (apps/authelia, field bootstrap_password) and
+# written root-only for one-time retrieval on the first run, while users.yml is
+# absent; day-to-day login is the passkey.
 # The estate's operator identity, from the same DEFAULT_USERNAME env the vikunja
 # role provisions its operator from — one source, not a per-role literal. The
 # users template puts this user in the `admins` group, so setting it here is what
@@ -190,11 +190,11 @@ authelia_service_users:
 # then re-converge in a fresh process so this role picks up the new value.
 authelia_service_users_rotate_passwords: false
 
-# --- Service secrets: generated at the source, no shared store ---------------
-# JWT / session / storage-encryption secrets have no second consumer, so per
-# the workspace generate-at-source rule they are generated-if-absent on the
-# guest's persistent mount and fed to Authelia via *_FILE env vars. They never
-# touch Doppler, OpenBao, or the rendered config.
+# --- Service secrets: OpenBao is authoritative, the guest holds copies -------
+# The JWT / session / storage-encryption secrets and the OIDC signing key live in
+# OpenBao at secret/apps/authelia (tasks/service_secrets.yml). The files below
+# are guest copies on the persistent mount, fed to Authelia via *_FILE env vars.
+# They are never rendered into the config.
 authelia_secrets_dir: "{{ authelia_data_dir }}/secrets"
 authelia_secret_files:
   jwt_secret: "{{ authelia_secrets_dir }}/jwt_secret"

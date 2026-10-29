@@ -179,20 +179,18 @@ def test_router_catalog_entries_feed_generation_and_the_apps_read_paths():
 
 def test_open_llm_fields_mirror_the_generated_router_fields():
     tasks = yaml.safe_load(GENERATION.read_text(encoding="utf-8"))
-    source = _find_task(tasks, "Read generated router keys for the open-llm mirror")
-    assert source["loop"] == [
-        {"app": "zcode", "field": "zcode_llm_router_key"},
-        {"app": "opencode", "field": "opencode_llm_router_key"},
-        {"app": "qwen-code", "field": "qwen_code_llm_router_key"},
-    ]
-    assert source["no_log"] is True
-
     capture = _find_task(tasks, "Capture generated router keys for the open-llm merge")
     assert capture["no_log"] is True
     assert capture["ansible.builtin.set_fact"] == {
-        "openbao_zcode_router_key_source": "{{ openbao_open_llm_router_key_sources.results[0].stdout }}",
-        "openbao_opencode_router_key_source": "{{ openbao_open_llm_router_key_sources.results[1].stdout }}",
-        "openbao_qwen_code_router_key_source": "{{ openbao_open_llm_router_key_sources.results[2].stdout }}",
+        "openbao_zcode_router_key_source": (
+            "{{ openbao_seeded_app_secret_values['zcode']['zcode_llm_router_key'] }}"
+        ),
+        "openbao_opencode_router_key_source": (
+            "{{ openbao_seeded_app_secret_values['opencode']['opencode_llm_router_key'] }}"
+        ),
+        "openbao_qwen_code_router_key_source": (
+            "{{ openbao_seeded_app_secret_values['qwen-code']['qwen_code_llm_router_key'] }}"
+        ),
     }
     merge = _find_task(tasks, "Merge generated router keys into open-llm")
     assert merge["vars"]["openbao_promote_fields"] == {

@@ -81,3 +81,10 @@ def test_secret_id_is_short_lived_and_not_minted_by_the_issuer():
 def test_execution_plane_policies_do_not_receive_sync_write_access():
     assert "apps/nautobot/sync-write" not in SEMAPHORE.read_text(encoding="utf-8")
     assert "apps/nautobot/sync-write" not in ANSIBLE_CONVERGE.read_text(encoding="utf-8")
+
+
+def test_source_class_is_workstation_only():
+    overrides = yaml.safe_load(
+        (ROOT / "roles/openbao/defaults/main/08b-cidr-and-unlock.yml").read_text(encoding="utf-8")
+    )["openbao_approle_cidr_class_overrides"]
+    assert overrides["nautobot-token-publisher"] == "workstation"
