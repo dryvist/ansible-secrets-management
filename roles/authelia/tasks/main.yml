@@ -123,12 +123,20 @@
 
 - name: Publish the generated Authelia secrets to OpenBao
   ansible.builtin.include_role:
-    name: openbao_secrets
+    name: dryvist.homelab.openbao_secrets
     tasks_from: publish.yml
   vars:
+    openbao_secrets_bao_addr: "{{ lookup('env', 'BAO_ADDR') | default('', true) }}"
+    openbao_secrets_kv_mount: secret
     openbao_secrets_publish_app: authelia
     openbao_secrets_publish_reason: (service secrets; storage key is unrecoverable if lost)
     openbao_secrets_publish_data: "{{ authelia_publish_data | default({}, true) }}"
+    openbao_secrets_publish_role_id: >-
+      {{ lookup('env', 'CONVERGE_ROLE_ID')
+         | default(lookup('env', 'OPENBAO_APPROLE_ANSIBLE_ROLE_ID'), true) }}
+    openbao_secrets_publish_secret_id: >-
+      {{ lookup('env', 'CONVERGE_SECRET_ID')
+         | default(lookup('env', 'OPENBAO_APPROLE_ANSIBLE_SECRET_ID'), true) }}
 
 - name: Decode OIDC secrets for the protected config render
   ansible.builtin.set_fact:

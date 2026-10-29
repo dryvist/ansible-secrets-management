@@ -135,7 +135,9 @@ def test_ansible_converge_owns_the_exact_splunk_publisher_paths():
 
 
 def test_local_llm_fetch_contract_merges_canonical_splunk_fields():
-    defaults = _read_role_defaults("openbao_secrets")
+    defaults = yaml.safe_load(
+        (ROOT / "playbooks/group_vars/all/openbao_secrets.yml").read_text(encoding="utf-8")
+    )
     local_llm = next(
         domain
         for domain in defaults["openbao_secrets_domains"]
