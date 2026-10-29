@@ -76,7 +76,7 @@
 # obtains a fresh target secret_id from approle-issuer and destroys it after the
 # target login. Missing issuer credentials on an initialized cluster are fatal.
 # Delegated, like every other vault_login in this repo (see
-# openbao_secrets/tasks/publish.yml): community.hashi_vault needs hvac, which
+# the shared publish task): community.hashi_vault needs hvac, which
 # lives in the controller's dev shell and NOT on the guests. Run on the guest it
 # fails to import, and `failed_when: false` then turns that into a silent "ok"
 # with no .login key -- indistinguishable from a rejected credential.
