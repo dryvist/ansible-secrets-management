@@ -104,16 +104,16 @@
     clickhouse_fields: [APP_PASSWORD, GRAFANA_PASSWORD, HYPERDX_PASSWORD, SPLUNK_PASSWORD]
     clickhouse_seed_source: >-
       {{ lookup('file', playbook_dir ~ '/../../roles/openbao/tasks/seed_generated_app_secret.yml') }}
-    clickhouse_seed_read: "{{ clickhouse_seed_source | regex_search('(?m)^    cmd:.*$') }}"
-    clickhouse_seed_write: "{{ clickhouse_seed_source | regex_search('(?m)^    url:.*$') }}"
   ansible.builtin.assert:
     that:
       - openbao_generated_app_secrets.clickhouse == clickhouse_fields
       - openbao_seeded_generated_app_secrets.clickhouse == clickhouse_fields
       - openbao_generated_app_secret_paths.clickhouse == 'ai/clickhouse'
       - openbao_seed_app_path == 'ai/clickhouse'
-      - "'openbao_seed_app_path' in clickhouse_seed_read"
-      - "'openbao_seed_app_path' in clickhouse_seed_write"
+      - "'dryvist.homelab.openbao_secrets' in clickhouse_seed_source"
+      - "'tasks_from: seed_generated' in clickhouse_seed_source"
+      - "'openbao_secrets_seed_path' in clickhouse_seed_source"
+      - "'openbao_seed_app_path' in clickhouse_seed_source"
       - "'clickhouse' not in openbao_apps_read_apps"
       - "'clickhouse' not in openbao_roster_agent_apps_leaf_names"
       - "'clickhouse' in openbao_roster_agent_ai_leaf_names"

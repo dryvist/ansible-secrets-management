@@ -1,16 +1,4 @@
-"""A stored router virtual key without the `sk-` prefix must be regenerated.
-
-LiteLLM's /key/generate rejects a caller-supplied virtual key that does not
-start with `sk-`. seed_generated_app_secret.yml's generate-if-absent rule
-would otherwise leave an unprefixed value stored forever, since nothing has
-ever accepted it. Router-key fields (the
-openbao_app_secret_router_key_suffix or
-openbao_app_secret_router_key_fields) get one carve-out: regenerate when empty
-OR when stored but missing the prefix. Every other field keeps the empty-only
-rule untouched.
-
-Renders the REAL `when` expression, never a reimplementation.
-"""
+"""Router-key declarations make the shared seed task repair invalid prefixes."""
 
 from pathlib import Path
 import unittest
@@ -20,83 +8,46 @@ from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar, trust_as_template
 
 ROOT = Path(__file__).resolve().parents[1]
-REL = "roles/openbao/tasks/seed_generated_app_secret.yml"
-TASK = "Generate a random value for each field that is not yet stored"
-
+SEED = ROOT / "roles/openbao/tasks/seed_generated_app_secret.yml"
 DEFAULTS = yaml.safe_load(
     (ROOT / "roles/openbao/defaults/main/01b-app-secret-generation.yml").read_text()
 )
-ROUTER_SUFFIX = DEFAULTS["openbao_app_secret_router_key_suffix"]
-ROUTER_FIELDS = DEFAULTS["openbao_app_secret_router_key_fields"]
-ROUTER_PREFIX = DEFAULTS["openbao_app_secret_router_key_prefix"]
+FIELD_TASK = "Add a shared declaration for each generated app-secret field"
 
 
-def _find(rel, name):
-    tasks = yaml.safe_load((ROOT / rel).read_text(encoding="utf-8"))
-    for t in tasks:
-        if t.get("name") == name:
-            return t
-    raise AssertionError(f"task {name!r} not found in {rel}")
-
-
-def _render(expr, variables):
+def _field_declaration(name):
+    tasks = yaml.safe_load(SEED.read_text(encoding="utf-8"))
+    task = next(task for task in tasks if task.get("name") == FIELD_TASK)
+    expression = task["ansible.builtin.set_fact"]["openbao_seed_shared_fields"]
     templar = Templar(loader=DataLoader())
-    templar.available_variables = variables
-    return bool(templar.template(trust_as_template("{{ " + expr + " }}")))
-
-
-def _regenerates(item, stored_value):
-    cond = _find(REL, TASK)["when"]
-    if not isinstance(cond, list):
-        cond = [cond]
-    variables = {
-        "item": item,
-        "openbao_seed_current_data": {item: stored_value} if stored_value else {},
-        "openbao_app_secret_router_key_suffix": ROUTER_SUFFIX,
-        "openbao_app_secret_router_key_fields": ROUTER_FIELDS,
-        "openbao_app_secret_router_key_prefix": ROUTER_PREFIX,
+    templar.available_variables = {
+        **DEFAULTS,
+        "openbao_seed_shared_fields": [],
+        "item": name,
     }
-    return all(_render(c, variables) for c in cond)
+    return templar.template(trust_as_template(expression))[0]
 
 
 class RouterKeyPrefixRegeneration(unittest.TestCase):
-    ROUTER_FIELD = "open_webui" + ROUTER_SUFFIX
+    def test_explicit_contract_router_field_requires_prefix(self):
+        field = _field_declaration("router_key")
+        self.assertEqual(field["prefix"], "sk-")
+        self.assertEqual(field["valid_pattern"], "^sk-")
 
-    def test_explicit_contract_router_field_regenerates_without_prefix(self):
-        self.assertTrue(_regenerates("router_key", "abc123"))
+    def test_second_explicit_contract_router_field_requires_prefix(self):
+        field = _field_declaration("claude_ocg_router_key")
+        self.assertEqual(field["prefix"], "sk-")
+        self.assertEqual(field["valid_pattern"], "^sk-")
 
-    def test_explicit_contract_router_field_keeps_prefix(self):
-        self.assertFalse(_regenerates("router_key", ROUTER_PREFIX + "abc123"))
+    def test_namespaced_router_field_requires_prefix(self):
+        field = _field_declaration("open_webui_llm_router_key")
+        self.assertEqual(field["prefix"], "sk-")
+        self.assertEqual(field["valid_pattern"], "^sk-")
 
-    def test_claude_ocg_router_field_regenerates_without_prefix(self):
-        # Its name does not end in the router suffix, so only the explicit list
-        # makes the generator mint and repair it as a LiteLLM virtual key.
-        self.assertFalse("claude_ocg_router_key".endswith(ROUTER_SUFFIX))
-        self.assertTrue(_regenerates("claude_ocg_router_key", "abc123"))
-        self.assertFalse(_regenerates("claude_ocg_router_key", ROUTER_PREFIX + "abc123"))
-
-    def test_explicit_contract_field_uses_router_prefix_generation(self):
-        expression = _find(REL, TASK)["ansible.builtin.set_fact"]["openbao_seed_desired"]
-        self.assertIn("item in openbao_app_secret_router_key_fields", expression)
-        self.assertIn("item: (openbao_app_secret_router_key_prefix", expression)
-
-    def test_an_empty_router_key_regenerates(self):
-        self.assertTrue(_regenerates(self.ROUTER_FIELD, ""))
-
-    def test_an_unprefixed_stored_router_key_regenerates(self):
-        # The defect this fixes: a value minted before the sk- rule existed.
-        self.assertTrue(_regenerates(self.ROUTER_FIELD, "abc123"))
-
-    def test_a_correctly_prefixed_router_key_is_left_alone(self):
-        self.assertFalse(_regenerates(self.ROUTER_FIELD, ROUTER_PREFIX + "abc123"))
-
-    def test_an_empty_non_router_field_still_regenerates(self):
-        self.assertTrue(_regenerates("hindsight_db_password", ""))
-
-    def test_a_stored_non_router_field_is_never_touched(self):
-        # Must NOT gain the router carve-out just because it holds a value
-        # that happens not to start with sk- -- the suffix check must gate it.
-        self.assertFalse(_regenerates("hindsight_db_password", "abc123"))
+    def test_ordinary_field_has_no_router_repair_pattern(self):
+        field = _field_declaration("ordinary_password")
+        self.assertEqual(field["prefix"], "")
+        self.assertNotIn("valid_pattern", field)
 
 
 if __name__ == "__main__":

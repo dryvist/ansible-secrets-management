@@ -206,16 +206,40 @@ MEASURED_READ_LOOPS = {
 
 
 class DelegatedBaoCallsAreConsistent(unittest.TestCase):
-    def test_generated_seed_write_uses_the_same_cli_as_its_read(self):
+    def test_generated_seed_uses_the_shared_role_on_the_cli_host(self):
         tasks = yaml.safe_load(
             (TASKS / "seed_generated_app_secret.yml").read_text(encoding="utf-8")
         )
-        read = next(t for t in tasks if t.get("register") == "openbao_seed_current")
-        write = next(t for t in tasks if "ansible.builtin.uri" in t)
-        for key in ("delegate_to", "become"):
-            self.assertEqual(write.get(key), read[key], key)
-        self.assertTrue(write["ansible.builtin.uri"]["url"].startswith(read["environment"]["BAO_ADDR"] + "/v1/"))
-        self.assertEqual(write.get("vars", {}).get("ansible_become"), read["vars"]["ansible_become"])
+        block = next(
+            task for task in tasks
+            if task.get("name") == "Seed the generated app secret through the shared contract"
+        )
+        call = next(
+            task for task in block["block"] if "ansible.builtin.include_role" in task
+        )
+
+        self.assertEqual(block.get("delegate_to"), "{{ openbao_cli_host }}")
+        self.assertEqual(block.get("become"), "{{ openbao_cli_become }}")
+        self.assertEqual(
+            block.get("vars", {}).get("ansible_become"),
+            "{{ openbao_cli_become }}",
+        )
+        self.assertEqual(
+            call["ansible.builtin.include_role"],
+            {
+                "name": "dryvist.homelab.openbao_secrets",
+                "tasks_from": "seed_generated",
+                "apply": {"tags": ["openbao_kv_seed"]},
+            },
+        )
+        self.assertEqual(
+            call["vars"]["openbao_secrets_seed_addr"],
+            "{{ openbao_cli_addr }}",
+        )
+        self.assertEqual(
+            call["vars"]["openbao_secrets_seed_token"],
+            "{{ openbao_bootstrap_token }}",
+        )
 
     def _delegated_tasks(self):
         for path in sorted(TASKS.rglob("*.yml")):
@@ -231,17 +255,29 @@ class DelegatedBaoCallsAreConsistent(unittest.TestCase):
         # a converge that fails somewhere far from the cause.
         broken = []
         for name, task in self._delegated_tasks():
-            addr = (
-                (task.get("environment") or {}).get("BAO_ADDR")
-                or ("{{ openbao_cli_addr }}" if str((task.get("ansible.builtin.uri") or {}).get("url", ""))
-                    .startswith("{{ openbao_cli_addr }}/") else None)
-            )
-            ok = (
-                addr == "{{ openbao_cli_addr }}"
-                and task.get("delegate_to") == "{{ openbao_cli_host }}"
-                and task.get("become") == "{{ openbao_cli_become }}"
-                and (task.get("vars") or {}).get("ansible_become") == "{{ openbao_cli_become }}"
-            )
+            if name == "seed_generated_app_secret.yml" and task.get("block"):
+                call = next(
+                    t for t in task["block"] if "ansible.builtin.include_role" in t
+                )
+                addr = call["vars"].get("openbao_secrets_seed_addr")
+                ok = (
+                    addr == "{{ openbao_cli_addr }}"
+                    and task.get("delegate_to") == "{{ openbao_cli_host }}"
+                    and task.get("become") == "{{ openbao_cli_become }}"
+                    and (task.get("vars") or {}).get("ansible_become") == "{{ openbao_cli_become }}"
+                )
+            else:
+                addr = (
+                    (task.get("environment") or {}).get("BAO_ADDR")
+                    or ("{{ openbao_cli_addr }}" if str((task.get("ansible.builtin.uri") or {}).get("url", ""))
+                        .startswith("{{ openbao_cli_addr }}/") else None)
+                )
+                ok = (
+                    addr == "{{ openbao_cli_addr }}"
+                    and task.get("delegate_to") == "{{ openbao_cli_host }}"
+                    and task.get("become") == "{{ openbao_cli_become }}"
+                    and (task.get("vars") or {}).get("ansible_become") == "{{ openbao_cli_become }}"
+                )
             if not ok:
                 broken.append(f"{name}: {task.get('name')}")
         self.assertEqual(broken, [], "partial openbao_cli_* switch on: " + ", ".join(broken))
