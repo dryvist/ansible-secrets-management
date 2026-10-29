@@ -36,7 +36,7 @@ def test_generated_seed_uses_the_pinned_shared_create_if_absent_contract():
         if item["name"] == "https://github.com/dryvist/homelab-contracts.git#/ansible/"
     )
 
-    assert contracts["version"] == "v5.35.0"
+    assert contracts["version"] == "v5.36.0"
     assert include["name"] == "dryvist.homelab.openbao_secrets"
     assert include["tasks_from"] == "seed_generated"
     assert block["delegate_to"] == "{{ openbao_cli_host }}"

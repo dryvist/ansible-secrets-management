@@ -16,8 +16,10 @@
 
 - name: Write the guest copies this case starts with
   ansible.builtin.copy:
-    content: "{{ item.value }}"
-    dest: "{{ verify_dir }}/{{ item.key }}"
+    content: "{{ (authelia_admin_user ~ ':' ~ item.value ~ '\n') if item.key == 'bootstrap_password' else item.value }}"
+    dest: >-
+      {{ (verify_dir ~ '/.bootstrap_password') if item.key == 'bootstrap_password'
+         else (verify_dir ~ '/' ~ item.key) }}
     mode: "0600"
   loop: "{{ verify_case.guest | dict2items }}"
   loop_control:
@@ -33,12 +35,18 @@
       storage_key: "{{ verify_dir }}/storage_key"
       oidc_hmac_secret: "{{ verify_dir }}/oidc_hmac_secret"
     authelia_oidc_jwks_key_file: "{{ verify_dir }}/oidc_jwks_private_key"
+    authelia_bootstrap_password_file: "{{ verify_dir }}/.bootstrap_password"
   no_log: true
 
 - name: Stat the jwt copy before the reconcile
   ansible.builtin.stat:
     path: "{{ verify_dir }}/jwt_secret"
   register: verify_jwt_before
+
+- name: Stat the bootstrap password copy before the reconcile
+  ansible.builtin.stat:
+    path: "{{ authelia_bootstrap_password_file }}"
+  register: verify_bootstrap_before
 
 - name: Read and declare the guest copies
   ansible.builtin.import_tasks: ../../roles/authelia/tasks/service_secrets_read.yml
@@ -77,6 +85,14 @@
   register: verify_jwt_after
   no_log: true
 
+# The reconcile never writes the bootstrap copy, so it is read only when the case starts with one.
+- name: Read the bootstrap password copy after the reconcile
+  ansible.builtin.slurp:
+    src: "{{ authelia_bootstrap_password_file }}"
+  register: verify_bootstrap_after
+  when: "'bootstrap_password' in verify_case.guest"
+  no_log: true
+
 - name: Stat the jwt and session copies after the reconcile
   ansible.builtin.stat:
     path: "{{ item }}"
@@ -84,6 +100,11 @@
     - "{{ verify_dir }}/jwt_secret"
     - "{{ verify_dir }}/session_secret"
   register: verify_after_stat
+
+- name: Stat the bootstrap password copy after the reconcile
+  ansible.builtin.stat:
+    path: "{{ authelia_bootstrap_password_file }}"
+  register: verify_bootstrap_after_stat
 
 - name: Read the signing key copy after a passing reconcile
   ansible.builtin.slurp:
@@ -100,9 +121,20 @@
       - verify_after_stat.results[0].stat.mode == '0600'
       - verify_after_stat.results[1].stat.exists == (not verify_case.expect_fail)
       - verify_case.expect_fail or (verify_jwks_after.content | b64decode).startswith('-----BEGIN')
+      - verify_bootstrap_after_stat.stat.exists == ('bootstrap_password' in verify_case.guest)
+      - >-
+        'bootstrap_password' not in verify_case.guest
+        or verify_bootstrap_after_stat.stat.mode == '0600'
+      - >-
+        'bootstrap_password' not in verify_case.guest
+        or (verify_bootstrap_after.content | b64decode)
+        == (authelia_admin_user ~ ':' ~ verify_case.expect_bootstrap_password ~ '\n')
       - >-
         'jwt_secret' not in verify_case.guest
         or verify_after_stat.results[0].stat.inode == verify_jwt_before.stat.inode
+      - >-
+        'bootstrap_password' not in verify_case.guest
+        or verify_bootstrap_after_stat.stat.inode == verify_bootstrap_before.stat.inode
     fail_msg: "Reconcile case {{ verify_case.name }} did not match its expected outcome."
   no_log: true
 
@@ -110,8 +142,11 @@
   ansible.builtin.assert:
     that:
       - "'jwt_secret' in verify_failure_msg"
+      - "'bootstrap_password' in verify_failure_msg"
       - "'guest-jwt' not in verify_failure_msg"
       - "'kv-jwt' not in verify_failure_msg"
+      - "'guest-bootstrap' not in verify_failure_msg"
+      - "'kv-bootstrap' not in verify_failure_msg"
     fail_msg: "The mismatch failure must name the field and no value."
   when: verify_case.expect_fail
   no_log: true

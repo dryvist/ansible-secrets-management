@@ -42,8 +42,9 @@ def test_seed_runs_the_shared_contract_on_the_controller_with_the_converge_token
 
 def test_field_names_are_the_ones_the_previous_publish_wrote():
     defaults = yaml.safe_load(DEFAULTS.read_text(encoding="utf-8"))
-    names = sorted(defaults["authelia_secret_files"]) + ["oidc_jwks_private_key"]
+    names = sorted(defaults["authelia_secret_files"]) + ["bootstrap_password", "oidc_jwks_private_key"]
     assert sorted(names) == [
+        "bootstrap_password",
         "jwt_secret",
         "oidc_hmac_secret",
         "oidc_jwks_private_key",
@@ -57,8 +58,23 @@ def test_nothing_in_the_authelia_role_publishes_or_generates_with_the_old_path()
         text = path.read_text(encoding="utf-8")
         assert "publish.yml" not in text, path
         assert "openbao_secrets_publish" not in text, path
+        assert "random_string" not in text, path
+
+
+def test_bootstrap_password_keeps_its_length_alphabet_and_root_only_file_format():
+    read = (AUTHELIA / "tasks" / "service_secrets_read.yml").read_text(encoding="utf-8")
     reconcile = (AUTHELIA / "tasks" / "service_secrets_reconcile.yml").read_text(encoding="utf-8")
-    assert "random_string" not in reconcile
+    persist = (AUTHELIA / "tasks" / "bootstrap_password_persist.yml").read_text(encoding="utf-8")
+    main = (AUTHELIA / "tasks" / "main.yml").read_text(encoding="utf-8")
+    assert "'length': (24 if item.key == 'bootstrap_password' else 64)" in read
+    assert "'charset': 'alnum'" in read
+    assert 'content: "{{ authelia_admin_user }}:{{ authelia_seed_result.bootstrap_password }}\\n"' in persist
+    assert "when: not authelia_users_stat.stat.exists" in persist
+    assert "authelia_bootstrap_password_file_owner | default('root')" in persist
+    assert "authelia_bootstrap_password_file_group | default('root')" in persist
+    assert 'mode: "0600"' in persist
+    assert "include_tasks: bootstrap_password_persist.yml" in main
+    assert "authelia_bootstrap_password_file" not in reconcile
 
 
 def test_contracts_pin_is_the_latest_tag():
@@ -68,4 +84,4 @@ def test_contracts_pin_is_the_latest_tag():
         for item in requirements["collections"]
         if item["name"] == "https://github.com/dryvist/homelab-contracts.git#/ansible/"
     )
-    assert contracts["version"] == "v5.35.0"
+    assert contracts["version"] == "v5.36.0"
