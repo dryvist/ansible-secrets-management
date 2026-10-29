@@ -239,32 +239,22 @@
 # passkey registrations to the STORAGE (SQLite), but the password hash in
 # users.yml must not be clobbered on every converge (the hash is salted, so a
 # re-render would always differ). Create-if-absent, like the traefik dashboard
-# htpasswd: the bootstrap password is GENERATED here (never Doppler/OpenBao —
-# generate-at-source rule) and persisted root-only for one-time retrieval; the
-# operator may then keep it in their personal password manager. To rotate:
-# delete users.yml + the password file and re-converge.
+# htpasswd: the bootstrap password comes from the OpenBao field seeded by the
+# service-secret tasks above and is persisted root-only for one-time retrieval;
+# the operator may then keep it in their personal password manager. To rotate,
+# remove the field from OpenBao, delete users.yml + the password file, and re-converge.
 - name: Check whether the users database already exists
   ansible.builtin.stat:
     path: "{{ authelia_users_file }}"
   register: authelia_users_stat
 
+# Writes the bootstrap password copy only while users.yml is absent (first run).
+- name: Persist the bootstrap password for one-time retrieval
+  ansible.builtin.include_tasks: bootstrap_password_persist.yml
+
 - name: Seed the users database (first run only)
   when: not authelia_users_stat.stat.exists
   block:
-    - name: Generate the bootstrap password
-      ansible.builtin.set_fact:
-        authelia_bootstrap_password: "{{ lookup('community.general.random_string', length=24, special=false) }}"
-      no_log: true
-
-    - name: Persist the bootstrap password for one-time retrieval (root-only)
-      ansible.builtin.copy:
-        content: "{{ authelia_admin_user }}:{{ authelia_bootstrap_password }}\n"
-        dest: "{{ authelia_bootstrap_password_file }}"
-        owner: root
-        group: root
-        mode: "0600"
-      no_log: true
-
     - name: Hash the bootstrap password
       ansible.builtin.command:
         argv:
@@ -274,7 +264,7 @@
           - generate
           - argon2
           - --password
-          - "{{ authelia_bootstrap_password }}"
+          - "{{ authelia_seed_result.bootstrap_password }}"
       register: authelia_hash_out
       changed_when: false
       no_log: true

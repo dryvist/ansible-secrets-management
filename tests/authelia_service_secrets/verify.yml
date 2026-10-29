@@ -14,25 +14,29 @@
   vars:
     verify_owner: "{{ lookup('pipe', 'id -un') }}"
     verify_group: "{{ lookup('pipe', 'id -gn') }}"
+    authelia_admin_user: authelia-test
     verify_cases:
       - name: guest-only
-        guest: {jwt_secret: guest-jwt}
+        guest: {jwt_secret: guest-jwt, bootstrap_password: guest-bootstrap}
         kv: {}
         expect_fail: false
         expect_jwt: guest-jwt
+        expect_bootstrap_password: guest-bootstrap
       - name: equal
-        guest: {jwt_secret: same-jwt}
-        kv: {jwt_secret: same-jwt}
+        guest: {jwt_secret: same-jwt, bootstrap_password: same-bootstrap}
+        kv: {jwt_secret: same-jwt, bootstrap_password: same-bootstrap}
         expect_fail: false
         expect_jwt: same-jwt
+        expect_bootstrap_password: same-bootstrap
       - name: differ
-        guest: {jwt_secret: guest-jwt}
-        kv: {jwt_secret: kv-jwt}
+        guest: {jwt_secret: guest-jwt, bootstrap_password: guest-bootstrap}
+        kv: {jwt_secret: kv-jwt, bootstrap_password: kv-bootstrap}
         expect_fail: true
         expect_jwt: guest-jwt
+        expect_bootstrap_password: guest-bootstrap
       - name: kv-only
         guest: {}
-        kv: {jwt_secret: kv-jwt}
+        kv: {jwt_secret: kv-jwt, bootstrap_password: kv-bootstrap}
         expect_fail: false
         expect_jwt: kv-jwt
       - name: neither
