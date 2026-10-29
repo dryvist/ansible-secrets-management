@@ -2,7 +2,8 @@
 # OpenBao policy for the `hermes` AppRole — the Hermes AI agent's dedicated,
 # least-privilege reader. Read-only on its own secret, the shared Splunk and
 # Zammad MCP connections, the Home Assistant config record, and its profiles'
-# router virtual keys; nothing else in the ai subtree or any other domain.
+# router virtual keys, including the Langfuse project-key pair on ai/hermes;
+# nothing else in the ai subtree or any other domain.
 path "{{ openbao_kv_mount }}/data/ai/hermes" {
   capabilities = ["read"]
 }
