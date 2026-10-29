@@ -43,4 +43,4 @@ def test_publish_uses_the_pinned_shared_role_with_the_same_inputs():
             "default(lookup('env', 'OPENBAO_APPROLE_ANSIBLE_SECRET_ID'), true) }}"
         ),
     }
-    assert contracts["version"] == "v5.34.0"
+    assert contracts["version"] == "v5.35.0"
