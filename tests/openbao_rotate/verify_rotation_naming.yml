@@ -1,0 +1,41 @@
+---
+# The rotation task destroys a previous secret_id only when its expiration is
+# absent or OpenBao's zero time.Time value. Keep these decisions aligned with
+# playbooks/tasks/openbao_rotate_one_domain.yml; no live OpenBao access is used.
+- name: Verify the never-expiring secret_id decision
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_become: false
+  tasks:
+    - name: Assert a future expiration_time is finite
+      vars:
+        _never_expires: "{{ ('2027-01-01T00:00:00Z' | default('', true)) is match('^(0001-01-01T00:00:00Z?)?$') }}"
+      ansible.builtin.assert:
+        that:
+          - not (_never_expires | bool)
+        fail_msg: A future expiration_time must not be treated as never-expiring.
+        quiet: true
+
+    - name: Assert OpenBao's zero-time expiration_time is never-expiring
+      vars:
+        _never_expires: "{{ ('0001-01-01T00:00:00Z' | default('', true)) is match('^(0001-01-01T00:00:00Z?)?$') }}"
+      ansible.builtin.assert:
+        that:
+          - _never_expires | bool
+        fail_msg: OpenBao's zero-time expiration_time must be treated as never-expiring.
+        quiet: true
+
+    - name: Assert an empty expiration_time is never-expiring
+      vars:
+        _never_expires: "{{ ('' | default('', true)) is match('^(0001-01-01T00:00:00Z?)?$') }}"
+      ansible.builtin.assert:
+        that:
+          - _never_expires | bool
+        fail_msg: An empty expiration_time must be treated as never-expiring.
+        quiet: true
+
+    - name: Report success
+      ansible.builtin.debug:
+        msg: The secret_id expiration decision passed all three rotation cases.
