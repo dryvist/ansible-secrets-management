@@ -6,32 +6,44 @@ import subprocess
 from pathlib import Path
 
 import yaml
-from ansible.parsing.dataloader import DataLoader
-from ansible.template import Templar, trust_as_template
 
 ROOT = Path(__file__).resolve().parents[1]
 PLAYBOOK = ROOT / "tests" / "openbao_roster_seed" / "verify_seed_tags.yml"
 SEED_TASKS = ROOT / "roles" / "openbao" / "tasks" / "seed_generated_app_secret.yml"
 OWNER_TASKS = ROOT / "roles" / "openbao" / "tasks" / "seed_roster_agent_leaf_owner.yml"
 RECONCILE_POLICY = ROOT / "roles" / "openbao" / "templates" / "openbao-reconcile-policy.hcl.j2"
+REQUIREMENTS = ROOT / "requirements.yml"
 FOREIGN_METADATA = '{"data": {"custom_metadata": {"managed-by": "example-other-owner"}}}'
 
 
-def _render_write_body(**variables):
+def _shared_call():
     tasks = yaml.safe_load(SEED_TASKS.read_text(encoding="utf-8"))
-    task = next(t for t in tasks if t["name"] == "Write the generated app secret to OpenBao (merge-preserving)")
-    templar = Templar(loader=DataLoader())
-    templar.available_variables = {"openbao_seed_merged": {"field": "value"}, **variables}
-    return templar.template(trust_as_template(task["ansible.builtin.uri"]["body"]))
+    block = next(
+        task for task in tasks
+        if task.get("name") == "Seed the generated app secret through the shared contract"
+    )
+    return block, next(
+        task for task in block["block"] if "ansible.builtin.include_role" in task
+    )
 
 
-def test_create_only_write_uses_check_and_set_zero():
-    assert _render_write_body(openbao_seed_create_only=True) == {
-        "data": {"field": "value"},
-        "options": {"cas": 0},
-    }
-    assert _render_write_body(openbao_seed_create_only=False) == {"data": {"field": "value"}}
-    assert _render_write_body() == {"data": {"field": "value"}}
+def test_generated_seed_uses_the_pinned_shared_create_if_absent_contract():
+    block, call = _shared_call()
+    include = call["ansible.builtin.include_role"]
+    requirements = yaml.safe_load(REQUIREMENTS.read_text(encoding="utf-8"))
+    contracts = next(
+        item for item in requirements["collections"]
+        if item["name"] == "https://github.com/dryvist/homelab-contracts.git#/ansible/"
+    )
+
+    assert contracts["version"] == "v5.27.0"
+    assert include["name"] == "dryvist.homelab.openbao_secrets"
+    assert include["tasks_from"] == "seed_generated"
+    assert block["delegate_to"] == "{{ openbao_cli_host }}"
+    assert block["become"] == "{{ openbao_cli_become }}"
+    assert call["vars"]["openbao_secrets_seed_addr"] == "{{ openbao_cli_addr }}"
+    assert call["vars"]["openbao_secrets_seed_token"] == "{{ openbao_bootstrap_token }}"
+    assert "openbao_seed_create_only" not in call["vars"]
 
 
 def test_seed_tag_runs_the_owner_check(tmp_path):
