@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.48.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.47.1...v0.48.0) (2026-10-30)
+
+
+### Features
+
+* **openbao:** converge seed grants and hermes Home Assistant read ([#361](https://github.com/dryvist/ansible-secrets-management/issues/361)) ([885a570](https://github.com/dryvist/ansible-secrets-management/commit/885a570052bbff8feadb76e8530fc32e076f1932))
+* **openbao:** run the secret-age audit daily at 06:05 UTC ([#358](https://github.com/dryvist/ansible-secrets-management/issues/358)) ([aa78a67](https://github.com/dryvist/ansible-secrets-management/commit/aa78a673b974028627af0a318a812622022f4f1f))
+* **runner:** delegate run-ansible and credential publish to v5.34.0 ([#360](https://github.com/dryvist/ansible-secrets-management/issues/360)) ([072ed6d](https://github.com/dryvist/ansible-secrets-management/commit/072ed6db3e0fafabfad8817770b5b998439e658a))
+
 ## [0.47.1](https://github.com/dryvist/ansible-secrets-management/compare/v0.47.0...v0.47.1) (2026-10-26)
 
 
