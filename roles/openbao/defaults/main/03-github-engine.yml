@@ -38,6 +38,8 @@ openbao_github_jpe_ansible_installation_id: >-
   {{ openbao_platform_env['OPENBAO_GITHUB_ADMIN_JPE_ANSIBLE_INSTALLATION_ID'] | default('', true) }}
 openbao_github_jpe_cribl_installation_id: >-
   {{ openbao_platform_env['OPENBAO_GITHUB_ADMIN_JPE_CRIBL_INSTALLATION_ID'] | default('', true) }}
+openbao_github_jpe_nix_installation_id: >-
+  {{ openbao_platform_env['OPENBAO_GITHUB_ADMIN_JPE_NIX_INSTALLATION_ID'] | default('', true) }}
 openbao_github_jpe_private_installation_id: >-
   {{ openbao_platform_env['OPENBAO_GITHUB_ADMIN_JPE_PRIVATE_INSTALLATION_ID'] | default('', true) }}
 openbao_github_jpe_splunk_installation_id: >-
@@ -227,6 +229,8 @@ openbao_github_org_secrets_installations:
     installation_id: "{{ openbao_github_jpe_ansible_installation_id }}"
   - name: jpe-cribl
     installation_id: "{{ openbao_github_jpe_cribl_installation_id }}"
+  - name: jpe-nix
+    installation_id: "{{ openbao_github_jpe_nix_installation_id }}"
   - name: jpe-private
     installation_id: "{{ openbao_github_jpe_private_installation_id }}"
   - name: jpe-splunk

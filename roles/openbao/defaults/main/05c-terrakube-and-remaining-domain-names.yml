@@ -153,6 +153,8 @@ openbao_github_org_gitleaks_path: github-org/gitleaks
 openbao_github_org_gitleaks_fields:
   - private_config
   - license_key
+openbao_github_org_release_key_path: github-org/GH_ACTION_RELEASE_PLEASE_PRIVATE_KEY
+openbao_github_org_release_key_field: private_key
 # Dedicated read-only leaf for the org-secrets workspace, registered in
 # openbao_base_policies (07c) and attached only to its Terrakube JWT role.
 openbao_github_org_secrets_read_policy_name: github-org-secrets-read
