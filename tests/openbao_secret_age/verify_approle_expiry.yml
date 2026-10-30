@@ -1,0 +1,165 @@
+---
+# Behavioral verification for the AppRole secret_id expiry check in
+# roles/openbao/templates/openbao-secret-age.sh.j2 (--approle-expiry). Renders
+# the ACTUAL script and runs it against the stub curl/bao from
+# _fixture_tasks.yml (no live OpenBao):
+#
+#   1. each secret_id state yields exactly its expected test-role alert: a
+#      never-expiring, empty, or 30-day secret_id is healthy; one with 12h or
+#      less left, or none at all, alerts
+#   2. a declared standing AppRole missing from OpenBao always alerts
+#   3. the expiry run reads no KV path and writes no report
+#   4. the daily run records the expiry item in the report but never pages it
+#
+# GNU `date -u -d` is required: CI-only, same as verify_age_logic.yml.
+#
+# Usage: ansible-playbook tests/openbao_secret_age/verify_approle_expiry.yml -c local
+
+- name: Verify the secret-age auditor's AppRole secret_id expiry check
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    ansible_become: false
+    _template_dir: "../../roles/openbao/templates"
+    # Mirror defaults/main/09b-secret-age.yml so the fixture matches production.
+    openbao_api_addr: "http://openbao-test:8200"
+    openbao_secret_age_target_days: 30
+    openbao_secret_age_max_days: 47
+    openbao_secret_age_interval: "24h"
+    openbao_secret_age_report_path: "{{ fixture_dir }}/secret-age.json"
+    openbao_secret_age_ntfy_url: "https://ntfy.example.test/secrets-security"
+    openbao_secret_age_healthcheck_url: ""
+    openbao_kv_mount: secret
+    openbao_config_mount: config
+    openbao_group: openbao
+    openbao_absent_stderr_marker: "No value found"
+    openbao_kv_mounts:
+      - path: secret
+      - path: secrets-external
+      - path: config
+        max_versions: 30
+
+  tasks:
+    - name: Set up the fixture (render the script, install stub curl/bao)
+      ansible.builtin.import_tasks: _fixture_tasks.yml
+
+    - name: Run the AppRole expiry check once per simulated secret_id state
+      ansible.builtin.command: "{{ fixture_dir }}/openbao-secret-age.sh --approle-expiry --dry-run"
+      loop:
+        - { case: never, simulate: never, expect: "" }
+        - { case: finite, simulate: finite, expect: "" }
+        - { case: empty, simulate: empty, expect: "" }
+        - { case: near, simulate: near, expect: "no live secret_id with more than 12h TTL remaining" }
+        - { case: absent, simulate: never, expect: "no live secret_id" }
+      loop_control:
+        label: "{{ item.case }}"
+      register: _runs
+      changed_when: false
+      environment:
+        # lookup('env', ...), not ansible_env.PATH — gather_facts is false.
+        PATH: "{{ fixture_dir }}/bin:{{ lookup('env', 'PATH') }}"
+        OPENBAO_APPROLE_SECRET_AGE_AUDIT_ROLE_ID: test-role-id
+        OPENBAO_APPROLE_SECRET_AGE_AUDIT_SECRET_ID: test-secret-id
+        SIMULATE_EXPIRY: "{{ item.simulate }}"
+        SIMULATE_NO_SECRET_ID: "{{ '1' if item.case == 'absent' else '0' }}"
+
+    - name: Assert each secret_id state yields exactly its expected AppRole alert
+      ansible.builtin.assert:
+        that:
+          - item.rc == 0
+          - >-
+            (item.stdout | from_json)['items'] | selectattr('kind', 'equalto', 'approle_expiry')
+            | selectattr('path', 'equalto', 'test-role') | map(attribute='reason') | list
+            == ([item.item.expect] if item.item.expect | length > 0 else [])
+          - >-
+            (item.stdout | from_json)['items'] | selectattr('kind', 'equalto', 'kv') | list | length == 0
+          - >-
+            (item.stdout | from_json)['items'] | selectattr('kind', 'equalto', 'approle_expiry')
+            | selectattr('path', 'equalto', 'ghost-role') | list | length == 1
+          - >-
+            (item.stdout | from_json)['items'] | selectattr('kind', 'equalto', 'approle_expiry')
+            | selectattr('path', 'equalto', 'empty-role') | list | length == 0
+        fail_msg: >-
+          Case {{ item.item.case }}: test-role must alert with
+          '{{ item.item.expect }}' (empty when healthy), ghost-role must alert
+          as missing, the expiry run must read no KV, and the inert empty-role
+          must not alert. stdout={{ item.stdout }}
+      loop: "{{ _runs.results }}"
+      loop_control:
+        label: "{{ item.item.case }}"
+
+    - name: Run the daily audit (not dry-run) with a near-expiry secret_id
+      ansible.builtin.command: "{{ fixture_dir }}/openbao-secret-age.sh"
+      register: _daily_run
+      changed_when: false
+      environment:
+        PATH: "{{ fixture_dir }}/bin:{{ lookup('env', 'PATH') }}"
+        OPENBAO_APPROLE_SECRET_AGE_AUDIT_ROLE_ID: test-role-id
+        OPENBAO_APPROLE_SECRET_AGE_AUDIT_SECRET_ID: test-secret-id
+        SIMULATE_EXPIRY: near
+        CALL_LOG: "{{ fixture_dir }}/daily-ntfy-calls.log"
+
+    - name: Read the daily run's ntfy calls and report
+      ansible.builtin.set_fact:
+        _daily_calls: "{{ lookup('ansible.builtin.file', fixture_dir ~ '/daily-ntfy-calls.log', errors='ignore') }}"
+        _daily_report: "{{ lookup('ansible.builtin.file', fixture_dir ~ '/secret-age.json') | from_json }}"
+
+    - name: Assert the daily audit records the expiry item but never pages it
+      ansible.builtin.assert:
+        that:
+          - _daily_run.rc == 0
+          - "'overdue' in _daily_calls"
+          - "'AppRole secret-id expiry' not in _daily_calls"
+          - >-
+            _daily_report['items'] | selectattr('kind', 'equalto', 'approle_expiry')
+            | selectattr('path', 'equalto', 'test-role') | list | length == 1
+        fail_msg: >-
+          The daily run must put the near-expiry item in the report and page
+          only the overdue digest, never the AppRole expiry page.
+          calls={{ _daily_calls }}
+
+    - name: Remove the daily report so the expiry run's report write is observable
+      ansible.builtin.file:
+        path: "{{ fixture_dir }}/secret-age.json"
+        state: absent
+
+    - name: Run the AppRole expiry check (not dry-run) with a near-expiry secret_id
+      ansible.builtin.command: "{{ fixture_dir }}/openbao-secret-age.sh --approle-expiry"
+      register: _expiry_run
+      changed_when: false
+      environment:
+        PATH: "{{ fixture_dir }}/bin:{{ lookup('env', 'PATH') }}"
+        OPENBAO_APPROLE_SECRET_AGE_AUDIT_ROLE_ID: test-role-id
+        OPENBAO_APPROLE_SECRET_AGE_AUDIT_SECRET_ID: test-secret-id
+        SIMULATE_EXPIRY: near
+        CALL_LOG: "{{ fixture_dir }}/expiry-ntfy-calls.log"
+
+    - name: Stat the report after the expiry run
+      ansible.builtin.stat:
+        path: "{{ fixture_dir }}/secret-age.json"
+      register: _expiry_report
+
+    - name: Assert the expiry run pages once and writes no report
+      ansible.builtin.assert:
+        that:
+          - _expiry_run.rc == 0
+          - >-
+            lookup('ansible.builtin.file', fixture_dir ~ '/expiry-ntfy-calls.log', errors='ignore')
+            | regex_findall('title=openbao AppRole secret-id expiry') | length == 1
+          - not _expiry_report.stat.exists
+        fail_msg: >-
+          The expiry run must send exactly one AppRole expiry page and must not
+          write secret-age.json (the daily audit owns that file).
+          rc={{ _expiry_run.rc }} stdout={{ _expiry_run.stdout }}
+
+    - name: Secret-age AppRole expiry verification PASSED
+      ansible.builtin.debug:
+        msg: |
+          Verified the --approle-expiry check:
+          - never / finite / empty expiration_time -> healthy (no alert)
+          - 12h or less left -> alert with the 12h reason
+          - no secret_id -> alert; declared-but-missing role -> alert
+          - expiry run reads no KV and writes no report
+          - daily run records the item but pages only the overdue digest

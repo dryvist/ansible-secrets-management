@@ -106,6 +106,16 @@ two thresholds:
   timestamp — and FAILS the run if any occurred, rather than reporting a
   wrong or incomplete sweep as a clean "0 overdue".
 
+AppRole secret_id expiry has its own timer, `openbao-secret-age-approle.timer`
+(every `openbao_secret_age_approle_expiry_interval`, default `6h`). It runs the
+same script with `--approle-expiry`, checks only the declared standing
+AppRoles (not `manage_secret_id: false`, not `secret_id_issuance: per_call`),
+and pages one urgent ntfy digest when a standing AppRole has no live
+secret_id, or none with more than 12h of TTL left, or is declared but missing
+from OpenBao. It reads each secret_id's expiration through the accessor
+lookup and never holds a secret_id value. It writes no report and sends no
+healthchecks ping; the daily audit keeps both.
+
 Deployed on every node (so surviving nodes keep auditing after a leadership
 change) and gated on the secret-age-audit AppRole creds being present, same
 bootstrap-safe shape as the Slack rotator.

@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.49.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.48.1...v0.49.0) (2026-10-30)
+
+
+### Features
+
+* extend organization secret delivery configuration ([#370](https://github.com/dryvist/ansible-secrets-management/issues/370)) ([bdd82a2](https://github.com/dryvist/ansible-secrets-management/commit/bdd82a2920a9a866be482d5fe8b5f9ea3175e6aa))
+* **openbao:** page when a standing AppRole secret_id nears expiry ([#340](https://github.com/dryvist/ansible-secrets-management/issues/340)) ([c9ded2f](https://github.com/dryvist/ansible-secrets-management/commit/c9ded2f61ff3f3e2a9edf4e613b36aff020d01db))
+
+
+### Bug Fixes
+
+* **openbao:** give the scheduled rotator a domain-only policy ([#371](https://github.com/dryvist/ansible-secrets-management/issues/371)) ([e834a3d](https://github.com/dryvist/ansible-secrets-management/commit/e834a3d9ea413bfd8dd5c084721f33802a6b2835))
+
 ## [0.48.1](https://github.com/dryvist/ansible-secrets-management/compare/v0.48.0...v0.48.1) (2026-10-30)
 
 
