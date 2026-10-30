@@ -45,8 +45,8 @@
       # Takes + integrity-checks the snapshot.
       - "'operator raft snapshot save' in (bao_snap_script.content | b64decode)"
       - "'gzip -t' in (bao_snap_script.content | b64decode)"
-      # Least-privilege snapshot AppRole login, not a root token.
-      - "'auth/approle/login' in (bao_snap_script.content | b64decode)"
+      # Least-privilege snapshot AppRole login via the shared CLI, not a root token.
+      - "'bao-approle login' in (bao_snap_script.content | b64decode)"
       # Names the real cause. A missing binary used to surface as the
       # leader-gate message above, which points at the cluster instead.
       - "'required binary not installed' in (bao_snap_script.content | b64decode)"

@@ -71,10 +71,11 @@ does not depend on either):
 ### Secret-age auditor (on-box timer)
 
 Rotation is only a durability guarantee if something proves it is actually
-happening. An on-box `openbao-secret-age.timer` (every
-`openbao_secret_age_interval`, default `24h`), leader-gated the same way as
-the snapshot timer, measures how long every stored secret and every AppRole
-secret-id has gone without rotation against two thresholds:
+happening. An on-box `openbao-secret-age.timer` runs daily at
+`openbao_secret_age_schedule` (default `*-*-* 06:05:00 UTC`). It is
+leader-gated the same way as the snapshot timer and measures how long every
+stored secret and every AppRole secret-id has gone without rotation against
+two thresholds:
 `openbao_secret_age_target_days` (default 30, "due") and
 `openbao_secret_age_max_days` (default 47, "overdue"). It:
 

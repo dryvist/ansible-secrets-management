@@ -15,9 +15,8 @@
 #     ambient OPENBAO_APPROLE_APPROLE_SECRET_ID_ROTATE_SCHEDULED_ROLE_ID /
 #     _SECRET_ID (the standing approle-secret-id-rotate-scheduled AppRole,
 #     delivered through the same platform/ansible/env document every other
-#     machine identity's secret-zero already rides -- see
-#     roles/openbao_secrets/README.md "Inputs (env)"). No -e needed; every
-#     domain rotates each run.
+#     machine identity's secret-zero already rides. No -e needed; every domain
+#     rotates each run.
 #
 #   Semaphore template spec for the scheduled path: a template running this
 #   playbook every 12h, environment sourced from the same env-document
@@ -91,6 +90,15 @@
     # and skips any identity the document already carries. Scheduled
     # rotation never touches these identities.
     bootstrap_seed_only: false
+
+  # The harness caller registry, loaded the way roles/openbao's meta dependency
+  # loads it. Without it openbao_agent_caller_ids is empty here, so the
+  # agentgateway-agent-keys reader drops out of openbao_secrets_domain_approle_names
+  # whenever no roster agent exists, and its pair is never written to the env document.
+  pre_tasks:
+    - name: Load the harness caller registry for the reader domain list
+      ansible.builtin.include_role:
+        name: dryvist.homelab.agent_callers
 
   tasks:
     - name: Decide which auth mode this run supplies

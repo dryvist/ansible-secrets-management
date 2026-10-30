@@ -96,13 +96,25 @@ def test_write_commands_are_never_forced_in_check_mode():
         assert task.get("check_mode") is not False, f"{path}: {task.get('name')} forces a write"
 
 
-def test_generated_secret_check_report_lists_field_names_only():
+def test_generated_secret_seed_uses_the_shared_role_without_forcing_check_mode_off():
     tasks = list(from_yaml(SEED))
-    report = next(task for task in tasks if task.get("name") == "Report generated app secret fields that would be written in check mode")
+    block = next(
+        task
+        for task in tasks
+        if task.get("name") == "Seed the generated app secret through the shared contract"
+    )
+    call = next(task for task in block["block"] if "ansible.builtin.include_role" in task)
 
-    assert "ansible_check_mode" in report["when"]
-    assert "openbao_seed_desired.keys()" in report["ansible.builtin.debug"]["msg"]
-    assert "openbao_seed_desired.values()" not in report["ansible.builtin.debug"]["msg"]
+    assert block["delegate_to"] == "{{ openbao_cli_host }}"
+    assert block["become"] == "{{ openbao_cli_become }}"
+    assert call["ansible.builtin.include_role"] == {
+        "name": "dryvist.homelab.openbao_secrets",
+        "tasks_from": "seed_generated",
+        "apply": {"tags": ["openbao_kv_seed"]},
+    }
+    assert call.get("check_mode") is not False
+    assert call["vars"]["openbao_secrets_seed_addr"] == "{{ openbao_cli_addr }}"
+    assert call["vars"]["openbao_secrets_seed_token"] == "{{ openbao_bootstrap_token }}"
 
 
 def test_policy_check_report_uses_the_existing_write_comparison():

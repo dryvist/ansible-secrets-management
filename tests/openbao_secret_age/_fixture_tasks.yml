@@ -102,8 +102,21 @@
         printf '%s' "${body}"
       fi
 
+# Stands in for the shared bao-approle CLI. Login prints a client token only
+# when both credentials arrive in the environment, which is how the script
+# passes them.
+- name: Install the stub bao-approle
+  ansible.builtin.copy:
+    dest: "{{ fixture_dir }}/bin/bao-approle"
+    mode: "0755"
+    content: |
+      #!/usr/bin/env bash
+      [ "${1:-}" = login ] || exit 64
+      [ -n "${BAO_APPROLE_ROLE_ID:-}" ] && [ -n "${BAO_APPROLE_SECRET_ID:-}" ] || exit 65
+      echo "test-vault-token"
+
 # Dispatches on the full argv so each case matches one specific call the
-# script actually makes — login, the two-mount KV walk (secret/ has one
+# script actually makes — the two-mount KV walk (secret/ has one
 # directory holding four leaves; secrets-external/ is genuinely empty —
 # `[]`, rc 0, NOT a failure), one metadata read per leaf, and the AppRole
 # secret-id accessor lookup. secret/empty/ and empty-role's secret-id list
@@ -121,8 +134,6 @@
       #!/usr/bin/env bash
       args="$*"
       case "${args}" in
-        "write -field=token auth/approle/login "*)
-          echo "test-vault-token" ;;
         "kv list -format=json secret/")
           if [ "${SIMULATE_ROOT_DENIAL:-0}" = "1" ]; then
             echo "permission denied" >&2

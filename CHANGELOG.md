@@ -1,5 +1,62 @@
 # Changelog
 
+## [0.48.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.47.1...v0.48.0) (2026-10-30)
+
+
+### Features
+
+* **openbao:** converge seed grants and hermes Home Assistant read ([#361](https://github.com/dryvist/ansible-secrets-management/issues/361)) ([885a570](https://github.com/dryvist/ansible-secrets-management/commit/885a570052bbff8feadb76e8530fc32e076f1932))
+* **openbao:** run the secret-age audit daily at 06:05 UTC ([#358](https://github.com/dryvist/ansible-secrets-management/issues/358)) ([aa78a67](https://github.com/dryvist/ansible-secrets-management/commit/aa78a673b974028627af0a318a812622022f4f1f))
+* **runner:** delegate run-ansible and credential publish to v5.34.0 ([#360](https://github.com/dryvist/ansible-secrets-management/issues/360)) ([072ed6d](https://github.com/dryvist/ansible-secrets-management/commit/072ed6db3e0fafabfad8817770b5b998439e658a))
+
+## [0.47.1](https://github.com/dryvist/ansible-secrets-management/compare/v0.47.0...v0.47.1) (2026-10-26)
+
+
+### Bug Fixes
+
+* **openbao:** bind nautobot-token-publisher to the workstation CIDR class ([#355](https://github.com/dryvist/ansible-secrets-management/issues/355)) ([3b29b03](https://github.com/dryvist/ansible-secrets-management/commit/3b29b03ce863fee829f1cf3bced32e057a2661da))
+
+## [0.47.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.46.0...v0.47.0) (2026-10-26)
+
+
+### Features
+
+* **openbao:** add the inert nautobot-token-publisher AppRole and policy ([#352](https://github.com/dryvist/ansible-secrets-management/issues/352)) ([6e34592](https://github.com/dryvist/ansible-secrets-management/commit/6e345927353c491862ce25fbfef53749415b3245))
+* **openbao:** grant the PBS API token path to the converge identity ([#350](https://github.com/dryvist/ansible-secrets-management/issues/350)) ([f2fe33f](https://github.com/dryvist/ansible-secrets-management/commit/f2fe33f364ade5ff4c6f5b09d33cad4cc336be20))
+
+## [0.46.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.45.1...v0.46.0) (2026-10-26)
+
+
+### Features
+
+* **openbao:** grant the Homebox service API key path ([#348](https://github.com/dryvist/ansible-secrets-management/issues/348)) ([c28040f](https://github.com/dryvist/ansible-secrets-management/commit/c28040f8fc3e2c52eaaae17950e79cd0ee06fa60))
+
+
+### Bug Fixes
+
+* **rotation:** load the caller registry so the gateway key reader rotates ([#346](https://github.com/dryvist/ansible-secrets-management/issues/346)) ([d6e20c0](https://github.com/dryvist/ansible-secrets-management/commit/d6e20c0d1f50485274a37e16d0bd61b1114f602a))
+
+## [0.45.1](https://github.com/dryvist/ansible-secrets-management/compare/v0.45.0...v0.45.1) (2026-10-26)
+
+
+### Bug Fixes
+
+* track dependency pins with Renovate ([#312](https://github.com/dryvist/ansible-secrets-management/issues/312)) ([5058819](https://github.com/dryvist/ansible-secrets-management/commit/50588197d9d2d44cb62ab3f1899420abf96e61d0))
+
+## [0.45.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.44.1...v0.45.0) (2026-10-25)
+
+
+### Features
+
+* **openbao:** add the nautobot_backup_b2 record and its apps grant ([#341](https://github.com/dryvist/ansible-secrets-management/issues/341)) ([b34b143](https://github.com/dryvist/ansible-secrets-management/commit/b34b14335df1a4dfe7f2bc9983fb9bc25ad48066))
+
+## [0.44.1](https://github.com/dryvist/ansible-secrets-management/compare/v0.44.0...v0.44.1) (2026-10-25)
+
+
+### Bug Fixes
+
+* **openbao:** gate rotation inventory loading on the roster-owned key reader only ([#337](https://github.com/dryvist/ansible-secrets-management/issues/337)) ([58f7315](https://github.com/dryvist/ansible-secrets-management/commit/58f731531448a3fb11823ff34a0af21bbafcca02))
+
 ## [0.44.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.43.0...v0.44.0) (2026-10-25)
 
 

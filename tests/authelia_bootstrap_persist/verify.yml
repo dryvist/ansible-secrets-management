@@ -1,0 +1,134 @@
+---
+# Proves when the bootstrap password copy is written, with the real persist and reconcile tasks and the
+# OpenBao value stubbed. Phases: the first run writes the copy and reports a change; an identical copy on the
+# first-run path reports none; a converge after the users database exists keeps the copy and skips the write;
+# and after the passkey cleanup removed the copy (simulated by removing it), a later converge recreates nothing.
+- name: Verify the Authelia bootstrap password copy across converges
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    verify_owner: "{{ lookup('pipe', 'id -un') }}"
+    verify_group: "{{ lookup('pipe', 'id -gn') }}"
+  tasks:
+    - name: Create the scratch directory for the copy
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: authelia-bootstrap-
+      register: verify_root
+
+    - name: Set the inputs the persist and reconcile tasks read
+      ansible.builtin.set_fact:
+        authelia_admin_user: authelia-test
+        authelia_bootstrap_password_file: "{{ verify_root.path }}/.bootstrap_password"
+        authelia_bootstrap_password_file_owner: "{{ verify_owner }}"
+        authelia_bootstrap_password_file_group: "{{ verify_group }}"
+        authelia_seed_result: {bootstrap_password: kv-bootstrap}
+        authelia_guest_secret_values: {}
+        authelia_service_secret_paths: {bootstrap_password: "{{ verify_root.path }}/.bootstrap_password"}
+      no_log: true
+
+    - name: Set the users database as absent for the first run
+      ansible.builtin.set_fact:
+        authelia_users_stat: {stat: {exists: false}}
+
+    - name: Persist the copy on the first run
+      ansible.builtin.include_tasks: ../../roles/authelia/tasks/bootstrap_password_persist.yml
+
+    - name: Read the copy after the first run
+      ansible.builtin.slurp:
+        src: "{{ authelia_bootstrap_password_file }}"
+      register: verify_first_content
+      no_log: true
+
+    - name: Stat the copy after the first run
+      ansible.builtin.stat:
+        path: "{{ authelia_bootstrap_password_file }}"
+      register: verify_first_stat
+
+    - name: Require the first run to write the copy from OpenBao and report a change
+      ansible.builtin.assert:
+        that:
+          - authelia_bootstrap_persist.changed
+          - >-
+            (verify_first_content.content | b64decode)
+            == (authelia_admin_user ~ ':kv-bootstrap' ~ '\n')
+          - verify_first_stat.stat.mode == '0600'
+        fail_msg: "The first run must write the bootstrap password copy from its OpenBao value."
+      no_log: true
+
+    - name: Persist again on the first-run path with an identical copy
+      ansible.builtin.include_tasks: ../../roles/authelia/tasks/bootstrap_password_persist.yml
+
+    - name: Require an identical copy on the first-run path to report no change
+      ansible.builtin.assert:
+        that:
+          - authelia_bootstrap_persist is not skipped
+          - not authelia_bootstrap_persist.changed
+        fail_msg: "An identical bootstrap password copy must not report a change."
+      no_log: true
+
+    - name: Stat the copy before the converges after the first run
+      ansible.builtin.stat:
+        path: "{{ authelia_bootstrap_password_file }}"
+      register: verify_before_later
+
+    - name: Set the users database as present and the copy as read from disk
+      ansible.builtin.set_fact:
+        authelia_users_stat: {stat: {exists: true}}
+        authelia_guest_secret_values: {bootstrap_password: kv-bootstrap}
+      no_log: true
+
+    - name: Reconcile on a converge after the users database exists
+      ansible.builtin.include_tasks: ../../roles/authelia/tasks/service_secrets_reconcile.yml
+
+    - name: Persist on a converge after the users database exists
+      ansible.builtin.include_tasks: ../../roles/authelia/tasks/bootstrap_password_persist.yml
+
+    - name: Stat the copy after a converge with the users database present
+      ansible.builtin.stat:
+        path: "{{ authelia_bootstrap_password_file }}"
+      register: verify_after_later
+
+    - name: Require the write to be skipped and the existing copy kept
+      ansible.builtin.assert:
+        that:
+          - authelia_bootstrap_persist is skipped
+          - verify_after_later.stat.exists
+          - verify_after_later.stat.inode == verify_before_later.stat.inode
+          - authelia_secret_mismatches | length == 0
+        fail_msg: "A converge with the users database present must keep the copy and skip the write."
+
+    - name: Remove the copy as the passkey cleanup does
+      ansible.builtin.file:
+        path: "{{ authelia_bootstrap_password_file }}"
+        state: absent
+
+    - name: Set the guest copy as absent after the passkey cleanup
+      ansible.builtin.set_fact:
+        authelia_guest_secret_values: {}
+      no_log: true
+
+    - name: Reconcile on the converge after the passkey cleanup
+      ansible.builtin.include_tasks: ../../roles/authelia/tasks/service_secrets_reconcile.yml
+
+    - name: Persist on the converge after the passkey cleanup
+      ansible.builtin.include_tasks: ../../roles/authelia/tasks/bootstrap_password_persist.yml
+
+    - name: Stat the copy after the converge that follows the passkey cleanup
+      ansible.builtin.stat:
+        path: "{{ authelia_bootstrap_password_file }}"
+      register: verify_enrolled_stat
+
+    - name: Require the converge after the passkey cleanup to recreate nothing and change nothing
+      ansible.builtin.assert:
+        that:
+          - authelia_bootstrap_persist is skipped
+          - not verify_enrolled_stat.stat.exists
+          - authelia_secret_mismatches | length == 0
+        fail_msg: "A converge after the passkey cleanup must not recreate the bootstrap password copy."
+
+    - name: Remove the scratch directory
+      ansible.builtin.file:
+        path: "{{ verify_root.path }}"
+        state: absent

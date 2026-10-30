@@ -1,9 +1,7 @@
 """Every path read with the `apps` AppRole is readable by the `apps` policy.
 
-roles/openbao_secrets reads each path of the `apps` domain with the `apps`
-AppRole. A path the policy denies answers 403, and classify_reads.yml fails
-the whole domain on any 403, `optional: true` included (optional only
-tolerates a 404). The policy's per-app grants come from
+The repo-owned domain catalog assigns each path to the `apps` AppRole.
+The policy must grant each declared path. Its per-app grants come from
 openbao_apps_read_apps (roles/openbao/defaults/main/05c-...), rendered here
 from the real expression with the real seeding maps; infrastructure/unifi is
 granted directly by apps-policy.hcl.j2.
@@ -14,6 +12,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import jinja2
+import pytest
 import yaml
 from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar, trust_as_template
@@ -25,7 +24,7 @@ GENERATED_FILE = DEFAULTS / "01c-app-secrets-generated.yml"
 GENERATED_PATHS_FILE = DEFAULTS / "01d-app-secret-paths.yml"
 PROMOTED_FILE = DEFAULTS / "01b-app-secrets.yml"
 CRIBL_EDGE_FILE = DEFAULTS / "05h-cribl-edge-readers.yml"
-DOMAINS_FILE = ROOT / "roles" / "openbao_secrets" / "defaults" / "main" / "01-domains.yml"
+DOMAINS_FILE = ROOT / "playbooks" / "group_vars" / "all" / "openbao_secrets.yml"
 POLICY_TEMPLATE = ROOT / "roles" / "openbao" / "templates" / "apps-policy.hcl.j2"
 MEDIA_POLICY_TEMPLATE = ROOT / "roles" / "openbao" / "templates" / "media-policy.hcl.j2"
 
@@ -205,25 +204,27 @@ def test_postgres_backup_path_has_one_exact_read_grant():
     assert 'path "secret/data/rustfs/*"' not in policy
 
 
-def test_homebox_backblaze_domain_reuses_apps_credentials_and_is_optional():
-    domain = _domain("homebox_backup_b2")
+@pytest.mark.parametrize("service", ["homebox", "nautobot"])
+def test_backblaze_domain_reuses_apps_credentials_and_is_optional(service):
+    domain = _domain(f"{service}_backup_b2")
 
     assert domain["credential_domain"] == "apps"
     assert domain["paths"] == [
         {
             "mount": "secrets-external",
-            "path": "backblaze/dryvist-homebox-backups/rw",
+            "path": f"backblaze/dryvist-{service}-backups/rw",
             "optional": True,
         }
     ]
 
 
-def test_homebox_backblaze_path_has_exact_external_grants_and_no_wildcard():
+@pytest.mark.parametrize("service", ["homebox", "nautobot"])
+def test_backblaze_path_has_exact_external_grants_and_no_wildcard(service):
     policy = _render_apps_policy(_read_apps(_yaml(NAMES_FILE)))
 
     for kind in ("data", "metadata"):
         assert (
-            f'path "secrets-external/{kind}/backblaze/dryvist-homebox-backups/rw" {{\n'
+            f'path "secrets-external/{kind}/backblaze/dryvist-{service}-backups/rw" {{\n'
             '  capabilities = ["read"]\n}'
         ) in policy
     assert 'path "secrets-external/data/backblaze/*"' not in policy

@@ -270,7 +270,7 @@
     # "0001-01-01T00:00:00Z", not "" -- treat both an empty string and that
     # zero-time value as never-expiring (the pre-hardening shape this rotation
     # exists to retire). This same expression is exercised directly by
-    # tests/openbao_secrets/verify_rotation_naming.yml -- keep them identical.
+    # tests/openbao_rotate/verify_rotation_naming.yml -- keep them identical.
     - name: Decide whether the previous secret_id never expires for {{ rotate_domain_name }}
       ansible.builtin.set_fact:
         rotate_old_secret_id_never_expires: >-

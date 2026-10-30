@@ -106,8 +106,12 @@ def _matches_apps_reader_contract(policy: str, apps: set[str]) -> bool:
         ("secret/metadata/infrastructure/unifi", ("read",)),
         ("secret/data/rustfs/dryvist-homelab-backups/rw", ("read",)),
         ("secret/data/rustfs/dryvist-homebox-backups/rw", ("read",)),
+        ("secret/data/homebox/main/rw", ("read",)),
+        ("secret/metadata/homebox/main/rw", ("read",)),
         ("secrets-external/data/backblaze/dryvist-homebox-backups/rw", ("read",)),
         ("secrets-external/metadata/backblaze/dryvist-homebox-backups/rw", ("read",)),
+        ("secrets-external/data/backblaze/dryvist-nautobot-backups/rw", ("read",)),
+        ("secrets-external/metadata/backblaze/dryvist-nautobot-backups/rw", ("read",)),
     }
     return sorted(_grants(policy)) == sorted(expected)
 
@@ -131,34 +135,60 @@ class CriblEdgeReaderContract(unittest.TestCase):
             "openbao_generated_app_secrets"
         ]
 
-    def test_three_password_fields_use_generate_if_absent_seed_logic(self):
+    def test_three_password_fields_use_the_shared_generate_if_absent_contract(self):
         tunables = _yaml(DEFAULTS / "01b-app-secret-generation.yml")
         fields = {"cribl-edge", *EXPECTED_READERS.values()}
         for bucket in fields:
             with self.subTest(bucket=bucket):
                 self.assertIn("cribl_admin_password", self.generated[bucket])
 
-        generate = next(
+        seed_tasks = yaml.safe_load(SEED.read_text(encoding="utf-8"))
+        declaration_task = next(
             task
-            for task in yaml.safe_load(SEED.read_text(encoding="utf-8"))
-            if task.get("name") == "Generate a random value for each field that is not yet stored"
+            for task in seed_tasks
+            if task.get("name") == "Add a shared declaration for each generated app-secret field"
         )
-        conditions = generate["when"]
-        if isinstance(conditions, str):
-            conditions = [conditions]
-        for stored in (False, True):
-            data = {"cribl_admin_password": "present"} if stored else {}
-            values = {
+        declaration = _render(
+            declaration_task["ansible.builtin.set_fact"]["openbao_seed_shared_fields"],
+            {
                 **tunables,
                 "item": "cribl_admin_password",
-                "openbao_seed_current_data": data,
-                "openbao_seed_rotate_fields": [],
-            }
-            outcomes = [
-                _render("{{ " + condition + " }}", values)
-                for condition in conditions
-            ]
-            self.assertEqual(all(bool(value) for value in outcomes), not stored)
+                "openbao_seed_shared_fields": [],
+            },
+        )[0]
+        self.assertEqual(declaration["length"], tunables["openbao_app_secret_length"])
+        self.assertEqual(declaration["charset"], "alnum")
+        self.assertNotIn("valid_pattern", declaration)
+
+        block = next(
+            task
+            for task in seed_tasks
+            if task.get("name") == "Seed the generated app secret through the shared contract"
+        )
+        shared = next(
+            task for task in block["block"] if "ansible.builtin.include_role" in task
+        )
+        rotate_expression = shared["vars"]["openbao_secrets_seed_rotate_fields"]
+        for bucket in fields:
+            with self.subTest(bucket=bucket):
+                rotated = _render(
+                    rotate_expression,
+                    {
+                        "openbao_seed_rotate_fields": ["cribl_admin_password"],
+                        "openbao_seed_fields": self.generated[bucket],
+                    },
+                )
+                self.assertEqual(rotated, ["cribl_admin_password"])
+                self.assertEqual(
+                    _render(
+                        rotate_expression,
+                        {
+                            "openbao_seed_rotate_fields": [],
+                            "openbao_seed_fields": self.generated[bucket],
+                        },
+                    ),
+                    [],
+                )
 
     def test_apps_reader_has_exact_existing_grants_including_linux_bucket_only(self):
         apps = _read_apps()

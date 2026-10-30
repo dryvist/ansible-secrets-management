@@ -279,6 +279,15 @@ openbao_base_approles_core:
     manage_secret_id: false
     secret_id_ttl: "{{ openbao_ai_elevated_secret_id_ttl }}"
     secret_id_num_uses: 1
+  # The workstation-only Nautobot token publisher is inert: a human unlocks
+  # one single-use secret_id for each token publication or rotation.
+  - name: "{{ openbao_nautobot_token_publisher_approle_name }}"
+    policy: "{{ openbao_nautobot_token_publisher_policy_name }}"
+    token_ttl: "{{ openbao_ai_admin_token_ttl }}"
+    token_max_ttl: "{{ openbao_ai_admin_token_ttl }}"
+    manage_secret_id: false
+    secret_id_ttl: "{{ openbao_ai_elevated_secret_id_ttl }}"
+    secret_id_num_uses: 1
 # openbao_base_approles_elevated (iac-platform-deploy through slack-ops) lives
 # in 07f-elevated-approles.yml — split for the CI token-limits gate.
 openbao_base_approles: >-
