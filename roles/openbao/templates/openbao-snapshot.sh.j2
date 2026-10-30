@@ -66,7 +66,7 @@ fail() {
 # jq would make every node decide it was a standby and snapshot nothing at all.
 # Keep the marker line in sync with the loop — Molecule reads it to check the
 # role actually installs what the script calls.
-# requires: curl jq
+# requires: bao-approle curl jq
 require_binaries() {
   local missing=""
   [ -x "${BIN}" ] || missing="${BIN}"
@@ -105,13 +105,13 @@ code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 8 \
   "${BAO_ADDR}/v1/sys/health?standbyok=true")"
 [ "${code}" = "200" ] || fail "health check returned HTTP ${code} (expected 200)"
 
-# 3. Authenticate with the least-privilege snapshot AppRole (-field=token maps
-#    to .auth.client_token for auth responses — no jq needed).
-token="$("${BIN}" write -field=token auth/approle/login \
-  role_id="${OPENBAO_SNAPSHOT_ROLE_ID}" \
-  secret_id="${OPENBAO_SNAPSHOT_SECRET_ID}" 2>/dev/null)" \
-  || fail "snapshot AppRole login failed"
-[ -n "${token}" ] || fail "snapshot AppRole login returned an empty token"
+# 3. Authenticate with the least-privilege snapshot AppRole through the shared
+#    bao-approle CLI, which prints only the client token.
+token="$(
+  BAO_APPROLE_ROLE_ID="${OPENBAO_SNAPSHOT_ROLE_ID}" \
+    BAO_APPROLE_SECRET_ID="${OPENBAO_SNAPSHOT_SECRET_ID}" \
+    bao-approle login
+)" || fail "snapshot AppRole login failed"
 
 # 4. Take the snapshot.
 ts="$(date -u +%Y%m%dT%H%M%SZ)"

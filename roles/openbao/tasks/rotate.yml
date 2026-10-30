@@ -17,6 +17,13 @@
 # table's own key folded in as `.name` — the table itself never repeats the
 # name as both key and field.
 
+- name: Install the shared OpenBao AppRole CLI
+  ansible.builtin.include_role:
+    name: dryvist.homelab.bao_approle_cli
+    apply:
+      tags:
+        - openbao_rotate
+
 - name: Render each active rotator's AppRole EnvironmentFile
   ansible.builtin.template:
     src: openbao-rotate.env.j2

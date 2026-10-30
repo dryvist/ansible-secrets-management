@@ -67,7 +67,17 @@
         state: directory
         mode: "0755"
 
-    # Stubs OpenBao AppRole login, the KV-v2 data+metadata read/write for
+    # Stands in for the shared bao-approle CLI; login always succeeds.
+    - name: Install the stub bao-approle
+      ansible.builtin.copy:
+        dest: "{{ fixture_dir }}/bin/bao-approle"
+        mode: "0755"
+        content: |
+          #!/usr/bin/env bash
+          [ "${1:-}" = login ] || exit 64
+          echo test-vault-token
+
+    # Stubs the KV-v2 data+metadata read/write for
     # secret/ai/mcp/splunk and the minter secret, and Splunk's mint/probe/
     # list/revoke endpoints. A GET vs POST-write on the same KV data URL is
     # distinguished by the script's own `-o` flag (kv_write_cas always
@@ -94,9 +104,6 @@
             fi
           done
           case "${url}" in
-            */auth/approle/login)
-              echo '{"auth":{"client_token":"test-vault-token"}}'
-              ;;
             *"/metadata/ai/mcp/splunk")
               is_patch=0
               for a in "${args[@]}"; do [ "${a}" = "PATCH" ] && is_patch=1; done
