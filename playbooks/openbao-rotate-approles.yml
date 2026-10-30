@@ -87,8 +87,10 @@
     openbao_rotate_domains: ""
     # One-time seed of openbao_host_secret_zero_approle_names into the env
     # document, in either auth mode. Mints at each role's current declared TTL
-    # and skips any identity the document already carries. Scheduled
-    # rotation never touches these identities.
+    # and skips a carried identity only while its stored role_id and secret_id
+    # still form a live pair. A dead or mismatched pair is re-minted only by a
+    # human-gated run; an unattended run fails that identity. Scheduled rotation
+    # never touches these identities.
     bootstrap_seed_only: false
 
   # The harness caller registry, loaded the way roles/openbao's meta dependency
@@ -348,5 +350,12 @@
       ansible.builtin.fail:
         msg: >-
           AppRole rotation failed for: {{ rotate_failed_domains | sort | join(', ') }}.
-          Every other identity rotated.
+          {{ (
+            'A human-gated run is required to re-seed ' ~
+            (rotate_human_gated_seed_domains | default([]) | sort | join(', ')) ~
+            '. Run `openbao-unlock --via yubikey approle-secret-id-rotate -- ... ' ~
+            'OPENBAO_ROTATE_TOKEN=$BAO_TOKEN ... ansible-playbook ' ~
+            'playbooks/openbao-rotate-approles.yml -e bootstrap_seed_only=true`.'
+          ) if (rotate_human_gated_seed_domains | default([]) | length > 0) else '' }}
+          The run continued for the other identities.
       when: rotate_failed_domains | default([]) | length > 0

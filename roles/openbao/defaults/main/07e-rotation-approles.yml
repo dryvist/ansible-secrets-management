@@ -5,8 +5,9 @@
 # enforces, and the remedy for that budget is always splitting the source.
 openbao_rotation_approles:
   # splunk-mcp-rotate: unattended timer identity for the Splunk MCP token
-  # rotator (openbao_rotators.splunk-mcp, tasks/rotate.yml). Standing
-  # secret_id like snapshot/slack-admin — nothing re-mints it on a schedule.
+  # rotator (openbao_rotators.splunk-mcp, tasks/rotate.yml). Its standing
+  # secret_id is separate from slack-admin's host-seed pair and this timer
+  # does not re-mint its own credential.
   - name: "{{ openbao_splunk_mcp_rotate_approle_name }}"
     policy: "{{ openbao_splunk_mcp_rotate_policy_name }}"
   # approle-secret-id-rotate-scheduled: unattended timer identity for
