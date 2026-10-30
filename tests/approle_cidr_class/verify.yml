@@ -108,6 +108,16 @@
           The unattended admin identity declares class '{{ cls }}'; it is
           redeemed only from the workstation.
 
+    - name: The human-gated rotators are redeemed from the workstation
+      vars:
+        names: [ai-rotate, apps-rotate, rustfs-rotate, approle-secret-id-rotate]
+      ansible.builtin.assert:
+        that:
+          - names | map('extract', openbao_approle_cidr_class_map) | unique == ['workstation']
+        fail_msg: >-
+          A human-gated rotator is not workstation class; openbao-unlock from
+          the workstation is refused on source address.
+
     # include_vars outranks task vars too, so the fixture realm is a fact.
     - name: Declare a fixture write realm
       ansible.builtin.set_fact:
