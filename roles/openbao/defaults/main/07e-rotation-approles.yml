@@ -13,10 +13,11 @@ openbao_rotation_approles:
   # approle-secret-id-rotate-scheduled: unattended timer identity for
   # playbooks/openbao-rotate-approles.yml, same shape as splunk-mcp-rotate
   # above (standing secret_id, machine defaults, nothing special) -- it
-  # attaches the approle-secret-id-rotate POLICY, so it can do exactly what
-  # the human-gated approle-secret-id-rotate AppRole can and nothing more.
+  # attaches the scheduled variant of the approle-secret-id-rotate policy:
+  # the domain catalog only, never the host secret-zero identities the
+  # human-gated approle-secret-id-rotate AppRole may also seed.
   - name: "{{ openbao_approle_secret_id_rotate_scheduled_approle_name }}"
-    policy: "{{ openbao_approle_secret_id_rotate_policy_name }}"
+    policy: "{{ openbao_approle_secret_id_rotate_scheduled_policy_name }}"
   # secret-age-audit: read-only sibling auditor over KV metadata + AppRole
   # secret-id accessors. No standing write anywhere; safe to leave ambient.
   - name: "{{ openbao_secret_age_audit_approle_name }}"

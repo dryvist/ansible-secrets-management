@@ -239,6 +239,9 @@ openbao_base_policies_static:
     template: rustfs-rotate-policy.hcl.j2
   - name: "{{ openbao_approle_secret_id_rotate_policy_name }}"
     template: approle-secret-id-rotate-policy.hcl.j2
+  - name: "{{ openbao_approle_secret_id_rotate_scheduled_policy_name }}"
+    template: approle-secret-id-rotate-policy.hcl.j2
+    scheduled_only: true
   # Enterprise App tokens use each raw endpoint, pinned by the dedicated tier policy.
   - name: "{{ openbao_github_enterprise_read_policy_name }}"
     template: github-enterprise-read-policy.hcl.j2

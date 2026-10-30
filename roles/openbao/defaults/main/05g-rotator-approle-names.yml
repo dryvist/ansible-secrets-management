@@ -35,11 +35,14 @@ openbao_rustfs_rotate_approle_name: rustfs-rotate
 # a routine unattended one.
 openbao_approle_secret_id_rotate_policy_name: approle-secret-id-rotate
 openbao_approle_secret_id_rotate_approle_name: approle-secret-id-rotate
-# approle-secret-id-rotate-scheduled — the SAME policy as above, attached to
-# a second, standing-credential AppRole so a scheduled run (no operator to
+# approle-secret-id-rotate-scheduled — the same policy template as above
+# minus the host secret-zero names, attached to a second, standing-credential AppRole so a scheduled run (no operator to
 # wrap a secret_id every cycle) can authenticate. Same machine class and
 # same secret_id lifetime as every other unattended machine identity
 # (openbao_approle_cidr_class_map's default + openbao_approle_secret_id_ttl
 # / _num_uses -- no override): liveness-probed and re-minted by a provisioning run exactly
 # like the domain AppRoles this identity itself rotates.
 openbao_approle_secret_id_rotate_scheduled_approle_name: approle-secret-id-rotate-scheduled
+# Its policy is the same template rendered without the host secret-zero names
+# (07c scheduled_only), so an unattended run cannot mint those.
+openbao_approle_secret_id_rotate_scheduled_policy_name: approle-secret-id-rotate-scheduled
