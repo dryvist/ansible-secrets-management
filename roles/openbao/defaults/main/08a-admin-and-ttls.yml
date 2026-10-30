@@ -126,9 +126,10 @@ openbao_approle_secret_id_ttl_overrides_base:
   approle-secret-id-rotate-scheduled: "{{ openbao_rotated_domain_secret_id_ttl }}"
   # Standing identities outside the scheduled rotation: their secret_id is
   # rendered onto the host (or held by the operator's deploy) at converge
-  # time, and nothing re-mints it. Non-expiring, bounded by the source-address
-  # class each carries in 08b, the same shape as the roles declared "0s" in
-  # 07b/07d. slack-admin and slack-ops take the same value from 04.
+  # time. A human-gated secret-zero seed run reissues a missing or dead
+  # env-document pair; an unattended run never does. Non-expiring, bounded by
+  # the source-address class each carries in 08b, the same shape as the roles
+  # declared "0s" in 07b/07d. slack-admin and slack-ops take the same value from 04.
   iac-platform-deploy: "0s"
   snapshot: "0s"
   splunk-mcp-rotate: "0s"

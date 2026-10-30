@@ -55,8 +55,8 @@
       {{ rotate_domain_name not in (openbao_rotate_doppler_only_domains | default([])) }}
   no_log: false
 
-# A seed run writes each host identity once: an identity the env document
-# already carries is left alone, so re-running the seed mints nothing new.
+# A seed run leaves a carried identity alone only while its stored role_id and
+# secret_id still form a live pair.
 - name: Seed run, check whether the env document already carries {{ rotate_domain_name }}
   ansible.builtin.uri:
     url: "{{ rotate_bao_addr }}/v1/{{ rotate_kv_mount }}/data/{{ rotate_env_path }}"
@@ -71,17 +71,127 @@
     - bootstrap_seed_only | default(false) | bool
     - rotate_env_document_enabled | bool
 
+- name: Seed run, reset carried secret_id liveness for {{ rotate_domain_name }}
+  ansible.builtin.set_fact:
+    rotate_seed_secret_id_live: false
+  no_log: false
+  when:
+    - bootstrap_seed_only | default(false) | bool
+    - rotate_env_document_enabled | bool
+
+- name: Seed run, look up the carried secret_id for {{ rotate_domain_name }}
+  ansible.builtin.uri:
+    url: "{{ rotate_bao_addr }}/v1/auth/approle/role/{{ rotate_domain_name }}/secret-id/lookup"
+    method: POST
+    headers:
+      X-Vault-Token: "{{ rotate_login.json.auth.client_token }}"
+    body_format: json
+    body:
+      secret_id: "{{ rotate_seed_probe.json.data.data[rotate_new_prefix ~ '_SECRET_ID'] }}"
+    # 204 and 400 (invalid secret id) mean the carried credential is dead.
+    status_code: [200, 204, 400]
+  register: rotate_seed_secret_id_lookup
+  changed_when: false
+  failed_when: >-
+    rotate_seed_secret_id_lookup.status == 400
+    and 'invalid secret id' not in
+        (rotate_seed_secret_id_lookup.json.errors | default([]) | join(' ') | lower)
+  no_log: true
+  when:
+    - bootstrap_seed_only | default(false) | bool
+    - rotate_env_document_enabled | bool
+    - (rotate_new_prefix ~ '_SECRET_ID') in (rotate_seed_probe.json.data.data | default({}))
+    - >-
+      (rotate_seed_probe.json.data.data[rotate_new_prefix ~ '_SECRET_ID']
+       | default('', true) | length) > 0
+
+- name: Decide whether the carried secret_id is live for {{ rotate_domain_name }}
+  ansible.builtin.set_fact:
+    rotate_seed_secret_id_live: >-
+      {{ (rotate_seed_secret_id_lookup.status | default(0) | int) == 200
+         and (rotate_seed_secret_id_lookup.json.data | default(none)) is not none
+         and ((rotate_seed_secret_id_lookup.json.data | default({})) | length) > 0 }}
+  no_log: false
+  when:
+    - bootstrap_seed_only | default(false) | bool
+    - rotate_env_document_enabled | bool
+    - (rotate_new_prefix ~ '_SECRET_ID') in (rotate_seed_probe.json.data.data | default({}))
+    - >-
+      (rotate_seed_probe.json.data.data[rotate_new_prefix ~ '_SECRET_ID']
+       | default('', true) | length) > 0
+
+- name: Seed run, read the live role_id for {{ rotate_domain_name }}
+  ansible.builtin.uri:
+    url: "{{ rotate_bao_addr }}/v1/auth/approle/role/{{ rotate_domain_name }}/role-id"
+    method: GET
+    headers:
+      X-Vault-Token: "{{ rotate_login.json.auth.client_token }}"
+    status_code: 200
+  register: rotate_seed_role_id_read
+  changed_when: false
+  no_log: true
+  when:
+    - bootstrap_seed_only | default(false) | bool
+    - rotate_env_document_enabled | bool
+    - (rotate_new_prefix ~ '_SECRET_ID') in (rotate_seed_probe.json.data.data | default({}))
+    - >-
+      (rotate_seed_probe.json.data.data[rotate_new_prefix ~ '_SECRET_ID']
+       | default('', true) | length) > 0
+
+- name: Decide whether the carried pair needs a re-seed for {{ rotate_domain_name }}
+  ansible.builtin.set_fact:
+    rotate_seed_pair_needs_reseed: >-
+      {{ (bootstrap_seed_only | default(false) | bool)
+         and (rotate_env_document_enabled | bool)
+         and ((rotate_new_prefix ~ '_SECRET_ID') in (rotate_seed_probe.json.data.data | default({})))
+         and ((rotate_seed_probe.json.data.data[rotate_new_prefix ~ '_SECRET_ID']
+               | default('', true) | length) > 0)
+         and (
+           not (rotate_seed_secret_id_live | default(false) | bool)
+           or (rotate_seed_probe.json.data.data[rotate_new_prefix ~ '_ROLE_ID'] | default('', true))
+              != (rotate_seed_role_id_read.json.data.role_id | default('', true))
+         ) }}
+  no_log: false
+
+# Only a human-gated run (human or pre-issued mode) may replace a dead or
+# mismatched carried pair. Every other run is unattended and is refused instead.
+- name: Decide whether an unattended run refuses the re-seed of {{ rotate_domain_name }}
+  ansible.builtin.set_fact:
+    rotate_seed_unattended_refusal: >-
+      {{ (rotate_seed_pair_needs_reseed | default(false) | bool)
+         and not (rotate_human_mode | default(false) | bool)
+         and not (rotate_preissued_mode | default(false) | bool) }}
+  no_log: false
+
 - name: Decide whether this run skips {{ rotate_domain_name }}
   ansible.builtin.set_fact:
     rotate_skip_identity: >-
       {{ (bootstrap_seed_only | default(false) | bool)
          and (rotate_env_document_enabled | bool)
-         and ((rotate_new_prefix ~ '_SECRET_ID') in (rotate_seed_probe.json.data.data | default({}))) }}
+         and ((rotate_new_prefix ~ '_SECRET_ID') in (rotate_seed_probe.json.data.data | default({})))
+         and ((rotate_seed_probe.json.data.data[rotate_new_prefix ~ '_SECRET_ID']
+               | default('', true) | length) > 0)
+         and (rotate_seed_secret_id_live | default(false) | bool)
+         and ((rotate_new_prefix ~ '_ROLE_ID') in (rotate_seed_probe.json.data.data | default({})))
+         and (rotate_seed_probe.json.data.data[rotate_new_prefix ~ '_ROLE_ID']
+              | default('', true)
+              == rotate_seed_role_id_read.json.data.role_id | default('', true)) }}
   no_log: false
 
 - name: Rotate {{ rotate_domain_name }}
   when: not (rotate_skip_identity | bool)
   block:
+    - name: Refuse an unattended re-seed for {{ rotate_domain_name }}
+      ansible.builtin.fail:
+        msg: >-
+          Refusing unattended seed for {{ rotate_domain_name }}: its carried
+          role_id/secret_id pair is dead or mismatched. This run will not mint a
+          replacement; a human-gated run is required. Run
+          `openbao-unlock --via yubikey approle-secret-id-rotate -- ...
+          OPENBAO_ROTATE_TOKEN=$BAO_TOKEN ... ansible-playbook
+          playbooks/openbao-rotate-approles.yml -e bootstrap_seed_only=true`.
+      when: rotate_seed_unattended_refusal | bool
+
     - name: Read the AppRole's role_id for {{ rotate_domain_name }}
       ansible.builtin.uri:
         url: "{{ rotate_bao_addr }}/v1/auth/approle/role/{{ rotate_domain_name }}/role-id"
@@ -134,9 +244,19 @@
     - name: Resolve this domain's currently-live secret_id, for later destruction
       ansible.builtin.set_fact:
         rotate_old_secret_id: >-
-          {{ rotate_env_current.json.data.data[rotate_new_prefix ~ '_SECRET_ID']
-             | default(rotate_env_current.json.data.data[rotate_legacy_prefix ~ '_SECRET_ID'], true)
-             | default('', true) }}
+          {{ '' if (
+               (bootstrap_seed_only | default(false) | bool)
+               and (rotate_env_document_enabled | bool)
+               and ((rotate_new_prefix ~ '_SECRET_ID') in (rotate_env_current.json.data.data | default({})))
+               and (rotate_env_current.json.data.data[rotate_new_prefix ~ '_SECRET_ID']
+                    | default('', true) | length) > 0
+               and rotate_env_current.json.data.data[rotate_new_prefix ~ '_SECRET_ID']
+                   == rotate_seed_probe.json.data.data[rotate_new_prefix ~ '_SECRET_ID']
+               and not (rotate_seed_secret_id_live | default(false) | bool)
+             ) else
+             (rotate_env_current.json.data.data[rotate_new_prefix ~ '_SECRET_ID']
+              | default(rotate_env_current.json.data.data[rotate_legacy_prefix ~ '_SECRET_ID'], true)
+              | default('', true)) }}
       no_log: true
       when: rotate_env_document_enabled | bool
 
@@ -317,7 +437,12 @@
   # One identity failing must not stop the rest. Record the name (never the
   # failed result, which can carry a secret) and let the playbook report it.
   rescue:
+    # One task records both: a refused unattended re-seed is also named for the
+    # human-gated run it needs. Only the name is recorded, never the result.
     - name: Record a failed rotation for {{ rotate_domain_name }}
       ansible.builtin.set_fact:
         rotate_failed_domains: "{{ rotate_failed_domains | default([]) + [rotate_domain_name] }}"
+        rotate_human_gated_seed_domains: >-
+          {{ (rotate_human_gated_seed_domains | default([]))
+             + ([rotate_domain_name] if (rotate_seed_unattended_refusal | default(false) | bool) else []) }}
       no_log: false

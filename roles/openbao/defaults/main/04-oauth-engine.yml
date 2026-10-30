@@ -30,9 +30,10 @@ openbao_slack_admin_policy_name: slack-admin
 openbao_slack_admin_approle_name: slack-admin
 # Token TTL stays short-lived: each minted token is held only for the
 # duration of a rotation. The secret_id is a separate, standing credential
-# rendered into the rotator's systemd env file at converge time; nothing
-# re-mints it, so it is non-expiring and bounded by the source-address class
-# slack-admin carries in 08b (redemptions: 08a).
+# rendered into the rotator's systemd env file at converge time. Only a
+# human-gated seed run re-mints it when the stored env-document pair is dead;
+# an unattended run fails instead. It remains non-expiring and bounded by the
+# source-address class slack-admin carries in 08b (redemptions: 08a).
 openbao_slack_admin_token_ttl: 15m
 openbao_slack_admin_secret_id_ttl: "0s"
 
