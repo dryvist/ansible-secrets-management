@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.49.1](https://github.com/dryvist/ansible-secrets-management/compare/v0.49.0...v0.49.1) (2026-10-30)
+
+
+### Bug Fixes
+
+* **openbao:** keep the secret-age digest count after the title separator ([#375](https://github.com/dryvist/ansible-secrets-management/issues/375)) ([f15e1ae](https://github.com/dryvist/ansible-secrets-management/commit/f15e1aed5708671d00bf8fe905abc86e44a5a04a))
+
 ## [0.49.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.48.1...v0.49.0) (2026-10-30)
 
 
