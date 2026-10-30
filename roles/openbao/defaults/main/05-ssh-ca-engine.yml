@@ -33,10 +33,8 @@ openbao_ssh_roles:
     principal: ai-agent
     ttl: 7200
     extensions: { "permit-pty": "" }
-  # Shared body of every exec-channel-only user-cert role below: no extensions
-  # (no pty, no agent forwarding), 2h. A role overrides only what differs.
-  - &ssh_exec_only
-    name: automation-ansible
+  # Exec-channel-only user-cert roles have no extensions (no pty or agent forwarding).
+  - name: automation-ansible
     principal: ansible
     ttl: 7200
     extensions: {}
@@ -45,23 +43,24 @@ openbao_ssh_roles:
   # and so revoking one does not revoke the other. Same 7200 TTL as
   # automation-ansible and for the same reason: a full converge that outlives
   # its own certificate fails on every host remaining after the expiry.
-  - <<: *ssh_exec_only
-    name: automation-semaphore
+  - name: automation-semaphore
     principal: semaphore
-  - <<: *ssh_exec_only
-    name: ci-runner
+    ttl: 7200
+    extensions: {}
+  - name: ci-runner
     principal: ci
     ttl: 1800
+    extensions: {}
   # Trusted-AI diagnostic access: a non-root, read-only account on the hosts
   # that opt in (principal -> account -> sudo allowlist is host-side data in
   # ansible-proxmox's local_identities). 15 minutes, the shortest cert here.
   # Another trusted identity or host class is one more entry like this one
   # plus its name in openbao_agent_ssh_sign_roles; the ssh-sign-<role> policy
   # leaf is derived (07a), never hand-written.
-  - <<: *ssh_exec_only
-    name: automation-ai-diag
+  - name: automation-ai-diag
     principal: ai-diag
     ttl: 900
+    extensions: {}
   # HOST certificates for estate guests, signed under the same CA keypair as
   # the user-cert roles above. cert_type distinguishes the two shapes the
   # role-reconcile task renders (init/07-ssh-ca-engine.yml) — this entry has
