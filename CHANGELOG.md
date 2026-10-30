@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.49.2](https://github.com/dryvist/ansible-secrets-management/compare/v0.49.1...v0.49.2) (2026-10-30)
+
+
+### Bug Fixes
+
+* **openbao:** redeem approle-secret-id-rotate from the workstation ([#377](https://github.com/dryvist/ansible-secrets-management/issues/377)) ([0a19648](https://github.com/dryvist/ansible-secrets-management/commit/0a1964853f1cf07f8389aa68e47dec67285286e3))
+
 ## [0.49.1](https://github.com/dryvist/ansible-secrets-management/compare/v0.49.0...v0.49.1) (2026-10-30)
 
 
