@@ -161,6 +161,9 @@ openbao_approle_cidr_class_overrides:
   ai-rotate: workstation
   apps-rotate: workstation
   rustfs-rotate: workstation
+  # Same human-gated shape: the host secret-zero re-seed runs under
+  # openbao-unlock from the workstation (openbao-rotate-approles.yml).
+  approle-secret-id-rotate: workstation
   # Enterprise GitHub AppRoles are redeemed by the workstation human-unlock flow.
   github-enterprise-read: workstation
   github-enterprise-admin: workstation

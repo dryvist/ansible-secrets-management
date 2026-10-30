@@ -145,7 +145,7 @@
           - _case_b2.rc == 0
           - >-
             _calls.splitlines()
-            | select('match', '^ntfy title=secrets overdue: 2 item\(s\)$')
+            | select('match', '^ntfy title=secrets overdue — 2 item\(s\)$')
             | list | length == 1
           - >-
             _calls.splitlines()
@@ -153,7 +153,7 @@
             | list | length == 0
         fail_msg: >-
           The 2 overdue items (apps/overdue-app#password, test-role) must
-          page as exactly ONE digest titled "secrets overdue: 2 item(s)" —
+          page as exactly ONE digest titled "secrets overdue — 2 item(s)" —
           never one "secret overdue: <label>" push per item.
           rc={{ _case_b2.rc }} calls={{ _calls }}
 
