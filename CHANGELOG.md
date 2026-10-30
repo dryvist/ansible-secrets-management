@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.48.1](https://github.com/dryvist/ansible-secrets-management/compare/v0.48.0...v0.48.1) (2026-10-30)
+
+
+### Bug Fixes
+
+* **openbao:** re-seed a dead host secret-zero pair only on a human-gated run ([#368](https://github.com/dryvist/ansible-secrets-management/issues/368)) ([dc81039](https://github.com/dryvist/ansible-secrets-management/commit/dc81039e6ec7e90b39b732f9b729c5db54da870d))
+
 ## [0.48.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.47.1...v0.48.0) (2026-10-30)
 
 
