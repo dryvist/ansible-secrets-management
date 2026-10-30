@@ -18,6 +18,12 @@
 #     machine identity's secret-zero already rides. No -e needed; every domain
 #     rotates each run.
 #
+#   Seed mode (host secret-zero identities, re-mints only a dead pair; from
+#   the workstation, one YubiKey tap):
+#     doppler run -- openbao-unlock --via yubikey approle-secret-id-rotate --
+#       bash -c 'OPENBAO_ROTATE_TOKEN="$BAO_TOKEN" ansible-playbook
+#         playbooks/openbao-rotate-approles.yml -e bootstrap_seed_only=true'
+#
 #   Semaphore template spec for the scheduled path: a template running this
 #   playbook every 12h, environment sourced from the same env-document
 #   secret-zero every other Semaphore template already uses, no
