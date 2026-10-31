@@ -103,6 +103,7 @@ plans):
 | `azure-iac-admin` | `azure/creds/openbao-iac-admin` | — | Dynamic Azure client secret for the IaC admin application; per-call, workstation-only |
 | `terrakube-<workspace>` JWT | Only that workspace's native paths | Workspace-specific | Short-lived; exact organization/workspace subject and audience |
 | `ansible-converge` | Platform, apps, MCP secrets, `platform/ansible/env` per mount | Exact MCP secrets | Config pulls, MCP publishers; no broad AI access |
+| `ansible-converge-writer` | Same as `ansible-converge` | Exact MCP secrets | Seed-play login; machine-bound, nonrenewable batch token capped at 600s |
 | `observability` | `secret/platform/{splunk,cribl}`, `secret/ai/mcp/splunk` | — | Ingest pipeline and read-only Splunk MCP queries |
 | `local-cloud` | `secret/platform/{object-storage,compute}` | — | RustFS + compute creds |
 | `monitoring` | `secret/apps/monitoring` | — | netmon/unifi_metrics/prometheus_stack |

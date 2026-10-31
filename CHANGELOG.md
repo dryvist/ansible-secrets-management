@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.50.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.49.2...v0.50.0) (2026-10-31)
+
+
+### Features
+
+* **openbao:** add a short-lived seed writer AppRole ([#382](https://github.com/dryvist/ansible-secrets-management/issues/382)) ([5b480ca](https://github.com/dryvist/ansible-secrets-management/commit/5b480cae8dd3ca674135e1baf0dd1b9ff0953cc7))
+
 ## [0.49.2](https://github.com/dryvist/ansible-secrets-management/compare/v0.49.1...v0.49.2) (2026-10-30)
 
 

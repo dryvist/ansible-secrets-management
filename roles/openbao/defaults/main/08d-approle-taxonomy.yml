@@ -20,6 +20,7 @@ openbao_approle_class_map: >-
     'agent-ssh-sign': 'trusted-agent-write',
     'agent-workstation': 'trusted-agent-write',
     'ansible-converge': 'converge-automation',
+    'ansible-converge-writer': 'converge-automation',
     'apps': 'service-runtime',
     'apps-rotate': 'converge-automation',
     'apps-seed': 'converge-automation',
