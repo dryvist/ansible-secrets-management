@@ -44,3 +44,16 @@ def test_langfuse_project_key_path_reuses_exact_converge_and_hermes_grants() -> 
     assert hermes_grants.count((LANGFUSE_PATH, ("read",))) == 1
     assert not any(_wildcard_covers(path, LANGFUSE_PATH) for path, _ in converge_grants)
     assert not any(_wildcard_covers(path, LANGFUSE_PATH) for path, _ in hermes_grants)
+
+
+LANGFUSE_KEY_RECORDS = ("ai/hermes", "ai/donna", "ai/hermes-private")
+
+
+def test_langfuse_key_records_have_one_exact_converge_grant_each() -> None:
+    converge_grants = _grants(CONVERGE_POLICY)
+    for record in LANGFUSE_KEY_RECORDS:
+        data_path = "{{ openbao_kv_mount }}/data/" + record
+        metadata_path = "{{ openbao_kv_mount }}/metadata/" + record
+        assert converge_grants.count((data_path, ("create", "update", "read"))) == 1
+        assert converge_grants.count((metadata_path, ("read",))) == 1
+        assert not any(_wildcard_covers(path, data_path) for path, _ in converge_grants)
