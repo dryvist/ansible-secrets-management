@@ -1,0 +1,9 @@
+---
+# A separate seed login reuses the existing converge grant and returns a
+# nonrenewable batch token capped at ten minutes.
+openbao_seed_writer_approles:
+  - name: "{{ openbao_ansible_converge_writer_approle_name }}"
+    policy: "{{ openbao_ansible_converge_policy_name }}"
+    token_type: batch
+    token_ttl: 600s
+    token_max_ttl: 600s
