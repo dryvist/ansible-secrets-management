@@ -425,6 +425,30 @@ def test_managed_approle_writes_pin_declared_policy_binding_and_cidrs(rendered_d
         assert required == expected_required, name
 
 
+def test_ansible_converge_writer_renders_exact_machine_bound_batch_parameters(rendered_defaults):
+    values, _approles, _policies = rendered_defaults
+    name = values["openbao_ansible_converge_writer_approle_name"]
+    parameters = values["openbao_approle_cli_parameters"][name]
+
+    assert (
+        values["openbao_approle_cidr_class_map"][name],
+        {key: parameters[key] for key in (
+            "token_policies",
+            "token_type",
+            "token_ttl",
+            "token_max_ttl",
+        )},
+    ) == (
+        "machine",
+        {
+            "token_policies": "ansible-converge",
+            "token_type": "batch",
+            "token_ttl": "600s",
+            "token_max_ttl": "600s",
+        },
+    )
+
+
 def test_policy_sync_unlock_renders_only_its_four_exact_paths(rendered_defaults):
     values, _approles, policies = rendered_defaults
     policy_name = values["openbao_policy_sync_unlock_policy_name"]
