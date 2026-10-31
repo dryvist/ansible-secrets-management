@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.51.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.50.0...v0.51.0) (2026-10-31)
+
+
+### Features
+
+* **openbao:** grant the converge policy the ai/hermes-private Langfuse key record ([#385](https://github.com/dryvist/ansible-secrets-management/issues/385)) ([5c6382a](https://github.com/dryvist/ansible-secrets-management/commit/5c6382acbccad0726f126e153e7d129bb79c2974))
+
 ## [0.50.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.49.2...v0.50.0) (2026-10-31)
 
 
