@@ -1,9 +1,13 @@
 ---
 # A separate seed login reuses the existing converge grant and returns a
-# nonrenewable batch token capped at ten minutes.
+# nonrenewable batch token. One login at run start serves every play, so the
+# token lives as long as the AppRole token ceiling. The 12h scheduled rotation
+# re-mints the secret_id (36h ttl, 08a); every run redeems it, so uses are
+# unlimited like the other scheduled-rotation domains.
 openbao_seed_writer_approles:
   - name: "{{ openbao_ansible_converge_writer_approle_name }}"
     policy: "{{ openbao_ansible_converge_policy_name }}"
     token_type: batch
-    token_ttl: 600s
-    token_max_ttl: 600s
+    token_ttl: "{{ openbao_approle_token_max_ttl }}"
+    token_max_ttl: "{{ openbao_approle_token_max_ttl }}"
+    secret_id_num_uses: 0
