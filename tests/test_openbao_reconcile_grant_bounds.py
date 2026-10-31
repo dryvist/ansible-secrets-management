@@ -429,6 +429,7 @@ def test_ansible_converge_writer_renders_exact_machine_bound_batch_parameters(re
     values, _approles, _policies = rendered_defaults
     name = values["openbao_ansible_converge_writer_approle_name"]
     parameters = values["openbao_approle_cli_parameters"][name]
+    ceiling = values["openbao_approle_token_max_ttl"]
 
     assert (
         values["openbao_approle_cidr_class_map"][name],
@@ -437,15 +438,19 @@ def test_ansible_converge_writer_renders_exact_machine_bound_batch_parameters(re
             "token_type",
             "token_ttl",
             "token_max_ttl",
+            "secret_id_ttl",
         )},
+        str(parameters["secret_id_num_uses"]),
     ) == (
         "machine",
         {
             "token_policies": "ansible-converge",
             "token_type": "batch",
-            "token_ttl": "600s",
-            "token_max_ttl": "600s",
+            "token_ttl": ceiling,
+            "token_max_ttl": ceiling,
+            "secret_id_ttl": values["openbao_rotated_domain_secret_id_ttl"],
         },
+        "0",
     )
 
 
