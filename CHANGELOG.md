@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.51.1](https://github.com/dryvist/ansible-secrets-management/compare/v0.51.0...v0.51.1) (2026-10-31)
+
+
+### Bug Fixes
+
+* **openbao:** rotate the converge writer secret_id on the 12h schedule ([#388](https://github.com/dryvist/ansible-secrets-management/issues/388)) ([f1561b1](https://github.com/dryvist/ansible-secrets-management/commit/f1561b18f49c0114a571be94a4ac89208e7b8d93))
+
 ## [0.51.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.50.0...v0.51.0) (2026-10-31)
 
 
