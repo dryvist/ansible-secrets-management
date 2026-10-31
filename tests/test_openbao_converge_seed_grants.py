@@ -66,3 +66,15 @@ def test_new_app_publisher_buckets_are_listed_once_with_exact_template_paths() -
     ) in policy
     assert 'path "{{ openbao_kv_mount }}/data/apps/*"' not in policy
     assert 'path "{{ openbao_kv_mount }}/metadata/apps/*"' not in policy
+
+
+def test_eval_namespace_grants_are_exact_specialist_platform_leaves() -> None:
+    eval_grants = [(path, caps) for path, caps in _grants() if "/ai/eval/" in path]
+    expected = []
+    for app in ("sim", "langflow", "dify", "hermes"):
+        expected += [
+            (f"{{{{ openbao_kv_mount }}}}/data/ai/eval/specialist-platform/{app}", ("create", "update", "read")),
+            (f"{{{{ openbao_kv_mount }}}}/metadata/ai/eval/specialist-platform/{app}", ("read",)),
+        ]
+    assert eval_grants == expected
+    assert not any("*" in path or "+" in path for path, _ in eval_grants)
