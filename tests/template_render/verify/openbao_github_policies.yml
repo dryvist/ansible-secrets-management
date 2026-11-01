@@ -563,6 +563,39 @@
       loop_control:
         label: "{{ item.item }}"
 
+    - name: Render fleet agent GitHub policies
+      ansible.builtin.template:
+        src: "{{ _template_dir }}/{{ item }}-policy.hcl.j2"
+        dest: "{{ _fixture_dir }}/{{ item }}-policy.hcl"
+        mode: "0644"
+      loop: [agent-code-simplifier, agent-ci-fixer]
+
+    - name: Read fleet agent GitHub policies
+      ansible.builtin.slurp:
+        src: "{{ _fixture_dir }}/{{ item }}-policy.hcl"
+      loop: [agent-code-simplifier, agent-ci-fixer]
+      register: _fleet_agent_policies
+
+    - name: Assert fleet agent policies mint only their named set
+      vars:
+        _policy: "{{ item.content | b64decode }}"
+        _path: "{{ openbao_github_agents_mount }}/token/{{ item.item }}"
+      ansible.builtin.assert:
+        that:
+          - _policy | regex_findall('(?m)^path "([^\"]+)"') == [_path]
+          - _policy | regex_findall('capabilities = (.*)') == ['["create", "update"]']
+          - "'secret/data/' not in _policy"
+          - "'secret/metadata/' not in _policy"
+          - "'sys/' not in _policy"
+          - "'*' not in _policy"
+          - >-
+            _policy | regex_findall('(?m)^path "([^\"]+)"')
+            | select('match', '^' ~ openbao_github_agents_mount ~ '/token/')
+            | reject('equalto', _path) | list == []
+      loop: "{{ _fleet_agent_policies.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
     - name: Assert per-tool dispatcher grants require wrapping
       vars:
         _role_id: >-
@@ -639,15 +672,26 @@
     - name: Assert the agents permission sets are public-only and narrowly scoped
       ansible.builtin.assert:
         that:
-          - openbao_github_agents_permission_sets | map(attribute='name') | list == ['public-read', 'public-write']
+          - >-
+            openbao_github_agents_permission_sets | map(attribute='name') | list
+            == ['public-read', 'public-write', 'agent-code-simplifier', 'agent-ci-fixer']
+          - >-
+            openbao_github_agents_permission_sets | map(attribute='tier') | list
+            == ['read', 'write', 'review', 'ci-fix']
           - >-
             openbao_github_agents_permission_sets | map(attribute='permissions') | list
-            == [openbao_github_agents_read_permissions, openbao_github_agents_write_permissions]
-          - openbao_github_agents_permission_sets | map(attribute='installation_id') | list == ['4242', '4242']
-          - openbao_github_agents_permission_sets | map(attribute='public_repos_of') | list == ['dryvist', 'dryvist']
+            == [openbao_github_agents_read_permissions, openbao_github_agents_write_permissions,
+                {'pull_requests': 'write', 'contents': 'read'},
+                {'contents': 'write', 'pull_requests': 'write', 'checks': 'read', 'actions': 'read'}]
+          - >-
+            openbao_github_agents_permission_sets | map(attribute='installation_id') | list
+            == ['4242', '4242', '4242', '4242']
+          - >-
+            openbao_github_agents_permission_sets | map(attribute='public_repos_of') | list
+            == ['dryvist', 'dryvist', 'dryvist', 'dryvist']
           - openbao_github_agents_permission_sets | selectattr('private_repos_of', 'defined') | list == []
           - openbao_github_agents_permission_sets | selectattr('repositories', 'defined') | list == []
-        fail_msg: The agents mount must declare only the two public permission sets.
+        fail_msg: The agents mount must declare only its exact public permission sets.
 
     - name: Assert no other tier reaches the work mount
       ansible.builtin.assert:

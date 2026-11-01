@@ -1,0 +1,5 @@
+{{ ansible_managed | comment }}
+# Fixes CI on public dryvist repositories with a bounded GitHub permission set.
+path "{{ openbao_github_agents_mount }}/token/{{ openbao_dify_agent_ci_fixer_policy_name }}" {
+  capabilities = ["create", "update"]
+}

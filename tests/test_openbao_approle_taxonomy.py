@@ -40,6 +40,9 @@ class TestAppRoleTaxonomy(unittest.TestCase):
         variables = {}
         for path in sorted((ROOT / "roles/openbao/defaults/main").glob("*.yml")):
             variables.update(yaml.safe_load(path.read_text(encoding="utf-8")) or {})
+        variables["openbao_platform_env"] = {
+            "OPENBAO_DIFY_AGENT_CIDR": "192.0.2.10/32",
+        }
 
         roles = _render("{{ openbao_approles }}", variables)
         class_map = _render("{{ openbao_approle_class_map }}", variables)
@@ -63,6 +66,16 @@ class TestAppRoleTaxonomy(unittest.TestCase):
                 self.assertEqual(role["token_ttl"], "15m")
                 self.assertEqual(role["token_max_ttl"], "15m")
                 self.assertFalse(role["manage_secret_id"])
+        for name in ("agent-code-simplifier", "agent-ci-fixer"):
+            self.assertEqual(class_map[name], "service-runtime")
+            role = next(role for role in roles if role["name"] == name)
+            self.assertEqual(role["policy"], name)
+            self.assertEqual(role["secret_id_bound_cidrs"], "192.0.2.10/32")
+            self.assertEqual(role["secret_id_ttl"], "720h")
+            self.assertEqual(role["secret_id_num_uses"], 0)
+            self.assertEqual(role["token_ttl"], "15m")
+            self.assertEqual(role["token_max_ttl"], "15m")
+            self.assertFalse(role["manage_secret_id"])
         self.assertEqual(class_map["ai-orchestrator"], "trusted-agent-write")
         self.assertEqual(class_map["agent-workstation"], "trusted-agent-read")
 

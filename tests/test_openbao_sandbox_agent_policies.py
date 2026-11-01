@@ -1,4 +1,4 @@
-"""Sandbox policies render the declared leaves and GitHub permission sets."""
+"""Sandbox and Dify agent policies render their declared leaves and token sets."""
 
 from pathlib import Path
 import re
@@ -21,10 +21,12 @@ def _render(policy):
         ansible_managed="managed",
         openbao_kv_mount="secret",
         openbao_github_agents_mount="github-agents",
+        openbao_dify_agent_code_simplifier_policy_name="agent-code-simplifier",
+        openbao_dify_agent_ci_fixer_policy_name="agent-ci-fixer",
     )
 
 
-class SandboxAgentPolicies(unittest.TestCase):
+class AgentPolicies(unittest.TestCase):
     def test_policies_do_not_read_external_secrets_or_wildcard_secret_paths(self):
         for policy in POLICIES:
             with self.subTest(policy=policy):
@@ -101,6 +103,24 @@ class SandboxAgentPolicies(unittest.TestCase):
                     self.assertFalse(any("llm-router" in p or p.startswith("sys/")
                                          or "/metadata/" in p or "*" in p for p in paths))
                     self.assertNotIn('"list"', rendered)
+
+    def test_fleet_agent_policies_mint_only_their_named_set(self):
+        for name in ("agent-code-simplifier", "agent-ci-fixer"):
+            with self.subTest(name=name):
+                rendered = _render(f"{name}-policy.hcl.j2")
+                path = f"github-agents/token/{name}"
+                paths = re.findall(r'path "([^"]+)"', rendered)
+                grants = re.findall(
+                    r'path "([^"]+)" \{\s*capabilities = \[([^]]+)\]\s*\}',
+                    rendered,
+                )
+                self.assertEqual(paths, [path])
+                self.assertEqual(grants, [(path, '"create", "update"')])
+                self.assertFalse(any(
+                    p.startswith(("secret/data/", "secret/metadata/", "sys/"))
+                    or "*" in p or (p.startswith("github-agents/token/") and p != path)
+                    for p in paths
+                ))
 
 
 if __name__ == "__main__":

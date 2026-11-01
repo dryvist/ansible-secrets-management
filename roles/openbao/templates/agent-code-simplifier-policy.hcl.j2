@@ -1,0 +1,5 @@
+{{ ansible_managed | comment }}
+# Reviews public dryvist repositories without permission to push code.
+path "{{ openbao_github_agents_mount }}/token/{{ openbao_dify_agent_code_simplifier_policy_name }}" {
+  capabilities = ["create", "update"]
+}
