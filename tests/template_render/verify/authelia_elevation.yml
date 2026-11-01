@@ -79,7 +79,7 @@
         authelia_approve_networks: ["192.0.2.0/24"]
         authelia_bao_elevation_enabled: true
         authelia_operator_group: openbao-operators-test
-        openbao_operator_oidc_public_url: https://openbao.example.test
+        authelia_openbao_ui_public_url: https://openbao.example.test
 
     - name: Render the Authelia configuration
       ansible.builtin.template:
