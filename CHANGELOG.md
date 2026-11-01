@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.54.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.53.1...v0.54.0) (2026-11-01)
+
+
+### Features
+
+* **openbao:** add Authelia SSO login for the OpenBao UI ([#403](https://github.com/dryvist/ansible-secrets-management/issues/403)) ([0889cdc](https://github.com/dryvist/ansible-secrets-management/commit/0889cdc9b239c78d3448d9fb9aed5664abcd53a1))
+* **openbao:** add per-tool sandbox AppRoles for zcode and opencode ([#402](https://github.com/dryvist/ansible-secrets-management/issues/402)) ([98af847](https://github.com/dryvist/ansible-secrets-management/commit/98af8473c4e1d01b4718e520b5f7a947d984b5b6))
+
+
+### Bug Fixes
+
+* **openbao:** drop the hermes-author-private permission set ([#401](https://github.com/dryvist/ansible-secrets-management/issues/401)) ([c8625db](https://github.com/dryvist/ansible-secrets-management/commit/c8625db67ef4a4e871b3a1836e3ba4ac80837d15))
+
 ## [0.53.1](https://github.com/dryvist/ansible-secrets-management/compare/v0.53.0...v0.53.1) (2026-11-01)
 
 
