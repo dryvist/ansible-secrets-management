@@ -16,7 +16,7 @@ configuration, so each App's own grant caps every token its mount mints:
 | `github` | everyday | read sets and the raw `github/token` write endpoint |
 | `github-admin` | admin | admin, repo-create, docs-publisher, ci-resolver, runner, exporter |
 | `github-agents` | agents | none: `open-llm` uses the raw `github-agents/token` with caller-selected org and repository fields |
-| `github-hermes` | hermes | `hermes-{review,author}-{public,private}`, split by repository visibility |
+| `github-hermes` | hermes | `hermes-review-{public,private}`, `hermes-read-public`, `hermes-author-public`, split by repository visibility |
 | `github-work` | work | a derived `read` set and the raw token endpoint for write; the App's grant is the only write ceiling |
 | `github-personal` | user-owned App | `personal-write`, pinned to its configured installation |
 | `github-enterprise-read` | read-only Enterprise App | none: raw token endpoint, pinned to its installation |
@@ -115,12 +115,13 @@ Token access is tiered; the tier IS the privilege boundary:
 - **hermes (`hermes-public`, `hermes-private`)** — four sets on
   `github-hermes`. `hermes-review-*`: `pull_requests`/`issues` write,
   `contents`/`checks`/`metadata` read, over the organization's public (or
-  private) repositories read at converge time. `hermes-author-*`: `contents`/
-  `pull_requests` write, `metadata` read, over an explicit allowlist from the
-  env document (`OPENBAO_GITHUB_HERMES_AUTHOR_{PUBLIC,PRIVATE}_REPOS`); the
-  converge fails when an entry is not of that visibility, and an unset list
-  declares no set. `hermes-public` mints only the two public sets,
-  `hermes-private` only the two private sets; both are machine-class AppRoles
+  private) repositories read at converge time. `hermes-author-public`:
+  `contents`/`pull_requests` write, `metadata` read, over an explicit
+  allowlist from the env document (`OPENBAO_GITHUB_HERMES_AUTHOR_PUBLIC_REPOS`);
+  the converge fails when an entry is outside the public review set, and an
+  unset list declares no set. `hermes-public` mints `hermes-review-public` and
+  `hermes-author-public`; `hermes-private` mints `hermes-review-private` and
+  `hermes-read-public`, and authors nothing. Both are machine-class AppRoles
   with a 15m token. The converge asserts each map verbatim. `hermes-private`
   reads the HMAC secret from `secrets-external/apps/hermes-webhook` and mints
   `aws/sts/hermes-webhook-consumer` when that role's ARN is configured. The
