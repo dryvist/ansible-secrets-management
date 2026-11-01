@@ -215,6 +215,8 @@ openbao_base_policies_static:
     template: llm-gate-policy.hcl.j2
   - name: "{{ openbao_vikunja_mcp_policy_name }}"
     template: vikunja-mcp-policy.hcl.j2
+  - name: "{{ openbao_agent_workstation_policy_name }}"
+    template: agent-workstation-policy.hcl.j2
   - name: "{{ openbao_ai_runner_policy_name }}"
     template: ai-runner-policy.hcl.j2
   - name: "{{ openbao_clickhouse_policy_name }}"

@@ -1,0 +1,8 @@
+{{ ansible_managed | comment }}
+# OpenBao policy for the `agent-workstation` AppRole.
+path "{{ openbao_kv_mount }}/data/apps/nautobot" {
+  capabilities = ["read"]
+}
+path "{{ openbao_kv_mount }}/data/ai/mcp" {
+  capabilities = ["read"]
+}
