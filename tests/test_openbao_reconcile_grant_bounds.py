@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 DEFAULTS = ROOT / "roles/openbao/defaults/main"
 TEMPLATES = ROOT / "roles/openbao/templates"
 RECONCILE = TEMPLATES / "openbao-reconcile-policy.hcl.j2"
+FLOW_LOCK = TEMPLATES / "flow-lock-policy.hcl.j2"
 ISSUER = TEMPLATES / "approle-issuer-policy.hcl.j2"
 POLICY_SYNC_UNLOCK = TEMPLATES / "policy-sync-unlock-policy.hcl.j2"
 APPROLE_TASKS = ROOT / "roles/openbao/tasks/init/10-approles.yml"
@@ -94,6 +95,24 @@ def _stanzas(policy):
                 if depth == 0:
                     yield match.group(1), policy[start : start + offset]
                     break
+
+
+def _capabilities(body):
+    match = re.search(r"capabilities\s*=\s*(\[[^\]]*\])", body)
+    assert match, body
+    return json.loads(match.group(1))
+
+
+def _effective_policy_union(policy_stanzas, target):
+    matching = []
+    for stanzas in policy_stanzas:
+        for path, body in stanzas.items():
+            pattern = re.escape(path).replace(r"\*", ".*").replace(r"\+", "[^/]+")
+            if re.fullmatch(pattern, target):
+                matching.append(set(_capabilities(body)))
+    if any("deny" in capabilities for capabilities in matching):
+        return {"deny"}
+    return set().union(*matching) if matching else set()
 
 
 def _render(template, values, *, policy_exclusions=None):
@@ -612,10 +631,11 @@ def test_reconcile_pins_the_two_human_gated_policy_bodies_and_attachments(render
         assert _allowed_parameters(body) == {
             "policy": [policy_text]
         }
-        capabilities = re.search(r"capabilities\s*=\s*(\[[^\]]*\])", body)
-        assert capabilities and "read" in json.loads(capabilities.group(1))
-        # A required parameter also applies to read, which carries no body.
-        assert "required_parameters" not in body
+        required = re.search(
+            r"(?m)^\s*required_parameters\s*=\s*(\[[^\n]*\])\s*$", body
+        )
+        assert required
+        assert json.loads(required.group(1)) == ["policy"]
 
     policy_write_tasks = yaml.safe_load(POLICY_WRITE_TASKS.read_text(encoding="utf-8"))
     policy_write = next(
@@ -691,14 +711,179 @@ def test_reconcile_does_not_grant_per_app_mount_configuration(rendered_defaults)
     assert not any(path.startswith("sys/mounts/github-") for path in paths)
 
 
-def test_reconcile_policy_paths_it_reads_carry_no_required_parameters(rendered_defaults):
+def test_reconcile_kv_grants_match_named_consumers_and_keep_flow_lock_separate(
+    rendered_defaults,
+):
     values, _approles, _policies = rendered_defaults
-    reconcile = _render(RECONCILE, values)
-    readable = [
-        path for path, body in _stanzas(reconcile)
-        if path.startswith("sys/policies/acl/")
-        and (caps := re.search(r"capabilities\s*=\s*(\[[^\]]*\])", body))
-        and "read" in json.loads(caps.group(1))
-        and "required_parameters" in body
+    context = dict(
+        values,
+        openbao_kv_mount="secret",
+        openbao_config_mount="config",
+        openbao_promoted_app_secrets={"promoted": {"TOKEN": "TOKEN"}},
+        openbao_promoted_external_secrets={"external": {"TOKEN": "TOKEN"}},
+        openbao_promoted_config_values={"review": {"base_url": "LLM_ROUTER_BASE_URL"}},
+        openbao_seeded_generated_app_secrets={
+            "generated": ["generated_key"],
+            "clickhouse": ["APP_PASSWORD"],
+        },
+        openbao_generated_app_secret_paths={"clickhouse": "ai/clickhouse"},
+        openbao_roster_agent_generated_app_secrets={"agent-one": ["agent_key"]},
+        openbao_caller_gateway_generated_app_secrets={"caller-gw": ["caller_key"]},
+        openbao_rotation_exempt=["secret:apps/n8n"],
+        openbao_kv_tuned_mounts=[{"path": "config", "max_versions": 30}],
+    )
+    reconcile = _render(RECONCILE, context)
+    reconcile_stanzas = dict(_stanzas(reconcile))
+    expected_data = {
+        "secret/data/apps/promoted": ["create", "read", "update"],
+        "secrets-external/data/external": ["create", "read", "update"],
+        "config/data/review": ["create", "read", "update"],
+        "secret/data/apps/generated": ["create", "read", "update"],
+        "secret/data/ai/clickhouse": ["create", "read", "update"],
+        "secret/data/apps/agent-one": ["create", "read", "update"],
+        "secret/data/apps/caller-gw": ["create", "read", "update"],
+        "secret/data/apps/semaphore": ["read"],
+    }
+    actual_data_paths = {
+        path for path in reconcile_stanzas
+        if "/data/" in path and path.startswith(("secret/", "secrets-external/", "config/"))
+    }
+    assert actual_data_paths == set(expected_data)
+    for path, capabilities in expected_data.items():
+        assert _capabilities(reconcile_stanzas[path]) == capabilities, path
+
+    expected_metadata = {
+        "secret/metadata/apps/n8n",
+        "secret/metadata/apps/agent-one",
+        "secret/metadata/apps/caller-gw",
+    }
+    actual_metadata_paths = {
+        path for path in reconcile_stanzas
+        if "/metadata/" in path and path.startswith(("secret/", "secrets-external/", "config/"))
+    }
+    assert actual_metadata_paths == expected_metadata
+    for path in expected_metadata:
+        body = reconcile_stanzas[path]
+        assert _capabilities(body) == ["read", "patch"], path
+        assert not re.search(
+            r"(?m)^\s*(?:allowed_parameters|denied_parameters|required_parameters)\s*=",
+            body,
+        ), path
+
+    retention = reconcile_stanzas["config/config"]
+    assert _capabilities(retention) == ["read", "update"]
+    assert not re.search(
+        r"(?m)^\s*(?:allowed_parameters|denied_parameters|required_parameters)\s*=",
+        retention,
+    )
+    assert {
+        path for path in reconcile_stanzas
+        if path.endswith("/config") and path.startswith(("secret/", "secrets-external/", "config/"))
+    } == {"config/config"}
+
+    kv_paths = [
+        path for path in reconcile_stanzas
+        if path.startswith(("secret/data/", "secret/metadata/", "secrets-external/data/", "config/data/"))
     ]
-    assert readable == []
+    assert all("*" not in path and "+" not in path for path in kv_paths)
+    assert not {
+        "secret/data/apps/unlisted",
+        "secret/data/ai/unlisted",
+        "secret/data/ai/mcp/splunk",
+        "secret/data/ai/mcp/cribl",
+        "secret/metadata/apps/unlisted",
+        "secret/metadata/ai/mcp/splunk",
+        "secret/metadata/ai/mcp/cribl",
+        "config/data/unlisted",
+    } & reconcile_stanzas.keys()
+    assert "secret/data/infra/rustfs" not in reconcile_stanzas
+
+    flow_lock_stanzas = dict(_stanzas(_render(FLOW_LOCK, context)))
+    assert _capabilities(flow_lock_stanzas["secret/data/locks/global"]) == [
+        "create", "update", "read"
+    ]
+    assert _capabilities(flow_lock_stanzas["secret/metadata/locks/global"]) == [
+        "delete"
+    ]
+    assert _capabilities(flow_lock_stanzas["secret/data/infra/*"]) == ["read"]
+    assert _capabilities(flow_lock_stanzas["secret/metadata/infra/*"]) == [
+        "read", "list"
+    ]
+
+    # The default generated-seed map includes semaphore; adding the dispatch
+    # helper's read path must retain those named seed capabilities.
+    default_context = dict(values)
+    default_context["openbao_seeded_generated_app_secrets"] = default_context[
+        "openbao_generated_app_secrets"
+    ]
+    default_reconcile_stanzas = dict(_stanzas(_render(RECONCILE, default_context)))
+    assert _capabilities(default_reconcile_stanzas["secret/data/apps/semaphore"]) == [
+        "create", "read", "update"
+    ]
+
+
+def test_reconcile_metadata_grants_match_real_defaults(rendered_defaults):
+    values, _approles, _policies = rendered_defaults
+    templar = _templar(_trust(values))
+    expected_metadata = {}
+
+    rotation_exempt = templar.template(_trust(values["openbao_rotation_exempt"]))
+    for entry in rotation_exempt:
+        mount, path = entry.split(":", 1)
+        expected_metadata[f"{mount}/metadata/{path}"] = {"read", "patch"}
+
+    for name in (
+        "openbao_roster_agent_generated_app_secrets",
+        "openbao_caller_gateway_generated_app_secrets",
+    ):
+        seeded_apps = templar.template(_trust(values[name]))
+        for app in seeded_apps:
+            expected_metadata[
+                f"{values['openbao_kv_mount']}/metadata/apps/{app}"
+            ] = {"read", "patch"}
+
+    reconcile_stanzas = dict(_stanzas(_render(RECONCILE, values)))
+    actual_metadata_paths = {
+        path for path in reconcile_stanzas if "/metadata/" in path
+    }
+    assert actual_metadata_paths == set(expected_metadata)
+    for path, capabilities in expected_metadata.items():
+        body = reconcile_stanzas[path]
+        assert set(_capabilities(body)) == capabilities, path
+        assert not re.search(
+            r"(?m)^\s*(?:allowed_parameters|denied_parameters|required_parameters)\s*=",
+            body,
+        ), path
+
+
+def test_semaphore_execution_role_keeps_its_intended_policy_union(rendered_defaults):
+    values, approles, policies = rendered_defaults
+    semaphore = next(
+        role for role in approles
+        if role["name"] == values["openbao_semaphore_approle_name"]
+    )
+    attached = _role_policies(semaphore)
+    assert values["openbao_reconcile_policy_name"] in attached
+    assert values["openbao_ansible_converge_policy_name"] in attached
+    assert values["openbao_semaphore_policy_name"] in attached
+
+    policy_by_name = {policy["name"]: policy for policy in policies}
+    attached_stanzas = []
+    for policy_name in attached:
+        policy = policy_by_name.get(policy_name)
+        if policy is None:
+            continue
+        context = dict(values, item=policy)
+        attached_stanzas.append(
+            dict(_stanzas(_render(TEMPLATES / policy["template"], context)))
+        )
+
+    assert _effective_policy_union(
+        attached_stanzas, "secret/data/apps/semaphore"
+    ) == {"create", "read", "update"}
+    assert _effective_policy_union(
+        attached_stanzas, "secret/data/apps/unlisted"
+    ) == set()
+    assert _effective_policy_union(
+        attached_stanzas, "secret/data/ai/mcp/cribl"
+    ) == set()
