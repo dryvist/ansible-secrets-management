@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.54.1](https://github.com/dryvist/ansible-secrets-management/compare/v0.54.0...v0.54.1) (2026-11-01)
+
+
+### Bug Fixes
+
+* **authelia:** define the OpenBao UI public URL in the authelia role ([#407](https://github.com/dryvist/ansible-secrets-management/issues/407)) ([ae34e7f](https://github.com/dryvist/ansible-secrets-management/commit/ae34e7fb93ab5e8a7c246c4e5b1017861f4ed3b9))
+
 ## [0.54.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.53.1...v0.54.0) (2026-11-01)
 
 
