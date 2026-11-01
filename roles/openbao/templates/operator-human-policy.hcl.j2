@@ -23,3 +23,29 @@ path "secrets-external/data/ai/saas/opencode" {
 path "secrets-external/data/ai/saas/zai" {
   capabilities = ["create", "read", "update"]
 }
+
+# Self-token and UI bootstrap calls, as in OpenBao's default policy. The OIDC
+# role sets token_no_default_policy, so the UI needs these to load after login.
+path "auth/token/lookup-self" {
+  capabilities = ["read"]
+}
+
+path "auth/token/renew-self" {
+  capabilities = ["update"]
+}
+
+path "auth/token/revoke-self" {
+  capabilities = ["update"]
+}
+
+path "sys/capabilities-self" {
+  capabilities = ["update"]
+}
+
+path "sys/internal/ui/resultant-acl" {
+  capabilities = ["read"]
+}
+
+path "sys/internal/ui/mounts/*" {
+  capabilities = ["read"]
+}

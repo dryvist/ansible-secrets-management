@@ -1,0 +1,5 @@
+---
+openbao_dify_agent_code_simplifier_policy_name: agent-code-simplifier
+openbao_dify_agent_code_simplifier_approle_name: agent-code-simplifier
+openbao_dify_agent_ci_fixer_policy_name: agent-ci-fixer
+openbao_dify_agent_ci_fixer_approle_name: agent-ci-fixer

@@ -15,7 +15,7 @@ configuration, so each App's own grant caps every token its mount mints:
 | --- | --- | --- |
 | `github` | everyday | read sets and the raw `github/token` write endpoint |
 | `github-admin` | admin | admin, repo-create, docs-publisher, ci-resolver, runner, exporter |
-| `github-agents` | agents | none: `open-llm` uses the raw `github-agents/token` with caller-selected org and repository fields |
+| `github-agents` | agents | public-read/write and two least-privilege fleet-agent sets, scoped to public dryvist repositories |
 | `github-hermes` | hermes | `hermes-review-{public,private}`, `hermes-read-public`, `hermes-author-public`, split by repository visibility |
 | `github-work` | work | a derived `read` set and the raw token endpoint for write; the App's grant is the only write ceiling |
 | `github-personal` | user-owned App | `personal-write`, pinned to its configured installation |
@@ -112,6 +112,13 @@ Token access is tiered; the tier IS the privilege boundary:
   reads only `secret/apps/open-llm`,
   `secrets-external/ai/saas/zai`, and the role IDs for its sandbox roles.
   Machine-class AppRole bound to one /32; 15m token, renewable to 60m.
+- **fleet agents (`agent-code-simplifier`, `agent-ci-fixer`)** — named sets on
+  `github-agents`, each resolved to the public dryvist repository list at
+  converge. The code simplifier gets `pull_requests: write` and `contents:
+  read`; the CI fixer gets `contents` and `pull_requests` write with `checks`
+  and `actions` read. The AppRole token is capped at 15m; the GitHub
+  installation token expires in one hour. Their reusable, human-issued
+  SecretIDs last 720h and are bound to the configured Dify host CIDR.
 - **hermes (`hermes-public`, `hermes-private`)** — four sets on
   `github-hermes`. `hermes-review-*`: `pull_requests`/`issues` write,
   `contents`/`checks`/`metadata` read, over the organization's public (or

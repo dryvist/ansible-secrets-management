@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.55.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.54.1...v0.55.0) (2026-11-01)
+
+
+### Features
+
+* **openbao:** add per-agent AppRoles for the Dify fleet agents ([#410](https://github.com/dryvist/ansible-secrets-management/issues/410)) ([26debff](https://github.com/dryvist/ansible-secrets-management/commit/26debff38d31750124bb652e01e7fa4ec703b3bd))
+
 ## [0.54.1](https://github.com/dryvist/ansible-secrets-management/compare/v0.54.0...v0.54.1) (2026-11-01)
 
 

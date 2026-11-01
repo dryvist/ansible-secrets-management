@@ -99,8 +99,20 @@ def test_policy_write_capabilities_are_limited_to_two_provider_records():
         "secrets-external/data/ai/saas/opencode",
         "secrets-external/data/ai/saas/zai",
     }
+    # Self-token and UI bootstrap grants from OpenBao's default policy; the role
+    # sets token_no_default_policy, so the UI cannot load after login without them.
+    self_grants = {
+        "auth/token/lookup-self": {"read"},
+        "auth/token/renew-self": {"update"},
+        "auth/token/revoke-self": {"update"},
+        "sys/capabilities-self": {"update"},
+        "sys/internal/ui/resultant-acl": {"read"},
+        "sys/internal/ui/mounts/*": {"read"},
+    }
     write_capabilities = {"create", "update", "delete", "patch", "sudo"}
 
+    assert {path: capabilities for path, capabilities in grants if path in self_grants} == self_grants
+    grants = [(path, capabilities) for path, capabilities in grants if path not in self_grants]
     assert {path for path, _ in grants} == read_paths | write_paths
     assert {
         path
