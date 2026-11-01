@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.52.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.51.1...v0.52.0) (2026-10-31)
+
+
+### Features
+
+* **openbao:** grant converge seeding for specialist-platform evaluation instances ([#391](https://github.com/dryvist/ansible-secrets-management/issues/391)) ([13941a1](https://github.com/dryvist/ansible-secrets-management/commit/13941a1c957966b6ce1f78b5ecd3dc64c1bfe13e))
+
 ## [0.51.1](https://github.com/dryvist/ansible-secrets-management/compare/v0.51.0...v0.51.1) (2026-10-31)
 
 

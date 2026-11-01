@@ -173,6 +173,39 @@ path "{{ openbao_kv_mount }}/metadata/ai/dify" {
   capabilities = ["read"]
 }
 
+# Evaluation-only specialist-platform instances: one exact leaf per candidate.
+path "{{ openbao_kv_mount }}/data/ai/eval/specialist-platform/sim" {
+  capabilities = ["create", "update", "read"]
+}
+
+path "{{ openbao_kv_mount }}/metadata/ai/eval/specialist-platform/sim" {
+  capabilities = ["read"]
+}
+
+path "{{ openbao_kv_mount }}/data/ai/eval/specialist-platform/langflow" {
+  capabilities = ["create", "update", "read"]
+}
+
+path "{{ openbao_kv_mount }}/metadata/ai/eval/specialist-platform/langflow" {
+  capabilities = ["read"]
+}
+
+path "{{ openbao_kv_mount }}/data/ai/eval/specialist-platform/dify" {
+  capabilities = ["create", "update", "read"]
+}
+
+path "{{ openbao_kv_mount }}/metadata/ai/eval/specialist-platform/dify" {
+  capabilities = ["read"]
+}
+
+path "{{ openbao_kv_mount }}/data/ai/eval/specialist-platform/hermes" {
+  capabilities = ["create", "update", "read"]
+}
+
+path "{{ openbao_kv_mount }}/metadata/ai/eval/specialist-platform/hermes" {
+  capabilities = ["read"]
+}
+
 # Transitional exact-path exception (Zammad MCP): the converge publishes the
 # minted Zammad MCP connection here. Same narrow create/update/read on the
 # SINGLE secret as the splunk grant above — deliberately NOT a wildcard.
