@@ -9,7 +9,6 @@
     ansible_python_interpreter: "{{ ansible_playbook_python }}"
     ingress_domain: example.test
     grafana_hostname: grafana
-    authelia_openbao_ui_public_url: https://openbao.example.test
     wall_kiosk_route_names: [wall, glance]
     tofu_data:
       domain: example.test
@@ -38,6 +37,7 @@
             authelia_db_path: "{{ _authelia_test_dir.path }}/authelia.sqlite3"
             authelia_notification_file: "{{ _authelia_test_dir.path }}/notification.txt"
             authelia_users_file: "{{ _authelia_test_dir.path }}/users.yml"
+            authelia_openbao_ui_public_url: https://openbao.example.test
             authelia_bao_elevation_enabled: true
             authelia_approve_subject: user:ci
             authelia_approve_networks: [192.0.2.0/24]
