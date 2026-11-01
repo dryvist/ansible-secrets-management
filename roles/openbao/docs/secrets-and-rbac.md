@@ -18,8 +18,14 @@ permission set. `sandbox-agent-write` reads both leaves and mints from
 `public-write`. These roles read no other KV paths. Both require
 `OPENBAO_SANDBOX_AGENT_CIDRS`, use 15-minute token limits, and have one-use
 15-minute SecretIDs. The `open-llm` dispatcher can mint wrapped SecretIDs for
-either role and reads the exact `secrets-external/zai-coding` leaf. Its internal
+either role and reads the exact `secrets-external/ai/saas/zai` leaf. Its internal
 leaf no longer carries the sandbox service tokens.
+
+The `sandbox-zcode-read` and `sandbox-zcode-write` roles read only the Z.ai
+provider leaf; `sandbox-opencode-read` and `sandbox-opencode-write` read only
+`secret/apps/sandbox-agent-router`. Each mints the matching public GitHub token.
+They share the sandbox CIDR, token lifetime, and one-use SecretID settings.
+The dispatcher can read each role ID and mint wrapped SecretIDs for each role.
 
 `roles/openbao/defaults/main/08d-approle-taxonomy.yml` maps declared AppRoles
 to the six identity classes. The AppRole initialization fails if any declared

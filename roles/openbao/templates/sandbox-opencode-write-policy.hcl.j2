@@ -1,0 +1,9 @@
+{{ ansible_managed | comment }}
+# Per-tool provider access and public repository tokens.
+path "{{ openbao_kv_mount }}/data/apps/sandbox-agent-router" {
+  capabilities = ["read"]
+}
+
+path "{{ openbao_github_agents_mount }}/token/public-write" {
+  capabilities = ["create", "update"]
+}

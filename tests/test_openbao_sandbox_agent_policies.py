@@ -76,6 +76,32 @@ class SandboxAgentPolicies(unittest.TestCase):
         self.assertNotIn('path "secret/metadata', rendered)
         self.assertNotIn('path "github-agents/token/public-read"', rendered)
 
+    def test_per_tool_policies_have_only_their_exact_grants(self):
+        for tool, credential in (
+            ("zcode", "secrets-external/data/ai/saas/zai"),
+            ("opencode", "secret/data/apps/sandbox-agent-router"),
+        ):
+            for tier in ("read", "write"):
+                with self.subTest(tool=tool, tier=tier):
+                    rendered = _render(f"sandbox-{tool}-{tier}-policy.hcl.j2")
+                    paths = re.findall(r'path "([^"]+)"', rendered)
+                    grants = re.findall(
+                        r'path "([^"]+)" \{\s*capabilities = \[([^\]]+)\]\s*\}', rendered
+                    )
+                    self.assertEqual(paths, [credential, f"github-agents/token/public-{tier}"])
+                    self.assertEqual(grants, [
+                        (credential, '"read"'),
+                        (f"github-agents/token/public-{tier}", '"create", "update"'),
+                    ])
+                    other = ("secret/data/apps/sandbox-agent-router" if tool == "zcode"
+                             else "secrets-external/data/ai/saas/zai")
+                    self.assertNotIn(other, paths)
+                    self.assertEqual([p for p in paths if p.startswith("secret/data/apps/")],
+                                     [credential] if tool == "opencode" else [])
+                    self.assertFalse(any("llm-router" in p or p.startswith("sys/")
+                                         or "/metadata/" in p or "*" in p for p in paths))
+                    self.assertNotIn('"list"', rendered)
+
 
 if __name__ == "__main__":
     unittest.main()
