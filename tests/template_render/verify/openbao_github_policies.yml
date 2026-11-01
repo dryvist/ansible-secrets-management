@@ -477,13 +477,21 @@
           - >-
             _open_llm_paths == [openbao_kv_mount ~ '/data/apps/open-llm',
                                 openbao_kv_mount ~ '/metadata/apps/open-llm',
-                                'secrets-external/data/zai-coding',
+                                'secrets-external/data/ai/saas/zai',
                                 openbao_github_agents_mount ~ '/token',
                                 openbao_github_agents_mount ~ '/token/public-write',
                                 'auth/approle/role/' ~ openbao_sandbox_agent_read_approle_name ~ '/role-id',
                                 'auth/approle/role/' ~ openbao_sandbox_agent_read_approle_name ~ '/secret-id',
                                 'auth/approle/role/' ~ openbao_sandbox_agent_write_approle_name ~ '/role-id',
-                                'auth/approle/role/' ~ openbao_sandbox_agent_write_approle_name ~ '/secret-id']
+                                'auth/approle/role/' ~ openbao_sandbox_agent_write_approle_name ~ '/secret-id',
+                                'auth/approle/role/' ~ openbao_sandbox_zcode_read_approle_name ~ '/role-id',
+                                'auth/approle/role/' ~ openbao_sandbox_zcode_read_approle_name ~ '/secret-id',
+                                'auth/approle/role/' ~ openbao_sandbox_zcode_write_approle_name ~ '/role-id',
+                                'auth/approle/role/' ~ openbao_sandbox_zcode_write_approle_name ~ '/secret-id',
+                                'auth/approle/role/' ~ openbao_sandbox_opencode_read_approle_name ~ '/role-id',
+                                'auth/approle/role/' ~ openbao_sandbox_opencode_read_approle_name ~ '/secret-id',
+                                'auth/approle/role/' ~ openbao_sandbox_opencode_write_approle_name ~ '/role-id',
+                                'auth/approle/role/' ~ openbao_sandbox_opencode_write_approle_name ~ '/secret-id']
           - _read_role_id_stanza | regex_findall('capabilities = (.*)') == ['["read"]']
           - _write_role_id_stanza | regex_findall('capabilities = (.*)') == ['["read"]']
           - >-
@@ -512,7 +520,7 @@
             'capabilities = ["create", "update"]' in _token_stanza
           - >-
             'max_wrapping_ttl = "15m"' in _open_llm_text
-          - _open_llm_text | regex_findall('min_wrapping_ttl = "1s"') | length == 2
+          - _open_llm_text | regex_findall('min_wrapping_ttl = "1s"') | length == 6
           - >-
             _open_llm_paths | select('match', '^(github|github-admin|' ~ openbao_github_hermes_mount ~ ')/')
             | list == []
@@ -521,9 +529,61 @@
             | select('search', 'list|delete|sudo') | list == []
         fail_msg: >-
           open-llm grants {{ _open_llm_paths }}. It must read only its internal
-          bucket, exact Z.ai leaf, and two sandbox role IDs, mint raw tokens
+          bucket, exact Z.ai leaf, and sandbox role IDs, mint raw tokens
           and use the named public-write set, and issue wrapped one-use SecretIDs
-          for the two sandbox roles.
+          for the sandbox roles.
+
+    - name: Render per-tool sandbox policies
+      ansible.builtin.template:
+        src: "{{ _template_dir }}/{{ item }}-policy.hcl.j2"
+        dest: "{{ _fixture_dir }}/{{ item }}-policy.hcl"
+        mode: "0644"
+      loop: [sandbox-zcode-read, sandbox-zcode-write, sandbox-opencode-read, sandbox-opencode-write]
+
+    - name: Read per-tool sandbox policies
+      ansible.builtin.slurp:
+        src: "{{ _fixture_dir }}/{{ item }}-policy.hcl"
+      loop: [sandbox-zcode-read, sandbox-zcode-write, sandbox-opencode-read, sandbox-opencode-write]
+      register: _sandbox_tool_policies
+
+    - name: Assert each per-tool policy has exactly its credential and token grants
+      vars:
+        _policy: "{{ item.content | b64decode }}"
+        _credential: >-
+          {{ 'secrets-external/data/ai/saas/zai' if 'zcode' in item.item
+             else openbao_kv_mount ~ '/data/apps/sandbox-agent-router' }}
+        _token: >-
+          {{ openbao_github_agents_mount ~ '/token/public-'
+             ~ ('read' if item.item.endswith('-read') else 'write') }}
+      ansible.builtin.assert:
+        that:
+          - _policy | regex_findall('(?m)^path "([^"]+)"') == [_credential, _token]
+          - _policy | regex_findall('capabilities = (.*)') == ['["read"]', '["create", "update"]']
+      loop: "{{ _sandbox_tool_policies.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: Assert per-tool dispatcher grants require wrapping
+      vars:
+        _role_id: >-
+          {{ _open_llm_text | regex_search('(?ms)path "auth/approle/role/'
+             ~ item ~ '/role-id" [{].*?^[}]') }}
+        _secret_id: >-
+          {{ _open_llm_text | regex_search('(?ms)path "auth/approle/role/'
+             ~ item ~ '/secret-id" [{].*?^[}]') }}
+      ansible.builtin.assert:
+        that:
+          - _role_id | regex_findall('capabilities = (.*)') == ['["read"]']
+          - _secret_id | regex_findall('capabilities = (.*)') == ['["create", "update"]']
+          - >-
+            'min_wrapping_ttl = "1s"' in _secret_id
+          - >-
+            'max_wrapping_ttl = "15m"' in _secret_id
+      loop:
+        - "{{ openbao_sandbox_zcode_read_approle_name }}"
+        - "{{ openbao_sandbox_zcode_write_approle_name }}"
+        - "{{ openbao_sandbox_opencode_read_approle_name }}"
+        - "{{ openbao_sandbox_opencode_write_approle_name }}"
 
     - name: Assert no other tier reaches the agents mount
       ansible.builtin.assert:
@@ -557,11 +617,19 @@
             (_open_llm_unset_raw.content | b64decode) | regex_findall('(?m)^path "([^"]+)"')
             == [openbao_kv_mount ~ '/data/apps/open-llm',
                 openbao_kv_mount ~ '/metadata/apps/open-llm',
-                'secrets-external/data/zai-coding',
+                'secrets-external/data/ai/saas/zai',
                 'auth/approle/role/' ~ openbao_sandbox_agent_read_approle_name ~ '/role-id',
                 'auth/approle/role/' ~ openbao_sandbox_agent_read_approle_name ~ '/secret-id',
                 'auth/approle/role/' ~ openbao_sandbox_agent_write_approle_name ~ '/role-id',
-                'auth/approle/role/' ~ openbao_sandbox_agent_write_approle_name ~ '/secret-id']
+                'auth/approle/role/' ~ openbao_sandbox_agent_write_approle_name ~ '/secret-id',
+                                'auth/approle/role/' ~ openbao_sandbox_zcode_read_approle_name ~ '/role-id',
+                                'auth/approle/role/' ~ openbao_sandbox_zcode_read_approle_name ~ '/secret-id',
+                                'auth/approle/role/' ~ openbao_sandbox_zcode_write_approle_name ~ '/role-id',
+                                'auth/approle/role/' ~ openbao_sandbox_zcode_write_approle_name ~ '/secret-id',
+                                'auth/approle/role/' ~ openbao_sandbox_opencode_read_approle_name ~ '/role-id',
+                                'auth/approle/role/' ~ openbao_sandbox_opencode_read_approle_name ~ '/secret-id',
+                                'auth/approle/role/' ~ openbao_sandbox_opencode_write_approle_name ~ '/role-id',
+                                'auth/approle/role/' ~ openbao_sandbox_opencode_write_approle_name ~ '/secret-id']
         fail_msg: With no installation ID the open-llm policy must render no GitHub mint grant.
 
     - name: Pin the agents installation back to the configured case

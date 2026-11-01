@@ -119,6 +119,13 @@ class TestUnknownOverrides(unittest.TestCase):
 class TestShippedDeclarationIsClean(unittest.TestCase):
     """The repo's own override map must name only roles it declares."""
 
+    def test_per_tool_roles_use_sandbox_agent_cidrs(self):
+        defaults = yaml.safe_load(DEFAULTS.read_text(encoding="utf-8"))
+        overrides = defaults["openbao_approle_cidr_class_overrides"]
+        for tool in ("zcode", "opencode"):
+            for tier in ("read", "write"):
+                self.assertEqual(overrides[f"sandbox-{tool}-{tier}"], "sandbox_agent")
+
     def test_no_unknown_overrides_in_repo(self):
         loaded = {}
         for f in sorted((ROOT / "roles" / "openbao" / "defaults" / "main").glob("*.yml")):

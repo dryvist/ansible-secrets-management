@@ -110,7 +110,7 @@ Token access is tiered; the tier IS the privilege boundary:
   `pull_requests: write` map or the exact `contents: read` map. The App's grant
   remains the permission ceiling. The policy reaches no other GitHub mount and
   reads only `secret/apps/open-llm`,
-  `secrets-external/zai-coding`, and the role IDs for its two sandbox roles.
+  `secrets-external/ai/saas/zai`, and the role IDs for its sandbox roles.
   Machine-class AppRole bound to one /32; 15m token, renewable to 60m.
 - **hermes (`hermes-public`, `hermes-private`)** — four sets on
   `github-hermes`. `hermes-review-*`: `pull_requests`/`issues` write,
