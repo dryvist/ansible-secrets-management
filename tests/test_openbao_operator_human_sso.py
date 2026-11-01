@@ -14,6 +14,7 @@ DEFAULTS = OPENBAO / "defaults/main/05j-openbao-ui-operator-oidc.yml"
 POLICY_DEFAULTS = OPENBAO / "defaults/main/07c-base-policies.yml"
 AUTHELIA_DEFAULTS = ROOT / "roles/authelia/defaults/main/01-oidc-clients.yml"
 AUTHELIA_GROUP_DEFAULTS = ROOT / "roles/authelia/defaults/main/02-notifier-and-rest.yml"
+AUTHELIA_URL_DEFAULTS = ROOT / "roles/authelia/defaults/main/03-openbao-ui-public-url.yml"
 SECRET_DEFAULTS = OPENBAO / "defaults/main/01c-app-secrets-generated.yml"
 AUTH_TASKS = OPENBAO / "tasks/init/09g-openbao-ui-operator-oidc.yml"
 AUTH_PARENT = OPENBAO / "tasks/init/09-auth-methods-and-terrakube-jwt.yml"
@@ -127,6 +128,7 @@ def test_policy_is_registered_and_secret_uses_the_generated_authelia_path():
     policy_defaults = yaml.safe_load(POLICY_DEFAULTS.read_text(encoding="utf-8"))
     authelia_defaults = yaml.safe_load(AUTHELIA_DEFAULTS.read_text(encoding="utf-8"))
     authelia_group_defaults = yaml.safe_load(AUTHELIA_GROUP_DEFAULTS.read_text(encoding="utf-8"))
+    authelia_url_defaults = yaml.safe_load(AUTHELIA_URL_DEFAULTS.read_text(encoding="utf-8"))
     secret_defaults = yaml.safe_load(SECRET_DEFAULTS.read_text(encoding="utf-8"))
     auth_tasks = yaml.safe_load(AUTH_TASKS.read_text(encoding="utf-8"))
     parent = yaml.safe_load(AUTH_PARENT.read_text(encoding="utf-8"))
@@ -140,6 +142,9 @@ def test_policy_is_registered_and_secret_uses_the_generated_authelia_path():
     assert defaults["openbao_authelia_operator_group"] == authelia_group_defaults[
         "authelia_operator_group"
     ]
+    assert authelia_url_defaults["authelia_openbao_ui_public_url"] == (
+        "{{ lookup('env', 'BAO_ADDR') | default('', true) | regex_replace('/+$', '') }}"
+    )
     assert "OPENBAO_AUTHELIA_OPERATOR_GROUP" in defaults["openbao_authelia_operator_group"]
     assert "authelia_oidc_openbao_ui_client_secret" in secret_defaults[
         "openbao_generated_app_secrets"
