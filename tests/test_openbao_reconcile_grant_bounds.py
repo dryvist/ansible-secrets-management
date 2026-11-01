@@ -315,6 +315,7 @@ def test_agent_workstation_effective_approle_policy_is_only_its_dedicated_policy
         "name": policy_name,
         "template": "agent-workstation-policy.hcl.j2",
     } in policies
+    assert policy_name not in values["openbao_reconcile_policy_excluded_names"]
 
 
 def test_rendered_policy_writes_exclude_issuer_and_plane_policies(rendered_defaults):
