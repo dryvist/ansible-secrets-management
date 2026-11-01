@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.53.1](https://github.com/dryvist/ansible-secrets-management/compare/v0.53.0...v0.53.1) (2026-11-01)
+
+
+### Bug Fixes
+
+* **openbao:** assign a dedicated agent workstation read policy ([#398](https://github.com/dryvist/ansible-secrets-management/issues/398)) ([cbc32d4](https://github.com/dryvist/ansible-secrets-management/commit/cbc32d48b141074549f4e651f510cdb0b7fb509b))
+
 ## [0.53.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.52.0...v0.53.0) (2026-11-01)
 
 
