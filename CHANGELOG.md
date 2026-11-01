@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.53.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.52.0...v0.53.0) (2026-11-01)
+
+
+### Features
+
+* **openbao:** generate the Hermes eval profile router key ([#393](https://github.com/dryvist/ansible-secrets-management/issues/393)) ([241186a](https://github.com/dryvist/ansible-secrets-management/commit/241186a7045ca681c075c4b5368d24e34af6dec8))
+
 ## [0.52.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.51.1...v0.52.0) (2026-10-31)
 
 
