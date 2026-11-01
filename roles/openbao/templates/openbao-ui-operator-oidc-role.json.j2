@@ -1,0 +1,12 @@
+{{ {'role_type': 'oidc',
+    'allowed_redirect_uris': [openbao_operator_oidc_ui_redirect_uri,
+                              openbao_operator_oidc_cli_redirect_uri],
+    'user_claim': 'preferred_username',
+    'groups_claim': 'groups',
+    'bound_claims': {'groups': [openbao_authelia_operator_group]},
+    'bound_claims_type': 'string',
+    'oidc_scopes': ['profile', 'groups', 'email'],
+    'token_policies': [openbao_operator_human_policy_name],
+    'token_no_default_policy': true,
+    'token_ttl': openbao_operator_oidc_token_ttl,
+    'token_max_ttl': openbao_operator_oidc_token_max_ttl} | to_json }}

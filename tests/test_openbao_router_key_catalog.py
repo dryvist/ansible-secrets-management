@@ -99,6 +99,10 @@ def _render_open_llm_policy(installation_id):
         openbao_github_agents_raw_mint_permissions=RAW_MINT_PERMISSIONS,
         openbao_sandbox_agent_read_approle_name="sandbox-agent-read",
         openbao_sandbox_agent_write_approle_name="sandbox-agent-write",
+        openbao_sandbox_zcode_read_approle_name="sandbox-zcode-read",
+        openbao_sandbox_zcode_write_approle_name="sandbox-zcode-write",
+        openbao_sandbox_opencode_read_approle_name="sandbox-opencode-read",
+        openbao_sandbox_opencode_write_approle_name="sandbox-opencode-write",
     )
 
 
@@ -219,13 +223,21 @@ def test_open_llm_policy_mints_raw_and_named_agents_tokens():
     assert paths == [
         "secret/data/apps/open-llm",
         "secret/metadata/apps/open-llm",
-        "secrets-external/data/zai-coding",
+        "secrets-external/data/ai/saas/zai",
         "github/token",
         "github/token/public-write",
         "auth/approle/role/sandbox-agent-read/role-id",
         "auth/approle/role/sandbox-agent-read/secret-id",
         "auth/approle/role/sandbox-agent-write/role-id",
         "auth/approle/role/sandbox-agent-write/secret-id",
+        "auth/approle/role/sandbox-zcode-read/role-id",
+        "auth/approle/role/sandbox-zcode-read/secret-id",
+        "auth/approle/role/sandbox-zcode-write/role-id",
+        "auth/approle/role/sandbox-zcode-write/secret-id",
+        "auth/approle/role/sandbox-opencode-read/role-id",
+        "auth/approle/role/sandbox-opencode-read/secret-id",
+        "auth/approle/role/sandbox-opencode-write/role-id",
+        "auth/approle/role/sandbox-opencode-write/secret-id",
     ]
 
     raw_token = re.search(r'(?ms)^path "github/token" \{\n(.*?)^\}', rendered)

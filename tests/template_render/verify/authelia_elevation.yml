@@ -28,6 +28,7 @@
       terrakube_dex: x
       grafana: x
       litellm: x
+      openbao_ui: x
       bao_elevate_trusted: x
       bao_elevate_policy_sync: x
     ingress_domain: example.test
@@ -61,6 +62,12 @@
           - >-
             'authelia_oidc_bao_elevate_policy_sync_client_secret'
             not in openbao_generated_app_secrets.authelia
+          - >-
+            'authelia_oidc_openbao_ui_client_secret'
+            in openbao_generated_app_secrets.authelia
+          - >-
+            authelia_oidc_openbao_ui_client_secret_path
+            == openbao_generated_app_secret_paths.get('authelia', 'apps/authelia')
           - openbao_generated_app_secret_paths.client == 'core/client'
         quiet: true
 
@@ -71,6 +78,8 @@
       ansible.builtin.set_fact:
         authelia_approve_networks: ["192.0.2.0/24"]
         authelia_bao_elevation_enabled: true
+        authelia_operator_group: openbao-operators-test
+        openbao_operator_oidc_public_url: https://openbao.example.test
 
     - name: Render the Authelia configuration
       ansible.builtin.template:
@@ -124,6 +133,34 @@
         _trusted: "{{ _clients | selectattr('client_id', 'eq', 'bao-elevate-trusted') | first }}"
         _policy_sync: "{{ _clients | selectattr('client_id', 'eq', 'bao-elevate-policy-sync') | first }}"
         _untrusted: "{{ _clients | selectattr('client_id', 'eq', 'bao-elevate-untrusted') | first }}"
+
+    - name: Assert the default-enabled OpenBao UI OIDC client
+      ansible.builtin.assert:
+        that:
+          - authelia_oidc_openbao_ui_enabled | bool
+          - authelia_operator_group in authelia_admin_groups
+          - _openbao_ui.client_id == authelia_oidc_openbao_ui_client_id
+          - _openbao_ui.public == false
+          - _openbao_ui.client_secret is defined
+          - >-
+            _openbao_ui.redirect_uris
+            == ['https://openbao.example.test/ui/vault/auth/oidc/oidc/callback',
+                'http://localhost:8250/oidc/callback']
+          - _openbao_ui.scopes == ['openid', 'profile', 'groups', 'email']
+          - _openbao_ui.grant_types == ['authorization_code']
+          - _openbao_ui.response_types == ['code']
+          - _openbao_ui.authorization_policy == 'two_factor'
+          - _openbao_ui.require_pkce == true
+          - _openbao_ui.pkce_challenge_method == 'S256'
+          - _openbao_ui.token_endpoint_auth_method == 'client_secret_basic'
+          - _openbao_ui.claims_policy == 'semaphore_claims_policy'
+        fail_msg: >-
+          the default OpenBao UI OIDC client is absent or does not use the
+          expected callbacks, group claims, and two-factor authorization
+          (got {{ _openbao_ui | default('ABSENT') }})
+      vars:
+        _clients: "{{ _authelia_config['identity_providers']['oidc']['clients'] }}"
+        _openbao_ui: "{{ _clients | selectattr('client_id', 'eq', 'openbao-ui') | first }}"
 
     - name: Assert the elevate policy admits only the operator, from the approval networks
       ansible.builtin.assert:

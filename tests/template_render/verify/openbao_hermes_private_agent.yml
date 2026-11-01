@@ -59,14 +59,13 @@
           The private reader policy grants {{ _paths }} with {{ _capabilities }}.
         quiet: true
 
-    - name: Assert the author set is exactly the declared private repository
+    - name: Assert the documentation source does not declare a private author set
       ansible.builtin.assert:
         that:
-          - openbao_github_hermes_author_private_repos_full_names == [openbao_github_oidc_docs_repository]
+          - openbao_github_oidc_docs_repository == 'example-org/example-docs'
           - >-
-            (openbao_github_hermes_permission_sets
-             | selectattr('name', 'equalto', 'hermes-author-private') | first).repositories
-            == [openbao_github_oidc_docs_repository | regex_replace('^[^/]+/', '')]
+            openbao_github_hermes_permission_sets
+            | selectattr('name', 'equalto', 'hermes-author-private') | list == []
         quiet: true
 
     - name: Assert the private and public GitHub policies expose only their tiers
@@ -86,9 +85,9 @@
           {{ _public_paths | select('match', '^' ~ _mount ~ '/token/') | list | sort }}
       ansible.builtin.assert:
         that:
-          - _private_tokens == [_mount ~ '/token/hermes-author-private',
-                                _mount ~ '/token/hermes-read-public',
+          - _private_tokens == [_mount ~ '/token/hermes-read-public',
                                 _mount ~ '/token/hermes-review-private'] | sort
+          - _mount ~ '/token/hermes-author-private' not in _private_tokens
           - _webhook_paths == ['secrets-external/data/' ~ openbao_hermes_webhook_kv_path]
           - _public_tokens == [_mount ~ '/token/hermes-author-public',
                                _mount ~ '/token/hermes-review-public'] | sort

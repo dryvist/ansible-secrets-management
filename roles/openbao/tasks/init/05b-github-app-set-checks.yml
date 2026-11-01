@@ -6,25 +6,13 @@
 # template-render tests run the same tasks against fixture responses.
 # Defined even for a mount that declares no sets, which the tasks below and
 # the reconcile in 05b-github-app-mount.yml then loop over as empty.
-- name: "Keep the Hermes private author scope exact on mount {{ gm.mount }}"
+- name: "Keep the docs source repository in owner/name form on mount {{ gm.mount }}"
   ansible.builtin.assert:
     that:
       - >-
-        openbao_github_hermes_author_private_repos_full_names
-        == ([openbao_github_oidc_docs_repository]
-            if openbao_github_oidc_docs_repository | default('', true) | length > 0 else [])
-      - >-
-        openbao_github_hermes_author_private_repos
-        == (openbao_github_hermes_author_private_repos_full_names
-            | map('regex_replace', '^[^/]+/', '') | list)
-      - >-
         openbao_github_oidc_docs_repository | default('', true) | length == 0
         or openbao_github_oidc_docs_repository is match('^[^/]+/[^/]+$')
-      - >-
-        openbao_github_oidc_docs_repository | default('', true) | length > 0
-        or (openbao_github_hermes_permission_sets
-            | selectattr('name', 'equalto', 'hermes-author-private') | list == [])
-    fail_msg: "The private author repository list does not match its declared scope."
+    fail_msg: "The docs source repository must be owner/name."
     quiet: true
   when:
     - gm.mount == openbao_github_hermes_mount

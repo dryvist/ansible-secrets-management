@@ -239,6 +239,10 @@
   ansible.builtin.import_tasks: 09e-authelia-elevation.yml
   when: openbao_authelia_elevation_enabled | bool
 
+- name: Configure the OpenBao UI OIDC operator login
+  ansible.builtin.import_tasks: 09g-openbao-ui-operator-oidc.yml
+  when: openbao_operator_oidc_enabled | bool
+
 # --- AppRoles (add-if-missing), one per RBAC group --------------------------
 
 # The human operator's own login is a third concern in this file (after the

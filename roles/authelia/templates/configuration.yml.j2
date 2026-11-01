@@ -255,6 +255,31 @@ identity_providers:
         authorization_policy: two_factor
         require_pkce: false
         token_endpoint_auth_method: client_secret_basic
+{% if authelia_oidc_openbao_ui_enabled | bool %}
+      # OpenBao UI and CLI use the same confidential authorization-code client.
+      # Authelia includes the groups and preferred_username claims OpenBao binds.
+      - client_id: '{{ authelia_oidc_openbao_ui_client_id }}'
+        client_name: OpenBao UI
+        client_secret: '{{ authelia_oidc_client_secret_hashes.openbao_ui }}'
+        public: false
+        redirect_uris:
+          - '{{ authelia_oidc_openbao_ui_redirect_uri }}'
+          - '{{ authelia_oidc_openbao_cli_redirect_uri }}'
+        scopes:
+          - openid
+          - profile
+          - groups
+          - email
+        grant_types:
+          - authorization_code
+        response_types:
+          - code
+        authorization_policy: two_factor
+        require_pkce: true
+        pkce_challenge_method: S256
+        token_endpoint_auth_method: client_secret_basic
+        claims_policy: semaphore_claims_policy
+{% endif %}
 {% if authelia_bao_elevation_enabled %}
       # OpenBao login approval clients. Device-code grant only: no redirect URI
       # and no authorization-code grant, so neither can drive a browser redirect.

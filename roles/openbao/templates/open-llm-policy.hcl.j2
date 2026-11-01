@@ -1,17 +1,17 @@
 {{ ansible_managed | comment }}
 # OpenBao policy for the open-llm AppRole — the untrusted-tier dispatcher.
 # The dispatcher reads its internal bucket, the exact external Z.ai leaf, and
-# the role IDs for the two sandbox roles; mints raw tokens with caller-selected
+# the role IDs for the sandbox roles; mints raw tokens with caller-selected
 # org and repository selectors and one of two exact permission maps, and mints
 # from the named public-write set; and issues wrapped SecretIDs for the roles.
 #
-#   * read secret/apps/open-llm and secrets-external/zai-coding;
-#   * read the role IDs for sandbox-agent-read and sandbox-agent-write;
+#   * read secret/apps/open-llm and secrets-external/ai/saas/zai;
+#   * read the role IDs for the sandbox roles;
 #   * mint from the raw endpoint with optional org_name and required
 #     repositories, restricted to the two exact permission maps the dispatcher sends;
 #     installation_id and repository_ids are denied;
 #   * mint using the named public-write permission set;
-#   * issue wrapped SecretIDs for sandbox-agent-read and sandbox-agent-write.
+#   * issue wrapped SecretIDs for the sandbox roles.
 #
 # No KV write, no other secret path, and no other GitHub mount.
 
@@ -23,7 +23,7 @@ path "{{ openbao_kv_mount }}/metadata/apps/open-llm" {
   capabilities = ["read"]
 }
 
-path "secrets-external/data/zai-coding" {
+path "secrets-external/data/ai/saas/zai" {
   capabilities = ["read"]
 }
 
@@ -68,6 +68,46 @@ path "auth/approle/role/{{ openbao_sandbox_agent_write_approle_name }}/role-id" 
 }
 
 path "auth/approle/role/{{ openbao_sandbox_agent_write_approle_name }}/secret-id" {
+  capabilities = ["create", "update"]
+  min_wrapping_ttl = "1s"
+  max_wrapping_ttl = "15m"
+}
+
+path "auth/approle/role/{{ openbao_sandbox_zcode_read_approle_name }}/role-id" {
+  capabilities = ["read"]
+}
+
+path "auth/approle/role/{{ openbao_sandbox_zcode_read_approle_name }}/secret-id" {
+  capabilities = ["create", "update"]
+  min_wrapping_ttl = "1s"
+  max_wrapping_ttl = "15m"
+}
+
+path "auth/approle/role/{{ openbao_sandbox_zcode_write_approle_name }}/role-id" {
+  capabilities = ["read"]
+}
+
+path "auth/approle/role/{{ openbao_sandbox_zcode_write_approle_name }}/secret-id" {
+  capabilities = ["create", "update"]
+  min_wrapping_ttl = "1s"
+  max_wrapping_ttl = "15m"
+}
+
+path "auth/approle/role/{{ openbao_sandbox_opencode_read_approle_name }}/role-id" {
+  capabilities = ["read"]
+}
+
+path "auth/approle/role/{{ openbao_sandbox_opencode_read_approle_name }}/secret-id" {
+  capabilities = ["create", "update"]
+  min_wrapping_ttl = "1s"
+  max_wrapping_ttl = "15m"
+}
+
+path "auth/approle/role/{{ openbao_sandbox_opencode_write_approle_name }}/role-id" {
+  capabilities = ["read"]
+}
+
+path "auth/approle/role/{{ openbao_sandbox_opencode_write_approle_name }}/secret-id" {
   capabilities = ["create", "update"]
   min_wrapping_ttl = "1s"
   max_wrapping_ttl = "15m"

@@ -35,6 +35,10 @@ def _render_policy(path):
         openbao_github_agents_raw_mint_permissions=RAW_MINT_PERMISSIONS,
         openbao_sandbox_agent_read_approle_name="sandbox-agent-read",
         openbao_sandbox_agent_write_approle_name="sandbox-agent-write",
+        openbao_sandbox_zcode_read_approle_name="sandbox-zcode-read",
+        openbao_sandbox_zcode_write_approle_name="sandbox-zcode-write",
+        openbao_sandbox_opencode_read_approle_name="sandbox-opencode-read",
+        openbao_sandbox_opencode_write_approle_name="sandbox-opencode-write",
     )
 
 

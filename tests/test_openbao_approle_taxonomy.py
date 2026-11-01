@@ -52,7 +52,19 @@ class TestAppRoleTaxonomy(unittest.TestCase):
 
         self.assertEqual(unclassified, [])
         self.assertEqual(invalid_classes, {})
+        for tool in ("zcode", "opencode"):
+            for tier in ("read", "write"):
+                name = f"sandbox-{tool}-{tier}"
+                self.assertEqual(class_map[name], "untrusted-sandbox")
+                role = next(role for role in roles if role["name"] == name)
+                self.assertEqual(role["policy"], name)
+                self.assertEqual(role["secret_id_ttl"], "15m")
+                self.assertEqual(role["secret_id_num_uses"], 1)
+                self.assertEqual(role["token_ttl"], "15m")
+                self.assertEqual(role["token_max_ttl"], "15m")
+                self.assertFalse(role["manage_secret_id"])
         self.assertEqual(class_map["ai-orchestrator"], "trusted-agent-write")
+        self.assertEqual(class_map["agent-workstation"], "trusted-agent-read")
 
 
 if __name__ == "__main__":
