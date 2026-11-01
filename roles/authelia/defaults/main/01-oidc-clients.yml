@@ -100,6 +100,22 @@ authelia_oidc_litellm_client_secret_plain: >-
      or undef(hint='authelia_oidc_litellm_client_secret missing from OpenBao secret/apps/authelia') }}
 authelia_oidc_litellm_client_secret_hash_file: "{{ authelia_secrets_dir }}/oidc_litellm_client_secret_hash"
 
+# OpenBao UI authorization-code client. Its confidential secret is generated
+# in OpenBao at the app-secret path below and hashed guest-side like the other
+# confidential clients. The path is relative to the OpenBao KV mount so the
+# OpenBao role can read the same field from its generate-if-absent seed.
+authelia_oidc_openbao_ui_enabled: true
+authelia_oidc_openbao_ui_client_id: openbao-ui
+authelia_oidc_openbao_ui_client_secret_path: apps/authelia
+authelia_oidc_openbao_ui_client_secret_plain: >-
+  {{ (bao_apps_secrets.authelia_oidc_openbao_ui_client_secret | default('', true))
+     or undef(hint='authelia_oidc_openbao_ui_client_secret missing from OpenBao secret/'
+                   ~ authelia_oidc_openbao_ui_client_secret_path) }}
+authelia_oidc_openbao_ui_client_secret_hash_file: "{{ authelia_secrets_dir }}/oidc_openbao_ui_client_secret_hash"
+authelia_oidc_openbao_ui_redirect_uri: >-
+  {{ openbao_operator_oidc_public_url }}/ui/vault/auth/oidc/oidc/callback
+authelia_oidc_openbao_cli_redirect_uri: "http://localhost:8250/oidc/callback"
+
 # OpenBao login approval, device-code clients. Off by default; enabling it
 # requires the trusted client secret in OpenBao and AUTHELIA_APPROVE_NETWORKS.
 authelia_bao_elevation_enabled: false
@@ -161,6 +177,10 @@ authelia_oidc_confidential_clients_base:
     hash_file: "{{ authelia_oidc_litellm_client_secret_hash_file }}"
 authelia_oidc_confidential_clients: >-
   {{ authelia_oidc_confidential_clients_base
+     + ([{'name': 'openbao_ui',
+          'secret_plain': authelia_oidc_openbao_ui_client_secret_plain,
+          'hash_file': authelia_oidc_openbao_ui_client_secret_hash_file}]
+        if authelia_oidc_openbao_ui_enabled | bool else [])
      + ([{'name': 'bao_elevate_trusted',
           'secret_plain': authelia_oidc_bao_elevate_trusted_client_secret_plain,
           'hash_file': authelia_oidc_bao_elevate_trusted_client_secret_hash_file}]

@@ -218,6 +218,18 @@
 # .token-limits.yaml: a file over budget is doing too many jobs, and the remedy
 # is an atomic, well-named file rather than a raised budget. import_tasks, not
 # include_tasks, so the inner tasks stay visible to --tags.
+- name: Assert the OpenBao UI OIDC inputs are supplied
+  ansible.builtin.assert:
+    that:
+      - authelia_operator_group | length > 0
+      - openbao_operator_oidc_public_url is match('^https://[^/]+$')
+    fail_msg: >-
+      OPENBAO_AUTHELIA_OPERATOR_GROUP must name the operator's Authelia group,
+      and openbao_operator_oidc_public_url must be the public OpenBao HTTPS URL before the
+      OpenBao UI OIDC client can be enabled.
+    quiet: true
+  when: authelia_oidc_openbao_ui_enabled | bool
+
 - name: Provision the confidential OIDC client-secret digests
   ansible.builtin.import_tasks: oidc_client_secrets.yml
 

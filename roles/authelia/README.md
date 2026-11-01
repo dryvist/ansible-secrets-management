@@ -26,7 +26,7 @@ opens every Traefik route whose tofu ingress row carries `sso = true`; the
 Authelia is the estate OIDC provider for apps that do their own sign-in.
 Hermes and Donna are public PKCE clients (no secret); Homarr, Langfuse,
 Phoenix, Semaphore, Terrakube's Dex, Grafana, LiteLLM and the trusted OpenBao
-elevation and policy-sync clients are confidential clients. A confidential
+UI, elevation and policy-sync clients are confidential clients. A confidential
 client's secret is the one exception to the no-shared-store rule below — it has
 a second consumer, the relying party — so it is generated once in OpenBao and
 hashed guest-side into `configuration.yml`; the plaintext never renders.
@@ -35,6 +35,12 @@ Client ids, redirect URIs and secret hash files live in
 
 `litellm` is the AI repo's LiteLLM proxy Admin UI (AI `roles/llm_router`);
 its redirect is `https://llm.<domain>/sso/callback`.
+
+The `openbao-ui` client is enabled by default for the OpenBao UI and CLI
+authorization-code flow. Set `OPENBAO_AUTHELIA_OPERATOR_GROUP` to the Authelia
+group that identifies the operator; the converge adds it to the operator
+account and refuses to render the client if it is unset. `BAO_ADDR` supplies
+the public OpenBao base URL for both registered callbacks.
 
 `bao-elevate-trusted` (confidential), `bao-elevate-policy-sync` (confidential)
 and `bao-elevate-untrusted` (public) are device-code clients that approve

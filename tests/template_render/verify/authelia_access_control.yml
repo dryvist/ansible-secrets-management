@@ -38,7 +38,10 @@
       terrakube_dex: x
       grafana: x
       litellm: x
+      openbao_ui: x
       bao_elevate_trusted: x
+    authelia_operator_group: openbao-operators-test
+    openbao_operator_oidc_public_url: https://openbao.example.test
     # Supplied by inventory/group_vars/all.yml at run time.
     ingress_domain: example.test
     grafana_hostname: grafana

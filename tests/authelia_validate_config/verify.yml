@@ -9,6 +9,7 @@
     ansible_python_interpreter: "{{ ansible_playbook_python }}"
     ingress_domain: example.test
     grafana_hostname: grafana
+    openbao_operator_oidc_public_url: https://openbao.example.test
     wall_kiosk_route_names: [wall, glance]
     tofu_data:
       domain: example.test
@@ -48,9 +49,9 @@
           ansible.builtin.set_fact:
             authelia_oidc_client_secret_hashes: >-
               {{ dict(['homarr', 'langfuse', 'phoenix', 'semaphore', 'terrakube_dex',
-                       'grafana', 'litellm', 'bao_elevate_trusted',
+                       'grafana', 'litellm', 'openbao_ui', 'bao_elevate_trusted',
                        'bao_elevate_policy_sync']
-                      | zip([_authelia_test_client_secret_hash] * 9)) }}
+                      | zip([_authelia_test_client_secret_hash] * 10)) }}
           no_log: true
 
         - name: Create valid users database and referenced files
