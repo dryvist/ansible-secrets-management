@@ -1,0 +1,25 @@
+{{ ansible_managed | comment }}
+# Read and list access is limited to the two credential mounts.
+path "secret/data/*" {
+  capabilities = ["read", "list"]
+}
+
+path "secret/metadata/*" {
+  capabilities = ["read", "list"]
+}
+
+path "secrets-external/data/*" {
+  capabilities = ["read", "list"]
+}
+
+path "secrets-external/metadata/*" {
+  capabilities = ["read", "list"]
+}
+
+path "secrets-external/data/ai/saas/opencode" {
+  capabilities = ["create", "read", "update"]
+}
+
+path "secrets-external/data/ai/saas/zai" {
+  capabilities = ["create", "read", "update"]
+}

@@ -54,12 +54,18 @@ authelia_terrakube_admin_group: >-
      if (authelia_terrakube_github_org and authelia_terrakube_github_team)
      else '' }}
 
+# The operator group used by the OpenBao UI OIDC role. There is deliberately
+# no group-name default; the UI client is enabled by default and fails closed
+# until OPENBAO_AUTHELIA_OPERATOR_GROUP is supplied.
+authelia_operator_group: "{{ lookup('env', 'OPENBAO_AUTHELIA_OPERATOR_GROUP') | default('', true) }}"
+
 # Groups the operator account must carry. `admins` is Authelia's own; the
 # Terrakube group is appended only when both atoms above resolved, so a run
 # without them omits the group rather than seeding a bare name that would look
 # granted and match nothing downstream.
 authelia_admin_groups: >-
   {{ ['admins']
+     + ([authelia_operator_group] if authelia_operator_group else [])
      + ([authelia_terrakube_admin_group] if authelia_terrakube_admin_group else []) }}
 
 # Owner of the users database. Split out from the literal `root` used elsewhere
