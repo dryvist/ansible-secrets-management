@@ -18,7 +18,7 @@ openbao_approle_class_map: >-
     'ai-sessions-backup': 'service-runtime',
     'ai-donna': 'trusted-agent-read',
     'agent-ssh-sign': 'trusted-agent-write',
-    'agent-workstation': 'trusted-agent-write',
+    'agent-workstation': 'trusted-agent-read',
     'ansible-converge': 'converge-automation',
     'ansible-converge-writer': 'converge-automation',
     'apps': 'service-runtime',

@@ -53,6 +53,7 @@ class TestAppRoleTaxonomy(unittest.TestCase):
         self.assertEqual(unclassified, [])
         self.assertEqual(invalid_classes, {})
         self.assertEqual(class_map["ai-orchestrator"], "trusted-agent-write")
+        self.assertEqual(class_map["agent-workstation"], "trusted-agent-read")
 
 
 if __name__ == "__main__":

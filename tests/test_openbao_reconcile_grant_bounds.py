@@ -299,6 +299,25 @@ def _assert_policy_bounds(reconcile, issuer, values, approles):
     return writable, issuer_roles, protected
 
 
+def test_agent_workstation_effective_approle_policy_is_only_its_dedicated_policy(
+    rendered_defaults,
+):
+    values, approles, policies = rendered_defaults
+    role_name = values["openbao_agent_workstation_approle_name"]
+    policy_name = values["openbao_agent_workstation_policy_name"]
+    role = next(role for role in approles if role["name"] == role_name)
+
+    assert _role_policies(role) == {policy_name}
+    assert values["openbao_approle_cli_parameters"][role_name]["token_policies"] == (
+        policy_name
+    )
+    assert {
+        "name": policy_name,
+        "template": "agent-workstation-policy.hcl.j2",
+    } in policies
+    assert policy_name not in values["openbao_reconcile_policy_excluded_names"]
+
+
 def test_rendered_policy_writes_exclude_issuer_and_plane_policies(rendered_defaults):
     values, approles, _policies = rendered_defaults
     reconcile = _render(RECONCILE, values)

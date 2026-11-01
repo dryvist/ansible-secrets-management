@@ -19,7 +19,7 @@ openbao_mcp_credential_custodians:
 # Workstation and AI-session identities that keep owned MCP credential access.
 openbao_mcp_credential_session_holders:
   splunk: [operator-workstation, ai-readonly, ai-elevated, ai-apply-ai, ai-apply-all]
-  cribl: [operator-workstation, agent-workstation, ai-readonly, ai-elevated, ai-apply-ai, ai-apply-all]
+  cribl: [operator-workstation, ai-readonly, ai-elevated, ai-apply-ai, ai-apply-all]
 
 # Non-custodian policies that still grant the slug once it is owned.
 openbao_mcp_credential_owners:
