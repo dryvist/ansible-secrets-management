@@ -113,7 +113,7 @@ authelia_oidc_openbao_ui_client_secret_plain: >-
                    ~ authelia_oidc_openbao_ui_client_secret_path) }}
 authelia_oidc_openbao_ui_client_secret_hash_file: "{{ authelia_secrets_dir }}/oidc_openbao_ui_client_secret_hash"
 authelia_oidc_openbao_ui_redirect_uri: >-
-  {{ openbao_operator_oidc_public_url }}/ui/vault/auth/oidc/oidc/callback
+  {{ authelia_openbao_ui_public_url }}/ui/vault/auth/oidc/oidc/callback
 authelia_oidc_openbao_cli_redirect_uri: "http://localhost:8250/oidc/callback"
 
 # OpenBao login approval, device-code clients. Off by default; enabling it

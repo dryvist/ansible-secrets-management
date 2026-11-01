@@ -1,0 +1,3 @@
+---
+# Mirrors the OpenBao role's BAO_ADDR-derived public URL default.
+authelia_openbao_ui_public_url: "{{ lookup('env', 'BAO_ADDR') | default('', true) | regex_replace('/+$', '') }}"
