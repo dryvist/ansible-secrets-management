@@ -125,6 +125,37 @@ class TestShippedDeclarationIsClean(unittest.TestCase):
         for tool in ("zcode", "opencode"):
             for tier in ("read", "write"):
                 self.assertEqual(overrides[f"sandbox-{tool}-{tier}"], "sandbox_agent")
+        for role in ("agent-code-simplifier", "agent-ci-fixer"):
+            self.assertNotIn(role, overrides)
+
+    def test_dify_roles_are_gated_and_bind_both_credentials_to_the_host_cidr(self):
+        defaults = {}
+        for path in sorted((ROOT / "roles/openbao/defaults/main").glob("*.yml")):
+            defaults.update(yaml.safe_load(path.read_text(encoding="utf-8")) or {})
+
+        host_cidr = "192.0.2.10/32"
+        defaults["openbao_platform_env"] = {"OPENBAO_DIFY_AGENT_CIDR": host_cidr}
+        roles = _render("{{ openbao_dify_agent_approles }}", defaults)
+        self.assertEqual(
+            [role["name"] for role in roles],
+            ["agent-code-simplifier", "agent-ci-fixer"],
+        )
+        for role in roles:
+            self.assertEqual(role["secret_id_bound_cidrs"], host_cidr)
+            self.assertEqual(role["secret_id_ttl"], "720h")
+            self.assertEqual(role["secret_id_num_uses"], 0)
+            self.assertEqual(role["token_ttl"], "15m")
+            self.assertEqual(role["token_max_ttl"], "15m")
+            self.assertFalse(role["manage_secret_id"])
+
+        defaults["openbao_approles"] = roles
+        parameters = _render("{{ openbao_approle_cli_parameters }}", defaults)
+        for name in ("agent-code-simplifier", "agent-ci-fixer"):
+            self.assertEqual(parameters[name]["secret_id_bound_cidrs"], host_cidr)
+            self.assertEqual(parameters[name]["token_bound_cidrs"], host_cidr)
+
+        defaults["openbao_dify_agent_cidrs"] = ""
+        self.assertEqual(_render("{{ openbao_dify_agent_approles }}", defaults), [])
 
     def test_no_unknown_overrides_in_repo(self):
         loaded = {}

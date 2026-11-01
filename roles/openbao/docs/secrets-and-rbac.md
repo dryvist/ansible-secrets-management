@@ -27,6 +27,17 @@ provider leaf; `sandbox-opencode-read` and `sandbox-opencode-write` read only
 They share the sandbox CIDR, token lifetime, and one-use SecretID settings.
 The dispatcher can read each role ID and mint wrapped SecretIDs for each role.
 
+The Dify fleet `agent-code-simplifier` and `agent-ci-fixer` AppRoles mint only
+their matching named set on `github-agents`. Both sets resolve to the public dryvist
+repository list. The code simplifier can write pull-request reviews and read
+contents, but cannot push; the CI fixer can write contents and pull requests,
+and read checks and actions. These roles read no KV paths. They use the
+`service-runtime` identity class and are created only when the private
+`OPENBAO_DIFY_AGENT_CIDR` is set. A human-gated unlock issues their reusable
+720-hour SecretIDs for the Dify admin to set; both SecretID redemption and
+resulting 15-minute OpenBao tokens are bound to that Dify host CIDR. GitHub
+installation tokens expire in one hour.
+
 `roles/openbao/defaults/main/08d-approle-taxonomy.yml` maps declared AppRoles
 to the six identity classes. The AppRole initialization fails if any declared
 role lacks a class. `ai-orchestrator` remains a `trusted-agent-write` migration

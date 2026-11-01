@@ -1,0 +1,17 @@
+---
+# Dify authenticates on every workflow run with one reusable, human-issued
+# SecretID held as a Dify secret. Do not create either role without its host CIDR.
+openbao_dify_agent_approles: >-
+  {{ ([{'name': openbao_dify_agent_code_simplifier_approle_name,
+        'policy': openbao_dify_agent_code_simplifier_policy_name,
+        'secret_id_bound_cidrs': openbao_dify_agent_cidrs,
+        'secret_id_ttl': '720h', 'secret_id_num_uses': 0,
+        'token_ttl': '15m', 'token_max_ttl': '15m',
+        'manage_secret_id': false},
+       {'name': openbao_dify_agent_ci_fixer_approle_name,
+        'policy': openbao_dify_agent_ci_fixer_policy_name,
+        'secret_id_bound_cidrs': openbao_dify_agent_cidrs,
+        'secret_id_ttl': '720h', 'secret_id_num_uses': 0,
+        'token_ttl': '15m', 'token_max_ttl': '15m',
+        'manage_secret_id': false}]
+     if openbao_dify_agent_cidrs | length > 0 else []) }}

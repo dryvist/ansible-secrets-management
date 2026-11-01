@@ -28,8 +28,7 @@ openbao_github_read_permission_sets:
 # open-llm can mint from the raw endpoint with optional org_name and required
 # repositories, restricted to the exact permission maps below; installation_id
 # and repository_ids are denied. It can also mint from the named public-write
-# set. The sandbox gets only explicitly named public-repository read and write
-# permission sets.
+# set. Fleet agents get named sets with their own exact maps and public repo scope.
 openbao_github_agents_mount: github-agents
 openbao_github_agents_installation_id: >-
   {{ openbao_platform_env['OPENBAO_GITHUB_AGENTS_DRYVIST_INSTALLATION_ID'] | default('', true) }}
@@ -54,14 +53,32 @@ openbao_github_agents_raw_mint_permissions:
   - contents: write
     pull_requests: write
   - contents: read
-openbao_github_agents_set_permissions:
-  public-read: "{{ openbao_github_agents_read_permissions }}"
-  public-write: "{{ openbao_github_agents_write_permissions }}"
+openbao_github_agents_permission_set_definitions:
+  - name: public-read
+    tier: read
+    permissions: "{{ openbao_github_agents_read_permissions }}"
+  - name: public-write
+    tier: write
+    permissions: "{{ openbao_github_agents_write_permissions }}"
+  - name: "{{ openbao_dify_agent_code_simplifier_policy_name }}"
+    tier: review
+    permissions:
+      pull_requests: write
+      contents: read
+  - name: "{{ openbao_dify_agent_ci_fixer_policy_name }}"
+    tier: ci-fix
+    permissions:
+      contents: write
+      pull_requests: write
+      checks: read
+      actions: read
+openbao_github_agents_set_permissions: >-
+  {{ openbao_github_agents_permission_set_definitions
+     | items2dict(key_name='name', value_name='permissions') }}
 openbao_github_agents_permission_sets: >-
-  {{ (openbao_github_agents_set_permissions
-      | dict2items(key_name='name', value_name='permissions')
+  {{ (openbao_github_agents_permission_set_definitions
       | map('combine', {'installation_id': openbao_github_agents_installation_id,
-                        'public_repos_of': 'dryvist'}) | list)
+                       'public_repos_of': 'dryvist'}) | list)
      if openbao_github_agents_installation_id | length > 0 else [] }}
 
 openbao_github_hermes_mount: github-hermes
