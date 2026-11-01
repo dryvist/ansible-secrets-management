@@ -8,7 +8,7 @@
 #
 #   github         everyday read/write
 #   github-agents  untrusted-tier public read/write, scoped by its installation
-#   github-hermes  review and allowlisted authoring, split by repository visibility
+#   github-hermes  review split by visibility; allowlisted public authoring
 #   github-work    read and App-grant write over one installation, no sets
 #   github-enterprise-read  human-gated raw-token read tier
 #   github-enterprise       human-gated raw-token admin tier
@@ -91,7 +91,6 @@ openbao_github_hermes_set_permissions:
   hermes-review-private: "{{ openbao_github_hermes_review_permissions }}"
   hermes-read-public: "{{ openbao_github_read_permissions }}"
   hermes-author-public: "{{ openbao_github_hermes_author_permissions }}"
-  hermes-author-private: "{{ openbao_github_hermes_author_permissions }}"
 # Author allowlists contain repository names, never globs. An unset list
 # yields no author set: an omitted `repositories` list means the whole
 # installation. `repositories_within` keeps author sets inside their review
@@ -99,12 +98,6 @@ openbao_github_hermes_set_permissions:
 openbao_github_hermes_author_public_repos: >-
   {{ (openbao_platform_env['OPENBAO_GITHUB_HERMES_AUTHOR_PUBLIC_REPOS'] | default('', true)).split(',')
      | map('trim') | reject('equalto', '') | list }}
-openbao_github_hermes_author_private_repos_full_names: >-
-  {{ [openbao_github_oidc_docs_repository]
-     if openbao_github_oidc_docs_repository | default('', true) | length > 0 else [] }}
-openbao_github_hermes_author_private_repos: >-
-  {{ openbao_github_hermes_author_private_repos_full_names
-     | map('regex_replace', '^[^/]+/', '') | list }}
 # No installation ID configured yields no sets and no mount.
 openbao_github_hermes_permission_sets: >-
   {{ ([{'name': 'hermes-review-public', 'tier': 'hermes-public',
@@ -124,13 +117,7 @@ openbao_github_hermes_permission_sets: >-
            'repositories': openbao_github_hermes_author_public_repos,
            'repositories_within': 'hermes-review-public',
            'permissions': openbao_github_hermes_author_permissions}]
-         if openbao_github_hermes_author_public_repos | length > 0 else [])
-      + ([{'name': 'hermes-author-private', 'tier': 'hermes-private',
-           'installation_id': openbao_github_hermes_installation_id,
-           'repositories': openbao_github_hermes_author_private_repos,
-           'repositories_within': 'hermes-review-private',
-           'permissions': openbao_github_hermes_author_permissions}]
-         if openbao_github_hermes_author_private_repos | length > 0 else []))
+         if openbao_github_hermes_author_public_repos | length > 0 else []))
      if openbao_github_hermes_installation_id | length > 0 else [] }}
 
 # github-work: one installation and no declared sets. Read mints the derived
