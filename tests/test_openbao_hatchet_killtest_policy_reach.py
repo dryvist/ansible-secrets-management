@@ -138,43 +138,58 @@ def _dev_server():
     raise AssertionError("the bao dev server did not become healthy")
 
 
+@mock.patch.dict(os.environ, REQUIRED_ENV)
+def reach(paths):
+    """Render every policy, load it into a dev server, and ask its capabilities on `paths`."""
+    variables = role_defaults()
+    result = {"approles": render(variables, "{{ openbao_approles }}"), "failed": {}, "rejected": {}, "caps": {}}
+    rendered = {}
+    for policy in render(variables, "{{ openbao_policies }}"):
+        source = (ROLE / "templates" / policy["template"]).read_text(encoding="utf-8")
+        try:
+            rendered[policy["name"]] = render({**variables, "item": policy}, source)
+        except Exception as error:  # noqa: BLE001 - every unrendered policy is reported
+            result["failed"][policy["name"]] = str(error).splitlines()[0]
+    server, base = _dev_server()
+    try:
+        for name, text in rendered.items():
+            status, body = _call(base, "root", "PUT", f"sys/policies/acl/{name}", {"policy": text})
+            if status != 204:
+                result["rejected"][name] = body
+                continue
+            status, body = _call(base, "root", "POST", "auth/token/create",
+                                 {"policies": [name], "no_default_policy": True})
+            assert status == 200, (name, body)
+            status, body = _call(base, "root", "POST", "sys/capabilities", {
+                "token": body["auth"]["client_token"], "paths": list(paths)})
+            assert status == 200, (name, body)
+            result["caps"][name] = {path: sorted(body[path]) for path in paths}
+    finally:
+        server.terminate()
+        server.wait(timeout=30)
+    return result
+
+
+def holders(caps, path):
+    return {name: held[path] for name, held in caps.items() if held[path] != ["deny"]}
+
+
+def carriers(approles, policies):
+    return {role["name"] for role in approles
+            if set(role.get("token_policies") or [role.get("policy")]) & set(policies)}
+
+
 class HatchetKillTestPolicyReach(unittest.TestCase):
     maxDiff = None
 
     @classmethod
-    @mock.patch.dict(os.environ, REQUIRED_ENV)
     def setUpClass(cls):
-        cls.variables = role_defaults()
-        cls.approles = render(cls.variables, "{{ openbao_approles }}")
-        policies = render(cls.variables, "{{ openbao_policies }}")
-        cls.rendered, cls.failed = {}, {}
-        for policy in policies:
-            source = (ROLE / "templates" / policy["template"]).read_text(encoding="utf-8")
-            try:
-                cls.rendered[policy["name"]] = render({**cls.variables, "item": policy}, source)
-            except Exception as error:  # noqa: BLE001 - every unrendered policy is reported
-                cls.failed[policy["name"]] = str(error).splitlines()[0]
-        server, base = _dev_server()
-        try:
-            cls.caps, cls.rejected = {}, {}
-            for name, text in cls.rendered.items():
-                status, body = _call(base, "root", "PUT", f"sys/policies/acl/{name}", {"policy": text})
-                if status != 204:
-                    cls.rejected[name] = body
-                    continue
-                status, body = _call(base, "root", "POST", "auth/token/create",
-                                     {"policies": [name], "no_default_policy": True})
-                assert status == 200, (name, body)
-                status, body = _call(base, "root", "POST", "sys/capabilities", {
-                    "token": body["auth"]["client_token"], "paths": [DATA, METADATA]})
-                assert status == 200, (name, body)
-                cls.caps[name] = {path: sorted(body[path]) for path in (DATA, METADATA)}
-        finally:
-            server.terminate()
-            server.wait(timeout=30)
+        found = reach([DATA, METADATA])
+        cls.approles, cls.failed, cls.rejected, cls.caps = (
+            found["approles"], found["failed"], found["rejected"], found["caps"])
 
     def _holders(self, path):
-        return {name: caps[path] for name, caps in self.caps.items() if caps[path] != ["deny"]}
+        return holders(self.caps, path)
 
     def test_every_policy_renders_and_loads(self):
         self.assertEqual(self.failed, {})
@@ -188,11 +203,7 @@ class HatchetKillTestPolicyReach(unittest.TestCase):
         self.assertEqual(self._holders(METADATA), METADATA_HOLDERS)
 
     def test_the_approles_inheriting_a_data_holder_are_exact(self):
-        inheriting = {
-            role["name"] for role in self.approles
-            if set(role.get("token_policies") or [role.get("policy")]) & set(DATA_HOLDERS)
-        }
-        self.assertEqual(inheriting, DATA_HOLDER_APPROLES)
+        self.assertEqual(carriers(self.approles, DATA_HOLDERS), DATA_HOLDER_APPROLES)
 
 
 if __name__ == "__main__":
