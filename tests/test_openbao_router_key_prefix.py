@@ -65,6 +65,22 @@ class AppFormatPatternRegeneration(unittest.TestCase):
         self.assertIsNone(re.match(pattern, "Aa1" * 22))
         self.assertIsNotNone(re.match(pattern, "Aa1" * 13))
 
+    def test_hatchet_cookie_secret_is_one_32_char_alnum_key(self):
+        import re
+
+        field = _field_declaration("hatchet_server_auth_cookie_secrets")
+        self.assertEqual(field["length"], 32)
+        self.assertEqual(field["charset"], "alnum")
+        pattern = field["valid_pattern"]
+        self.assertIsNotNone(re.match(pattern, "Ab3" * 10 + "Cd"))
+        # The stored two-part hex value and a 40-char default both fail, so the seed regenerates them.
+        self.assertIsNone(re.match(pattern, "a" * 64 + " " + "b" * 64))
+        self.assertIsNone(re.match(pattern, "A1" * 20))
+
+    def test_fields_without_a_length_override_keep_the_default(self):
+        self.assertEqual(_field_declaration("ordinary_password")["length"], DEFAULTS["openbao_app_secret_length"])
+        self.assertEqual(_field_declaration("secret_key")["length"], DEFAULTS["openbao_app_secret_key_length"])
+
 
 if __name__ == "__main__":
     unittest.main()
