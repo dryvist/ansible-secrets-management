@@ -50,8 +50,26 @@
   no_log: true
   when: openbao_agent_tier_reader.login_path is defined
 
-- name: Prepare the login leaf from any password still in its token leaf
+- name: Prepare the login leaf without overwriting an existing password
   ansible.builtin.set_fact:
+    openbao_agent_tier_login_migrate_conflicts: >-
+      {%- set _login = openbao_agent_tier_login_existing.json.data.data | default({}, true) -%}
+      {%- set _token = openbao_agent_tier_token_migration_source.json.data.data | default({}, true) -%}
+      {%- set _legacy = openbao_agent_tier_legacy_migration_source.json.data.data | default({}, true) -%}
+      {%- set _ns = namespace(fields=[]) -%}
+      {%- for _field in openbao_agent_tier_reader.login_fields | default([]) -%}
+      {%- set _destination = _login.get(_field, '') | default('', true) | string -%}
+      {%- set _token_value = _token.get(_field, '') | default('', true) | string -%}
+      {%- set _legacy_value = _legacy.get(_field, '') | default('', true) | string -%}
+      {%- if (_destination | length > 0 and
+              ((_token_value | length > 0 and _destination != _token_value) or
+               (_legacy_value | length > 0 and _destination != _legacy_value))) or
+            (_destination | length == 0 and _token_value | length > 0 and
+             _legacy_value | length > 0 and _token_value != _legacy_value) -%}
+      {%- set _ns.fields = _ns.fields + [_field] -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {{ _ns.fields }}
     openbao_agent_tier_login_migrate_fields: >-
       {%- set _login = openbao_agent_tier_login_existing.json.data.data | default({}, true) -%}
       {%- set _token = openbao_agent_tier_token_migration_source.json.data.data | default({}, true) -%}
@@ -59,7 +77,8 @@
       {%- set _ns = namespace(fields={}) -%}
       {%- for _field in openbao_agent_tier_reader.login_fields | default([]) -%}
       {%- set _value = (_token.get(_field, '') or _legacy.get(_field, '')) | string -%}
-      {%- if _value | length > 0 and _login.get(_field, '') | string != _value -%}
+      {%- if _value | length > 0 and
+            _login.get(_field, '') | default('', true) | string | length == 0 -%}
       {%- set _ns.fields = _ns.fields | combine({_field: _value}) -%}
       {%- endif -%}
       {%- endfor -%}
@@ -74,6 +93,14 @@
     - >-
       openbao_agent_tier_token_migration_source.status | default(0) == 200 or
       openbao_agent_tier_legacy_migration_source.status | default(0) == 200
+
+- name: Refuse a conflicting existing app-agent login password
+  ansible.builtin.fail:
+    msg: >-
+      Password values for {{ openbao_agent_tier_reader.tier }} conflict in the
+      destination or source leaves for {{ openbao_agent_tier_login_migrate_conflicts | join(', ') }}.
+      Resolve the conflict before writing or removing either source field.
+  when: openbao_agent_tier_login_migrate_conflicts | default([]) | length > 0
 
 - name: Preserve an existing tier password in its new login leaf with a check-and-set write
   ansible.builtin.uri:

@@ -21,6 +21,7 @@ def _defaults():
 
 def _render(expression, values):
     templar = jinja2.Environment(undefined=jinja2.StrictUndefined)
+    templar.filters["combine"] = lambda left, right: {**left, **right}
     return templar.from_string(expression).render(**values)
 
 
@@ -152,3 +153,137 @@ def test_legacy_removal_is_field_scoped_and_uses_kv_check_and_set():
     assert "_login.get(_field, '') | string == _token.get(_field, '') | string" in task
     assert "openbao_agent_tier_reader.generated_fields" in task
     assert "openbao_agent_tier_reader.login_fields" in task
+
+
+def _login_migration(tasks, field, destination, token_source, legacy_source):
+    prepare = next(
+        task for task in tasks
+        if task.get("name") == "Prepare the login leaf without overwriting an existing password"
+    )["ansible.builtin.set_fact"]
+    variables = {
+        "openbao_agent_tier_reader": {"tier": "vikunja-read", "login_fields": [field]},
+        "openbao_agent_tier_login_existing": {"json": {"data": {"data": destination}}},
+        "openbao_agent_tier_token_migration_source": {"json": {"data": {"data": token_source}}},
+        "openbao_agent_tier_legacy_migration_source": {"json": {"data": {"data": legacy_source}}},
+    }
+    results = {}
+    for name, expression in prepare.items():
+        results[name] = ast.literal_eval(_render(expression, variables).strip())
+        variables[name] = results[name]
+    return results
+
+
+def _token_removals_after_copy(tasks, field, destination, token_source):
+    prepare = next(
+        task for task in tasks
+        if task.get("name") == "Prepare the token leaf after its login leaf holds the password"
+    )["ansible.builtin.set_fact"]["openbao_agent_tier_token_remove_fields"]
+    variables = {
+        "openbao_agent_tier_reader": {"login_fields": [field]},
+        "openbao_agent_tier_current": {"json": {"data": {"data": destination}}},
+        "openbao_agent_tier_token_current": {"json": {"data": {"data": token_source}}},
+    }
+    return ast.literal_eval(_render(prepare, variables).strip())
+
+
+def _legacy_removals_after_copy(tasks, field, destination, legacy_source):
+    prepare = next(
+        task for task in tasks
+        if task.get("name") == "Prepare the legacy leaf with only provisioned tier fields removed"
+    )["ansible.builtin.set_fact"]["openbao_agent_tier_legacy_remove_fields"]
+    variables = {
+        "openbao_agent_tier_reader": {"generated_fields": [], "login_fields": [field]},
+        "openbao_agent_tier_current": {"json": {"data": {"data": destination}}},
+        "openbao_agent_tier_legacy_current": {"json": {"data": {"data": legacy_source}}},
+    }
+    return ast.literal_eval(_render(prepare, variables).strip())
+
+
+def test_legacy_login_password_copy_branch_copies_before_source_removal():
+    tasks = yaml.safe_load(
+        (ROOT / "roles/openbao/tasks/remove_app_agent_legacy_fields.yml").read_text(
+            encoding="utf-8"
+        )
+    )
+    field = next(
+        reader["login_fields"][0]
+        for reader in _defaults()["openbao_app_agent_tier_readers"]
+        if reader.get("login_fields")
+    )
+    source = {field: "copied-password"}
+    prepared = _login_migration(tasks, field, {}, {}, source)
+
+    assert prepared["openbao_agent_tier_login_migrate_conflicts"] == []
+    assert prepared["openbao_agent_tier_login_migrate_fields"] == source
+    assert prepared["openbao_agent_tier_login_migrated_data"] == source
+    assert _legacy_removals_after_copy(tasks, field, source, source) == [field]
+
+
+def test_legacy_login_password_equal_branch_removes_only_the_equal_source():
+    tasks = yaml.safe_load(
+        (ROOT / "roles/openbao/tasks/remove_app_agent_legacy_fields.yml").read_text(
+            encoding="utf-8"
+        )
+    )
+    field = next(
+        reader["login_fields"][0]
+        for reader in _defaults()["openbao_app_agent_tier_readers"]
+        if reader.get("login_fields")
+    )
+    existing = {field: "same-password"}
+    prepared = _login_migration(tasks, field, existing, existing, {})
+
+    assert prepared["openbao_agent_tier_login_migrate_conflicts"] == []
+    assert prepared["openbao_agent_tier_login_migrate_fields"] == {}
+    assert _token_removals_after_copy(tasks, field, existing, existing) == [field]
+
+
+def test_legacy_login_password_mismatch_fails_before_any_write_or_delete():
+    tasks = yaml.safe_load(
+        (ROOT / "roles/openbao/tasks/remove_app_agent_legacy_fields.yml").read_text(
+            encoding="utf-8"
+        )
+    )
+    field = next(
+        reader["login_fields"][0]
+        for reader in _defaults()["openbao_app_agent_tier_readers"]
+        if reader.get("login_fields")
+    )
+    destination = {field: "new-password"}
+    source = {field: "old-password"}
+    prepared = _login_migration(tasks, field, destination, source, {})
+    fail_index, fail_task = next(
+        (index, task) for index, task in enumerate(tasks)
+        if task.get("name") == "Refuse a conflicting existing app-agent login password"
+    )
+    side_effect_indices = [
+        index for index, task in enumerate(tasks)
+        if (task.get("ansible.builtin.uri") or {}).get("method") in {"POST", "DELETE"}
+    ]
+
+    assert prepared["openbao_agent_tier_login_migrate_conflicts"] == [field]
+    assert prepared["openbao_agent_tier_login_migrate_fields"] == {}
+    assert _render(
+        "{{ " + fail_task["when"] + " }}",
+        {"openbao_agent_tier_login_migrate_conflicts": prepared["openbao_agent_tier_login_migrate_conflicts"]},
+    ) == "True"
+    assert side_effect_indices and all(index > fail_index for index in side_effect_indices)
+    assert source[field] == "old-password"
+
+    disagreeing_sources = _login_migration(
+        tasks,
+        field,
+        {},
+        {field: "token-password"},
+        {field: "legacy-password"},
+    )
+    assert disagreeing_sources["openbao_agent_tier_login_migrate_conflicts"] == [field]
+    assert disagreeing_sources["openbao_agent_tier_login_migrate_fields"] == {
+        field: "token-password"
+    }
+    assert _render(
+        "{{ " + fail_task["when"] + " }}",
+        {"openbao_agent_tier_login_migrate_conflicts": disagreeing_sources[
+            "openbao_agent_tier_login_migrate_conflicts"
+        ]},
+    ) == "True"
