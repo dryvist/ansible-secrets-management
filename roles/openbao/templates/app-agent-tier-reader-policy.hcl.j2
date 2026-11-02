@@ -1,0 +1,10 @@
+{{ ansible_managed | comment }}
+# A reader can inspect exactly one agent credential leaf, including its KV-v2
+# metadata. It cannot list the mount or reach either other tier.
+path "{{ openbao_agent_tier_mount }}/data/{{ item.tier }}" {
+  capabilities = ["read"]
+}
+
+path "{{ openbao_agent_tier_mount }}/metadata/{{ item.tier }}" {
+  capabilities = ["read"]
+}

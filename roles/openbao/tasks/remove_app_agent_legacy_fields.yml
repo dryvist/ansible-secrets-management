@@ -1,0 +1,276 @@
+---
+# Remove only fields whose replacement is already present in their dedicated
+# leaf. Vikunja passwords use login_path; other fields stay on the token leaf.
+# A 403 or 404 means the source is not provisioned yet, so leave the old value.
+- name: Read an existing Vikunja login leaf before migrating a password
+  ansible.builtin.uri:
+    url: "{{ openbao_cli_addr }}/v1/{{ openbao_agent_tier_mount }}/data/{{ openbao_agent_tier_reader.login_path }}"
+    method: GET
+    headers:
+      X-Vault-Token: "{{ openbao_bootstrap_token }}"
+    status_code: [200, 403, 404]
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
+  register: openbao_agent_tier_login_existing
+  changed_when: false
+  no_log: true
+  when: openbao_agent_tier_reader.login_path is defined
+
+- name: Read the token leaf as the source for any unmigrated login password
+  ansible.builtin.uri:
+    url: "{{ openbao_cli_addr }}/v1/{{ openbao_agent_tier_mount }}/data/{{ openbao_agent_tier_reader.tier }}"
+    method: GET
+    headers:
+      X-Vault-Token: "{{ openbao_bootstrap_token }}"
+    status_code: [200, 403, 404]
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
+  register: openbao_agent_tier_token_migration_source
+  changed_when: false
+  no_log: true
+  when: openbao_agent_tier_reader.login_path is defined
+
+- name: Read the former shared app leaf as a fallback login-password source
+  ansible.builtin.uri:
+    url: "{{ openbao_cli_addr }}/v1/{{ openbao_kv_mount }}/data/{{ openbao_agent_tier_reader.legacy_app_path }}"
+    method: GET
+    headers:
+      X-Vault-Token: "{{ openbao_bootstrap_token }}"
+    status_code: [200, 403, 404]
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
+  register: openbao_agent_tier_legacy_migration_source
+  changed_when: false
+  no_log: true
+  when: openbao_agent_tier_reader.login_path is defined
+
+- name: Prepare the login leaf without overwriting an existing password
+  ansible.builtin.set_fact:
+    openbao_agent_tier_login_migrate_conflicts: >-
+      {%- set _login = openbao_agent_tier_login_existing.json.data.data | default({}, true) -%}
+      {%- set _token = openbao_agent_tier_token_migration_source.json.data.data | default({}, true) -%}
+      {%- set _legacy = openbao_agent_tier_legacy_migration_source.json.data.data | default({}, true) -%}
+      {%- set _ns = namespace(fields=[]) -%}
+      {%- for _field in openbao_agent_tier_reader.login_fields | default([]) -%}
+      {%- set _destination = _login.get(_field, '') | default('', true) | string -%}
+      {%- set _token_value = _token.get(_field, '') | default('', true) | string -%}
+      {%- set _legacy_value = _legacy.get(_field, '') | default('', true) | string -%}
+      {%- if (_destination | length > 0 and
+              ((_token_value | length > 0 and _destination != _token_value) or
+               (_legacy_value | length > 0 and _destination != _legacy_value))) or
+            (_destination | length == 0 and _token_value | length > 0 and
+             _legacy_value | length > 0 and _token_value != _legacy_value) -%}
+      {%- set _ns.fields = _ns.fields + [_field] -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {{ _ns.fields }}
+    openbao_agent_tier_login_migrate_fields: >-
+      {%- set _login = openbao_agent_tier_login_existing.json.data.data | default({}, true) -%}
+      {%- set _token = openbao_agent_tier_token_migration_source.json.data.data | default({}, true) -%}
+      {%- set _legacy = openbao_agent_tier_legacy_migration_source.json.data.data | default({}, true) -%}
+      {%- set _ns = namespace(fields={}) -%}
+      {%- for _field in openbao_agent_tier_reader.login_fields | default([]) -%}
+      {%- set _value = (_token.get(_field, '') or _legacy.get(_field, '')) | string -%}
+      {%- if _value | length > 0 and
+            _login.get(_field, '') | default('', true) | string | length == 0 -%}
+      {%- set _ns.fields = _ns.fields | combine({_field: _value}) -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {{ _ns.fields }}
+    openbao_agent_tier_login_migrated_data: >-
+      {{ (openbao_agent_tier_login_existing.json.data.data | default({}, true))
+         | combine(openbao_agent_tier_login_migrate_fields) }}
+  no_log: true
+  when:
+    - openbao_agent_tier_reader.login_path is defined
+    - openbao_agent_tier_login_existing.status | default(0) in [200, 404]
+    - >-
+      openbao_agent_tier_token_migration_source.status | default(0) == 200 or
+      openbao_agent_tier_legacy_migration_source.status | default(0) == 200
+
+- name: Refuse a conflicting existing app-agent login password
+  ansible.builtin.fail:
+    msg: >-
+      Password values for {{ openbao_agent_tier_reader.tier }} conflict in the
+      destination or source leaves for {{ openbao_agent_tier_login_migrate_conflicts | join(', ') }}.
+      Resolve the conflict before writing or removing either source field.
+  when: openbao_agent_tier_login_migrate_conflicts | default([]) | length > 0
+
+- name: Preserve an existing tier password in its new login leaf with a check-and-set write
+  ansible.builtin.uri:
+    url: "{{ openbao_cli_addr }}/v1/{{ openbao_agent_tier_mount }}/data/{{ openbao_agent_tier_reader.login_path }}"
+    method: POST
+    headers:
+      X-Vault-Token: "{{ openbao_bootstrap_token }}"
+    body_format: json
+    body:
+      data: "{{ openbao_agent_tier_login_migrated_data }}"
+      options:
+        cas: "{{ openbao_agent_tier_login_existing.json.data.metadata.version | default(0) | int }}"
+    status_code: [200, 204]
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
+  no_log: true
+  changed_when: true
+  when:
+    - openbao_agent_tier_reader.login_path is defined
+    - openbao_agent_tier_login_existing.status | default(0) in [200, 404]
+    - >-
+      openbao_agent_tier_token_migration_source.status | default(0) == 200 or
+      openbao_agent_tier_legacy_migration_source.status | default(0) == 200
+    - openbao_agent_tier_login_migrate_fields | default({}) | length > 0
+
+- name: Check whether the agent-tier replacement leaf is provisioned
+  ansible.builtin.uri:
+    url: >-
+      {{ openbao_cli_addr }}/v1/{{ openbao_agent_tier_mount }}/data/{{
+        openbao_agent_tier_reader.login_path | default(openbao_agent_tier_reader.tier) }}
+    method: GET
+    headers:
+      X-Vault-Token: "{{ openbao_bootstrap_token }}"
+    status_code: [200, 403, 404]
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
+  register: openbao_agent_tier_current
+  changed_when: false
+  no_log: true
+
+- name: Read the legacy shared app leaf when the dedicated leaf exists
+  ansible.builtin.uri:
+    url: "{{ openbao_cli_addr }}/v1/{{ openbao_kv_mount }}/data/{{ openbao_agent_tier_reader.legacy_app_path }}"
+    method: GET
+    headers:
+      X-Vault-Token: "{{ openbao_bootstrap_token }}"
+    status_code: [200, 403, 404]
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
+  register: openbao_agent_tier_legacy_current
+  changed_when: false
+  no_log: true
+  when: openbao_agent_tier_current.status | default(0) == 200
+
+- name: Prepare the legacy leaf with only provisioned tier fields removed
+  ansible.builtin.set_fact:
+    openbao_agent_tier_legacy_remove_fields: >-
+      {%- set _destination = openbao_agent_tier_current.json.data.data | default({}, true) -%}
+      {%- set _legacy = openbao_agent_tier_legacy_current.json.data.data | default({}, true) -%}
+      {%- set _fields = (openbao_agent_tier_reader.generated_fields | default([]))
+         + (openbao_agent_tier_reader.login_fields | default([])) -%}
+      {%- set _ns = namespace(fields=[]) -%}
+      {%- for _field in _fields -%}
+      {%- if _destination.get(_field, '') | string | length > 0
+            and _destination.get(_field, '') | string == _legacy.get(_field, '') | string
+            and _field in _legacy -%}
+      {%- set _ns.fields = _ns.fields + [_field] -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {{ _ns.fields }}
+    openbao_agent_tier_legacy_kept_data: >-
+      {{ (openbao_agent_tier_legacy_current.json.data.data | default({}, true)
+          | dict2items
+          | rejectattr('key', 'in', openbao_agent_tier_legacy_remove_fields)
+          | items2dict) }}
+  no_log: true
+  when:
+    - openbao_agent_tier_current.status | default(0) == 200
+    - openbao_agent_tier_legacy_current.status | default(0) == 200
+
+- name: Remove migrated fields from the legacy leaf with a check-and-set write
+  ansible.builtin.uri:
+    url: "{{ openbao_cli_addr }}/v1/{{ openbao_kv_mount }}/data/{{ openbao_agent_tier_reader.legacy_app_path }}"
+    method: POST
+    headers:
+      X-Vault-Token: "{{ openbao_bootstrap_token }}"
+    body_format: json
+    body:
+      data: "{{ openbao_agent_tier_legacy_kept_data }}"
+      options:
+        cas: "{{ openbao_agent_tier_legacy_current.json.data.metadata.version | int }}"
+    status_code: [200, 204]
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
+  no_log: true
+  changed_when: true
+  when:
+    - openbao_agent_tier_current.status | default(0) == 200
+    - openbao_agent_tier_legacy_current.status | default(0) == 200
+    - openbao_agent_tier_legacy_remove_fields | default([]) | length > 0
+
+- name: Read the token leaf that may still contain a migrated login password
+  ansible.builtin.uri:
+    url: "{{ openbao_cli_addr }}/v1/{{ openbao_agent_tier_mount }}/data/{{ openbao_agent_tier_reader.tier }}"
+    method: GET
+    headers:
+      X-Vault-Token: "{{ openbao_bootstrap_token }}"
+    status_code: [200, 403, 404]
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
+  register: openbao_agent_tier_token_current
+  changed_when: false
+  no_log: true
+  when: openbao_agent_tier_reader.login_path is defined
+
+- name: Prepare the token leaf after its login leaf holds the password
+  ansible.builtin.set_fact:
+    openbao_agent_tier_token_remove_fields: >-
+      {%- set _login = openbao_agent_tier_current.json.data.data | default({}, true) -%}
+      {%- set _token = openbao_agent_tier_token_current.json.data.data | default({}, true) -%}
+      {%- set _ns = namespace(fields=[]) -%}
+      {%- for _field in openbao_agent_tier_reader.login_fields | default([]) -%}
+      {%- if _login.get(_field, '') | string | length > 0
+            and _login.get(_field, '') | string == _token.get(_field, '') | string
+            and _field in _token -%}
+      {%- set _ns.fields = _ns.fields + [_field] -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {{ _ns.fields }}
+    openbao_agent_tier_token_kept_data: >-
+      {{ (openbao_agent_tier_token_current.json.data.data | default({}, true)
+          | dict2items
+          | rejectattr('key', 'in', openbao_agent_tier_token_remove_fields)
+          | items2dict) }}
+  no_log: true
+  when:
+    - openbao_agent_tier_reader.login_path is defined
+    - openbao_agent_tier_current.status | default(0) == 200
+    - openbao_agent_tier_token_current.status | default(0) == 200
+
+- name: Remove the migrated password from the token leaf with a check-and-set write
+  ansible.builtin.uri:
+    url: "{{ openbao_cli_addr }}/v1/{{ openbao_agent_tier_mount }}/data/{{ openbao_agent_tier_reader.tier }}"
+    method: POST
+    headers:
+      X-Vault-Token: "{{ openbao_bootstrap_token }}"
+    body_format: json
+    body:
+      data: "{{ openbao_agent_tier_token_kept_data }}"
+      options:
+        cas: "{{ openbao_agent_tier_token_current.json.data.metadata.version | int }}"
+    status_code: [200, 204]
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
+  no_log: true
+  changed_when: true
+  when:
+    - openbao_agent_tier_reader.login_path is defined
+    - openbao_agent_tier_current.status | default(0) == 200
+    - openbao_agent_tier_token_current.status | default(0) == 200
+    - openbao_agent_tier_token_remove_fields | default([]) | length > 0

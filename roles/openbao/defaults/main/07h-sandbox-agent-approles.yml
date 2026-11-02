@@ -50,3 +50,18 @@ openbao_sandbox_agent_approles:
     token_ttl: 15m
     token_max_ttl: 15m
     manage_secret_id: false
+
+# The router holds one reader credential for each exact agent-tier leaf.
+# Write-tier identities require trusted callers; SecretIDs use the existing
+# rotated domain-identity lifecycle consumed by the router.
+openbao_app_agent_tier_reader_approles: >-
+  {%- set _entries = [] -%}
+  {%- for reader in openbao_app_agent_tier_readers -%}
+  {%- set _name = 'app-agent-' ~ reader.tier -%}
+  {%- set _ = _entries.append({
+      'name': _name, 'policy': _name,
+      'secret_id_bound_cidrs': openbao_approle_cidr_classes[reader.cidr_class],
+      'secret_id_ttl': '0s', 'secret_id_num_uses': 0,
+      'token_ttl': '15m', 'token_max_ttl': '15m'}) -%}
+  {%- endfor -%}
+  {{ _entries }}

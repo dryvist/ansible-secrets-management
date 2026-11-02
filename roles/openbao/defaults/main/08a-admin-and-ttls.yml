@@ -142,7 +142,12 @@ openbao_approle_secret_id_ttl_overrides: >-
   {{ openbao_approle_secret_id_ttl_overrides_base
      | combine(dict(openbao_roster_agent_valid_names
                     | zip([openbao_rotated_domain_secret_id_ttl]
-                         * (openbao_roster_agent_valid_names | length)))) }}
+                         * (openbao_roster_agent_valid_names | length))))
+     | combine(dict(openbao_app_agent_tier_readers
+                    | map(attribute='tier')
+                    | map('regex_replace', '^', 'app-agent-') | list
+                    | zip([openbao_rotated_domain_secret_id_ttl]
+                         * (openbao_app_agent_tier_readers | length)))) }}
 # num_uses 0 (unlimited redemptions) is permitted ONLY with a reason on the line.
 openbao_approle_secret_id_num_uses_overrides:
   # Its secret_id is live, non-expiring, and in active use by every agent

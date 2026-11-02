@@ -3,63 +3,25 @@ path "{{ openbao_kv_mount }}/data/{{ openbao_proxman_secret_path }}" {
   capabilities = ["create", "read", "update"]
 }
 
-# OpenBao policy for the ansible-converge AppRole — config-management pulls
-# (was "ansible"). ENUMERATED exact paths only: there is deliberately NO
-# platform/* or apps/* wildcard, and no access to the infra kernel
-# (secret/infra/*). The narrow exact-path publication and seed grants below
-# are the only write exceptions.
+# OpenBao policy for the ansible-converge AppRole. Reads are enumerated; only
+# exact publisher and seed paths are writable. No platform/*, apps/*, or
+# secret/infra/* access is granted.
 #
-# THE LIST BELOW IS THE CONSUMER INVENTORY. Every entry is a KV path that a
-# converge actually reads with THIS AppRole's token, and each names the reading
-# call site. A path with no named consumer does not belong here; a new consumer
-# adds its path here and nowhere else. The per-resource-domain reads
-# (observability / local-cloud / monitoring / media / apps / local-llm) do NOT
-# use this identity — the shared openbao_secrets role logs each domain in with its own
-# least-privilege AppRole, so those subtrees are intentionally absent.
+# Consumer inventory: each listed read has a current consumer. Resource-domain
+# reads (observability, local-cloud, monitoring, media, apps, local-llm) use the
+# shared openbao_secrets role's separate AppRoles and are intentionally absent.
 #
-#   platform/object-storage
-#     The shared `inventory_resolve` role (dryvist/homelab-contracts, pinned in
-#     each repo's requirements.yml) reads these object-storage credentials to
-#     fetch the tofu-published inventory artifact from RustFS. Call sites:
-#       ansible-proxmox        playbooks/load_tofu.yml
-#       ansible-proxmox-apps   inventory/load_tofu.yml
-#       ansible-proxmox-ai     inventory/load_tofu.yml
-#       ansible-splunk         inventory/load_tofu.yml
+#   platform/object-storage: inventory_resolve in proxmox, apps, ai, and splunk
+#     reads the tofu-published RustFS inventory artifact.
+#   platform/windows-vdi/win11-admin: inventory/load_tofu.yml resolves the
+#     WinRM admin password; windows_baseline authenticates with it. Read only.
+#   platform/defaults: windows_baseline reads admin_password for VDI admin
+#     access. This grants the exact KV object, never platform/defaults/*.
+#   apps/nas: nas_storage resolves role-selected Samba username/password for
+#     declared SMB shares (main.yml and validate-nas.yml). Read only.
 #
-#   platform/windows-vdi/win11-admin
-#     inventory/load_tofu.yml resolves the local Administrator password for the
-#     Windows guests, which are published with ansible_connection=winrm and are
-#     unreachable without it. The same credential is what roles/windows_baseline
-#     authenticates with. READ ONLY: the credential is minted elsewhere and a
-#     converge must never rewrite it.
-#
-#   platform/defaults
-#     Estate-wide defaults, one KV object with a key per default:
-#     admin_username / admin_password today, more later (limits, ports,
-#     retention). It is a namespace rather than one password path because a
-#     second default would otherwise need a second grant and a second lookup.
-#     roles/windows_baseline reads admin_password to set the local
-#     Administrator credential on VDI guests, so a human can type it at an RDP
-#     or console prompt where copy/paste is unavailable. Sub-paths
-#     (platform/defaults/<domain>) are NOT granted by wildcard — each one is a
-#     deliberate addition to the list below.
-#
-#   apps/nas
-#     roles/nas_storage resolves the managed Samba accounts of a node that
-#     declares an SMB share. Each account is selected by ROLE rather than by
-#     name and reads two fields, <secret_prefix>_username and
-#     <secret_prefix>_password -- a login name is half a credential and is not
-#     rotatable once published, so it lives here and not in the desired state.
-#     Call sites:
-#       ansible-proxmox        roles/nas_storage/tasks/main.yml
-#       ansible-proxmox        playbooks/validate-nas.yml
-#     READ ONLY: the credential is provisioned out of band, and a converge
-#     must never rewrite the account it authenticates as.
-#
-#   apps/nautobot is NOT listed here. It is granted once, below, by the
-#   credential-publication loop — which is a superset of the read it used to
-#   carry. Two stanzas for one path is ambiguous at policy-parse time, so the
-#   path must appear exactly once in this file.
+# apps/nautobot is granted once by the publication loop below. Do not add a
+# duplicate stanza: the publisher grant already includes the required read.
 
 {% for kv_path in ['platform/object-storage', 'platform/windows-vdi/win11-admin', 'platform/defaults', 'apps/nas'] %}
 path "{{ openbao_kv_mount }}/data/{{ kv_path }}" {
@@ -101,6 +63,29 @@ path "{{ openbao_kv_mount }}/data/ai/mcp/vikunja" {
 path "{{ openbao_kv_mount }}/metadata/ai/mcp/vikunja" {
   capabilities = ["read"]
 }
+
+# Each app-agent publisher writes only its exact tier leaf, preserving its
+# sibling fields via KV v2 read-modify-write.
+{% for tier_path in openbao_app_agent_tier_paths %}
+path "{{ openbao_agent_tier_mount }}/data/{{ tier_path }}" {
+  capabilities = ["create", "update", "read"]
+}
+
+path "{{ openbao_agent_tier_mount }}/metadata/{{ tier_path }}" {
+  capabilities = ["read"]
+}
+{% endfor %}
+
+# App converge reads login credentials only from their provisioner-only leaves.
+{% for login_path in openbao_app_agent_tier_login_paths %}
+path "{{ openbao_agent_tier_mount }}/data/{{ login_path }}" {
+  capabilities = ["read"]
+}
+
+path "{{ openbao_agent_tier_mount }}/metadata/{{ login_path }}" {
+  capabilities = ["read"]
+}
+{% endfor %}
 
 # Exact-path exception (Homebox API key): converge publishes the minted key here.
 path "{{ openbao_kv_mount }}/data/homebox/main/rw" {
