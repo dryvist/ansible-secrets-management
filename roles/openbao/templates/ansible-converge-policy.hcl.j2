@@ -76,6 +76,17 @@ path "{{ openbao_agent_tier_mount }}/metadata/{{ tier_path }}" {
 }
 {% endfor %}
 
+# App converge reads login credentials only from their provisioner-only leaves.
+{% for login_path in openbao_app_agent_tier_login_paths %}
+path "{{ openbao_agent_tier_mount }}/data/{{ login_path }}" {
+  capabilities = ["read"]
+}
+
+path "{{ openbao_agent_tier_mount }}/metadata/{{ login_path }}" {
+  capabilities = ["read"]
+}
+{% endfor %}
+
 # Exact-path exception (Homebox API key): converge publishes the minted key here.
 path "{{ openbao_kv_mount }}/data/homebox/main/rw" {
   capabilities = ["create", "update", "read"]

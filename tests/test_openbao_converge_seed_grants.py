@@ -93,6 +93,7 @@ def test_agent_tier_mount_has_exact_publisher_and_router_grants_only() -> None:
     mount = defaults["openbao_agent_tier_mount"]
     readers = defaults["openbao_app_agent_tier_readers"]
     leaves = [reader["tier"] for reader in readers]
+    login_paths = [reader["login_path"] for reader in readers if reader.get("login_path")]
     assert leaves and mount != "secret"
     environment = jinja2.Environment()
     environment.filters["comment"] = lambda value: ""
@@ -101,6 +102,7 @@ def test_agent_tier_mount_has_exact_publisher_and_router_grants_only() -> None:
         "openbao_kv_mount": "secret",
         "openbao_agent_tier_mount": mount,
         "openbao_app_agent_tier_paths": leaves,
+        "openbao_app_agent_tier_login_paths": login_paths,
         "openbao_app_agent_tier_readers": readers,
     }
 
@@ -114,10 +116,15 @@ def test_agent_tier_mount_has_exact_publisher_and_router_grants_only() -> None:
 
     data = {f"{mount}/data/{leaf}" for leaf in leaves}
     metadata = {(f"{mount}/metadata/{leaf}", ("read",)) for leaf in leaves}
+    login_reads = {
+        (f"{mount}/data/{leaf}", ("read",)) for leaf in login_paths
+    } | {
+        (f"{mount}/metadata/{leaf}", ("read",)) for leaf in login_paths
+    }
     # Exact equality: no extra leaf, no glob, no broader capability on the mount.
     assert mount_grants("ansible-converge-policy.hcl.j2") == {
         (path, ("create", "update", "read")) for path in data
-    } | metadata
+    } | metadata | login_reads
     assert mount_grants("local-llm-policy.hcl.j2") == set()
 
     for reader in readers:
