@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.60.1](https://github.com/dryvist/ansible-secrets-management/compare/v0.60.0...v0.60.1) (2026-11-02)
+
+
+### Bug Fixes
+
+* **openbao:** bound reconcile KV grants to exact declared leaves ([#400](https://github.com/dryvist/ansible-secrets-management/issues/400)) ([e35697b](https://github.com/dryvist/ansible-secrets-management/commit/e35697be33b80efff76feaff90d9fdd5d70c6787))
+
 ## [0.60.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.59.0...v0.60.0) (2026-11-02)
 
 

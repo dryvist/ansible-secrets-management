@@ -10,11 +10,10 @@ openbao_roster_agent_policy_marker: "# managed-by: openbao roster-agent "
 openbao_roster_agent_ownable_slugs: [splunk, cribl]
 openbao_roster_owned_mcp_deny_policy_name: roster-owned-mcp-deny
 
-# Break-glass administration and the converge identity's policies keep access
-# by design.
+# These policies actively administer, publish, or rotate the owned credentials.
 openbao_mcp_credential_custodians:
-  splunk: [ai-admin, ansible-converge, openbao-reconcile, splunk-mcp-rotate, ai-rotate]
-  cribl: [ai-admin, ai-rotate, openbao-reconcile]
+  splunk: [ai-admin, ansible-converge, splunk-mcp-rotate, ai-rotate]
+  cribl: [ai-admin, ai-rotate]
 
 # Workstation and AI-session identities that keep owned MCP credential access.
 openbao_mcp_credential_session_holders:
