@@ -12,9 +12,11 @@ opens every Traefik route whose tofu ingress row carries `sso = true`; the
   tofu-proxmox `ingress.tf` and published through the inventory). Machine/API
   endpoints and apps with native client auth opt out there.
 - **Login**: passkey-first (`webauthn.enable_passkey_login`) — Touch ID on the
-  registering Mac, synced to other devices via the platform keychain. The
-  bootstrap password exists only to create the account and register the first
-  passkey.
+  registering Mac, synced to other devices via the platform keychain. User
+  verification is required on every assertion, so the experimental UV
+  two-factor option lets one verified passkey gesture satisfy `two_factor`.
+  The bootstrap password exists only to create the account and register the
+  first passkey.
 - **State**: local SQLite on the persistent `/var/lib/authelia` mount
   (passkey registrations survive rebuilds). Sessions are in-memory: a service
   restart just re-prompts the browser.
