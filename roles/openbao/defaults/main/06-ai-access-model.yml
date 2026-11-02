@@ -13,8 +13,9 @@
 #        path rules): read-all, read-write-all (derived below).
 #   3. ACTOR ROLES (`ai-*` AppRoles) that ATTACH the capabilities/rollups they are
 #        allowed, plus actor mechanics (TTLs, inert human-gated secret_id):
-#        ai-readonly    -> [read-all]                       (standing, ambient)
-#        ai-elevated    -> [read-all + read-<extra>]        (standing, ambient)
+#        ai-readonly    -> [read-all + ai-global-read]       (standing, ambient)
+#        ai-elevated    -> [read-all + ai-global-read + read-<extra>]
+#                                                           (standing, ambient)
 #        ai-apply-<svc> -> [read-<svc>, write-<svc>, github-mint]  (per-window, 6h/12h)
 #        ai-apply-all   -> [read-write-all, github-mint]           (per-window, 1h/6h)
 #        ai-admin       -> [ai-admin]                    (full admin, 1h, alerted)

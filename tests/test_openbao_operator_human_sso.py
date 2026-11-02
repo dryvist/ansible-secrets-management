@@ -29,7 +29,7 @@ PATH_BLOCK = re.compile(
 
 def _render_role(group: str) -> dict:
     environment = Environment(
-        loader=FileSystemLoader(str(OPENBAO / "templates")),
+        loader=FileSystemLoader([str(OPENBAO / "templates"), str(OPENBAO)]),
         undefined=StrictUndefined,
     )
     environment.filters["to_json"] = lambda value: json.dumps(value)
@@ -48,7 +48,7 @@ def _render_role(group: str) -> dict:
 
 def _render_policy() -> str:
     environment = Environment(
-        loader=FileSystemLoader(str(OPENBAO / "templates")),
+        loader=FileSystemLoader([str(OPENBAO / "templates"), str(OPENBAO)]),
         undefined=StrictUndefined,
     )
     environment.filters["comment"] = lambda value: "# " + str(value)
@@ -94,6 +94,16 @@ def test_policy_write_capabilities_are_limited_to_two_provider_records():
         "secret/metadata/*",
         "secrets-external/data/*",
         "secrets-external/metadata/*",
+        "config/data/*",
+        "config/metadata/*",
+    }
+    system_metadata_paths = {
+        "sys/mounts",
+        "sys/auth",
+        "sys/policies/acl",
+        "sys/policies/acl/*",
+        "sys/internal/ui/mounts",
+        "sys/internal/ui/mounts/*",
     }
     write_paths = {
         "secrets-external/data/ai/saas/opencode",
@@ -107,18 +117,17 @@ def test_policy_write_capabilities_are_limited_to_two_provider_records():
         "auth/token/revoke-self": {"update"},
         "sys/capabilities-self": {"update"},
         "sys/internal/ui/resultant-acl": {"read"},
-        "sys/internal/ui/mounts/*": {"read"},
     }
     write_capabilities = {"create", "update", "delete", "patch", "sudo"}
 
     assert {path: capabilities for path, capabilities in grants if path in self_grants} == self_grants
     grants = [(path, capabilities) for path, capabilities in grants if path not in self_grants]
-    assert {path for path, _ in grants} == read_paths | write_paths
+    assert {path for path, _ in grants} == read_paths | system_metadata_paths | write_paths
     assert {
         path
         for path, capabilities in grants
         if {"read", "list"} <= capabilities
-    } == read_paths
+    } == read_paths | system_metadata_paths
     assert {
         path: capabilities
         for path, capabilities in grants
