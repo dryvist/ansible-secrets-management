@@ -23,6 +23,10 @@
 # now, not a copy of one hash frozen at commit time.
 # renovate: datasource=github-releases depName=authelia/authelia
 authelia_version: "4.39.28"
+# Request user verification for every WebAuthn assertion.
+authelia_webauthn_user_verification: required
+# Authelia version reviewed with the experimental flag; reread its WebAuthn page before bumping.
+authelia_webauthn_uv_two_factors_reviewed_version: "4.39.28"
 authelia_release_tgz: "authelia-v{{ authelia_version }}-linux-amd64.tar.gz"
 authelia_release_base_url: "https://github.com/authelia/authelia/releases/download/v{{ authelia_version }}"
 authelia_release_tgz_url: "{{ authelia_release_base_url }}/{{ authelia_release_tgz }}"
