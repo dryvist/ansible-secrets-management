@@ -128,6 +128,7 @@ plans):
 | `local-llm` | `secret/ai/*` | — | The LLM serving stack itself |
 | `clickhouse` | `secret/ai/clickhouse` data + metadata | — | Dedicated reader for the application and integration passwords |
 | `clickhouse-ingest` | `secret/ai/clickhouse-ingest` data + metadata | — | Dedicated reader for the ClickHouse ingest writer password |
+| `hatchet-killtest` | `secret/apps/hatchet-killtest` | — | Power-only PVE token; per-call one-use secret_id; machine CIDR; 15m[^hatchet-killtest] |
 | `hermes` | `secret/ai/hermes`, `secret/ai/mcp/splunk` | — | Dedicated least-privilege reader for Hermes; NO broad `secret/ai/*` |
 | `hermes-write` | `secret/ai/hermes` | `secret/ai/hermes` | Narrow one-time credential seed writer; shared MCP publication belongs to `ansible-converge` |
 | `agent-code-simplifier` | — | — | No KV grants; GitHub public repo `contents: read`, `pull_requests: write`; `service-runtime`; 15m token |
@@ -170,6 +171,13 @@ reconciliation.
     `terraform-apply` (OpenTofu), `ansible-converge` (Ansible), and the
     per-workspace Terrakube JWT roles. It withholds `destroy` and `delete` on
     `metadata/*`, the two capabilities that permanently erase version history.
+
+[^hatchet-killtest]: Its policy reads only the `secret/data/apps/hatchet-killtest`
+    leaf, and `approle-issuer` mints its one-use secret_id per Semaphore run.
+    The shared `apps` reader excludes this bucket. By design, three other
+    identities also reach the leaf: `ansible-converge`, which publishes the
+    token, and `apps-seed` and `apps-rotate`, through their `secret/apps/*`
+    grants.
 
 [^ai-tiers]: Task-scoped AI actor roles. Authorization is by task/blast-radius
     and human-gated, never by model capability (model is an audit claim). Every

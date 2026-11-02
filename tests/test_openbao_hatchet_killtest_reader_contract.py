@@ -104,7 +104,18 @@ class HatchetKillTestReaderContract(unittest.TestCase):
         cidr = _yaml("08b-cidr-and-unlock.yml")
         self.assertEqual(cidr["openbao_approle_default_cidr_class"], "machine")
         self.assertNotIn("hatchet-killtest", cidr["openbao_approle_cidr_class_overrides"])
-        taxonomy = (DEFAULTS / "08d-approle-taxonomy.yml").read_text(encoding="utf-8")
+        rendered_class = _render(cidr["openbao_approle_cidr_class_map"], {
+            "openbao_approles": [{"name": "hatchet-killtest"}],
+            "openbao_approle_default_cidr_class": cidr["openbao_approle_default_cidr_class"],
+            "openbao_approle_cidr_class_overrides": {},
+            "openbao_github_write_scope_cidr_classes": {},
+            "openbao_roster_agent_cidr_classes": {},
+            "openbao_roster_key_reader_cidr_classes": {},
+            "openbao_ai_apply_cidr_classes": {},
+        })["hatchet-killtest"]
+        self.assertEqual(rendered_class, "machine")
+        self.assertNotEqual(rendered_class, "unbound")
+        taxonomy =(DEFAULTS / "08d-approle-taxonomy.yml").read_text(encoding="utf-8")
         self.assertIn("'hatchet-killtest': 'converge-automation'", taxonomy)
 
         agent_sources = [
