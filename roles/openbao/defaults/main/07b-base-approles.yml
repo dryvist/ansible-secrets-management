@@ -198,6 +198,10 @@ openbao_base_approles_core:
   - name: "{{ openbao_github_exporter_approle_name }}"
     policy: "{{ openbao_github_exporter_policy_name }}"
     token_ttl: 15m
+  # Hatchet eval status reporting mints its one repository-scoped set per run.
+  - name: "{{ openbao_hatchet_eval_status_approle_name }}"
+    policy: "{{ openbao_hatchet_eval_status_policy_name }}"
+    token_ttl: 15m
   - name: "{{ openbao_reconcile_approle_name }}"
     policy: "{{ openbao_reconcile_policy_name }}"
     token_ttl: "{{ openbao_reconcile_approle_token_ttl }}"

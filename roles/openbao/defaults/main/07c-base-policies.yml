@@ -110,6 +110,8 @@ openbao_base_policies_static:
     template: ci-ai-review-policy.hcl.j2
   - name: docs-router-snapshot
     template: docs-router-snapshot-policy.hcl.j2
+  - name: "{{ openbao_hatchet_eval_status_policy_name }}"
+    template: hatchet-eval-status-policy.hcl.j2
   - name: "{{ openbao_hermes_policy_name }}"
     template: hermes-policy.hcl.j2
   - name: "{{ openbao_hermes_write_policy_name }}"

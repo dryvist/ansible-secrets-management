@@ -19,6 +19,7 @@
     _other_policies:
       - github-docs-publisher-policy.hcl
       - github-ci-resolver-policy.hcl
+      - hatchet-eval-status-policy.hcl
       - github-mint-policy.hcl
       - github-read-policy.hcl
       - github-repo-create-policy.hcl

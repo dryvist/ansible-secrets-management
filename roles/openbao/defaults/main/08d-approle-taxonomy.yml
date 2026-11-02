@@ -44,6 +44,7 @@ openbao_approle_class_map: >-
     'github-enterprise-admin': 'operator-admin',
     'github-enterprise-read': 'operator-admin',
     'github-exporter': 'service-runtime',
+    'hatchet-eval-status': 'service-runtime',
     'github-write': 'trusted-agent-write',
     'github-read': 'trusted-agent-read',
     'github-repo-create': 'operator-admin',

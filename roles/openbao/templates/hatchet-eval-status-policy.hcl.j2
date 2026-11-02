@@ -1,0 +1,7 @@
+{{ ansible_managed | comment }}
+# hatchet-eval-status grants the Hatchet eval worker its one repository-scoped status set.
+{% for permission_set in openbao_github_permission_sets | selectattr('name', 'equalto', openbao_github_role_eval_status_set_name) %}
+path "{{ permission_set.mount }}/token/{{ permission_set.name }}" {
+  capabilities = ["create", "read", "update"]
+}
+{% endfor %}
