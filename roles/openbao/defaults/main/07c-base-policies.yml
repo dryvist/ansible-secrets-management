@@ -197,6 +197,9 @@ openbao_base_policies_static:
   # exceptions are separate from the userpass human-unlock policy.
   - name: "{{ openbao_operator_human_policy_name }}"
     template: operator-human-policy.hcl.j2
+  # Global KV and non-secret system metadata reads for trusted AI actor roles.
+  - name: "{{ openbao_ai_global_read_policy_name }}"
+    template: ai-global-read-policy.hcl.j2
   # human-unlock-untrusted: the phone-approved grant for the untrusted client.
   # Per-service apply-role secret_ids only; see the template.
   - name: "{{ openbao_human_unlock_untrusted_policy_name }}"
