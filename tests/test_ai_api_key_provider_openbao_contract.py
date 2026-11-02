@@ -69,7 +69,7 @@ def test_provider_policy_is_external_exact_and_read_only():
 
 def test_local_llm_attaches_the_derived_provider_policy_set():
     approles = _read("roles/openbao/defaults/main/07b-base-approles.yml")
-    policies = _read("roles/openbao/defaults/main/07c-base-policies.yml")
+    policies = _read("roles/openbao/defaults/main/07c-policy-composition.yml")
 
     assert "[openbao_local_llm_policy_name] + openbao_ai_api_key_policy_names" in approles
     assert "+ openbao_ai_api_key_policies" in policies

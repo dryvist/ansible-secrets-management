@@ -90,6 +90,8 @@ openbao_approle_class_map: >-
     'sandbox-opencode-write': 'untrusted-sandbox',
     'agent-code-simplifier': 'service-runtime',
     'agent-ci-fixer': 'service-runtime',
+    'agent-vikunja-clerk': 'service-runtime',
+    'agent-docs-updater': 'service-runtime',
     'semaphore': 'converge-automation',
     'secret-age-audit': 'service-runtime',
     'slack-admin': 'operator-admin',

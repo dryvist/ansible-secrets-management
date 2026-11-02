@@ -24,6 +24,7 @@ from ansible.template import Templar, trust_as_template
 ROOT = Path(__file__).resolve().parents[1]
 TASKS = ROOT / "roles" / "openbao" / "tasks" / "init" / "10-approles.yml"
 DEFAULTS = ROOT / "roles" / "openbao" / "defaults" / "main" / "08b-cidr-and-unlock.yml"
+IDENTITIES = ROOT / "roles" / "openbao" / "defaults" / "main" / "05l-dify-agent-identities.yml"
 
 UNCLASSED_TASK = "Assert every AppRole this run creates has a source-address class"
 
@@ -54,6 +55,14 @@ def _render(expr, variables):
     templar = Templar(loader=DataLoader())
     templar.available_variables = _trust(variables)
     return templar.template(trust_as_template(expr))
+
+
+def _dify_agent_names(defaults, suffix):
+    return [
+        value
+        for name, value in defaults.items()
+        if name.startswith("openbao_dify_agent_") and name.endswith(suffix)
+    ]
 
 
 def unclassed(declared, class_map):
@@ -125,7 +134,8 @@ class TestShippedDeclarationIsClean(unittest.TestCase):
         for tool in ("zcode", "opencode"):
             for tier in ("read", "write"):
                 self.assertEqual(overrides[f"sandbox-{tool}-{tier}"], "sandbox_agent")
-        for role in ("agent-code-simplifier", "agent-ci-fixer"):
+        identities = yaml.safe_load(IDENTITIES.read_text(encoding="utf-8"))
+        for role in _dify_agent_names(identities, "_approle_name"):
             self.assertNotIn(role, overrides)
 
     def test_dify_roles_are_gated_and_bind_both_credentials_to_the_host_cidr(self):
@@ -136,11 +146,15 @@ class TestShippedDeclarationIsClean(unittest.TestCase):
         host_cidr = "192.0.2.10/32"
         defaults["openbao_platform_env"] = {"OPENBAO_DIFY_AGENT_CIDR": host_cidr}
         roles = _render("{{ openbao_dify_agent_approles }}", defaults)
+        approle_names = _dify_agent_names(defaults, "_approle_name")
+        policy_names = _dify_agent_names(defaults, "_policy_name")
+        self.assertEqual(approle_names, policy_names)
         self.assertEqual(
             [role["name"] for role in roles],
-            ["agent-code-simplifier", "agent-ci-fixer"],
+            approle_names,
         )
-        for role in roles:
+        for role, name in zip(roles, approle_names):
+            self.assertEqual(role["policy"], name)
             self.assertEqual(role["secret_id_bound_cidrs"], host_cidr)
             self.assertEqual(role["secret_id_ttl"], "720h")
             self.assertEqual(role["secret_id_num_uses"], 0)
@@ -150,7 +164,7 @@ class TestShippedDeclarationIsClean(unittest.TestCase):
 
         defaults["openbao_approles"] = roles
         parameters = _render("{{ openbao_approle_cli_parameters }}", defaults)
-        for name in ("agent-code-simplifier", "agent-ci-fixer"):
+        for name in approle_names:
             self.assertEqual(parameters[name]["secret_id_bound_cidrs"], host_cidr)
             self.assertEqual(parameters[name]["token_bound_cidrs"], host_cidr)
 

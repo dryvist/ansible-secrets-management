@@ -27,16 +27,16 @@ provider leaf; `sandbox-opencode-read` and `sandbox-opencode-write` read only
 They share the sandbox CIDR, token lifetime, and one-use SecretID settings.
 The dispatcher can read each role ID and mint wrapped SecretIDs for each role.
 
-The Dify fleet `agent-code-simplifier` and `agent-ci-fixer` AppRoles mint only
-their matching named set on `github-agents`. Both sets resolve to the public dryvist
-repository list. The code simplifier can write pull-request reviews and read
-contents, but cannot push; the CI fixer can write contents and pull requests,
-and read checks and actions. These roles read no KV paths. They use the
-`service-runtime` identity class and are created only when the private
-`OPENBAO_DIFY_AGENT_CIDR` is set. A human-gated unlock issues their reusable
-720-hour SecretIDs for the Dify admin to set; both SecretID redemption and
-resulting 15-minute OpenBao tokens are bound to that Dify host CIDR. GitHub
-installation tokens expire in one hour.
+The Dify fleet `agent-code-simplifier`, `agent-ci-fixer`,
+`agent-vikunja-clerk`, and `agent-docs-updater` AppRoles each mint only their
+matching named set on `github-agents`. All four sets are scoped to public
+dryvist repositories. The code simplifier can write pull-request reviews and
+read contents; the CI fixer can write contents and pull requests, and read
+checks and actions; the Vikunja clerk and docs updater can read contents, pull
+requests, issues, and checks. These roles read no KV paths. They use the
+`service-runtime` identity class and are created only when
+`OPENBAO_DIFY_AGENT_CIDR` is set. Their SecretIDs last 720 hours, use the
+configured CIDR binding, and produce OpenBao tokens capped at 15 minutes.
 
 `roles/openbao/defaults/main/08d-approle-taxonomy.yml` maps declared AppRoles
 to the six identity classes. The AppRole initialization fails if any declared
@@ -130,6 +130,10 @@ plans):
 | `clickhouse-ingest` | `secret/ai/clickhouse-ingest` data + metadata | — | Dedicated reader for the ClickHouse ingest writer password |
 | `hermes` | `secret/ai/hermes`, `secret/ai/mcp/splunk` | — | Dedicated least-privilege reader for Hermes; NO broad `secret/ai/*` |
 | `hermes-write` | `secret/ai/hermes` | `secret/ai/hermes` | Narrow one-time credential seed writer; shared MCP publication belongs to `ansible-converge` |
+| `agent-code-simplifier` | — | — | No KV grants; GitHub public repo `contents: read`, `pull_requests: write`; `service-runtime`; 15m token |
+| `agent-ci-fixer` | — | — | No KV grants; GitHub public repo `contents`/`pull_requests: write`, `checks`/`actions: read`; `service-runtime`; 15m token |
+| `agent-vikunja-clerk` | — | — | No KV grants; GitHub public repo `contents`/`pull_requests`/`issues`/`checks: read`; `service-runtime`; 15m token |
+| `agent-docs-updater` | — | — | No KV grants; GitHub public repo `contents`/`pull_requests`/`issues`/`checks: read`; `service-runtime`; 15m token |
 | `config-read` | all of `config/` | — | **Default** reader; mount-wide wildcard is correct here; shipped ambiently |
 | `config-write` *(policy, no AppRole)* | all of `config/` | `config/` values: create/update/patch/soft-delete | Attached to the 3 IaC authors[^config-write] |
 | `ai-orchestrator` | `secret/ai/{hermes,agents}` | `secret/ai/{hermes,agents}` (create/update) | WRITE; Doppler tier-0; narrowed + 30m TTL at Phase-3 |
@@ -156,28 +160,11 @@ Transit data-key plaintext and decrypt paths for the OpenTofu state key. The
 reconcile policy pins its rendered body and attaches it to `ai-admin-session`
 through the role's `token_policies` field.
 
-The AI rows above are **actor roles**: they carry no path rules themselves, only
-attach **actor-agnostic base capability policies** — `read-<svc>` / `write-<svc>`
-(one pair per entry in `openbao_ai_domains`), plus `github-mint`. The rollups
-`read-all` / `read-write-all` are lists of those base policy names (composition at
-the token layer, no duplicated path rules). Adding a writable service is **one
-entry** in `openbao_ai_domains`: it renders a new `read-<svc>`/`write-<svc>` pair,
-auto-joins the rollups, mints an `ai-apply-<svc>` role, and becomes available to
-any future actor (`human-*`, `ci-*`) that attaches the same base names. "Broad on
-services, specific on users."
+### Identity and credential lifecycle
 
-### Terrakube workload identity
-
-The role enables JWT auth at `auth/terrakube` using the internal Terrakube API
-as both OIDC discovery URL and bound issuer. Each entry in
-`openbao_terrakube_workspaces` has a `terrakube-<workspace>` role and policy.
-Roles bind audience `openbao.workload.identity` and the exact string subject
-`organization:<openbao_terrakube_organization>:workspace:<workspace>`; a token
-from one workspace cannot select another workspace's policy. The converge
-deletes live roles and policies under `openbao_retired_terrakube_prefix`.
-Terrakube stores only the non-secret dynamic credential controls. Provider
-credentials remain in their native OpenBao KV or secrets-engine paths and are
-returned through a short-lived OpenBao token.
+See [Identity and credential lifecycle](identity-and-credential-lifecycle.md) for
+policy composition, workload identities, SecretID lifetime, source binding, and
+reconciliation.
 
 [^config-write]: A capability policy, not an identity — attached to
     `terraform-apply` (OpenTofu), `ansible-converge` (Ansible), and the
@@ -208,73 +195,6 @@ returned through a short-lived OpenBao token.
     `role/tf-proxmox` and the broader, permissions-boundary-capped
     `role/openbao-iac-admin`, replacing static aws-vault base keys. See the
     AWS secrets engine section below.
-
-**Secret-zero model**: each AppRole's `role_id`/`secret_id` is published to
-Doppler tier-0 and reaches its consumer as ambient environment under
-`doppler run`. Access to Doppler tier-0 is the primary access boundary, but it
-is no longer the only one: a `secret_id` also carries a finite lifetime and a
-redemption cap, and is bound to the network segment its holder is supposed to
-sit on.
-
-`secret_id_ttl: 0` used to be the standing default and was described here as
-intentional. It was not defensible: it made every published credential
-permanent, so any copy that escaped Doppler — a drop file left on a controller,
-a value in a shell history — stayed a working credential until somebody noticed.
-Nothing rotated them, so "rotate manually" never happened. The defaults are now
-finite (`openbao_approle_secret_id_ttl`, `openbao_approle_secret_id_num_uses`
-in `defaults/main/08-admin-and-ttls.yml`), with per-role overrides and a
-documented reason required for any remaining `0`.
-
-The workstation per-call path uses `approle-issuer` for `flow-lock`,
-`openbao-reconcile`, `azure-iac-admin`, and five workstation-only aliases for
-the domain prefetch roles. Each target secret_id is limited to 15 minutes and one use; the shared
-`flow-lock approle-token ROLE` command logs in, destroys that secret_id by its
-accessor, and prints only the client token. Issuer grants are generated only
-for roles explicitly marked `secret_id_issuance: per_call`; stored and
-scheduled-rotation identities are not eligible. Domain machine callers retain
-their existing rotated credentials. Per-call role IDs and secret IDs are
-excluded from stored-credential probes, rotation catalogs, controller files,
-and Doppler publication. Human-gated roles and the issuer's own bootstrap
-identity remain outside that mint set.
-
-The OpenBao role's routine reconciliation uses the same issuer directly through
-`community.hashi_vault`: it reads the declared `openbao-reconcile` role ID,
-mints one secret_id, logs in with it, then revokes it by accessor. Its issuer
-liveness probe runs for every initialized cluster, including provisioning-token
-runs, after RBAC and AppRole declarations have been applied. A first scoped
-converge selects `openbao_rbac` and `openbao_approle` so grants precede the
-probe.
-
-Source binding uses named CIDR classes (`machine` / `workstation` / `ci`), whose
-values arrive by environment and are never committed. A class that a declared
-role uses but which was never supplied **fails the converge** rather than
-quietly creating the unbound role the binding exists to prevent.
-
-Two sibling asserts cover the class *assignment* rather than the class values.
-Every AppRole the converge loops must resolve to a class, so a role declared
-outside `openbao_approles` fails the run by name instead of dying on an
-undefined variable inside a `no_log` loop. And every key of
-`openbao_approle_cidr_class_overrides` must name a declared role, because an
-override that matches nothing is a silent no-op that leaves its role on the
-machine default while the file says otherwise. `unbound` stays a decision that
-is written down with a reason, never something a role arrives at by omission.
-
-The one exception throughout is `public`: it needs no secret-zero, no
-redemption cap and no source binding, since it only unlocks non-exploitable
-facts.
-
-Every check above assumes the declared list is the complete truth. It is not,
-by construction: reconciliation only ever loops what code declares, so an
-identity created by any other path — a rename that left the old name live, a
-manual break-glass create nobody backfilled — is invisible to every one of
-them and keeps whatever bounds it was created with forever. The converge
-closes that by listing what actually exists in the store (`bao list
-auth/approle/role`, granted read-only to the reconcile identity) and failing
-by name on anything live that is declared nowhere. A genuine, deliberate
-exception is named in `openbao_approle_undeclared_exceptions`, next to the
-declarations themselves, with a reason — never a silent allowlist elsewhere.
-The reverse direction (declared but not yet live) only warns: that is the
-ordinary shape of a role about to be created, not a leak.
 
 ### How a human gets break-glass now
 
