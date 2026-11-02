@@ -765,10 +765,7 @@ def test_reconcile_kv_grants_match_named_consumers_and_keep_flow_lock_separate(
     for path in expected_metadata:
         body = reconcile_stanzas[path]
         assert _capabilities(body) == ["read", "patch"], path
-        assert not re.search(
-            r"(?m)^\s*(?:allowed_parameters|denied_parameters|required_parameters)\s*=",
-            body,
-        ), path
+        assert _allowed_parameters(body) == {"custom_metadata": []}, path
 
     retention = reconcile_stanzas["config/config"]
     assert _capabilities(retention) == ["read", "update"]
@@ -857,10 +854,13 @@ def test_reconcile_metadata_grants_match_real_defaults(rendered_defaults):
     for path, capabilities in expected_metadata.items():
         body = reconcile_stanzas[path]
         assert set(_capabilities(body)) == capabilities, path
-        assert not re.search(
-            r"(?m)^\s*(?:allowed_parameters|denied_parameters|required_parameters)\s*=",
-            body,
-        ), path
+        if "patch" in capabilities or "update" in capabilities:
+            assert _allowed_parameters(body) == {"custom_metadata": []}, path
+        else:
+            assert not re.search(
+                r"(?m)^\s*(?:allowed_parameters|denied_parameters|required_parameters)\s*=",
+                body,
+            ), path
 
 
 def test_semaphore_execution_role_keeps_its_intended_policy_union(rendered_defaults):

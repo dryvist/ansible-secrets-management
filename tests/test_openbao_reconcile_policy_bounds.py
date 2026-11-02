@@ -1,6 +1,8 @@
 """Rendered and enforced bounds for the OpenBao reconcile KV ACL."""
 
 import json
+import re
+import shlex
 import shutil
 import socket
 import subprocess
@@ -16,6 +18,7 @@ from ansible.template import trust_as_template
 from test_openbao_reconcile_grant_bounds import (
     RECONCILE,
     _allowed_parameters,
+    _capabilities,
     _render,
     _stanzas,
     _templar,
@@ -26,20 +29,283 @@ from test_openbao_reconcile_grant_bounds import (
 ROOT = Path(__file__).resolve().parents[1]
 POLICY_SYNC = ROOT / "roles/openbao/tasks/init/02b-policy-sync.yml"
 PATH_COMPONENTS = "^[A-Za-z0-9][A-Za-z0-9._-]*(/[A-Za-z0-9][A-Za-z0-9._-]*)*$"
+TASKS_03 = ROOT / "roles/openbao/tasks/init/03-kv-mounts-and-seed-secrets.yml"
+TASKS_08A = ROOT / "roles/openbao/tasks/init/08a-roster-live-collisions.yml"
+PROMOTE_TASKS = ROOT / "roles/openbao/tasks/promote_app_secret.yml"
+GENERATED_SEED_TASKS = ROOT / "roles/openbao/tasks/seed_generated_app_secret.yml"
+ROSTER_SEED_TASKS = ROOT / "roles/openbao/tasks/seed_roster_agent_leaf.yml"
+ROSTER_OWNER_TASKS = ROOT / "roles/openbao/tasks/seed_roster_agent_leaf_owner.yml"
+LEGACY_AGENT_TASKS = ROOT / "roles/openbao/tasks/remove_app_agent_legacy_fields.yml"
+ROTATION_TASKS = ROOT / "roles/openbao/tasks/tag_rotation_exempt.yml"
 
 
 def _request(base, token, method, path, body=None):
+    headers = {"X-Vault-Token": token}
+    if body is not None:
+        headers["Content-Type"] = (
+            "application/merge-patch+json" if method == "PATCH" else "application/json"
+        )
     request = urllib.request.Request(
         f"{base}/v1/{path}",
         data=None if body is None else json.dumps(body).encode(),
         method=method,
-        headers={"X-Vault-Token": token},
+        headers=headers,
     )
     try:
         with urllib.request.urlopen(request, timeout=10) as response:
             return response.status, response.read()
     except urllib.error.HTTPError as error:
         return error.code, error.read()
+
+
+def _render_value(values, value, **overrides):
+    return _templar(_trust(dict(values, **overrides))).template(_trust(value))
+
+
+def _task_file(path):
+    def flatten(tasks):
+        for task in tasks or []:
+            yield task
+            for key in ("block", "rescue", "always"):
+                yield from flatten(task.get(key, []))
+
+    return list(flatten(yaml.safe_load(path.read_text(encoding="utf-8"))))
+
+
+def _named_task(path, name):
+    return next(task for task in _task_file(path) if task.get("name") == name)
+
+
+def _include_details(task):
+    modules = {
+        module: module.rsplit(".", 1)[-1]
+        for module in (
+            "include_tasks",
+            "ansible.builtin.include_tasks",
+            "import_tasks",
+            "ansible.builtin.import_tasks",
+            "include_role",
+            "ansible.builtin.include_role",
+        )
+    }
+    matches = [(module, modules[module]) for module in modules if module in task]
+    if not matches:
+        return None
+    if len(matches) != 1:
+        raise AssertionError(
+            f"task {task.get('name')!r} has multiple include/import actions"
+        )
+
+    module, action = matches[0]
+    declaration = task[module]
+    if isinstance(declaration, str):
+        include = {"name" if action == "include_role" else "file": declaration}
+    elif isinstance(declaration, dict):
+        include = declaration
+    else:
+        raise AssertionError(
+            f"cannot interpret {action} declaration in task {task.get('name')!r}"
+        )
+
+    target_key = "name" if action == "include_role" else "file"
+    target = include.get(target_key)
+    if not isinstance(target, str) or not target.strip():
+        raise AssertionError(
+            f"{action} task {task.get('name')!r} has no usable {target_key!r}"
+        )
+
+    task_vars = task.get("vars", {})
+    if task_vars is None:
+        task_vars = {}
+    if not isinstance(task_vars, dict):
+        raise AssertionError(
+            f"vars on {action} task {task.get('name')!r} are not a mapping"
+        )
+    return action, include, task_vars
+
+
+def _loop_values(values, expression):
+    result = _render_value(values, expression)
+    return yaml.safe_load(result) if isinstance(result, str) else result
+
+
+def _command_text(task, values):
+    command = task.get("ansible.builtin.command", {})
+    text = command.get("cmd", " ".join(command.get("argv", [])))
+    return _render_value(values, text) if text else ""
+
+
+def _add_kv_command(grants, task, values):
+    rendered = _command_text(task, values)
+    if not rendered:
+        return
+    args = shlex.split(" ".join(rendered.split()))
+    if args[:2] == ["bao", "kv"] and len(args) > 3:
+        if args[2] == "metadata":
+            action = args[3]
+            target = args[-1]
+            mount = next(
+                (arg.split("=", 1)[1] for arg in args if arg.startswith("-mount=")),
+                None,
+            )
+            if mount:
+                target = f"{mount}/metadata/{target.lstrip('/')}"
+            else:
+                mount, relative = target.split("/", 1)
+                target = f"{mount}/metadata/{relative}"
+            capabilities = {"get": {"read"}, "list": {"list"}, "patch": {"patch"}}
+        else:
+            action = args[2]
+            target = args[-1]
+            mount, relative = target.split("/", 1)
+            target = f"{mount}/data/{relative}"
+            capabilities = {
+                "get": {"read"},
+                "list": {"list"},
+                "put": {"create", "update"},
+                "patch": {"patch"},
+                "delete": {"delete"},
+                "destroy": {"delete"},
+            }
+        grants.setdefault(target, set()).update(capabilities.get(action, set()))
+    elif args[:2] in (["bao", "read"], ["bao", "write"]):
+        target = next(
+            (arg for arg in args[2:] if not arg.startswith("-") and "=" not in arg),
+            "",
+        )
+        if target.endswith("/config"):
+            grants.setdefault(target, set()).add(
+                "read" if args[1] == "read" else "update"
+            )
+
+
+def _add_kv_uri(grants, task, values):
+    uri = task.get("ansible.builtin.uri", {})
+    url = uri.get("url", "")
+    if "/v1/" not in url:
+        return
+    path = _render_value(values, url.split("/v1/", 1)[1])
+    method = uri.get("method", "GET").upper()
+    capabilities = {
+        "GET": {"read"},
+        "LIST": {"list"},
+        "POST": {"create", "update"},
+        "PATCH": {"patch"},
+        "DELETE": {"delete"},
+    }
+    grants.setdefault(path, set()).update(capabilities.get(method, set()))
+
+
+def _add_promoted_paths(grants, values, include_task):
+    details = _include_details(include_task)
+    if details is None:
+        raise AssertionError(f"expected an include/import task: {include_task!r}")
+    action, include, include_vars = details
+    if action not in ("include_tasks", "import_tasks"):
+        return
+    filename = include["file"]
+    if not filename.endswith("promote_app_secret.yml"):
+        return
+    loop_var = include_task.get("loop_control", {}).get("loop_var", "item")
+    items = _loop_values(values, include_task["loop"]) if "loop" in include_task else [None]
+    promote_tasks = _task_file(PROMOTE_TASKS)
+    for item in items:
+        context = dict(values)
+        if item is not None:
+            context[loop_var] = item
+        for name in ("openbao_promote_app", "openbao_promote_mount", "openbao_promote_path"):
+            if name in include_vars:
+                context[name] = _render_value(context, include_vars[name])
+        for task in promote_tasks:
+            for name, expression in task.get("vars", {}).items():
+                if name in ("_promote_mount", "_promote_path"):
+                    context[name] = _render_value(context, expression)
+            _add_kv_command(grants, task, context)
+            _add_kv_uri(grants, task, context)
+
+
+def _add_seeded_paths(grants, values, include_task):
+    details = _include_details(include_task)
+    if details is None:
+        raise AssertionError(f"expected an include/import task: {include_task!r}")
+    action, include, include_vars = details
+
+    if action in ("include_tasks", "import_tasks"):
+        filename = include["file"]
+        if filename.endswith("seed_context7_key.yml"):
+            # This legacy migration seed is explicitly disabled in reconcile mode.
+            return
+        if not filename.endswith(
+            ("seed_generated_app_secret.yml", "seed_roster_agent_leaf.yml")
+        ):
+            if Path(filename).name.startswith("seed_"):
+                raise AssertionError(f"unrecognized seed task include: {filename!r}")
+            return
+        is_roster_seed = filename.endswith("seed_roster_agent_leaf.yml")
+        seed_task = _named_task(
+            GENERATED_SEED_TASKS, "Call shared generate-if-absent seeding"
+        )
+        seed_details = _include_details(seed_task)
+        if seed_details is None:
+            raise AssertionError(
+                "shared generated seeding task has no include_role action"
+            )
+        seed_action, seed_include, seed_vars = seed_details
+        if (
+            seed_action != "include_role"
+            or seed_include["name"] != "dryvist.homelab.openbao_secrets"
+            or seed_include.get("tasks_from", "main") != "seed_generated"
+        ):
+            raise AssertionError(
+                "shared generated seeding task has an unexpected include_role"
+            )
+    elif action == "include_role":
+        role_name = include["name"]
+        tasks_from = include.get("tasks_from", "main")
+        if (
+            role_name != "dryvist.homelab.openbao_secrets"
+            or tasks_from != "seed_generated"
+        ):
+            if "seed" in role_name or "seed" in str(tasks_from):
+                raise AssertionError(
+                    f"cannot interpret seeded include_role {role_name!r}:{tasks_from!r}"
+                )
+            return
+        is_roster_seed = False
+        seed_vars = include_vars
+    else:
+        raise AssertionError(f"cannot interpret seeded path source {action!r}")
+
+    mount_expression = seed_vars.get("openbao_secrets_seed_mount")
+    path_expression = seed_vars.get("openbao_secrets_seed_path")
+    if not isinstance(mount_expression, str) or not isinstance(path_expression, str):
+        raise AssertionError("seed include is missing its mount or path expression")
+
+    loop_var = include_task.get("loop_control", {}).get("loop_var", "item")
+    items = (
+        _loop_values(values, include_task["loop"])
+        if "loop" in include_task
+        else [None]
+    )
+    for item in items:
+        context = dict(values)
+        if item is not None:
+            context[loop_var] = item
+        if "openbao_seed_app" in include_vars:
+            context["openbao_seed_app"] = _render_value(
+                context, include_vars["openbao_seed_app"]
+            )
+        mount = _render_value(context, mount_expression)
+        path = _render_value(context, path_expression)
+        grants.setdefault(f"{mount}/data/{path}", set()).update(
+            {"create", "read", "update"}
+        )
+        if is_roster_seed:
+            for task in _task_file(ROSTER_SEED_TASKS):
+                _add_kv_command(grants, task, context)
+                _add_kv_uri(grants, task, context)
+            for task in _task_file(ROSTER_OWNER_TASKS):
+                _add_kv_uri(grants, task, context)
 
 
 def test_rendered_kv_config_grants_pin_each_mount_to_its_declared_retention(
@@ -128,7 +394,7 @@ def test_path_guard_covers_template_sources_and_precedes_policy_write():
     assert names.index(guard_name) < names.index(write_name)
 
 
-def test_dev_server_denies_unlisted_retention_value_and_allows_declared_value(
+def test_dev_server_enforces_config_and_metadata_parameter_bounds(
     rendered_defaults,
 ):
     binary = shutil.which("bao")
@@ -203,6 +469,107 @@ def test_dev_server_denies_unlisted_retention_value_and_allows_declared_value(
             )[0]
             == 204
         )
+
+        rotation_exempt = _templar(_trust(values)).template(
+            _trust(values["openbao_rotation_exempt"])
+        )
+        metadata_mount, metadata_key = rotation_exempt[0].split(":", 1)
+        metadata_path = f"{metadata_mount}/metadata/{metadata_key}"
+        status, body = _request(
+            base,
+            "root",
+            "POST",
+            f"{metadata_mount}/data/{metadata_key}",
+            {"data": {"fixture": "value"}},
+        )
+        assert status in (200, 204), body
+
+        for forbidden in (
+            {"max_versions": 3},
+            {"delete_version_after": "24h"},
+        ):
+            status, body = _request(
+                base, token, "PATCH", metadata_path, forbidden
+            )
+            assert status == 403, (forbidden, status, body)
+
+        status, body = _request(
+            base,
+            token,
+            "PATCH",
+            metadata_path,
+            {"custom_metadata": {"fixture": "allowed"}},
+        )
+        assert status in (200, 204), body
     finally:
         server.terminate()
         server.wait(timeout=30)
+
+
+def test_reconcile_kv_task_paths_have_exact_grants(rendered_defaults):
+    values, _approles, _policies = rendered_defaults
+    context = dict(
+        values,
+        tofu_data={"agents": {"review-agent": {}}},
+        agent_callers_registry={"review-caller": {}},
+    )
+    tasks = _task_file(TASKS_03)
+    grants = {}
+
+    # The tuned-config read and write use the same mount loop in init/03.
+    config_read = _named_task(
+        TASKS_03, "Read the current version-retention config of each tuned KV mount"
+    )
+    config_write = _named_task(
+        TASKS_03, "Set KV v2 version retention on the tuned mounts (write-if-changed)"
+    )
+    for mount in _loop_values(context, config_read["loop"]):
+        _add_kv_command(grants, config_read, dict(context, item=mount))
+        _add_kv_command(grants, config_write, dict(context, item=(mount, {})))
+
+    # Promotion and generate-if-absent paths come from the concrete task
+    # includes and the target mount/path passed to the shared seed role.
+    for task in tasks:
+        if _include_details(task) is None:
+            continue
+        _add_promoted_paths(grants, context, task)
+        _add_seeded_paths(grants, context, task)
+
+    # The live roster collision probe reads all three candidate metadata paths
+    # for each valid roster name, including the legacy ai/<agent> leaf.
+    metadata_read = _named_task(
+        TASKS_08A, "Read live metadata for roster agent KV paths"
+    )
+    for item in _loop_values(context, metadata_read["loop"]):
+        _add_kv_command(grants, metadata_read, dict(context, item=item))
+
+    readers = _render_value(context, context["openbao_app_agent_tier_readers"])
+    for reader in readers:
+        reader_context = dict(context, openbao_agent_tier_reader=reader)
+        for task in _task_file(LEGACY_AGENT_TASKS):
+            if (
+                "login_path is defined" in str(task.get("when", ""))
+                and "login_path" not in reader
+            ):
+                continue
+            _add_kv_uri(grants, task, reader_context)
+
+    rotation_exempt = _render_value(context, context["openbao_rotation_exempt"])
+    for entry in rotation_exempt:
+        mount, path = entry.split(":", 1)
+        rotation_context = dict(
+            context,
+            openbao_rotation_exempt_entry=entry,
+            openbao_rotation_exempt_mount=mount,
+            openbao_rotation_exempt_path=path,
+            openbao_rotation_exempt_metadata_path=f"{mount}/metadata/{path}",
+        )
+        for task in _task_file(ROTATION_TASKS):
+            _add_kv_command(grants, task, rotation_context)
+
+    rendered = _render(RECONCILE, context)
+    stanzas = dict(_stanzas(rendered))
+    for path, capabilities in grants.items():
+        assert path in stanzas, f"no exact reconcile stanza covers task KV path {path}"
+        assert "*" not in path and "+" not in path, path
+        assert capabilities <= set(_capabilities(stanzas[path])), (path, capabilities)

@@ -240,9 +240,19 @@ path "{{ mount.path | default(mount) }}/config" {
 {% for app in (openbao_caller_gateway_generated_app_secrets | default({})).keys() %}
 {% set _ = kv_metadata_grants.update({openbao_kv_mount ~ '/metadata/apps/' ~ app: ['read', 'patch']}) %}
 {% endfor %}
+{% for agent in (openbao_ai_agents | default({})).keys() %}
+{% if (agent | string | regex_search(openbao_roster_agent_name_pattern)) is not none %}
+{% set _ = kv_metadata_grants.update({openbao_kv_mount ~ '/metadata/ai/' ~ agent: ['read']}) %}
+{% endif %}
+{% endfor %}
 {% for path in kv_metadata_grants | sort %}
 path "{{ path }}" {
   capabilities       = {{ kv_metadata_grants[path] | tojson }}
+{% if 'patch' in kv_metadata_grants[path] or 'update' in kv_metadata_grants[path] %}
+  allowed_parameters = {
+    "custom_metadata" = []
+  }
+{% endif %}
 }
 {% endfor %}
 {% for reader in openbao_app_agent_tier_readers %}
