@@ -181,6 +181,24 @@ def test_router_catalog_entries_feed_generation_and_the_apps_read_paths():
     assert 'path "secret/metadata/apps/*"' not in policy
 
 
+def test_hermes_eval_api_server_key_stays_outside_the_router_catalog():
+    api_server_key = "hermes_eval_api_server_key"
+    generated = DEFAULTS_DATA["openbao_generated_app_secrets"]
+    catalog = {"contract-fixture": ["contract_fixture_llm_router_key"]}
+    seeded = _render(
+        ROSTER_DATA["openbao_seeded_generated_app_secrets"],
+        {
+            "openbao_generated_app_secrets": generated,
+            "openbao_router_key_catalog": catalog,
+        },
+    )
+
+    assert generated["hermes-eval"] == ["hermes_eval_llm_router_key", api_server_key]
+    assert "hermes-eval" not in catalog
+    assert all(api_server_key not in fields for fields in catalog.values())
+    assert seeded["hermes-eval"] == generated["hermes-eval"]
+
+
 def test_open_llm_fields_mirror_the_generated_router_fields():
     tasks = yaml.safe_load(GENERATION.read_text(encoding="utf-8"))
     capture = _find_task(tasks, "Capture generated router keys for the open-llm merge")
