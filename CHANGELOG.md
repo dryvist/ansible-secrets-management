@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.60.2](https://github.com/dryvist/ansible-secrets-management/compare/v0.60.1...v0.60.2) (2026-11-02)
+
+
+### Bug Fixes
+
+* **openbao:** read the policy write rc from its registered result ([#445](https://github.com/dryvist/ansible-secrets-management/issues/445)) ([835ac61](https://github.com/dryvist/ansible-secrets-management/commit/835ac61b471711104dc4c70ba4797c95381173ca))
+* **tests:** render the KV develop-path baseline from the in-file snapshot ([#447](https://github.com/dryvist/ansible-secrets-management/issues/447)) ([3ea4871](https://github.com/dryvist/ansible-secrets-management/commit/3ea48715b83561ae723e65c1795f300646e6413d))
+
 ## [0.60.1](https://github.com/dryvist/ansible-secrets-management/compare/v0.60.0...v0.60.1) (2026-11-02)
 
 
