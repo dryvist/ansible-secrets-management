@@ -123,6 +123,60 @@
     - openbao_reconcile_mode | default(false)
     - (openbao_policy_sync_caps.rc | default(1)) == 0
 
+- name: Collect the KV keys used by the reconcile policy
+  ansible.builtin.set_fact:
+    openbao_reconcile_kv_policy_keys: >-
+      {{ (openbao_promoted_app_secrets | default({})).keys() | list
+         + (openbao_promoted_external_secrets | default({})).keys() | list
+         + (openbao_promoted_config_values | default({})).keys() | list
+         + (openbao_seeded_generated_app_secrets | default({})).keys() | list
+         + (openbao_roster_agent_generated_app_secrets | default({})).keys() | list
+         + (openbao_caller_gateway_generated_app_secrets | default({})).keys() | list }}
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_reconcile_mode | default(false)
+
+- name: Add the generated seed paths used by the reconcile policy
+  ansible.builtin.set_fact:
+    openbao_reconcile_kv_policy_keys: >-
+      {{ openbao_reconcile_kv_policy_keys
+         + [(openbao_generated_app_secret_paths | default({})).get(
+             item.key, 'apps/' ~ item.key)] }}
+  loop: "{{ (openbao_seeded_generated_app_secrets | default({})) | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_reconcile_mode | default(false)
+
+- name: Add the rotation-exempt mount and path components used by the reconcile policy
+  ansible.builtin.set_fact:
+    openbao_reconcile_kv_policy_keys: >-
+      {{ openbao_reconcile_kv_policy_keys
+         + (item.split(':', 1) if ':' in item else [item, '']) }}
+  loop: "{{ openbao_rotation_exempt | default([]) }}"
+  loop_control:
+    label: "{{ item }}"
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_reconcile_mode | default(false)
+
+- name: Assert reconcile KV grant keys are literal path components
+  ansible.builtin.assert:
+    that:
+      - item is match('^[A-Za-z0-9][A-Za-z0-9._-]*(/[A-Za-z0-9][A-Za-z0-9._-]*)*$')
+      - "'..' not in item"
+    fail_msg: >-
+      Reconcile policy KV grant key '{{ item }}' contains an ACL path character
+      or syntax sequence; keys must be literal nested components using only
+      letters, digits, dots, underscores, and hyphens.
+  loop: "{{ openbao_reconcile_kv_policy_keys | default([]) }}"
+  loop_control:
+    label: "{{ item }}"
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_reconcile_mode | default(false)
+
 - name: Sync the reconcile policy from the declared set (policy-sync)
   ansible.builtin.command:
     cmd: "bao policy write {{ openbao_reconcile_policy_name }} -"
