@@ -29,12 +29,13 @@ def _load_defaults_and_render_webauthn():
 def test_experimental_uv_two_factors_flag_version_is_reviewed():
     defaults, webauthn = _load_defaults_and_render_webauthn()
 
-    if webauthn.get("experimental_enable_passkey_uv_two_factors") is True:
+    experimental = [key for key, value in webauthn.items() if key.startswith("experimental_") and value is True]
+    if experimental:
         assert defaults["authelia_version"] == defaults[
             "authelia_webauthn_uv_two_factors_reviewed_version"
         ], (
-            f"{UPSTREAM_WEBAUTHN_URL}: reread the WebAuthn page, confirm the "
-            f"experimental flag still starts in Authelia {defaults['authelia_version']}, "
+            f"{UPSTREAM_WEBAUTHN_URL}: reread the WebAuthn page, confirm {experimental} "
+            f"still start in Authelia {defaults['authelia_version']}, "
             "then bump authelia_webauthn_uv_two_factors_reviewed_version."
         )
 
@@ -44,3 +45,5 @@ def test_rendered_passkey_requires_user_verification():
 
     assert webauthn["enable_passkey_login"] is True
     assert webauthn["selection_criteria"]["user_verification"] == "required"
+    assert webauthn["selection_criteria"]["discoverability"] == "required"
+    assert webauthn["experimental_enable_passkey_upgrade"] is True
