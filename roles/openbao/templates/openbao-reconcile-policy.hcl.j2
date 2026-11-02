@@ -222,6 +222,9 @@ path "{{ path }}" {
 {% for mount in openbao_kv_tuned_mounts | default([]) %}
 path "{{ mount.path | default(mount) }}/config" {
   capabilities       = ["read", "update"]
+  allowed_parameters = {
+    "max_versions" = [{{ mount.max_versions | string | tojson }}]
+  }
 }
 {% endfor %}
 # The rotation-exempt marker and roster leaf ownership require exact metadata

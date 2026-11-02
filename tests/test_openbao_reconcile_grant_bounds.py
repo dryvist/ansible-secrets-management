@@ -772,10 +772,7 @@ def test_reconcile_kv_grants_match_named_consumers_and_keep_flow_lock_separate(
 
     retention = reconcile_stanzas["config/config"]
     assert _capabilities(retention) == ["read", "update"]
-    assert not re.search(
-        r"(?m)^\s*(?:allowed_parameters|denied_parameters|required_parameters)\s*=",
-        retention,
-    )
+    assert _allowed_parameters(retention) == {"max_versions": ["30"]}
     assert {
         path for path in reconcile_stanzas
         if path.endswith("/config") and path.startswith(("secret/", "secrets-external/", "config/"))
@@ -841,6 +838,16 @@ def test_reconcile_metadata_grants_match_real_defaults(rendered_defaults):
             expected_metadata[
                 f"{values['openbao_kv_mount']}/metadata/apps/{app}"
             ] = {"read", "patch"}
+
+    agent_tier_mount = values["openbao_agent_tier_mount"]
+    for reader in templar.template(_trust(values["openbao_app_agent_tier_readers"])):
+        expected_metadata[
+            f"{agent_tier_mount}/metadata/{reader['tier']}"
+        ] = {"read"}
+        if "login_path" in reader:
+            expected_metadata[
+                f"{agent_tier_mount}/metadata/{reader['login_path']}"
+            ] = {"read"}
 
     reconcile_stanzas = dict(_stanzas(_render(RECONCILE, values)))
     actual_metadata_paths = {
