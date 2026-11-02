@@ -89,6 +89,36 @@ authelia_oidc_grafana_client_secret_plain: >-
      or undef(hint='authelia_oidc_grafana_client_secret missing from OpenBao secret/apps/authelia') }}
 authelia_oidc_grafana_client_secret_hash_file: "{{ authelia_secrets_dir }}/oidc_grafana_client_secret_hash"
 
+# YouTrack (JetBrains, Hub-based OAuth 2.0 auth module) — confidential client,
+# same shape as Grafana. The redirect is the Hub's OAuth callback per Authelia's
+# YouTrack integration guide; the YouTrack 2026 OIDC wizard shows the exact URI
+# and it must be confirmed at setup.
+authelia_oidc_youtrack_client_id: youtrack
+authelia_oidc_youtrack_redirect_uri: "https://youtrack.{{ authelia_cookie_domain }}/hub/api/rest/oauth2/auth"
+authelia_oidc_youtrack_client_secret_plain: >-
+  {{ (bao_apps_secrets.authelia_oidc_youtrack_client_secret | default('', true))
+     or undef(hint='authelia_oidc_youtrack_client_secret missing from OpenBao secret/apps/authelia') }}
+authelia_oidc_youtrack_client_secret_hash_file: "{{ authelia_secrets_dir }}/oidc_youtrack_client_secret_hash"
+
+# Vikunja — confidential client, same shape as Grafana. Vikunja builds its
+# redirect from the provider key in its own config, so that key must be
+# `authelia` for the path below: /auth/openid/<provider-id>.
+authelia_oidc_vikunja_client_id: vikunja
+authelia_oidc_vikunja_redirect_uri: "https://vikunja.{{ authelia_cookie_domain }}/auth/openid/authelia"
+authelia_oidc_vikunja_client_secret_plain: >-
+  {{ (bao_apps_secrets.authelia_oidc_vikunja_client_secret | default('', true))
+     or undef(hint='authelia_oidc_vikunja_client_secret missing from OpenBao secret/apps/authelia') }}
+authelia_oidc_vikunja_client_secret_hash_file: "{{ authelia_secrets_dir }}/oidc_vikunja_client_secret_hash"
+
+# Leantime (native PHP, OIDC through LEAN_OIDC_* env) — confidential client. Its
+# callback is documented by Leantime's OIDC configuration page.
+authelia_oidc_leantime_client_id: leantime
+authelia_oidc_leantime_redirect_uri: "https://leantime.{{ authelia_cookie_domain }}/oidc/callback"
+authelia_oidc_leantime_client_secret_plain: >-
+  {{ (bao_apps_secrets.authelia_oidc_leantime_client_secret | default('', true))
+     or undef(hint='authelia_oidc_leantime_client_secret missing from OpenBao secret/apps/authelia') }}
+authelia_oidc_leantime_client_secret_hash_file: "{{ authelia_secrets_dir }}/oidc_leantime_client_secret_hash"
+
 # LiteLLM proxy UI (ai roles/llm_router) — confidential client on LiteLLM's
 # generic OIDC backend. The redirect is LiteLLM's documented generic-SSO
 # callback path (<PROXY_BASE_URL>/sso/callback); same bao-first guard shape
@@ -175,6 +205,15 @@ authelia_oidc_confidential_clients_base:
   - name: litellm
     secret_plain: "{{ authelia_oidc_litellm_client_secret_plain }}"
     hash_file: "{{ authelia_oidc_litellm_client_secret_hash_file }}"
+  - name: youtrack
+    secret_plain: "{{ authelia_oidc_youtrack_client_secret_plain }}"
+    hash_file: "{{ authelia_oidc_youtrack_client_secret_hash_file }}"
+  - name: vikunja
+    secret_plain: "{{ authelia_oidc_vikunja_client_secret_plain }}"
+    hash_file: "{{ authelia_oidc_vikunja_client_secret_hash_file }}"
+  - name: leantime
+    secret_plain: "{{ authelia_oidc_leantime_client_secret_plain }}"
+    hash_file: "{{ authelia_oidc_leantime_client_secret_hash_file }}"
 authelia_oidc_confidential_clients: >-
   {{ authelia_oidc_confidential_clients_base
      + ([{'name': 'openbao_ui',

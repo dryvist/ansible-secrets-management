@@ -32,8 +32,9 @@ opens every Traefik route whose tofu ingress row carries `sso = true`; the
 
 Authelia is the estate OIDC provider for apps that do their own sign-in.
 Hermes and Donna are public PKCE clients (no secret); Homarr, Langfuse,
-Phoenix, Semaphore, Terrakube's Dex, Grafana, LiteLLM and the trusted OpenBao
-UI, elevation and policy-sync clients are confidential clients. A confidential
+Phoenix, Semaphore, Terrakube's Dex, Grafana, LiteLLM, YouTrack, Leantime,
+Vikunja and the trusted OpenBao UI, elevation and policy-sync clients are
+confidential clients. A confidential
 client's secret is the one exception to the no-shared-store rule below — it has
 a second consumer, the relying party — so it is generated once in OpenBao and
 hashed guest-side into `configuration.yml`; the plaintext never renders.
