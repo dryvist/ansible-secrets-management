@@ -35,6 +35,13 @@ openbao_credential_publish_apps:
   - open-llm
   # The service-generated API credential used by the fan-control role.
   - fan-control-write
+  # The Hatchet eval worker's Langfuse project keys and router key, published by
+  # the existing langfuse_project_keys and openbao_secrets seeding modules. Its own
+  # leaf, so this grant never reaches the Hatchet keysets in apps/hatchet.
+  - hatchet/eval
+  # The Dify evaluation instance's router key, converge-published by the shared
+  # seeding module. Its own leaf, so this grant never reaches apps/dify.
+  - dify/eval
 
 # Policies whose template emits a `path` stanza only for a configured input.
 # With that input unset the mount they govern is not created either (see

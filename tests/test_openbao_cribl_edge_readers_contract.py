@@ -174,7 +174,7 @@ class CriblEdgeReaderContract(unittest.TestCase):
                 rotated = _render(
                     rotate_expression,
                     {
-                        "openbao_seed_rotate_fields": ["cribl_admin_password"],
+                        "openbao_seed_rotate_list": ["cribl_admin_password"],
                         "openbao_seed_fields": self.generated[bucket],
                     },
                 )
@@ -183,7 +183,7 @@ class CriblEdgeReaderContract(unittest.TestCase):
                     _render(
                         rotate_expression,
                         {
-                            "openbao_seed_rotate_fields": [],
+                            "openbao_seed_rotate_list": [],
                             "openbao_seed_fields": self.generated[bucket],
                         },
                     ),
