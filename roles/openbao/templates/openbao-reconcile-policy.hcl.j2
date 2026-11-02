@@ -34,16 +34,16 @@
 {% for policy_name in managed_policies %}
 path "sys/policies/acl/{{ policy_name }}" {
   capabilities = ["create", "read", "update"]
+{# No required_parameters here: the ACL applies it to read too, and the
+   pre-write read must succeed. The policy API already requires "policy". #}
 {% if policy_name == openbao_tofu_state_admin_policy_name %}
   allowed_parameters = {
     "policy" = [{{ (lookup('template', 'tofu-state-admin-policy.hcl.j2') | trim | regex_replace('$', '\n')) | tojson }}]
   }
-  required_parameters = ["policy"]
 {% elif policy_name == openbao_github_mount_config_policy_name %}
   allowed_parameters = {
     "policy" = [{{ (lookup('template', 'github-mount-config-policy.hcl.j2') | trim | regex_replace('$', '\n')) | tojson }}]
   }
-  required_parameters = ["policy"]
 {% endif %}
 }
 {% endfor %}

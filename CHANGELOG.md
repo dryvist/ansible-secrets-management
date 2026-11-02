@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.60.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.59.0...v0.60.0) (2026-11-02)
+
+
+### Features
+
+* **authelia:** require WebAuthn user verification and guard the UV flag ([#433](https://github.com/dryvist/ansible-secrets-management/issues/433)) ([fd0b4a5](https://github.com/dryvist/ansible-secrets-management/commit/fd0b4a55af13ac17515e42638e27997f350f9862))
+* **openbao:** add global read for the operator and trusted AI roles ([#440](https://github.com/dryvist/ansible-secrets-management/issues/440)) ([8d552aa](https://github.com/dryvist/ansible-secrets-management/commit/8d552aa401553c2d04783194271b256fa584bad4))
+* **openbao:** add single-object policy and AppRole selectors ([8ba7a5e](https://github.com/dryvist/ansible-secrets-management/commit/8ba7a5e935b775eca8c93458a24996002dc5ee70))
+* **openbao:** generate hermes_eval_api_server_key at apps/hermes-eval ([#434](https://github.com/dryvist/ansible-secrets-management/issues/434)) ([ded1a52](https://github.com/dryvist/ansible-secrets-management/commit/ded1a52d229ea931bfd6e350b0727e596f80105d))
+* **openbao:** let the apps reader read the OpenCode Go key ([#439](https://github.com/dryvist/ansible-secrets-management/issues/439)) ([fd3c21c](https://github.com/dryvist/ansible-secrets-management/commit/fd3c21c312e285eef7bba6b7f17c30efe3704774))
+* **openbao:** single-object selectors for policy and AppRole runs ([#437](https://github.com/dryvist/ansible-secrets-management/issues/437)) ([8ba7a5e](https://github.com/dryvist/ansible-secrets-management/commit/8ba7a5e935b775eca8c93458a24996002dc5ee70))
+
+
+### Bug Fixes
+
+* **authelia:** require discoverable WebAuthn credentials for passkey login ([#435](https://github.com/dryvist/ansible-secrets-management/issues/435)) ([e2a7385](https://github.com/dryvist/ansible-secrets-management/commit/e2a73853e26302c9e40a316ed16103f0761df574))
+* **openbao:** let reconcile read the two pinned human-gated policies ([#441](https://github.com/dryvist/ansible-secrets-management/issues/441)) ([1eef962](https://github.com/dryvist/ansible-secrets-management/commit/1eef962bc5d89fab99661005728bb8229605ee40))
+
 ## [0.59.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.58.0...v0.59.0) (2026-11-02)
 
 
