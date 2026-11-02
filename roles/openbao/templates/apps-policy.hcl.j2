@@ -68,8 +68,7 @@ path "secrets-external/metadata/backblaze/dryvist-nautobot-backups/rw" {
   capabilities = ["read"]
 }
 
-# Exact-path read of the OpenCode Go key for the workstation opencode wrapper,
-# which logs in as this reader. One leaf, no wildcard.
+# Exact-path read of the OpenCode Go key. One leaf, no wildcard.
 path "secrets-external/data/ai/saas/opencode" {
   capabilities = ["read"]
 }
