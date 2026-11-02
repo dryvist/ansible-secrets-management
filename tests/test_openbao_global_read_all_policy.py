@@ -15,6 +15,7 @@ ROLE_DEFAULTS = DEFAULTS / "07b-base-approles.yml"
 POLICY_DEFAULTS = DEFAULTS / "07c-base-policies.yml"
 ELEVATED_ROLE_DEFAULTS = DEFAULTS / "07f-elevated-approles.yml"
 READ_LIST = {"read", "list"}
+READ_ONLY = {"read"}
 SYSTEM_METADATA_PATHS = {
     "sys/mounts",
     "sys/auth",
@@ -50,6 +51,53 @@ def _mounts():
     return mounts
 
 
+def _task_dicts(value):
+    if isinstance(value, dict):
+        yield value
+        for child in value.values():
+            yield from _task_dicts(child)
+    elif isinstance(value, list):
+        for child in value:
+            yield from _task_dicts(child)
+
+
+def _role_created_kv_mounts():
+    values = _defaults()
+    renderer = Environment(undefined=StrictUndefined)
+    mounts = []
+    for task_file in sorted((OPENBAO / "tasks").rglob("*.yml")):
+        tasks = yaml.safe_load(task_file.read_text(encoding="utf-8")) or []
+        for task in _task_dicts(tasks):
+            command = task.get("ansible.builtin.command")
+            if isinstance(command, dict):
+                command = command.get("cmd", "")
+            if not isinstance(command, str) or not re.search(
+                r"\bbao\s+secrets\s+enable\b.*\bkv\s*$", command, re.DOTALL
+            ):
+                continue
+            assert re.search(r"-version=2\b", command), task_file
+
+            loop = task.get("loop")
+            if loop:
+                loop_match = re.fullmatch(r"\s*{{\s*(\w+)\s*}}\s*", loop)
+                assert loop_match, (task_file, loop)
+                for item in values[loop_match.group(1)]:
+                    path = item.get("path", item) if isinstance(item, dict) else item
+                    mounts.append(
+                        renderer.from_string(str(path)).render(**values)
+                    )
+                continue
+
+            path_match = re.search(r"-path=\s*{{\s*([^}]+?)\s*}}", command)
+            assert path_match, (task_file, command)
+            expression = "{{ " + path_match.group(1) + " }}"
+            mounts.append(renderer.from_string(expression).render(**values))
+
+    assert mounts, "No KV v2 mount creation tasks were found in the OpenBao role"
+    assert len(mounts) == len(set(mounts)), mounts
+    return mounts
+
+
 def _environment():
     environment = Environment(
         loader=FileSystemLoader([str(TEMPLATES), str(OPENBAO)]),
@@ -60,9 +108,11 @@ def _environment():
 
 
 def _render(template):
+    values = _defaults()
+    values["openbao_kv_mounts"] = [{"path": path} for path in _mounts()]
     return _environment().get_template(template).render(
         ansible_managed="managed",
-        openbao_kv_mounts=[{"path": path} for path in _mounts()],
+        **values,
     )
 
 
@@ -81,23 +131,41 @@ def _expected_global_read_grants():
         path: READ_LIST.copy()
         for path in SYSTEM_METADATA_PATHS
     }
-    for mount in _mounts():
-        grants[f"{mount}/data/*"] = READ_LIST.copy()
+    for mount in _global_read_kv_mounts():
+        grants[f"{mount}/data/*"] = READ_ONLY.copy()
         grants[f"{mount}/metadata/*"] = READ_LIST.copy()
     return grants
 
 
-def test_both_global_read_policies_cover_every_declared_kv_mount():
+def _global_read_kv_mounts():
+    return [
+        mount
+        for mount in _role_created_kv_mounts()
+        if not any(pattern.search(f"{mount}/data/*") for pattern in EXCLUDED_PATHS)
+    ]
+
+
+def test_both_global_read_policies_account_for_every_role_created_kv_mount():
     expected = _expected_global_read_grants()
     for template in ("ai-global-read-policy.hcl.j2", "operator-human-policy.hcl.j2"):
         grants = _grants(_render(template))
         assert {path: grants.get(path) for path in expected} == expected
 
+    created = set(_role_created_kv_mounts())
+    covered = set(_global_read_kv_mounts())
+    excluded = created - covered
+    assert covered | excluded == created
+    assert covered.isdisjoint(excluded)
+    assert all(
+        any(pattern.search(f"{mount}/data/*") for pattern in EXCLUDED_PATHS)
+        for mount in excluded
+    )
+
 
 def test_shared_read_all_block_has_only_read_and_list():
     grants = _grants(_render("templates/global-read-all-policy-block.j2"))
     assert grants == _expected_global_read_grants()
-    assert all(capabilities == READ_LIST for capabilities in grants.values())
+    assert all(capabilities in (READ_ONLY, READ_LIST) for capabilities in grants.values())
     assert not any(
         capabilities.intersection({"create", "update", "delete", "patch", "sudo"})
         for capabilities in grants.values()
