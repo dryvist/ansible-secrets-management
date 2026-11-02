@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.58.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.57.0...v0.58.0) (2026-11-02)
+
+
+### Features
+
+* **openbao:** add the converge-published apps/dify/eval leaf ([#423](https://github.com/dryvist/ansible-secrets-management/issues/423)) ([a0a02c7](https://github.com/dryvist/ansible-secrets-management/commit/a0a02c7656e2dcdccde17591cd0f4e7babba1908))
+* **openbao:** generate app-agent identity credentials ([#427](https://github.com/dryvist/ansible-secrets-management/issues/427)) ([9684496](https://github.com/dryvist/ansible-secrets-management/commit/96844961677c2fb427d8cd1240878aeef4646c61))
+* **openbao:** per-field valid patterns for generated app secrets ([#421](https://github.com/dryvist/ansible-secrets-management/issues/421)) ([9fc5f4b](https://github.com/dryvist/ansible-secrets-management/commit/9fc5f4bdcd44ad12223d38cba77644ab46cb8ca3))
+
+
+### Bug Fixes
+
+* **openbao:** generate the Hatchet cookie secret as one 32-character key ([#425](https://github.com/dryvist/ansible-secrets-management/issues/425)) ([41c9b43](https://github.com/dryvist/ansible-secrets-management/commit/41c9b43c0dbe73f4383d46ae4cba31886aaf1abf))
+* **openbao:** parse the rotate request and fail on unknown field names ([#422](https://github.com/dryvist/ansible-secrets-management/issues/422)) ([fbcecb5](https://github.com/dryvist/ansible-secrets-management/commit/fbcecb57911017b76c1e1d5d2478cf04fa946b7c))
+* **openbao:** warn and continue on pinned reconcile policy denials ([#424](https://github.com/dryvist/ansible-secrets-management/issues/424)) ([7b32741](https://github.com/dryvist/ansible-secrets-management/commit/7b327413431d2b44f6b8975bbf2c74d45b4eadb3))
+
 ## [0.57.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.56.0...v0.57.0) (2026-11-02)
 
 
