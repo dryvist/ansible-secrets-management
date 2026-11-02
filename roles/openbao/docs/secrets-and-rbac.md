@@ -176,12 +176,16 @@ reconciliation.
     leaf, outside `secret/apps/*`, so no standing AI reader reaches it.
     `approle-issuer` mints its one-use secret_id per Semaphore run; the issuer
     itself is `machine_or_workstation`, so a workstation can mint one, while
-    redemption stays bound to the machine CIDR class. Four other policies reach
-    the leaf: `ansible-converge`, which publishes the token; `openbao-reconcile`
-    and the `ai-admin` break-glass role, through `secret/*`; and
-    `operator-human`, read only. `secret-age-audit` reads its metadata, never
-    its value. `tests/test_openbao_hatchet_killtest_policy_reach.py` renders
-    every policy and fails on any other holder.
+    redemption stays bound to the machine CIDR class; init refuses to create the
+    role with an empty secret_id or token CIDR, even with the unbound escape
+    hatch set. Four other policies reach the leaf: `ansible-converge`, which
+    publishes the token; `openbao-reconcile` and the `ai-admin` break-glass
+    policy, through `secret/*`; and `operator-human`, read only. AppRoles
+    carrying them: `ansible-converge`, `ansible-converge-writer`, `semaphore`,
+    `openbao-reconcile`, `openbao-policy-sync`, and break-glass `ai-admin`,
+    `ai-admin-session`, `admin`. `secret-age-audit` reads only metadata.
+    `tests/test_openbao_hatchet_killtest_policy_reach.py` asks an OpenBao dev
+    server and fails on any other holder or AppRole.
 
 [^ai-tiers]: Task-scoped AI actor roles. Authorization is by task/blast-radius
     and human-gated, never by model capability (model is an audit claim). Every
