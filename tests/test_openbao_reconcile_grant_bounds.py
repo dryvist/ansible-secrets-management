@@ -743,6 +743,7 @@ def test_reconcile_kv_grants_match_named_consumers_and_keep_flow_lock_separate(
         "secret/data/apps/agent-one": ["create", "read", "update"],
         "secret/data/apps/caller-gw": ["create", "read", "update"],
         "secret/data/apps/semaphore": ["read"],
+        "secret/data/platform/splunk/main": ["read"],
     }
     actual_data_paths = {
         path for path in reconcile_stanzas
@@ -814,6 +815,29 @@ def test_reconcile_kv_grants_match_named_consumers_and_keep_flow_lock_separate(
     assert _capabilities(default_reconcile_stanzas["secret/data/apps/semaphore"]) == [
         "create", "read", "update"
     ]
+    assert _capabilities(
+        default_reconcile_stanzas["secret/data/platform/splunk/main"]
+    ) == ["read"]
+
+
+def test_reconcile_splunk_read_uses_the_declared_mount_and_setdefault(
+    rendered_defaults,
+):
+    values, _approles, _policies = rendered_defaults
+    mount = "fixture-kv"
+    context = dict(
+        values,
+        openbao_kv_mount=mount,
+        openbao_config_mount=mount,
+        openbao_promoted_config_values={
+            "platform/splunk/main": {"endpoint": "SPLUNK_ENDPOINT"}
+        },
+    )
+    stanzas = dict(_stanzas(_render(RECONCILE, context)))
+    splunk_path = f"{mount}/data/platform/splunk/main"
+
+    assert _capabilities(stanzas[splunk_path]) == ["create", "read", "update"]
+    assert "secret/data/platform/splunk/main" not in stanzas
 
 
 def test_reconcile_metadata_grants_match_real_defaults(rendered_defaults):
