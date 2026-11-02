@@ -63,6 +63,8 @@ other voter restarts.
   the role and run it.
 - [Secret hierarchy and RBAC](docs/secrets-and-rbac.md) — the KV mounts,
   policies, and AppRole-per-domain model.
+- [Generated app secrets](docs/generated-app-secrets.md) — credential field
+  ownership and app-path access boundaries for the generated-secret catalog.
 - [Break-glass access](docs/break-glass-access.md) — the human-unlock login
   flow and TOTP enrolment order.
 - [GitHub secrets engine](docs/github-engine.md) — App mounts, permission
