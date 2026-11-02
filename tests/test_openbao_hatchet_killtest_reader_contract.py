@@ -46,36 +46,29 @@ class HatchetKillTestReaderContract(unittest.TestCase):
 
     def test_policy_renders_read_on_the_single_killtest_data_leaf(self):
         template = (TEMPLATES / "cribl-edge-reader-policy.hcl.j2").read_text(encoding="utf-8")
-        bucket = self.policy_row["bucket"]
+        path = _render(self.policy_row["path"], self.names)
         policy = _render(
             template,
             {"ansible_managed": "Ansible managed", "openbao_kv_mount": "secret",
-             "item": {"bucket": bucket}},
+             "item": {"path": path}},
         )
 
-        self.assertEqual(_grants(policy), [("secret/data/apps/hatchet-killtest", ("read",))])
+        self.assertEqual(_grants(policy), [("secret/data/killtest/hatchet", ("read",))])
         self.assertNotIn("*", policy)
         self.assertEqual(self.policy_row["template"], "cribl-edge-reader-policy.hcl.j2")
-        self.assertEqual(bucket, "hatchet-killtest")
+        self.assertNotIn("bucket", self.policy_row)
+        # Existing rows keep their apps/<bucket> leaf.
+        legacy = _render(template, {"ansible_managed": "", "openbao_kv_mount": "secret",
+                                    "item": {"bucket": "cribl-edge-macbook"}})
+        self.assertEqual(_grants(legacy), [("secret/data/apps/cribl-edge-macbook", ("read",))])
 
     def test_publisher_gets_only_the_declared_create_read_update_leaf(self):
+        # The rendered grant itself is pinned in test_openbao_hatchet_killtest_policy_reach.py.
         publisher_defaults = _yaml("07c-policy-composition.yml")
-        self.assertIn("hatchet-killtest", publisher_defaults["openbao_credential_publish_apps"])
-
-        source = (TEMPLATES / "ansible-converge-policy.hcl.j2").read_text(encoding="utf-8")
-        block = re.search(
-            r"{% for app in openbao_credential_publish_apps %}(.*?){% endfor %}",
-            source,
-            flags=re.DOTALL,
-        ).group(1)
-        rendered = _render(
-            block,
-            {"openbao_kv_mount": "secret", "app": "hatchet-killtest"},
-        )
+        self.assertNotIn("hatchet-killtest", publisher_defaults["openbao_credential_publish_apps"])
         self.assertEqual(
-            _grants(rendered),
-            [("secret/data/apps/hatchet-killtest", ("create", "update", "read")),
-             ("secret/metadata/apps/hatchet-killtest", ("read",))],
+            [_render(path, self.names) for path in publisher_defaults["openbao_credential_publish_paths"]],
+            ["killtest/hatchet"],
         )
 
     def test_dedicated_reader_is_per_call_bounded_and_not_attached_to_agents(self):
@@ -89,12 +82,6 @@ class HatchetKillTestReaderContract(unittest.TestCase):
         self.assertNotIn("manage_secret_id", self.reader)
         self.assertNotIn("role_id", self.reader)
         self.assertNotIn("secret_id", self.reader)
-
-        excluded = [
-            _render(value, self.names)
-            for value in self.names["openbao_apps_read_excluded_generated_apps"]
-        ]
-        self.assertIn("hatchet-killtest", excluded)
 
         self.assertEqual(self.reader["secret_id_num_uses"], "{{ openbao_approle_per_call_secret_id_num_uses }}")
         self.assertEqual(_yaml("08a-admin-and-ttls.yml")["openbao_approle_per_call_secret_id_num_uses"], 1)

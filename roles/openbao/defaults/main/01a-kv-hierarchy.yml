@@ -7,6 +7,7 @@
 #   secret/apps/*      application credentials (media/monitoring/home-automation)
 #   secret/ai/*        LLM stack + AI-agent creds
 #   secret/ci/*        CI/CD tokens
+#   secret/killtest/*  kill-test power credentials; no standing reader
 openbao_kv_mount: secret
 # Non-secret configuration mount. Holds values that are sensitive-but-not-
 # exploitable — operator selections, tunables, thresholds, coordination and

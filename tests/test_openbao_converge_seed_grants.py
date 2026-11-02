@@ -64,12 +64,13 @@ def test_new_app_publisher_buckets_are_listed_once_with_exact_template_paths() -
         assert apps.count(app) == 1
 
     policy = POLICY.read_text(encoding="utf-8")
+    assert "openbao_credential_publish_apps | map('regex_replace', '^', 'apps/')" in policy
     assert (
-        'path "{{ openbao_kv_mount }}/data/apps/{{ app }}" {\n'
+        'path "{{ openbao_kv_mount }}/data/{{ leaf }}" {\n'
         '  capabilities = ["create", "update", "read"]\n}'
     ) in policy
     assert (
-        'path "{{ openbao_kv_mount }}/metadata/apps/{{ app }}" {\n'
+        'path "{{ openbao_kv_mount }}/metadata/{{ leaf }}" {\n'
         '  capabilities = ["read"]\n}'
     ) in policy
     assert 'path "{{ openbao_kv_mount }}/data/apps/*"' not in policy

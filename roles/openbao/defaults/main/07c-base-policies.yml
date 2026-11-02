@@ -109,7 +109,7 @@ openbao_base_policies_static:
     bucket: cribl-edge-mac-studio
   - name: "{{ openbao_hatchet_killtest_policy_name }}"
     template: cribl-edge-reader-policy.hcl.j2
-    bucket: hatchet-killtest
+    path: "{{ openbao_hatchet_killtest_kv_path }}"
   - name: "{{ openbao_local_llm_policy_name }}"
     template: local-llm-policy.hcl.j2
   - name: "{{ openbao_local_llm_workstation_policy_name }}"

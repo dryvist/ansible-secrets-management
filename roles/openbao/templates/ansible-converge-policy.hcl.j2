@@ -305,12 +305,13 @@ path "{{ mount }}/metadata/platform/ansible/env" {
 # NOT a secret/data/apps/* wildcard, so a converge can never rewrite an app
 # credential it does not own. `read` is required for the read-modify-write that
 # preserves sibling fields. No `delete`: publishing must never destroy a secret.
-{% for app in openbao_credential_publish_apps %}
-path "{{ openbao_kv_mount }}/data/apps/{{ app }}" {
+{% for leaf in (openbao_credential_publish_apps | map('regex_replace', '^', 'apps/') | list)
+               + (openbao_credential_publish_paths | default([])) %}
+path "{{ openbao_kv_mount }}/data/{{ leaf }}" {
   capabilities = ["create", "update", "read"]
 }
 
-path "{{ openbao_kv_mount }}/metadata/apps/{{ app }}" {
+path "{{ openbao_kv_mount }}/metadata/{{ leaf }}" {
   capabilities = ["read"]
 }
 

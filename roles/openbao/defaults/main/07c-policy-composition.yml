@@ -30,8 +30,6 @@ openbao_credential_publish_apps:
   # into that consumer's bucket under this same converge identity. homarr's
   # token lands in apps/homarr, covered by the entry above.
   - pve-exporter
-  # ansible-proxmox's pve_api_tokens publishes the power-only kill-test token.
-  - hatchet-killtest
   # The untrusted-tier Qdrant JWT (QDRANT_UNTRUSTED_JWT), minted by
   # ansible-proxmox-ai's qdrant_docker role and merged into this bucket.
   - open-llm
@@ -44,6 +42,12 @@ openbao_credential_publish_apps:
   # The Dify evaluation instance's router key, converge-published by the shared
   # seeding module. Its own leaf, so this grant never reaches apps/dify.
   - dify/eval
+
+# Credential leaves outside secret/apps/* that a converge publishes back, as full
+# paths under the KV mount. Same exact-path grant as the list above.
+openbao_credential_publish_paths:
+  # ansible-proxmox's pve_api_tokens publishes the power-only kill-test token.
+  - "{{ openbao_hatchet_killtest_kv_path }}"
 
 # Policies whose template emits a `path` stanza only for a configured input.
 # With that input unset the mount they govern is not created either (see
