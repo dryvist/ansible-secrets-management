@@ -1,3 +1,12 @@
 {{ ansible_managed | comment }}
 # Global read-only policy for the trusted AI actor tier.
 {% include "templates/global-read-all-policy-block.j2" %}
+
+{% for leaf in openbao_actuating_credential_leaves %}
+path "{{ openbao_kv_mount }}/data/{{ leaf }}" {
+  capabilities = ["deny"]
+}
+path "{{ openbao_kv_mount }}/metadata/{{ leaf }}" {
+  capabilities = ["deny"]
+}
+{% endfor %}

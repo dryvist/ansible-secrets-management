@@ -23,6 +23,7 @@ from ansible.parsing.dataloader import DataLoader
 from ansible.plugins.loader import init_plugin_loader
 from ansible.template import Templar, trust_as_template
 import yaml
+from test_openbao_global_read_all_policy import _environment as policy_environment
 
 ROOT = Path(__file__).resolve().parents[1]
 ROLE = ROOT / "roles/openbao"
@@ -31,7 +32,7 @@ DATA, METADATA = "secret/data/killtest/hatchet", "secret/metadata/killtest/hatch
 DATA_HOLDERS = {
     "hatchet-killtest": ["read"],
     "ansible-converge": ["create", "read", "update"],
-    "operator-human": ["list", "read"],
+    "operator-human": ["read"],
     "openbao-reconcile": ["create", "list", "read", "update"],
     "ai-admin": ["create", "delete", "list", "patch", "read", "update"],
 }
@@ -83,9 +84,9 @@ def _trust(value):
 
 def _templar(variables):
     loader = DataLoader()
-    # Templates resolve {% include %} from templates/, as the role's lookup does.
-    loader.set_basedir(str(ROLE / "templates"))
+    loader.set_basedir(str(ROLE))
     templar = Templar(loader=loader)
+    templar.environment.loader = policy_environment().loader
     templar.available_variables = _trust(variables)
     return templar
 
@@ -115,6 +116,18 @@ def _call(base, token, method, path, body=None):
             return response.status, json.loads(response.read() or b"{}")
     except urllib.error.HTTPError as error:
         return error.code, error.read()
+
+
+def _read_with_policies(base, policies, path):
+    status, body = _call(
+        base,
+        "root",
+        "POST",
+        "auth/token/create",
+        {"policies": policies, "no_default_policy": True},
+    )
+    assert status == 200, (policies, body)
+    return _call(base, body["auth"]["client_token"], "GET", path)
 
 
 def _dev_server():
@@ -152,6 +165,14 @@ def reach(paths):
             result["failed"][policy["name"]] = str(error).splitlines()[0]
     server, base = _dev_server()
     try:
+        status, body = _call(
+            base,
+            "root",
+            "PUT",
+            DATA,
+            {"data": {"value": "dev-server fixture"}},
+        )
+        assert status == 200, body
         for name, text in rendered.items():
             status, body = _call(base, "root", "PUT", f"sys/policies/acl/{name}", {"policy": text})
             if status != 204:
@@ -164,6 +185,15 @@ def reach(paths):
                 "token": body["auth"]["client_token"], "paths": list(paths)})
             assert status == 200, (name, body)
             result["caps"][name] = {path: sorted(body[path]) for path in paths}
+        ai_read_policies = render(variables, "{{ openbao_ai_trusted_read_all_policies }}")
+        result["reads"] = {
+            "ai_global_read_plus_read_all": _read_with_policies(
+                base, ai_read_policies, DATA
+            ),
+            "operator_human": _read_with_policies(
+                base, [variables["openbao_operator_human_policy_name"]], DATA
+            ),
+        }
     finally:
         server.terminate()
         server.wait(timeout=30)
@@ -187,6 +217,7 @@ class HatchetKillTestPolicyReach(unittest.TestCase):
         found = reach([DATA, METADATA])
         cls.approles, cls.failed, cls.rejected, cls.caps = (
             found["approles"], found["failed"], found["rejected"], found["caps"])
+        cls.reads = found["reads"]
 
     def _holders(self, path):
         return holders(self.caps, path)
@@ -204,6 +235,16 @@ class HatchetKillTestPolicyReach(unittest.TestCase):
 
     def test_the_approles_inheriting_a_data_holder_are_exact(self):
         self.assertEqual(carriers(self.approles, DATA_HOLDERS), DATA_HOLDER_APPROLES)
+
+    def test_ai_global_read_plus_read_all_cannot_read_the_killtest_leaf(self):
+        status, body = self.reads["ai_global_read_plus_read_all"]
+        self.assertEqual(status, 403)
+        self.assertIn(b"permission denied", body.lower())
+
+    def test_operator_human_can_read_the_killtest_leaf(self):
+        status, body = self.reads["operator_human"]
+        self.assertEqual(status, 200)
+        self.assertEqual(body["data"]["data"]["value"], "dev-server fixture")
 
 
 if __name__ == "__main__":

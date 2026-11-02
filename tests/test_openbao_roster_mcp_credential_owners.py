@@ -8,6 +8,7 @@ from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar, trust_as_template
 import pytest
 import yaml
+from test_openbao_global_read_all_policy import _environment as policy_environment
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULTS = ROOT / "roles/openbao/defaults/main"
@@ -73,9 +74,9 @@ def _trust_values(value):
 
 def _templar(values):
     loader = DataLoader()
-    # Templates resolve {% include %} from templates/, as the role's lookup does.
-    loader.set_basedir(str(ROOT / "roles/openbao/templates"))
+    loader.set_basedir(str(ROOT / "roles/openbao"))
     templar = Templar(loader=loader)
+    templar.environment.loader = policy_environment().loader
     templar.available_variables = values
     return templar
 

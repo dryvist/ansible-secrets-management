@@ -17,7 +17,9 @@ DATA_HOLDERS = {
     "apps-seed": ["create", "read", "update"],
     "write-apps": ["create", "delete", "patch", "update"],
     "openbao-reconcile": ["create", "list", "read", "update"],
-    "operator-human": ["list", "read"],
+    "operator-human": ["read"],
+    # Global read reaches every KV leaf except the actuating credentials it denies.
+    "ai-global-read": ["read"],
     "ai-admin": ["create", "delete", "list", "patch", "read", "update"],
 }
 

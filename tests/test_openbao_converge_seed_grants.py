@@ -6,6 +6,7 @@ import re
 
 import jinja2
 import yaml
+from test_openbao_global_read_all_policy import _environment as policy_environment
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -98,7 +99,7 @@ def test_agent_tier_mount_has_exact_publisher_and_router_grants_only() -> None:
     leaves = [reader["tier"] for reader in readers]
     login_paths = [reader["login_path"] for reader in readers if reader.get("login_path")]
     assert leaves and mount != "secret"
-    environment = jinja2.Environment()
+    environment = jinja2.Environment(loader=policy_environment().loader)
     environment.filters["comment"] = lambda value: ""
     context = {
         "ansible_managed": "",
