@@ -14,9 +14,9 @@ APPROLE_TASKS = ROOT / "roles/openbao/tasks/init/10-approles.yml"
 HATCH = "OPENBAO_APPROLE_ALLOW_UNBOUND_CIDRS"
 
 
-def _rendered(expression, **env):
+def _rendered(expression, overrides=None, **env):
     with mock.patch.dict(os.environ, {**REQUIRED_ENV, **env}):
-        return render(role_defaults(), "{{ " + expression + " }}")
+        return render({**role_defaults(), **(overrides or {})}, "{{ " + expression + " }}")
 
 
 class EscapeHatch(unittest.TestCase):
@@ -49,6 +49,13 @@ class BoundRequired(unittest.TestCase):
         self.assertEqual(
             _rendered("openbao_approle_bound_required_unbound", OPENBAO_MANAGEMENT_CIDRS="", **{HATCH: "true"}),
             ["hatchet-killtest"])
+
+    def test_a_renamed_killtest_approle_stays_bound_required(self):
+        renamed = {"openbao_hatchet_killtest_approle_name": "killtest-renamed"}
+        self.assertEqual(_rendered("openbao_approle_bound_required", renamed), ["killtest-renamed"])
+        self.assertEqual(
+            _rendered("openbao_approle_bound_required_unbound", renamed, OPENBAO_MANAGEMENT_CIDRS=""),
+            ["killtest-renamed"])
 
     def test_the_refusal_runs_before_creation_and_ignores_the_hatch(self):
         names = [task["name"] for task in yaml.safe_load(APPROLE_TASKS.read_text(encoding="utf-8"))]
