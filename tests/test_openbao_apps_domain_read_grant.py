@@ -324,3 +324,14 @@ def test_backblaze_path_has_exact_external_grants_and_no_wildcard(service):
         ) in policy
     assert 'path "secrets-external/data/backblaze/*"' not in policy
     assert 'path "secrets-external/metadata/backblaze/*"' not in policy
+
+
+def test_opencode_key_has_one_exact_external_read_grant():
+    policy = _render_apps_policy(_read_apps(_yaml(NAMES_FILE)))
+
+    assert (
+        'path "secrets-external/data/ai/saas/opencode" {\n'
+        '  capabilities = ["read"]\n}'
+    ) in policy
+    assert 'path "secrets-external/data/ai/saas/*"' not in policy
+    assert 'path "secrets-external/data/ai/*"' not in policy
