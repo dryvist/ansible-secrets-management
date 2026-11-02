@@ -248,14 +248,12 @@ openbao_base_approles_core:
     secret_id_bound_cidrs: "{{ openbao_open_llm_secret_id_cidr }}"
     token_ttl: 15m
     token_max_ttl: 60m
-  # ai-readonly / ai-elevated ACTOR roles: standing (ambient) READ tiers. Their
-  # token_policies ATTACH composed rollups — no standalone ai-* policy object.
-  # ai-readonly = read-all (every read-<svc>); ai-elevated = read-all + the
-  # read-only extras (secret/platform/*). Adding a service to openbao_ai_domains
-  # auto-widens read-all, so both tiers grow from one list entry.
+  # ai-readonly / ai-elevated ACTOR roles: standing (ambient) READ tiers. Both
+  # attach the shared global KV and non-secret metadata policy plus read-all;
+  # ai-elevated also keeps its read-only extras (secret/platform/*).
   # Redeemed interactively by `aikey`; nothing re-mints it.
   - name: "{{ openbao_ai_readonly_approle_name }}"
-    token_policies: "{{ openbao_read_all_policies }}"
+    token_policies: "{{ openbao_ai_trusted_read_all_policies }}"
     secret_id_ttl: "0s"
     secret_id_num_uses: 0
   # ai-elevated additionally attaches ssh-sign-automation-ai: the STANDING
@@ -264,7 +262,7 @@ openbao_base_approles_core:
   # principals, default-deny host opt-in, cert TTL, and audit-logged signs.
   - name: "{{ openbao_ai_elevated_approle_name }}"
     token_policies: >-
-      {{ openbao_read_all_policies
+      {{ openbao_ai_trusted_read_all_policies
          + (openbao_ai_readonly_extra_subtrees | map('regex_replace', '^(.+)$', 'read-\1') | list)
          + (['ssh-sign-automation-ai'] if openbao_ssh_engine_enabled else []) }}
   # Enterprise GitHub tiers use raw token endpoints pinned by their policies.
@@ -306,6 +304,7 @@ openbao_base_approles_core:
 openbao_base_approles: >-
   {{ openbao_base_approles_core + openbao_base_approles_elevated
      + openbao_hermes_private_agent_approles + openbao_sandbox_agent_approles
+     + openbao_app_agent_tier_reader_approles
      + openbao_dify_agent_approles + openbao_seed_writer_approles }}
 openbao_roster_agent_approles: >-
   {%- set _entries = [] -%}

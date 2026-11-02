@@ -130,7 +130,7 @@ def test_policy_check_report_uses_the_existing_write_comparison():
             {"name": "changed"},
             {"name": "missing"},
         ],
-        "openbao_policies_raw": {"stdout": '["unchanged", "changed"]'},
+        "openbao_existing_policy_names": ["unchanged", "changed"],
         "openbao_existing_policy_map": {"unchanged": "same", "changed": "old"},
         "openbao_rendered_policy_map": {
             "unchanged": "same",

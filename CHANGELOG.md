@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.59.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.58.0...v0.59.0) (2026-11-02)
+
+
+### Features
+
+* **openbao:** add agent-tier mount grants ([#430](https://github.com/dryvist/ansible-secrets-management/issues/430)) ([ba61cdb](https://github.com/dryvist/ansible-secrets-management/commit/ba61cdbdcc7260bc9b3a4dd4ebc55e23c77cec99))
+
 ## [0.58.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.57.0...v0.58.0) (2026-11-02)
 
 

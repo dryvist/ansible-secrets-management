@@ -12,9 +12,16 @@ opens every Traefik route whose tofu ingress row carries `sso = true`; the
   tofu-proxmox `ingress.tf` and published through the inventory). Machine/API
   endpoints and apps with native client auth opt out there.
 - **Login**: passkey-first (`webauthn.enable_passkey_login`) — Touch ID on the
-  registering Mac, synced to other devices via the platform keychain. The
-  bootstrap password exists only to create the account and register the first
-  passkey.
+  registering Mac, synced to other devices via the platform keychain. User
+  verification is required on every assertion, so the experimental UV
+  two-factor option lets one verified passkey gesture satisfy `two_factor`.
+  Registration requires a discoverable credential, because passkey login only
+  finds credentials stored as discoverable. A security key that cannot store a
+  discoverable credential (for example a legacy U2F key) cannot be enrolled.
+  The experimental upgrade option records a new credential as a passkey when
+  the browser does not report one.
+  The bootstrap password exists only to create the account and register the
+  first passkey.
 - **State**: local SQLite on the persistent `/var/lib/authelia` mount
   (passkey registrations survive rebuilds). Sessions are in-memory: a service
   restart just re-prompts the browser.
@@ -112,5 +119,8 @@ guest copy on that first-run converge.
 
 1. Converge (`--tags authelia` + `traefik`, with `localhost` in `--limit`).
 2. Retrieve the bootstrap password from the root-only file on the guest.
-3. Browse to the portal, log in, register a WebAuthn credential (Touch ID).
+3. Browse to the portal, log in, register a passkey (Touch ID). A credential
+   that is not discoverable cannot sign in with a passkey: register a new
+   passkey, confirm passkey login works, then remove the old credential only
+   when you no longer need it as a second factor.
 4. Subsequent logins: passkey only, "Remember me" checked.

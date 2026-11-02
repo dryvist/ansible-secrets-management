@@ -27,9 +27,18 @@ PATH_BLOCK = re.compile(
 )
 
 
+def _agent_tier_mount() -> str:
+    defaults = yaml.safe_load(
+        (OPENBAO / "defaults/main/05k-agent-tier-secret-paths.yml").read_text(
+            encoding="utf-8"
+        )
+    )
+    return defaults["openbao_agent_tier_mount"]
+
+
 def _render_role(group: str) -> dict:
     environment = Environment(
-        loader=FileSystemLoader(str(OPENBAO / "templates")),
+        loader=FileSystemLoader([str(OPENBAO / "templates"), str(OPENBAO)]),
         undefined=StrictUndefined,
     )
     environment.filters["to_json"] = lambda value: json.dumps(value)
@@ -48,7 +57,7 @@ def _render_role(group: str) -> dict:
 
 def _render_policy() -> str:
     environment = Environment(
-        loader=FileSystemLoader(str(OPENBAO / "templates")),
+        loader=FileSystemLoader([str(OPENBAO / "templates"), str(OPENBAO)]),
         undefined=StrictUndefined,
     )
     environment.filters["comment"] = lambda value: "# " + str(value)
@@ -59,6 +68,7 @@ def _render_policy() -> str:
             {"path": "secrets-external"},
             {"path": "config"},
         ],
+        openbao_agent_tier_mount=_agent_tier_mount(),
     )
 
 
@@ -89,11 +99,30 @@ def test_operator_role_binds_only_the_configured_group_and_policy():
 def test_policy_write_capabilities_are_limited_to_two_provider_records():
     policy = _render_policy()
     grants = _grants(policy)
+    agent_tier_mount = _agent_tier_mount()
     read_paths = {
         "secret/data/*",
         "secret/metadata/*",
         "secrets-external/data/*",
         "secrets-external/metadata/*",
+        "config/data/*",
+        "config/metadata/*",
+        f"{agent_tier_mount}/data/*",
+        f"{agent_tier_mount}/metadata/*",
+    }
+    data_read_paths = {
+        "secret/data/*",
+        "secrets-external/data/*",
+        "config/data/*",
+        f"{agent_tier_mount}/data/*",
+    }
+    system_metadata_paths = {
+        "sys/mounts",
+        "sys/auth",
+        "sys/policies/acl",
+        "sys/policies/acl/*",
+        "sys/internal/ui/mounts",
+        "sys/internal/ui/mounts/*",
     }
     write_paths = {
         "secrets-external/data/ai/saas/opencode",
@@ -107,18 +136,18 @@ def test_policy_write_capabilities_are_limited_to_two_provider_records():
         "auth/token/revoke-self": {"update"},
         "sys/capabilities-self": {"update"},
         "sys/internal/ui/resultant-acl": {"read"},
-        "sys/internal/ui/mounts/*": {"read"},
     }
     write_capabilities = {"create", "update", "delete", "patch", "sudo"}
 
     assert {path: capabilities for path, capabilities in grants if path in self_grants} == self_grants
     grants = [(path, capabilities) for path, capabilities in grants if path not in self_grants]
-    assert {path for path, _ in grants} == read_paths | write_paths
+    assert {path for path, _ in grants} == read_paths | system_metadata_paths | write_paths
     assert {
-        path
-        for path, capabilities in grants
-        if {"read", "list"} <= capabilities
-    } == read_paths
+        path for path, capabilities in grants if capabilities == {"read"}
+    } == data_read_paths
+    assert {
+        path for path, capabilities in grants if capabilities == {"read", "list"}
+    } == (read_paths - data_read_paths) | system_metadata_paths
     assert {
         path: capabilities
         for path, capabilities in grants

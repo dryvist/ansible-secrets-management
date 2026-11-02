@@ -23,17 +23,18 @@ from ansible.template import Templar, trust_as_template
 
 ROOT = Path(__file__).resolve().parents[1]
 TASKS = ROOT / "roles" / "openbao" / "tasks" / "init" / "10d-approle-undeclared-live.yml"
+POLICY_TASKS = ROOT / "roles" / "openbao" / "tasks" / "init" / "08b-rbac-policy-writes.yml"
 
 LIVE_NAMES_TASK = "Resolve the set of AppRole names that actually exist live"
 UNDECLARED_TASK = "Assert every live AppRole is either declared or a named exception"
 MISSING_TASK = "Warn about declared AppRoles that reconciliation cannot see live"
 
 
-def _task(name):
-    for t in yaml.safe_load(TASKS.read_text(encoding="utf-8")):
+def _task(name, path=TASKS):
+    for t in yaml.safe_load(path.read_text(encoding="utf-8")):
         if t.get("name") == name:
             return t
-    raise AssertionError(f"task {name!r} not found in {TASKS}")
+    raise AssertionError(f"task {name!r} not found in {path}")
 
 
 def _trust(value):
@@ -52,14 +53,17 @@ def _render(expr, variables):
     return templar.template(trust_as_template(expr))
 
 
-def live_names(rc, keys=None):
+def live_names(rc, keys=None, roster_names=None):
     """Render the set_fact that turns a `bao list` result into a name list."""
     expr = _task(LIVE_NAMES_TASK)["ansible.builtin.set_fact"][
         "openbao_approle_live_names"
     ]
     # `bao list -format=json` prints a bare array, not the API envelope.
     stdout = json.dumps(keys or [])
-    return _render(expr, {"openbao_approle_live_list": {"rc": rc, "stdout": stdout}})
+    variables = {"openbao_approle_live_list": {"rc": rc, "stdout": stdout}}
+    if roster_names is not None:
+        variables["openbao_roster_live_approle_names"] = roster_names
+    return _render(expr, variables)
 
 
 def undeclared(live, declared, exceptions=()):
@@ -109,6 +113,13 @@ class TestLiveNames(unittest.TestCase):
         # An empty mount on a fresh cluster reads this way too -- the FAIL
         # task (not this one) is what distinguishes "empty" from "denied".
         self.assertEqual(live_names(2), [])
+
+    def test_roster_list_fact_is_reused_without_reading_a_skipped_result(self):
+        self.assertEqual(
+            live_names(1, ["ignored-fallback"], roster_names=["apps", "orphan"]),
+            ["apps", "orphan"],
+        )
+        self.assertEqual(live_names(1, ["ignored"], roster_names=[]), [])
 
 
 class TestUndeclaredLive(unittest.TestCase):
@@ -162,6 +173,49 @@ class TestBaoCallsRunOnTheCliHost(unittest.TestCase):
         for task in yaml.safe_load(TASKS.read_text(encoding="utf-8")):
             env = task.get("environment") or {}
             self.assertNotEqual(env.get("BAO_ADDR"), "{{ openbao_write_addr }}", task.get("name"))
+
+
+class TestCombinedTagNameListReuse(unittest.TestCase):
+    def test_approle_list_falls_back_only_when_08a_did_not_set_its_fact(self):
+        list_task = _task(LIST_TASK)
+        denied_task = _task("FAIL -- the AppRole listing was DENIED, so live identities cannot be enumerated")
+        self.assertIn("openbao_roster_live_approle_names is not defined", list_task["when"])
+        self.assertIn("openbao_roster_live_approle_names is not defined", denied_task["when"])
+        self.assertNotIn("cacheable", _task(LIVE_NAMES_TASK).get("ansible.builtin.set_fact", {}))
+
+    def test_policy_and_approle_paths_reuse_08a_facts_and_keep_fallbacks(self):
+        policy_names_task = _task(
+            "Resolve existing RBAC policy names from the roster audit or list result",
+            POLICY_TASKS,
+        )
+        policy_names_expr = policy_names_task["ansible.builtin.set_fact"][
+            "openbao_existing_policy_names"]
+        self.assertEqual(_render(policy_names_expr, {
+            "openbao_roster_live_policy_names": ["apps", "ssh-ca"],
+            "openbao_policies_raw": {"stdout": '["ignored"]'},
+        }), ["apps", "ssh-ca"])
+        self.assertEqual(_render(policy_names_expr, {
+            "openbao_policies_raw": {"stdout": '["fallback-policy"]'},
+        }), ["fallback-policy"])
+
+        approle_names_expr = _task(LIVE_NAMES_TASK)["ansible.builtin.set_fact"][
+            "openbao_approle_live_names"]
+        self.assertEqual(_render(approle_names_expr, {
+            "openbao_roster_live_approle_names": ["apps", "ssh-ca"],
+            "openbao_approle_live_list": {"rc": 1, "stderr": "permission denied (403)"},
+        }), ["apps", "ssh-ca"])
+        self.assertEqual(live_names(0, ["fallback-role"]), ["fallback-role"])
+
+        policy_list = _task("List existing policies", POLICY_TASKS)
+        approle_list = _task(LIST_TASK)
+        self.assertIn("openbao_roster_live_policy_names is not defined", policy_list["when"])
+        self.assertIn("openbao_roster_live_approle_names is not defined", approle_list["when"])
+
+    def test_reused_roster_list_keeps_full_undeclared_role_audit(self):
+        self.assertEqual(
+            undeclared(["apps", "orphan"], ["apps"]),
+            ["orphan"],
+        )
 
 
 if __name__ == "__main__":

@@ -55,6 +55,7 @@ class TestAppRoleTaxonomy(unittest.TestCase):
         roles = _render("{{ openbao_approles }}", variables)
         class_map = _render("{{ openbao_approle_class_map }}", variables)
         cidr_class_map = _render("{{ openbao_approle_cidr_class_map }}", variables)
+        secret_id_ttls = _render("{{ openbao_approle_secret_id_ttl_overrides }}", variables)
         unclassified = sorted({role["name"] for role in roles} - set(class_map))
         invalid_classes = {
             name: identity_class
@@ -91,10 +92,25 @@ class TestAppRoleTaxonomy(unittest.TestCase):
             self.assertEqual(role["token_ttl"], "15m")
             self.assertEqual(role["token_max_ttl"], "15m")
             self.assertFalse(role["manage_secret_id"])
+        for reader in variables["openbao_app_agent_tier_readers"]:
+            name = f"app-agent-{reader['tier']}"
+            self.assertEqual(class_map[name], reader["trust_class"])
+            role = next(role for role in roles if role["name"] == name)
+            self.assertEqual(role["policy"], name)
+            self.assertEqual(role["token_ttl"], "15m")
+            self.assertEqual(role["token_max_ttl"], "15m")
+            self.assertEqual(
+                secret_id_ttls[name],
+                variables["openbao_rotated_domain_secret_id_ttl"],
+            )
         self.assertEqual(class_map["ai-orchestrator"], "trusted-agent-write")
         self.assertEqual(class_map["agent-workstation"], "trusted-agent-read")
         self.assertEqual(class_map["hatchet-eval-status"], "service-runtime")
         self.assertEqual(cidr_class_map["hatchet-eval-status"], "machine")
+        for reader in variables["openbao_app_agent_tier_readers"]:
+            self.assertEqual(
+                cidr_class_map[f"app-agent-{reader['tier']}"], reader["cidr_class"]
+            )
 
 
 if __name__ == "__main__":

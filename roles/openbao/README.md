@@ -48,6 +48,30 @@ including rolling expansion and seal-key rotation, are in
 [Installation and usage](docs/installation-and-usage.md) and
 [Operations](docs/operations.md).
 
+### Single-object RBAC and AppRole config runs
+
+The optional `openbao_rbac_policy_name` and `openbao_approle_config_name`
+variables select one exact declared and manageable policy or AppRole. They are
+empty by default, which keeps the full-set behavior. A selected run rejects an
+unknown or ambiguous name and cannot run with `openbao_reconcile_mode: true`.
+Policy templates and global collision/undeclared-role/CIDR checks still cover
+the full declared set. AppRole config runs do not issue secret IDs.
+
+Run one target per invocation through the approved runner and provisioning-token
+path:
+
+```sh
+semaphore-run-ansible.sh --rail-sec=600 ./scripts/run-ansible.sh playbooks/site.yml \
+  --tags openbao_rbac --limit openbao_group,localhost --diff \
+  -e '{"openbao_rbac_policy_name":"<policy-name>"}'
+```
+
+```sh
+semaphore-run-ansible.sh --rail-sec=600 ./scripts/run-ansible.sh playbooks/site.yml \
+  --tags openbao_approle_config --limit openbao_group,localhost --diff \
+  -e '{"openbao_approle_config_name":"<approle-name>"}'
+```
+
 When a config or unit change notifies a restart, only the voters that changed
 restart. They restart one at a time, with the active voter last. Each voter
 must report initialized, unsealed and joined before the next one restarts. If

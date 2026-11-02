@@ -193,6 +193,23 @@ class TestShippedDeclarationIsClean(unittest.TestCase):
             "openbao_approle_cidr_class_overrides names a role that is not declared",
         )
 
+    def test_agent_tier_readers_have_their_declared_source_class(self):
+        loaded = {}
+        for path in sorted((ROOT / "roles/openbao/defaults/main").glob("*.yml")):
+            loaded.update(yaml.safe_load(path.read_text(encoding="utf-8")) or {})
+        loaded["openbao_management_cidrs"] = "machine-network"
+        loaded["openbao_workstation_cidrs"] = "workstation-network"
+        roles = _render("{{ openbao_approles }}", loaded)
+        loaded["openbao_approles"] = roles
+        class_map = _render("{{ openbao_approle_cidr_class_map }}", loaded)
+        cidr_classes = _render("{{ openbao_approle_cidr_classes }}", loaded)
+        roles_by_name = {role["name"]: role for role in roles}
+        for reader in loaded["openbao_app_agent_tier_readers"]:
+            name = f"app-agent-{reader['tier']}"
+            self.assertEqual(class_map[name], reader["cidr_class"])
+            self.assertEqual(roles_by_name[name]["secret_id_bound_cidrs"],
+                             cidr_classes[reader["cidr_class"]])
+
 
 if __name__ == "__main__":
     unittest.main()

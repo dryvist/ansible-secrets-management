@@ -1,0 +1,32 @@
+# Read access on KV data and read/list access on metadata for every KV v2 mount.
+{% set global_read_kv_mounts = (openbao_kv_mounts | default([])) + [
+  openbao_agent_tier_mount
+] %}
+{% for mount in global_read_kv_mounts %}
+path "{{ mount.path | default(mount) }}/data/*" {
+  capabilities = ["read"]
+}
+path "{{ mount.path | default(mount) }}/metadata/*" {
+  capabilities = ["read", "list"]
+}
+{% endfor %}
+
+# Read/list access to non-secret OpenBao mount, auth, policy, and UI metadata.
+path "sys/mounts" {
+  capabilities = ["read", "list"]
+}
+path "sys/auth" {
+  capabilities = ["read", "list"]
+}
+path "sys/policies/acl" {
+  capabilities = ["read", "list"]
+}
+path "sys/policies/acl/*" {
+  capabilities = ["read", "list"]
+}
+path "sys/internal/ui/mounts" {
+  capabilities = ["read", "list"]
+}
+path "sys/internal/ui/mounts/*" {
+  capabilities = ["read", "list"]
+}

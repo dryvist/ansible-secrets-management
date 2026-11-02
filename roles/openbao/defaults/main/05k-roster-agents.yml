@@ -131,7 +131,9 @@ openbao_roster_agent_leaf_metadata: >-
 # Every non-roster app leaf the seed task generates. Roster leaves go through
 # seed_roster_agent_leaf.yml, which checks the leaf's owner before writing.
 openbao_seeded_generated_app_secrets: >-
-  {{ openbao_generated_app_secrets | combine(openbao_router_key_catalog) }}
+  {{ openbao_generated_app_secrets
+     | combine(openbao_app_agent_tier_generated_app_secrets | default({}, true))
+     | combine(openbao_router_key_catalog) }}
 
 # Owner decision for one roster leaf, from the registered metadata read in
 # seed_roster_agent_leaf.yml and the leaf's expected openbao_seed_owner_metadata.

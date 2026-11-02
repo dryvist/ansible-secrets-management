@@ -155,11 +155,42 @@ def test_eval_leaf_adds_only_its_exact_read_grant_for_the_apps_reader(leaf):
     )
 
 
+def test_hatchet_apps_reader_has_exact_read_only_leaf_grants():
+    policy = _render_apps_policy(_read_apps(_yaml(NAMES_FILE)))
+    grants = _policy_grants(policy)
+
+    assert {
+        ("secret/data/apps/hatchet/worker-token", ("read",)),
+        ("secret/metadata/apps/hatchet/worker-token", ("read", "list")),
+        ("secret/data/apps/hatchet/eval", ("read",)),
+        ("secret/metadata/apps/hatchet/eval", ("read", "list")),
+    } <= grants
+    assert not any(
+        path.endswith("apps/hatchet/*") for path, _ in grants
+    )
+    assert not any(
+        WRITE_CAPABILITIES.intersection(capabilities)
+        for path, capabilities in grants
+        if path.startswith(("secret/data/apps/hatchet", "secret/metadata/apps/hatchet"))
+    )
+
+
 def test_vikunja_generated_password_coexists_with_promoted_fields():
     generated = _yaml(GENERATED_FILE)["openbao_generated_app_secrets"]["vikunja"]
     promoted = _yaml(PROMOTED_FILE)["openbao_promoted_app_secrets"]["vikunja"]
+    readers = _yaml(DEFAULTS / "05k-agent-tier-secret-paths.yml")[
+        "openbao_app_agent_tier_readers"
+    ]
+    tier_fields = {
+        field
+        for reader in readers
+        if reader["tier"].startswith("vikunja-")
+        for field in reader.get("login_fields", [])
+    }
 
-    assert "vikunja_agent_read_password" in generated
+    assert {"vikunja_agent_read_password", "vikunja_agent_write_password"} == tier_fields
+    assert not any("vikunja_agent_" in field for reader in readers for field in reader.get("generated_fields", []))
+    assert not tier_fields.intersection(generated)
     assert promoted
     assert not set(generated).intersection(promoted)
     assert "vikunja" in _read_apps(_yaml(NAMES_FILE))
@@ -168,8 +199,13 @@ def test_vikunja_generated_password_coexists_with_promoted_fields():
 def test_zammad_agent_write_token_is_generated_with_the_app_credentials():
     generated = _yaml(GENERATED_FILE)["openbao_generated_app_secrets"]
     promoted = _yaml(PROMOTED_FILE)["openbao_promoted_app_secrets"]
+    readers = _yaml(DEFAULTS / "05k-agent-tier-secret-paths.yml")[
+        "openbao_app_agent_tier_readers"
+    ]
+    zammad_reader = next(reader for reader in readers if reader["tier"] == "zammad-write")
 
-    assert "zammad_agent_write_api_token" in generated["zammad"]
+    assert zammad_reader["generated_fields"] == ["zammad_agent_write_api_token"]
+    assert "zammad_agent_write_api_token" not in generated["zammad"]
     assert len(generated["zammad"]) == len(set(generated["zammad"]))
     assert "zammad_agent_write_api_token" not in promoted.get("zammad", {})
 
@@ -288,3 +324,14 @@ def test_backblaze_path_has_exact_external_grants_and_no_wildcard(service):
         ) in policy
     assert 'path "secrets-external/data/backblaze/*"' not in policy
     assert 'path "secrets-external/metadata/backblaze/*"' not in policy
+
+
+def test_opencode_key_has_one_exact_external_read_grant():
+    policy = _render_apps_policy(_read_apps(_yaml(NAMES_FILE)))
+
+    assert (
+        'path "secrets-external/data/ai/saas/opencode" {\n'
+        '  capabilities = ["read"]\n}'
+    ) in policy
+    assert 'path "secrets-external/data/ai/saas/*"' not in policy
+    assert 'path "secrets-external/data/ai/*"' not in policy

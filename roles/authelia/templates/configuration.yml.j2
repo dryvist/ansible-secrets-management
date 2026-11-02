@@ -28,15 +28,21 @@ authentication_backend:
   file:
     path: "{{ authelia_users_file }}"
 
-# Passkey-first login: a discoverable WebAuthn credential logs the user in with
-# one Touch ID prompt, no password typed. A passkey alone is only one_factor by
-# default, so uv_two_factors lets a user-verifying passkey (Touch ID performs
-# user verification) satisfy the two_factor policy on its own — otherwise the
-# two_factor routes below would still demand a password after the passkey.
+# Requiring user verification asks the authenticator to verify the user (e.g.,
+# with Touch ID) on every assertion, and fails if it cannot. With the
+# experimental UV two-factor option, a verified passkey satisfies two_factor
+# in one gesture, without a separate password prompt. Passkey login only finds
+# credentials stored as discoverable: registration requires a discoverable
+# credential, and the experimental upgrade option records a new credential as
+# a passkey when the browser does not report that it is one.
 webauthn:
   disable: false
   enable_passkey_login: true
   experimental_enable_passkey_uv_two_factors: true
+  experimental_enable_passkey_upgrade: true
+  selection_criteria:
+    discoverability: '{{ authelia_webauthn_discoverability }}'
+    user_verification: '{{ authelia_webauthn_user_verification }}'
 
 # Native OIDC is required by Hermes Dashboard before it will bind beyond
 # loopback. The client is public and PKCE-only; no reusable client secret exists.
