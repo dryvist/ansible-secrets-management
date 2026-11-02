@@ -97,6 +97,7 @@ class HatchetKillTestReaderContract(unittest.TestCase):
         self.assertIn("hatchet-killtest", excluded)
 
         self.assertEqual(self.reader["secret_id_num_uses"], "{{ openbao_approle_per_call_secret_id_num_uses }}")
+        self.assertEqual(_yaml("08a-admin-and-ttls.yml")["openbao_approle_per_call_secret_id_num_uses"], 1)
         self.assertEqual(self.reader["secret_id_ttl"], "{{ openbao_approle_per_call_secret_id_ttl }}")
         self.assertEqual(self.reader["token_max_ttl"], "15m")
 

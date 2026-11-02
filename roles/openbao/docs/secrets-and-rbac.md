@@ -174,10 +174,11 @@ reconciliation.
 
 [^hatchet-killtest]: Its policy reads only the `secret/data/apps/hatchet-killtest`
     leaf, and `approle-issuer` mints its one-use secret_id per Semaphore run.
-    The shared `apps` reader excludes this bucket. By design, three other
+    The shared `apps` reader excludes this bucket. By design, five other
     identities also reach the leaf: `ansible-converge`, which publishes the
-    token, and `apps-seed` and `apps-rotate`, through their `secret/apps/*`
-    grants.
+    token; `apps-seed` and `apps-rotate`, through their `secret/apps/*`
+    grants; `openbao-reconcile`, through `secret/*`; and the `ai-admin`
+    break-glass role.
 
 [^ai-tiers]: Task-scoped AI actor roles. Authorization is by task/blast-radius
     and human-gated, never by model capability (model is an audit claim). Every
