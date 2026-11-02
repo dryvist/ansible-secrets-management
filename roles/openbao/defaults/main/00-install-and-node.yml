@@ -91,6 +91,10 @@ openbao_cli_host: "{{ 'localhost' if openbao_reconcile_addr | length > 0 else in
 openbao_cli_addr: "{{ openbao_reconcile_addr | default(openbao_write_addr, true) }}"
 openbao_cli_become: "{{ openbao_reconcile_addr | length == 0 }}"
 
+# --- Optional single-object RBAC / AppRole config runs -----------------------
+openbao_rbac_policy_name: ""
+openbao_approle_config_name: ""
+
 # --- Ingress addresses whose X-Forwarded-For header is trusted ---------------
 # Every ingress instance's own address plus the floating ingress VIP, both
 # derived from the inventory exactly as the keepalived role derives them — no

@@ -1,49 +1,6 @@
 ---
-# Each Terrakube workspace policy references its workspace BY LIST INDEX
-# (openbao_terrakube_workspaces[N]) while carrying the workspace's name in its
-# own `name`. Nothing structural keeps the two in step: inserting a workspace
-# anywhere but the end, or mistyping an index, silently points a policy at a
-# DIFFERENT workspace — which grants that workspace's KV paths to the wrong
-# job identity and reads as a working converge.
-#
-# Compare the two ORDERED lists rather than their sets: a set comparison passes
-# on exactly the swap this is guarding against, since both names are still
-# present.
-- name: Assert every Terrakube workspace policy names the workspace it points at
-  ansible.builtin.assert:
-    that:
-      - _tk_policy_names == _tk_workspace_derived_names
-    fail_msg: >-
-      A Terrakube workspace policy references the wrong entry in
-      openbao_terrakube_workspaces. Declared policy names:
-      {{ _tk_policy_names }}; names derived from the workspaces each one
-      actually points at: {{ _tk_workspace_derived_names }}.
-    success_msg: "All {{ _tk_policy_names | length }} Terrakube workspace policies point at their own workspace."
-  vars:
-    _tk_policies: "{{ openbao_base_policies | selectattr('workspace', 'defined') | list }}"
-    _tk_policy_names: "{{ _tk_policies | map(attribute='name') | list }}"
-    _tk_workspace_derived_names: >-
-      {{ _tk_policies | map(attribute='workspace.name')
-         | map('regex_replace', '^', 'terrakube-') | list }}
-  run_once: true
-  delegate_to: localhost
-  become: false
-
-# The per-service apply-role names are generated from openbao_ai_domains. A
-# domain named `all` or containing a glob character would render a policy path
-# that matches ai-apply-all, which the untrusted tier must never reach. Checked
-# before any policy is written.
-- name: Assert no AI domain name is a wildcard or the all rollup
-  ansible.builtin.assert:
-    that:
-      - openbao_ai_domains | select('search', '^all$|[*]') | list | length == 0
-    fail_msg: >-
-      openbao_ai_domains contains "all" or a "*" glob: {{ openbao_ai_domains }}.
-      Rendered ai-apply-<svc> policy paths would match ai-apply-all.
-    success_msg: "No AI domain name is a wildcard or the all rollup."
-  run_once: true
-  delegate_to: localhost
-  become: false
+- name: Assert RBAC policy declaration invariants
+  ansible.builtin.import_tasks: 08-policy-declaration-assertions.yml
 
 # The policy-sync pair (ask capability + rewrite the reconcile policy from
 # the declared set) now runs in init/02-initialize-cluster.yml, immediately
@@ -285,6 +242,21 @@
       {{ openbao_reachable_policies | map(attribute='name') | list
          | reject('in', _openbao_non_empty_names) | list | sort }}
   when: openbao_bootstrap_token is defined
+
+- name: Select one RBAC policy when a policy name was requested
+  ansible.builtin.import_tasks: select-single-object.yml
+  vars:
+    openbao_single_object_selector: "{{ openbao_rbac_policy_name | default('', true) }}"
+    openbao_single_object_candidates: >-
+      {{ openbao_reachable_policies
+         | default(openbao_manageable_policies | default(openbao_policies)) }}
+    openbao_single_object_label: RBAC policy
+  when: openbao_rbac_policy_name | default('', true) | length > 0
+
+- name: Keep the selected RBAC policy targets for the read and write loops
+  ansible.builtin.set_fact:
+    openbao_rbac_policy_targets: "{{ openbao_single_object_targets }}"
+  when: openbao_rbac_policy_name | default('', true) | length > 0
 
 - name: Refuse live objects that collide with roster agent names
   ansible.builtin.import_tasks: 08a-roster-live-collisions.yml
