@@ -8,7 +8,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 POLICY = ROOT / "roles/openbao/templates/ansible-converge-policy.hcl.j2"
-DEFAULTS = ROOT / "roles/openbao/defaults/main/07c-base-policies.yml"
+DEFAULTS = ROOT / "roles/openbao/defaults/main/07c-policy-composition.yml"
 PATH_BLOCK = re.compile(
     r'path "([^"]+)"\s*\{\s*capabilities\s*=\s*\[([^]]+)\]\s*\}',
     re.MULTILINE,

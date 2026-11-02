@@ -1,0 +1,96 @@
+---
+- name: Pin the agents installation to the unconfigured case
+  ansible.builtin.set_fact:
+    openbao_github_agents_installation_id: ""
+
+- name: Render the open-llm policy with no agents installation configured
+  ansible.builtin.template:
+    src: "{{ _template_dir }}/open-llm-policy.hcl.j2"
+    dest: "{{ _fixture_dir }}/unset-open-llm-policy.hcl"
+    mode: "0644"
+
+- name: Read the open-llm policy rendered without an installation
+  ansible.builtin.slurp:
+    src: "{{ _fixture_dir }}/unset-open-llm-policy.hcl"
+  register: _open_llm_unset_raw
+
+- name: Assert an unconfigured installation leaves open-llm without a GitHub mint grant
+  ansible.builtin.assert:
+    that:
+      - >-
+        (_open_llm_unset_raw.content | b64decode) | regex_findall('(?m)^path "([^"]+)"')
+        == [openbao_kv_mount ~ '/data/apps/open-llm',
+            openbao_kv_mount ~ '/metadata/apps/open-llm',
+            'secrets-external/data/ai/saas/zai',
+            'auth/approle/role/' ~ openbao_sandbox_agent_read_approle_name ~ '/role-id',
+            'auth/approle/role/' ~ openbao_sandbox_agent_read_approle_name ~ '/secret-id',
+            'auth/approle/role/' ~ openbao_sandbox_agent_write_approle_name ~ '/role-id',
+            'auth/approle/role/' ~ openbao_sandbox_agent_write_approle_name ~ '/secret-id',
+                            'auth/approle/role/' ~ openbao_sandbox_zcode_read_approle_name ~ '/role-id',
+                            'auth/approle/role/' ~ openbao_sandbox_zcode_read_approle_name ~ '/secret-id',
+                            'auth/approle/role/' ~ openbao_sandbox_zcode_write_approle_name ~ '/role-id',
+                            'auth/approle/role/' ~ openbao_sandbox_zcode_write_approle_name ~ '/secret-id',
+                            'auth/approle/role/' ~ openbao_sandbox_opencode_read_approle_name ~ '/role-id',
+                            'auth/approle/role/' ~ openbao_sandbox_opencode_read_approle_name ~ '/secret-id',
+                            'auth/approle/role/' ~ openbao_sandbox_opencode_write_approle_name ~ '/role-id',
+                            'auth/approle/role/' ~ openbao_sandbox_opencode_write_approle_name ~ '/secret-id']
+    fail_msg: With no installation ID the open-llm policy must render no GitHub mint grant.
+
+- name: Pin the agents installation back to the configured case
+  ansible.builtin.set_fact:
+    openbao_github_agents_installation_id: "4242"
+
+- name: Assert the agents permission sets are public-only and narrowly scoped
+  ansible.builtin.assert:
+    that:
+      - >-
+        openbao_github_agents_permission_sets | map(attribute='name') | list
+        == ['public-read', 'public-write',
+            openbao_dify_agent_code_simplifier_policy_name,
+            openbao_dify_agent_ci_fixer_policy_name,
+            openbao_dify_agent_vikunja_clerk_policy_name,
+            openbao_dify_agent_docs_updater_policy_name]
+      - >-
+        openbao_github_agents_permission_sets | map(attribute='tier') | list
+        == ['read', 'write', 'review', 'ci-fix', 'read', 'read']
+      - >-
+        openbao_github_agents_permission_sets | map(attribute='permissions') | list
+        == [openbao_github_agents_read_permissions, openbao_github_agents_write_permissions,
+            {'pull_requests': 'write', 'contents': 'read'},
+            {'contents': 'write', 'pull_requests': 'write', 'checks': 'read', 'actions': 'read'},
+            {'contents': 'read', 'pull_requests': 'read', 'issues': 'read', 'checks': 'read'},
+            {'contents': 'read', 'pull_requests': 'read', 'issues': 'read', 'checks': 'read'}]
+      - >-
+        openbao_github_agents_permission_sets | map(attribute='installation_id') | unique | list
+        == ['4242']
+      - >-
+        openbao_github_agents_permission_sets | map(attribute='public_repos_of') | unique | list
+        == ['dryvist']
+      - openbao_github_agents_permission_sets | selectattr('private_repos_of', 'defined') | list == []
+      - openbao_github_agents_permission_sets | selectattr('repositories', 'defined') | list == []
+    fail_msg: The agents mount must declare only its exact public permission sets.
+
+- name: Assert no other tier reaches the work mount
+  ansible.builtin.assert:
+    that:
+      - >-
+        (_publisher_paths + _mint_paths + _read_paths + _repo_create_paths
+         + _org_admin_paths + _write_paths + _open_llm_paths + _ai_public_paths)
+        | select('match', '^' ~ openbao_github_work_mount ~ '/') | list == []
+    fail_msg: >-
+      Only the github-work-read and github-work-write policies may mint from
+      {{ openbao_github_work_mount }}.
+
+- name: Assert no set on the per-App mounts carries administration
+  ansible.builtin.assert:
+    that:
+      - item.permissions is mapping
+      - "'administration' not in item.permissions"
+      - "'organization_administration' not in item.permissions"
+    fail_msg: "{{ item.mount }}/permissionset/{{ item.name }} carries administration."
+    quiet: true
+  loop: >-
+    {{ openbao_github_permission_sets
+       | rejectattr('mount', 'equalto', openbao_github_mount) | list }}
+  loop_control:
+    label: "{{ item.mount }}/{{ item.name }}"

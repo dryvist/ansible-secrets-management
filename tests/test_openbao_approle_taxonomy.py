@@ -35,6 +35,14 @@ def _render(expression, variables):
     return templar.template(trust_as_template(expression))
 
 
+def _dify_agent_names(defaults, suffix):
+    return [
+        value
+        for name, value in defaults.items()
+        if name.startswith("openbao_dify_agent_") and name.endswith(suffix)
+    ]
+
+
 class TestAppRoleTaxonomy(unittest.TestCase):
     def test_every_declared_approle_has_one_identity_class(self):
         variables = {}
@@ -46,6 +54,7 @@ class TestAppRoleTaxonomy(unittest.TestCase):
 
         roles = _render("{{ openbao_approles }}", variables)
         class_map = _render("{{ openbao_approle_class_map }}", variables)
+        cidr_class_map = _render("{{ openbao_approle_cidr_class_map }}", variables)
         unclassified = sorted({role["name"] for role in roles} - set(class_map))
         invalid_classes = {
             name: identity_class
@@ -66,7 +75,13 @@ class TestAppRoleTaxonomy(unittest.TestCase):
                 self.assertEqual(role["token_ttl"], "15m")
                 self.assertEqual(role["token_max_ttl"], "15m")
                 self.assertFalse(role["manage_secret_id"])
-        for name in ("agent-code-simplifier", "agent-ci-fixer"):
+        approle_names = _dify_agent_names(variables, "_approle_name")
+        self.assertEqual(approle_names, _dify_agent_names(variables, "_policy_name"))
+        self.assertEqual(
+            [role["name"] for role in roles if role["name"] in approle_names],
+            approle_names,
+        )
+        for name in approle_names:
             self.assertEqual(class_map[name], "service-runtime")
             role = next(role for role in roles if role["name"] == name)
             self.assertEqual(role["policy"], name)
@@ -78,6 +93,8 @@ class TestAppRoleTaxonomy(unittest.TestCase):
             self.assertFalse(role["manage_secret_id"])
         self.assertEqual(class_map["ai-orchestrator"], "trusted-agent-write")
         self.assertEqual(class_map["agent-workstation"], "trusted-agent-read")
+        self.assertEqual(class_map["hatchet-eval-status"], "service-runtime")
+        self.assertEqual(cidr_class_map["hatchet-eval-status"], "machine")
 
 
 if __name__ == "__main__":

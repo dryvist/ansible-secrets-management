@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.56.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.55.0...v0.56.0) (2026-11-02)
+
+
+### Features
+
+* **openbao:** add the inert hatchet-token-publisher AppRole and policy ([#414](https://github.com/dryvist/ansible-secrets-management/issues/414)) ([64c3c8c](https://github.com/dryvist/ansible-secrets-management/commit/64c3c8cd18e5bfa1001027a264e160221a257954))
+
+
+### Bug Fixes
+
+* **openbao:** let the operator SSO token load the UI ([#411](https://github.com/dryvist/ansible-secrets-management/issues/411)) ([ed7f089](https://github.com/dryvist/ansible-secrets-management/commit/ed7f0893c7e66b781cb1df6e3daf9a443d8e99cf))
+
 ## [0.55.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.54.1...v0.55.0) (2026-11-01)
 
 

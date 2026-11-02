@@ -1,0 +1,121 @@
+---
+- name: Render and verify the Hatchet eval status policy
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    ansible_become: false
+    _fixture_dir: "{{ render_tmp }}"
+    _template_dir: "../../../roles/openbao/templates"
+    ansible_managed: "test fixture"
+    _eval_status_path: >-
+      {{ openbao_github_mount }}/token/{{ openbao_github_role_eval_status_set_name }}
+    _other_policies:
+      - docs-router-snapshot-policy.hcl
+      - github-docs-publisher-policy.hcl
+      - github-ci-resolver-policy.hcl
+      - github-mint-policy.hcl
+      - github-read-policy.hcl
+      - github-repo-create-policy.hcl
+      - github-org-admin-policy.hcl
+      - github-write-policy.hcl
+      - github-runner-policy.hcl
+      - github-exporter-policy.hcl
+      - github-admin-policy.hcl
+      - ai-orchestrator-policy.hcl
+      - ai-public-policy.hcl
+
+  tasks:
+    - name: Load the OpenBao defaults
+      ansible.builtin.include_vars:
+        dir: ../../../roles/openbao/defaults/main
+
+    - name: Set fixture installation IDs and repository inputs
+      ansible.builtin.set_fact:
+        openbao_platform_env:
+          OPENBAO_GITHUB_ADMIN_DRYVIST_INSTALLATION_ID: "4242"
+          OPENBAO_GITHUB_ADMIN_JACOBPEVANS_INSTALLATION_ID: ""
+          OPENBAO_GITHUB_ADMIN_JPE_ANSIBLE_INSTALLATION_ID: ""
+          OPENBAO_GITHUB_ADMIN_JPE_CRIBL_INSTALLATION_ID: ""
+          OPENBAO_GITHUB_ADMIN_JPE_NIX_INSTALLATION_ID: ""
+          OPENBAO_GITHUB_ADMIN_JPE_OPENBAO_PLUGIN_SECRETS_INSTALLATION_ID: ""
+          OPENBAO_GITHUB_ADMIN_JPE_PRIVATE_INSTALLATION_ID: ""
+          OPENBAO_GITHUB_ADMIN_JPE_SPLUNK_INSTALLATION_ID: ""
+          OPENBAO_GITHUB_ADMIN_PERSONAL_INSTALLATION_ID: ""
+          OPENBAO_GITHUB_AGENTS_DRYVIST_INSTALLATION_ID: "4242"
+          OPENBAO_GITHUB_DRYVIST_INSTALLATION_ID: "4242"
+          OPENBAO_GITHUB_ENTERPRISE_INSTALLATION_ID: ""
+          OPENBAO_GITHUB_ENTERPRISE_READ_INSTALLATION_ID: ""
+          OPENBAO_GITHUB_HERMES_DRYVIST_INSTALLATION_ID: ""
+          OPENBAO_GITHUB_PERSONAL_INSTALLATION_ID: ""
+          OPENBAO_GITHUB_WORK_INSTALLATION_ID: ""
+          OPENBAO_GITHUB_APP_INSTALL_ALLOWLIST: ""
+          OPENBAO_GITHUB_HERMES_AUTHOR_PUBLIC_REPOS: ""
+        openbao_github_oidc_docs_repository: fixture-owner/fixture-source
+        openbao_github_docs_publisher_repos: [fixture-repo]
+        openbao_github_ci_resolver_repos: [fixture-repo]
+        openbao_terrakube_network_workspace: fixture-network
+        openbao_terrakube_aws_workspace: fixture-aws
+
+    - name: Render the status policy and every other shared-set policy
+      ansible.builtin.template:
+        src: "{{ _template_dir }}/{{ item }}.j2"
+        dest: "{{ _fixture_dir }}/{{ item }}"
+        mode: "0644"
+      loop: "{{ ['hatchet-eval-status-policy.hcl'] + _other_policies }}"
+
+    - name: Render every Terrakube workspace policy
+      ansible.builtin.template:
+        src: "{{ _template_dir }}/terrakube-workspace-policy.hcl.j2"
+        dest: "{{ _fixture_dir }}/workspace-{{ item.name }}.hcl"
+        mode: "0644"
+      loop: "{{ openbao_terrakube_base_policies }}"
+
+    - name: Read the rendered status and shared-set policies
+      ansible.builtin.slurp:
+        src: "{{ _fixture_dir }}/{{ item }}"
+      register: _policy_raw
+      loop: "{{ ['hatchet-eval-status-policy.hcl'] + _other_policies }}"
+
+    - name: Read the rendered Terrakube workspace policies
+      ansible.builtin.slurp:
+        src: "{{ _fixture_dir }}/workspace-{{ item.name }}.hcl"
+      register: _workspace_policy_raw
+      loop: "{{ openbao_terrakube_base_policies }}"
+
+    - name: Reduce rendered policies to path lines
+      ansible.builtin.set_fact:
+        _status_paths: "{{ _paths[0] }}"
+        _other_paths: >-
+          {{ (_paths[1:] | flatten) + (_workspace_paths | flatten) }}
+      vars:
+        _paths: >-
+          {{ _policy_raw.results | map(attribute='content') | map('b64decode')
+             | map('regex_findall', '(?m)^path "([^"]+)"') | list }}
+        _workspace_paths: >-
+          {{ _workspace_policy_raw.results | default([])
+             | map(attribute='content') | map('b64decode')
+             | map('regex_findall', '(?m)^path "([^"]+)"') | list }}
+
+    - name: Resolve the status set from the shared GitHub registry
+      ansible.builtin.set_fact:
+        _eval_status_sets: >-
+          {{ openbao_github_permission_sets
+             | selectattr('name', 'equalto', openbao_github_role_eval_status_set_name)
+             | list }}
+
+    - name: Assert the set and policy are exact and isolated
+      ansible.builtin.assert:
+        that:
+          - _eval_status_sets | length == 1
+          - _eval_status_sets[0].tier == 'agents'
+          - _eval_status_sets[0].repositories == openbao_github_role_eval_status_permission_sets[0].repositories
+          - _eval_status_sets[0].permissions == openbao_github_role_eval_status_permissions
+          - _eval_status_sets[0].installation_id == '4242'
+          - _eval_status_sets[0].mount == openbao_github_mount
+          - _status_paths == [_eval_status_path]
+          - _eval_status_path not in _other_paths
+        fail_msg: >-
+          The Hatchet eval status policy must mint only the one repository-scoped
+          status set, and no other policy may mention its token path.

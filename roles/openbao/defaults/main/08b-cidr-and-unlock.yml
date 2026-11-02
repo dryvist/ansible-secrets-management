@@ -102,6 +102,8 @@ openbao_approle_cidr_class_overrides:
   # CI-metrics exporter runs on a regular infra guest (the prometheus host),
   # not the isolated CI segment or a human workstation.
   github-exporter: machine
+  # The Hatchet eval status reporter uses the existing machine address class.
+  hatchet-eval-status: machine
   # Operator-run, not machine-resident: the platform deploy is driven from the
   # operator's workstation against a remote engine, so it belongs to the same
   # class as the other identities that machine holds. It defaulted to the
@@ -122,6 +124,8 @@ openbao_approle_cidr_class_overrides:
   backblaze-admin: workstation
   # The Nautobot token publisher is unlocked and run from the operator's machine.
   nautobot-token-publisher: workstation
+  # The Hatchet worker-token publisher is unlocked and run from the operator's machine.
+  hatchet-token-publisher: workstation
   # Routine reconciliation runs from both the execution plane and workstation.
   # Keep both sources in the credential's declared address class.
   openbao-reconcile: machine_or_workstation

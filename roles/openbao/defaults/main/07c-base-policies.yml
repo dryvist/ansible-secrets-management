@@ -52,6 +52,7 @@ openbao_base_policies: >-
   {{ openbao_terrakube_base_policies + openbao_base_policies_static
      + openbao_roster_owned_mcp_deny_policies }}
 
+# Static policy catalog, loaded with the other defaults.
 openbao_base_policies_static:
   - name: "{{ openbao_terraform_apply_policy_name }}"
     template: terraform-apply-policy.hcl.j2
@@ -110,6 +111,8 @@ openbao_base_policies_static:
     template: ci-ai-review-policy.hcl.j2
   - name: docs-router-snapshot
     template: docs-router-snapshot-policy.hcl.j2
+  - name: "{{ openbao_hatchet_eval_status_policy_name }}"
+    template: hatchet-eval-status-policy.hcl.j2
   - name: "{{ openbao_hermes_policy_name }}"
     template: hermes-policy.hcl.j2
   - name: "{{ openbao_hermes_write_policy_name }}"
@@ -212,6 +215,10 @@ openbao_base_policies_static:
     template: agent-code-simplifier-policy.hcl.j2
   - name: "{{ openbao_dify_agent_ci_fixer_policy_name }}"
     template: agent-ci-fixer-policy.hcl.j2
+  - name: "{{ openbao_dify_agent_vikunja_clerk_policy_name }}"
+    template: agent-vikunja-clerk-policy.hcl.j2
+  - name: "{{ openbao_dify_agent_docs_updater_policy_name }}"
+    template: agent-docs-updater-policy.hcl.j2
   # ai-readonly / ai-elevated / ai-apply-<svc> no longer own standalone policies —
   # they are ACTOR roles that attach the base read-/write- capability leaves
   # (generated below into openbao_ai_capability_policies). ai-admin remains a
@@ -267,66 +274,5 @@ openbao_base_policies_static:
     template: github-enterprise-admin-policy.hcl.j2
   - name: "{{ openbao_nautobot_token_publisher_policy_name }}"
     template: nautobot-token-publisher-policy.hcl.j2
-# Full policy set = the static base above + the base read-/write-/github-mint
-# capability leaves generated from openbao_ai_domains + the ssh-sign-<role>
-# leaves generated from openbao_ssh_roles. init.yml renders this list.
-# NOTE: ssh-sign-ci-runner is rendered but attached to no identity yet — no CI
-# AppRole/JWT identity exists in this role today; attach it when one does.
-# Apps whose roles generate a credential locally and publish it back to
-# secret/apps/<app> via dryvist.homelab.openbao_secrets tasks_from publish.yml. Each entry
-# becomes an EXACT-path create/update/read grant on the ansible-converge policy
-# (see ansible-converge-policy.hcl.j2) — never a wildcard. Adding a publishing
-# role means adding its name here; forgetting to makes the publish fail loudly
-# with a permission denied rather than silently skipping.
-openbao_credential_publish_apps:
-  - traefik
-  - authelia
-  - nautobot
-  - healthchecks
-  - n8n
-  - grafana
-  - status-stack
-  - sortarr
-  # Homarr publishes back its API key (issued by the app, so it cannot be
-  # seeded) and its integration-secret encryption key. The latter is exactly
-  # the case the comment above describes: losing it does not invalidate the
-  # stored integration credentials, it makes them permanently undecryptable.
-  - homarr
-  - homarr-v2
-  # Not published by a role in this repo: ansible-proxmox's pve_api_tokens
-  # mints each consumer's read-only PVE API token on the cluster and writes it
-  # into that consumer's bucket under this same converge identity. homarr's
-  # token lands in apps/homarr, covered by the entry above.
-  - pve-exporter
-  # The untrusted-tier Qdrant JWT (QDRANT_UNTRUSTED_JWT), minted by
-  # ansible-proxmox-ai's qdrant_docker role and merged into this bucket.
-  - open-llm
-  # The service-generated API credential used by the fan-control role.
-  - fan-control-write
-
-# Policies whose template emits a `path` stanza only for a configured input.
-# With that input unset the mount they govern is not created either (see
-# openbao_github_hermes_permission_sets, openbao_github_work_installation_id
-# and openbao_github_enterprise_app_mounts), so the policies are not declared:
-# `bao policy write` replaces the stored ACL, and an empty render must never
-# reach it. Setting the input brings the mount and its policies back together.
-openbao_policies_without_inputs: >-
-  {{ ([openbao_github_hermes_public_policy_name,
-       openbao_github_hermes_private_policy_name]
-      if openbao_github_hermes_permission_sets | length == 0 else [])
-     + ([openbao_github_work_read_policy_name, openbao_github_work_write_policy_name]
-        if openbao_github_work_installation_id | length == 0 else [])
-     + ([openbao_github_enterprise_read_policy_name]
-        if openbao_github_enterprise_read_installation_id | length == 0 else [])
-     + ([openbao_github_enterprise_admin_policy_name]
-        if openbao_github_enterprise_installation_id | length == 0 else []) }}
-
-openbao_policies: >-
-  {{ (openbao_base_policies
-      + openbao_ai_capability_policies + openbao_ssh_sign_policies
-      + openbao_ai_api_key_policies
-      + openbao_github_write_scope_policies
-      + openbao_roster_agent_policies + openbao_roster_key_reader_policies
-      + openbao_caller_gateway_key_policies
-      + [{'name': 'proxman', 'template': 'proxman-policy.hcl.j2'}])
-     | rejectattr('name', 'in', openbao_policies_without_inputs) | list }}
+  - name: "{{ openbao_hatchet_token_publisher_policy_name }}"
+    template: hatchet-token-publisher-policy.hcl.j2
