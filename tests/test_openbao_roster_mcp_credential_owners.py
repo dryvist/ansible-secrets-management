@@ -73,7 +73,8 @@ def _trust_values(value):
 
 def _templar(values):
     loader = DataLoader()
-    loader.set_basedir(str(ROOT / "roles/openbao"))
+    # Templates resolve {% include %} from templates/, as the role's lookup does.
+    loader.set_basedir(str(ROOT / "roles/openbao/templates"))
     templar = Templar(loader=loader)
     templar.available_variables = values
     return templar

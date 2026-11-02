@@ -61,7 +61,8 @@ def _trust(value):
 
 def _templar(variables):
     loader = DataLoader()
-    loader.set_basedir(str(ROLE))
+    # Templates resolve {% include %} from templates/, as the role's lookup does.
+    loader.set_basedir(str(ROLE / "templates"))
     templar = Templar(loader=loader)
     templar.available_variables = _trust(variables)
     return templar
