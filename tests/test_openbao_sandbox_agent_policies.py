@@ -5,9 +5,17 @@ import re
 import unittest
 
 from jinja2 import Environment, FileSystemLoader
+import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 TEMPLATES = ROOT / "roles" / "openbao" / "templates"
+IDENTITY_DEFAULTS = ROOT / "roles" / "openbao" / "defaults" / "main" / "05l-dify-agent-identities.yml"
+IDENTITIES = yaml.safe_load(IDENTITY_DEFAULTS.read_text(encoding="utf-8"))
+DIFY_AGENT_POLICY_NAMES = [
+    value
+    for name, value in IDENTITIES.items()
+    if name.startswith("openbao_dify_agent_") and name.endswith("_policy_name")
+]
 POLICIES = (
     "sandbox-agent-read-policy.hcl.j2",
     "sandbox-agent-write-policy.hcl.j2",
@@ -21,8 +29,7 @@ def _render(policy):
         ansible_managed="managed",
         openbao_kv_mount="secret",
         openbao_github_agents_mount="github-agents",
-        openbao_dify_agent_code_simplifier_policy_name="agent-code-simplifier",
-        openbao_dify_agent_ci_fixer_policy_name="agent-ci-fixer",
+        **IDENTITIES,
     )
 
 
@@ -105,7 +112,7 @@ class AgentPolicies(unittest.TestCase):
                     self.assertNotIn('"list"', rendered)
 
     def test_fleet_agent_policies_mint_only_their_named_set(self):
-        for name in ("agent-code-simplifier", "agent-ci-fixer"):
+        for name in DIFY_AGENT_POLICY_NAMES:
             with self.subTest(name=name):
                 rendered = _render(f"{name}-policy.hcl.j2")
                 path = f"github-agents/token/{name}"

@@ -9,12 +9,13 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE_DIR = ROOT / "roles/openbao/templates"
 GITHUB_MOUNT_DEFAULTS = ROOT / "roles/openbao/defaults/main/03b-github-app-mounts.yml"
+IDENTITY_DEFAULTS = ROOT / "roles/openbao/defaults/main/05l-dify-agent-identities.yml"
 AGENTS_MOUNT = "github-agents"
-ALLOWED_NAMED_SETS = {
-    "public-read",
-    "public-write",
-    "agent-code-simplifier",
-    "agent-ci-fixer",
+IDENTITIES = yaml.safe_load(IDENTITY_DEFAULTS.read_text(encoding="utf-8"))
+ALLOWED_NAMED_SETS = {"public-read", "public-write"} | {
+    value
+    for name, value in IDENTITIES.items()
+    if name.startswith("openbao_dify_agent_") and name.endswith("_policy_name")
 }
 RAW_MINT_PERMISSIONS = yaml.safe_load(GITHUB_MOUNT_DEFAULTS.read_text(encoding="utf-8"))[
     "openbao_github_agents_raw_mint_permissions"
@@ -44,8 +45,7 @@ def _render_policy(path):
         openbao_sandbox_zcode_write_approle_name="sandbox-zcode-write",
         openbao_sandbox_opencode_read_approle_name="sandbox-opencode-read",
         openbao_sandbox_opencode_write_approle_name="sandbox-opencode-write",
-        openbao_dify_agent_code_simplifier_policy_name="agent-code-simplifier",
-        openbao_dify_agent_ci_fixer_policy_name="agent-ci-fixer",
+        **IDENTITIES,
     )
 
 

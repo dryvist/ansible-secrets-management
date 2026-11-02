@@ -72,6 +72,20 @@ openbao_github_agents_permission_set_definitions:
       pull_requests: write
       checks: read
       actions: read
+  - name: "{{ openbao_dify_agent_vikunja_clerk_policy_name }}"
+    tier: read
+    permissions:
+      contents: read
+      pull_requests: read
+      issues: read
+      checks: read
+  - name: "{{ openbao_dify_agent_docs_updater_policy_name }}"
+    tier: read
+    permissions:
+      contents: read
+      pull_requests: read
+      issues: read
+      checks: read
 openbao_github_agents_set_permissions: >-
   {{ openbao_github_agents_permission_set_definitions
      | items2dict(key_name='name', value_name='permissions') }}
