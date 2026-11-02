@@ -15,6 +15,9 @@ opens every Traefik route whose tofu ingress row carries `sso = true`; the
   registering Mac, synced to other devices via the platform keychain. User
   verification is required on every assertion, so the experimental UV
   two-factor option lets one verified passkey gesture satisfy `two_factor`.
+  Registration requires a discoverable credential, because passkey login only
+  finds credentials stored as discoverable. The experimental upgrade option
+  records a new credential as a passkey when the browser does not report one.
   The bootstrap password exists only to create the account and register the
   first passkey.
 - **State**: local SQLite on the persistent `/var/lib/authelia` mount
@@ -114,5 +117,7 @@ guest copy on that first-run converge.
 
 1. Converge (`--tags authelia` + `traefik`, with `localhost` in `--limit`).
 2. Retrieve the bootstrap password from the root-only file on the guest.
-3. Browse to the portal, log in, register a WebAuthn credential (Touch ID).
+3. Browse to the portal, log in, register a passkey (Touch ID). A credential
+   registered before discoverability was required cannot sign in with a
+   passkey: register a new one, then delete the old one.
 4. Subsequent logins: passkey only, "Remember me" checked.

@@ -25,7 +25,9 @@
 authelia_version: "4.39.28"
 # Request user verification for every WebAuthn assertion.
 authelia_webauthn_user_verification: required
-# Authelia version reviewed with the experimental flag; reread its WebAuthn page before bumping.
+# Require a discoverable credential at registration so passkey login can find it.
+authelia_webauthn_discoverability: required
+# Authelia version reviewed with the experimental flags; reread its WebAuthn page before bumping.
 authelia_webauthn_uv_two_factors_reviewed_version: "4.39.28"
 authelia_release_tgz: "authelia-v{{ authelia_version }}-linux-amd64.tar.gz"
 authelia_release_base_url: "https://github.com/authelia/authelia/releases/download/v{{ authelia_version }}"
