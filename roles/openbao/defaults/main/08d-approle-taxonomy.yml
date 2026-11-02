@@ -52,6 +52,7 @@ openbao_approle_class_map: >-
     'github-work-read': 'trusted-agent-read',
     'github-work-write': 'trusted-agent-write',
     'herdr-hail': 'service-runtime',
+    'claude-code-router-key': 'service-runtime',
     'hermes': 'trusted-agent-read',
     'hermes-private-agent': 'trusted-agent-read',
     'hermes-private': 'trusted-agent-write',

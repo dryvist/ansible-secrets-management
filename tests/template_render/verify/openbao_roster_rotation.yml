@@ -41,6 +41,7 @@
           - agent-ssh-sign
           - agent-workstation
           - herdr-hail
+          - claude-code-router-key
           - bao-elevate-client
           - hermes
           - ai-donna

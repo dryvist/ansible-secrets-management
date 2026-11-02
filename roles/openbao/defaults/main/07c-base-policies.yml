@@ -211,6 +211,8 @@ openbao_base_policies_static:
     template: open-llm-policy.hcl.j2
   - name: "{{ openbao_herdr_hail_policy_name }}"
     template: herdr-hail-policy.hcl.j2
+  - name: "{{ openbao_claude_code_router_key_policy_name }}"
+    template: claude-code-router-key-policy.hcl.j2
   - name: "{{ openbao_bao_elevate_client_policy_name }}"
     template: bao-elevate-client-policy.hcl.j2
   - name: "{{ openbao_sandbox_agent_read_policy_name }}"

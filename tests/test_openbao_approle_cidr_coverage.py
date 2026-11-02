@@ -187,6 +187,8 @@ class TestShippedDeclarationIsClean(unittest.TestCase):
         names = _render(
             "{{ openbao_approles | map(attribute='name') | list }}", loaded
         )
+        self.assertIn("claude-code-router-key", names)
+        self.assertEqual(overrides["claude-code-router-key"], "workstation")
         self.assertEqual(
             sorted(set(overrides) - set(names)),
             [],
