@@ -65,7 +65,7 @@ class TestAppRoleTaxonomy(unittest.TestCase):
 
         self.assertEqual(unclassified, [])
         self.assertEqual(invalid_classes, {})
-        for tool in ("zcode", "opencode"):
+        for tool in ("agent", "zcode", "opencode"):
             for tier in ("read", "write"):
                 name = f"sandbox-{tool}-{tier}"
                 self.assertEqual(class_map[name], "untrusted-sandbox")
@@ -74,7 +74,7 @@ class TestAppRoleTaxonomy(unittest.TestCase):
                 self.assertEqual(role["secret_id_ttl"], "15m")
                 self.assertEqual(role["secret_id_num_uses"], 1)
                 self.assertEqual(role["token_ttl"], "15m")
-                self.assertEqual(role["token_max_ttl"], "15m")
+                self.assertEqual(role["token_max_ttl"], "60m")
                 self.assertFalse(role["manage_secret_id"])
         approle_names = _dify_agent_names(variables, "_approle_name")
         self.assertEqual(approle_names, _dify_agent_names(variables, "_policy_name"))
