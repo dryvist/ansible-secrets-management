@@ -87,6 +87,22 @@ def test_legacy_internal_provider_area_remains_denied():
     assert "externally configured leaves" in local_policy
 
 
+def test_local_llm_reads_only_exact_app_agent_token_leaves():
+    policy_defaults = _read("roles/openbao/defaults/main/05k-agent-tier-secret-paths.yml")
+    local_policy = _read("roles/openbao/templates/local-llm-policy.hcl.j2")
+    paths = yaml.safe_load(policy_defaults)
+    mount = paths["openbao_agent_tier_mount"]
+    leaves = paths["openbao_app_agent_tier_paths"]
+
+    assert "{% for tier_path in openbao_app_agent_tier_paths %}" in local_policy
+    assert 'path "{{ openbao_agent_tier_mount }}/data/{{ tier_path }}"' in local_policy
+    assert 'path "{{ openbao_agent_tier_mount }}/metadata/{{ tier_path }}"' in local_policy
+    assert len(leaves) == len(set(leaves))
+    assert all("*" not in leaf and "+" not in leaf for leaf in leaves)
+    assert mount == "agent-tier"
+    assert mount != yaml.safe_load(_read("roles/openbao/defaults/main/01a-kv-hierarchy.yml"))["openbao_kv_mount"]
+
+
 def test_ai_runner_uses_external_provider_leaves():
     runner_policy = _read("roles/openbao/templates/ai-runner-policy.hcl.j2")
     fetch_defaults = _read("playbooks/group_vars/all/openbao_secrets.yml")

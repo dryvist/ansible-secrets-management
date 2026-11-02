@@ -159,7 +159,7 @@ def test_vikunja_generated_password_coexists_with_promoted_fields():
     generated = _yaml(GENERATED_FILE)["openbao_generated_app_secrets"]["vikunja"]
     promoted = _yaml(PROMOTED_FILE)["openbao_promoted_app_secrets"]["vikunja"]
 
-    assert "vikunja_agent_read_password" in generated
+    assert {"vikunja_agent_read_password", "vikunja_agent_write_password"} <= set(generated)
     assert promoted
     assert not set(generated).intersection(promoted)
     assert "vikunja" in _read_apps(_yaml(NAMES_FILE))

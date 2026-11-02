@@ -1,8 +1,10 @@
 """Converge has exact writer grants for its AI seeds and app publishers."""
 
 from pathlib import Path
+from fnmatch import fnmatchcase
 import re
 
+import jinja2
 import yaml
 
 
@@ -15,6 +17,12 @@ PATH_BLOCK = re.compile(
 )
 AI_SEED_APPS = ("langfuse", "langflow", "phoenix", "dify")
 PUBLISH_APPS = ("grafana", "status-stack")
+AGENT_PATH_DEFAULTS = ROOT / "roles/openbao/defaults/main/05k-agent-tier-secret-paths.yml"
+PRIVILEGED_POLICY_TEMPLATES = {
+    "operator-human-policy.hcl.j2",
+    "ai-admin-policy.hcl.j2",
+    "openbao-reconcile-policy.hcl.j2",
+}
 
 
 def _grants() -> list[tuple[str, tuple[str, ...]]]:
@@ -78,3 +86,70 @@ def test_eval_namespace_grants_are_exact_specialist_platform_leaves() -> None:
         ]
     assert eval_grants == expected
     assert not any("*" in path or "+" in path for path, _ in eval_grants)
+
+
+def test_agent_tier_mount_has_exact_publisher_and_router_grants_only() -> None:
+    defaults = yaml.safe_load(AGENT_PATH_DEFAULTS.read_text(encoding="utf-8"))
+    mount = defaults["openbao_agent_tier_mount"]
+    leaves = defaults["openbao_app_agent_tier_paths"]
+    assert leaves and mount != "secret"
+    environment = jinja2.Environment()
+    environment.filters["comment"] = lambda value: ""
+    context = {
+        "ansible_managed": "",
+        "openbao_kv_mount": "secret",
+        "openbao_agent_tier_mount": mount,
+        "openbao_app_agent_tier_paths": leaves,
+    }
+
+    def mount_grants(name: str) -> set[tuple[str, tuple[str, ...]]]:
+        source = (ROOT / "roles/openbao/templates" / name).read_text(encoding="utf-8")
+        return {
+            (path, tuple(re.findall(r'"([^\"]+)"', caps)))
+            for path, caps in PATH_BLOCK.findall(environment.from_string(source).render(**context))
+            if path.startswith(f"{mount}/")
+        }
+
+    data = {f"{mount}/data/{leaf}" for leaf in leaves}
+    metadata = {(f"{mount}/metadata/{leaf}", ("read",)) for leaf in leaves}
+    # Exact equality: no extra leaf, no glob, no broader capability on the mount.
+    assert mount_grants("ansible-converge-policy.hcl.j2") == {
+        (path, ("create", "update", "read")) for path in data
+    } | metadata
+    assert mount_grants("local-llm-policy.hcl.j2") == {(path, ("read",)) for path in data} | metadata
+
+    # Every other non-admin policy must not reach the mount at all: no reference to
+    # the mount variable or name, and no pattern that matches any tier endpoint.
+    endpoints = data | {path for path, _ in metadata}
+    role_defaults: dict = {}
+    for path in sorted((ROOT / "roles/openbao/defaults/main").glob("*.yml")):
+        role_defaults.update(yaml.safe_load(path.read_text(encoding="utf-8")) or {})
+
+    def literal(match: re.Match) -> str:
+        # A literal default resolves exactly; anything computed stays a wildcard.
+        value = role_defaults.get(match.group(1))
+        return value if isinstance(value, str) and "{{" not in value else "*"
+
+    for template in (ROOT / "roles/openbao/templates").glob("*.hcl.j2"):
+        if template.name in {
+            "ansible-converge-policy.hcl.j2",
+            "local-llm-policy.hcl.j2",
+            *PRIVILEGED_POLICY_TEMPLATES,
+        }:
+            continue
+        source = template.read_text(encoding="utf-8")
+        assert "openbao_agent_tier_mount" not in source, template.name
+        assert f'"{mount}/' not in source, template.name
+        for path, _ in PATH_BLOCK.findall(source):
+            pattern = re.sub(r"{{\s*(\w+)\s*}}", literal, path.replace("{{ openbao_kv_mount }}", "secret"))
+            pattern = re.sub(r"{{[^}]+}}", "*", pattern)
+            if pattern == "*":
+                continue  # fully data-driven path; covered by the defaults check below
+            assert not any(fnmatchcase(endpoint, pattern) for endpoint in endpoints), (
+                f"{template.name} path {path} reaches the {mount} mount"
+            )
+
+    # Data-driven policy paths come from role defaults; only the tier file names the mount.
+    for path in (ROOT / "roles/openbao/defaults/main").glob("*.yml"):
+        if path != AGENT_PATH_DEFAULTS:
+            assert mount not in path.read_text(encoding="utf-8"), path.name
