@@ -122,6 +122,8 @@ openbao_approle_cidr_class_overrides:
   backblaze-admin: workstation
   # The Nautobot token publisher is unlocked and run from the operator's machine.
   nautobot-token-publisher: workstation
+  # The Hatchet worker-token publisher is unlocked and run from the operator's machine.
+  hatchet-token-publisher: workstation
   # Routine reconciliation runs from both the execution plane and workstation.
   # Keep both sources in the credential's declared address class.
   openbao-reconcile: machine_or_workstation

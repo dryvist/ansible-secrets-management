@@ -288,6 +288,14 @@ openbao_base_approles_core:
     manage_secret_id: false
     secret_id_ttl: "{{ openbao_ai_elevated_secret_id_ttl }}"
     secret_id_num_uses: 1
+  # The workstation-only Hatchet worker-token publisher is inert the same way.
+  - name: "{{ openbao_hatchet_token_publisher_approle_name }}"
+    policy: "{{ openbao_hatchet_token_publisher_policy_name }}"
+    token_ttl: "{{ openbao_ai_admin_token_ttl }}"
+    token_max_ttl: "{{ openbao_ai_admin_token_ttl }}"
+    manage_secret_id: false
+    secret_id_ttl: "{{ openbao_ai_elevated_secret_id_ttl }}"
+    secret_id_num_uses: 1
 # openbao_base_approles_elevated (iac-platform-deploy through slack-ops) lives
 # in 07f-elevated-approles.yml — split for the CI token-limits gate.
 # openbao_seed_writer_approles lives in 07i-seed-writer-approles.yml.

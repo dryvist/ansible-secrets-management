@@ -70,6 +70,7 @@ openbao_approle_class_map: >-
     'monitoring': 'service-runtime',
     'monitoring-workstation': 'service-runtime',
     'nautobot-token-publisher': 'operator-admin',
+    'hatchet-token-publisher': 'operator-admin',
     'ntfy': 'service-runtime',
     'observability': 'service-runtime',
     'observability-workstation': 'service-runtime',
