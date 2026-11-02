@@ -49,6 +49,16 @@ class RouterKeyPrefixRegeneration(unittest.TestCase):
         self.assertEqual(field["prefix"], "")
         self.assertNotIn("valid_pattern", field)
 
+    def test_hermes_eval_api_server_key_is_plain_alphanumeric(self):
+        name = "hermes_eval_api_server_key"
+        field = _field_declaration(name)
+        self.assertEqual(field["prefix"], "")
+        self.assertEqual(field["charset"], "alnum")
+        self.assertEqual(field["length"], DEFAULTS["openbao_app_secret_length"])
+        self.assertNotIn("valid_pattern", field)
+        self.assertNotIn(name, DEFAULTS["openbao_app_secret_router_key_fields"])
+        self.assertNotIn(name, DEFAULTS["openbao_app_secret_valid_patterns"])
+
 
 class AppFormatPatternRegeneration(unittest.TestCase):
     def test_hatchet_admin_password_takes_its_app_pattern(self):
