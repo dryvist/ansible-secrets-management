@@ -273,37 +273,3 @@ openbao_approle_unsupplied_cidr_classes: >-
 openbao_approle_unknown_cidr_class_overrides: >-
   {{ openbao_approle_cidr_class_overrides | list
      | reject('in', openbao_approles | map(attribute='name') | list) | list }}
-
-# --- Human unlock: the operator's own login -----------------------------------
-# A person, not a workload, so this is a userpass user rather than an AppRole:
-# there is no role_id/secret_id pair to store anywhere, which is the point — the
-# credential that mints break-glass must not itself be a file.
-#
-# The role NEVER touches the password. It updates only the token_* fields on an
-# EXISTING user (verified against OpenBao 2.5.5 `userCreateUpdate`: the password
-# is only written when the `password` parameter is explicitly present, and a
-# create with no password is refused outright). If the user does not exist the
-# converge FAILS and says so rather than creating a passwordless administrator.
-openbao_human_unlock_user: jevans
-# Short session, hard ceiling: the operator holds this only while unlocking.
-openbao_human_unlock_token_ttl: 15m
-openbao_human_unlock_token_max_ttl: 1h
-# Same workstation class the break-glass AppRoles are bound to.
-openbao_human_unlock_cidr_class: workstation
-
-# --- Login MFA (TOTP) on the human login --------------------------------------
-# A password alone is single-factor on the one credential that can mint full
-# admin. OpenBao 2.5.5 carries login MFA (endpoints verified against the v2.5.5
-# docs in-tree, NOT assumed): `identity/mfa/method/totp` and
-# `identity/mfa/login-enforcement/<name>` — note these live under `identity/`,
-# not `sys/`; only `sys/mfa/validate` is under sys.
-#
-# ENROLMENT IS A ONE-TIME HUMAN STEP AND IS NOT DONE HERE. The role declares the
-# method and the enforcement; a human then runs the `admin-generate` endpoint
-# once against their own entity to get the QR/secret. Enrolling from a converge
-# would mean the automation had, however briefly, the second factor — which
-# would make it not a second factor. See docs/secrets-and-rbac.md.
-openbao_human_unlock_mfa_enabled: true
-openbao_human_unlock_mfa_method_name: human-unlock-totp
-openbao_human_unlock_mfa_enforcement_name: human-unlock
-openbao_human_unlock_mfa_issuer: OpenBao
