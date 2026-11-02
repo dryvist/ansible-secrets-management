@@ -155,6 +155,26 @@ def test_eval_leaf_adds_only_its_exact_read_grant_for_the_apps_reader(leaf):
     )
 
 
+def test_hatchet_apps_reader_has_exact_read_only_leaf_grants():
+    policy = _render_apps_policy(_read_apps(_yaml(NAMES_FILE)))
+    grants = _policy_grants(policy)
+
+    assert {
+        ("secret/data/apps/hatchet/worker-token", ("read",)),
+        ("secret/metadata/apps/hatchet/worker-token", ("read", "list")),
+        ("secret/data/apps/hatchet/eval", ("read",)),
+        ("secret/metadata/apps/hatchet/eval", ("read", "list")),
+    } <= grants
+    assert not any(
+        path.endswith("apps/hatchet/*") for path, _ in grants
+    )
+    assert not any(
+        WRITE_CAPABILITIES.intersection(capabilities)
+        for path, capabilities in grants
+        if path.startswith(("secret/data/apps/hatchet", "secret/metadata/apps/hatchet"))
+    )
+
+
 def test_vikunja_generated_password_coexists_with_promoted_fields():
     generated = _yaml(GENERATED_FILE)["openbao_generated_app_secrets"]["vikunja"]
     promoted = _yaml(PROMOTED_FILE)["openbao_promoted_app_secrets"]["vikunja"]
