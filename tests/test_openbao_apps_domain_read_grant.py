@@ -10,6 +10,7 @@ granted directly by apps-policy.hcl.j2.
 from __future__ import annotations
 
 from pathlib import Path
+import re
 
 import jinja2
 import pytest
@@ -27,6 +28,11 @@ CRIBL_EDGE_FILE = DEFAULTS / "05h-cribl-edge-readers.yml"
 DOMAINS_FILE = ROOT / "playbooks" / "group_vars" / "all" / "openbao_secrets.yml"
 POLICY_TEMPLATE = ROOT / "roles" / "openbao" / "templates" / "apps-policy.hcl.j2"
 MEDIA_POLICY_TEMPLATE = ROOT / "roles" / "openbao" / "templates" / "media-policy.hcl.j2"
+PATH_BLOCK = re.compile(
+    r'(?m)^path "([^"]+)"\s*\{\s*capabilities\s*=\s*\[([^]]*)\]'
+)
+WRITE_CAPABILITIES = {"create", "update", "patch", "delete", "sudo"}
+EVAL_LEAVES = ("hatchet/eval", "dify/eval")
 
 
 def _yaml(path: Path) -> dict:
@@ -96,6 +102,13 @@ def _render_apps_policy(read_apps: set[str]) -> str:
     )
 
 
+def _policy_grants(policy: str) -> set[tuple[str, tuple[str, ...]]]:
+    return {
+        (path, tuple(re.findall(r'"([^"]+)"', capabilities)))
+        for path, capabilities in PATH_BLOCK.findall(policy)
+    }
+
+
 def _render_media_policy() -> str:
     environment = jinja2.Environment()
     environment.filters["comment"] = str
@@ -112,6 +125,33 @@ def test_every_apps_domain_path_is_granted_to_the_apps_reader():
         f"the `apps` domain reads {missing}, which the `apps` policy does not grant; "
         "the domain fetch fails on the 403. Add the bucket to a seeding map or to "
         "openbao_apps_read_published_apps."
+    )
+
+
+@pytest.mark.parametrize("leaf", EVAL_LEAVES)
+def test_eval_leaf_adds_only_its_exact_read_grant_for_the_apps_reader(leaf):
+    names = _yaml(NAMES_FILE)
+    published = names["openbao_apps_read_published_apps"]
+    assert published.count(leaf) == 1
+
+    without_leaf = dict(names)
+    without_leaf["openbao_apps_read_published_apps"] = [
+        app for app in published if app != leaf
+    ]
+    previous_apps = _read_apps(without_leaf)
+    read_apps = _read_apps(names)
+    assert read_apps - previous_apps == {leaf}
+
+    previous_grants = _policy_grants(_render_apps_policy(previous_apps))
+    grants = _policy_grants(_render_apps_policy(read_apps))
+    added_grants = grants - previous_grants
+    assert added_grants == {
+        (f"secret/data/apps/{leaf}", ("read",)),
+        (f"secret/metadata/apps/{leaf}", ("read", "list")),
+    }
+    assert not any(
+        WRITE_CAPABILITIES.intersection(capabilities)
+        for _, capabilities in added_grants
     )
 
 
