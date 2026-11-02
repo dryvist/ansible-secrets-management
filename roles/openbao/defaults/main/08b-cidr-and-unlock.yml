@@ -27,10 +27,26 @@ openbao_dify_agent_cidrs: >-
   {{ openbao_platform_env.get('OPENBAO_DIFY_AGENT_CIDR', '')
      | default(lookup('env', 'OPENBAO_DIFY_AGENT_CIDR'), true)
      | default('', true) }}
-# Escape hatch for a first bootstrap, where no CIDR is known yet. Setting it
-# true downgrades the assert to the loud warning that preceded it.
+# Escape hatch for a first bootstrap, where no CIDR is known yet. Only a true
+# value (1, true, yes, on) downgrades the assert to the loud warning that
+# preceded it; "false" or any other string keeps the assert.
 openbao_approle_allow_unbound_cidrs: >-
-  {{ (lookup('env', 'OPENBAO_APPROLE_ALLOW_UNBOUND_CIDRS') | default('', true)) | length > 0 }}
+  {{ (lookup('env', 'OPENBAO_APPROLE_ALLOW_UNBOUND_CIDRS') | default('', true) | string | trim | lower)
+     in ['1', 'true', 'yes', 'on'] }}
+# Roles whose secret_id and token CIDRs must render non-empty even when the
+# escape hatch is set: init/10-approles.yml refuses to create them unbound.
+openbao_approle_bound_required:
+  - hatchet-killtest
+openbao_approle_bound_required_unbound: >-
+  {%- set _ns = namespace(names=[]) -%}
+  {%- for _name in openbao_approle_bound_required if _name in openbao_approle_cli_parameters -%}
+  {%- set _params = openbao_approle_cli_parameters[_name] -%}
+  {%- if (_params.secret_id_bound_cidrs | trim | length == 0)
+        or (_params.token_bound_cidrs | trim | length == 0) -%}
+  {%- set _ns.names = _ns.names + [_name] -%}
+  {%- endif -%}
+  {%- endfor -%}
+  {{ _ns.names }}
 
 # Named classes, so a role declares WHERE it lives rather than a literal.
 openbao_approle_cidr_classes:

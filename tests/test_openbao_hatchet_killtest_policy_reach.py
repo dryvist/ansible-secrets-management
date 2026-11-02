@@ -1,16 +1,23 @@
-"""Render every declared policy and list who reaches the kill-test power token.
+"""Render every declared policy and ask OpenBao who reaches the kill-test power token.
 
-The leaf sits outside secret/apps/* so no standing AI reader covers it. This
-matches each rendered `path` stanza against the leaf with OpenBao's own glob
-rules (a trailing `*` is a prefix match, `+` is one path segment) and requires
-that only the allowlisted policies hold any non-deny capability on it.
+The leaf sits outside secret/apps/* so no standing AI reader covers it. Each
+rendered policy is written to a real OpenBao dev server, and sys/capabilities
+answers for a token holding only that policy, so the server's own ACL
+evaluator decides reach. The holder sets on the data and metadata leaves are
+exact, as is the set of AppRoles that inherit a data holder.
 """
 
+import json
 import os
 from pathlib import Path
-import re
+import shutil
+import socket
+import subprocess
+import time
 import unittest
 from unittest import mock
+import urllib.error
+import urllib.request
 
 from ansible.parsing.dataloader import DataLoader
 from ansible.plugins.loader import init_plugin_loader
@@ -19,16 +26,30 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 ROLE = ROOT / "roles/openbao"
-STANZA = re.compile(r'path\s+"([^"]+)"\s*\{(.*?)\n\}', re.DOTALL)
-CAPABILITIES = re.compile(r'capabilities\s*=\s*\[([^]]*)\]')
-LEAVES = ("secret/data/killtest/hatchet", "secret/metadata/killtest/hatchet")
+DATA, METADATA = "secret/data/killtest/hatchet", "secret/metadata/killtest/hatchet"
 # The dedicated reader, its publisher, and the human-gated or reconcile identities.
-ALLOWED = {
-    "hatchet-killtest",
-    "ansible-converge",
-    "operator-human",
-    "openbao-reconcile",
-    "ai-admin",
+DATA_HOLDERS = {
+    "hatchet-killtest": ["read"],
+    "ansible-converge": ["create", "read", "update"],
+    "operator-human": ["list", "read"],
+    "openbao-reconcile": ["create", "list", "read", "update"],
+    "ai-admin": ["create", "delete", "list", "patch", "read", "update"],
+}
+# Metadata holds no value; secret-age-audit reads only its timestamps.
+METADATA_HOLDERS = {
+    "ansible-converge": ["read"],
+    "operator-human": ["list", "read"],
+    "openbao-reconcile": ["list", "patch", "read"],
+    "ai-admin": ["create", "delete", "list", "patch", "read", "update"],
+    "secret-age-audit": ["list", "read"],
+}
+# ai-admin-session and admin carry ai-admin (07f) as accepted break-glass; semaphore,
+# ansible-converge-writer and openbao-policy-sync carry ansible-converge or
+# openbao-reconcile.
+DATA_HOLDER_APPROLES = {
+    "hatchet-killtest", "ansible-converge", "openbao-reconcile", "ai-admin",
+    "ai-admin-session", "admin", "semaphore", "ansible-converge-writer",
+    "openbao-policy-sync",
 }
 
 # Values the role reads from the process environment and refuses when empty.
@@ -36,6 +57,7 @@ REQUIRED_ENV = {name: "fixture" for name in (
     "OPENBAO_AI_API_KEY_MOUNT", "OPENBAO_AI_API_KEY_PATH_PREFIX",
     "OPENBAO_APPROLE_SNAPSHOT_ROLE_ID", "OPENBAO_APPROLE_SNAPSHOT_SECRET_ID",
     "OPENBAO_TERRAKUBE_AWS_WORKSPACE", "OPENBAO_TERRAKUBE_NETWORK_WORKSPACE")}
+
 
 class _PlatformEnv(dict):
     """Inventory env values: a placeholder for every key, so every policy renders."""
@@ -68,20 +90,52 @@ def _templar(variables):
     return templar
 
 
-def _matches(pattern, path):
-    expression = re.escape(pattern).replace(r"\+", "[^/]+")
-    if expression.endswith(r"\*"):
-        return re.fullmatch(expression[:-2] + ".*", path) is not None
-    return re.fullmatch(expression, path) is not None
+def role_defaults():
+    """Every role default plus the placeholder inventory a full render needs."""
+    init_plugin_loader()
+    variables = {"ansible_managed": "Ansible managed"}
+    for path in sorted((ROLE / "defaults/main").glob("*.yml")):
+        variables.update(yaml.safe_load(path.read_text(encoding="utf-8")) or {})
+    variables["openbao_platform_env"] = _PlatformEnv()
+    # A runtime fact; its entries render as apps/<name>, never killtest/.
+    variables["llm_router_key_catalog_facts"] = {"openbao_router_key_catalog": {}}
+    return variables
 
 
-def _reach(policy_text, path):
-    caps = set()
-    for pattern, body in STANZA.findall(policy_text):
-        if _matches(pattern, path):
-            found = CAPABILITIES.search(body)
-            caps |= set(re.findall(r'"([^"]+)"', found.group(1))) if found else set()
-    return caps - {"deny"} if "deny" not in caps else set()
+def render(variables, expression):
+    return _templar(variables).template(trust_as_template(expression))
+
+
+def _call(base, token, method, path, body=None):
+    request = urllib.request.Request(
+        f"{base}/v1/{path}", method=method, headers={"X-Vault-Token": token},
+        data=None if body is None else json.dumps(body).encode())
+    try:
+        with urllib.request.urlopen(request, timeout=10) as response:
+            return response.status, json.loads(response.read() or b"{}")
+    except urllib.error.HTTPError as error:
+        return error.code, error.read()
+
+
+def _dev_server():
+    binary = shutil.which("bao")
+    assert binary, "the bao binary must be on PATH: this test runs a real OpenBao dev server"
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+    base = f"http://127.0.0.1:{port}"
+    server = subprocess.Popen(
+        [binary, "server", "-dev", "-dev-root-token-id=root", f"-dev-listen-address=127.0.0.1:{port}"],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    for _ in range(60):
+        try:
+            if _call(base, "root", "GET", "sys/health")[0] == 200:
+                return server, base
+        except OSError:
+            pass
+        time.sleep(0.5)
+    server.terminate()
+    raise AssertionError("the bao dev server did not become healthy")
 
 
 class HatchetKillTestPolicyReach(unittest.TestCase):
@@ -90,48 +144,55 @@ class HatchetKillTestPolicyReach(unittest.TestCase):
     @classmethod
     @mock.patch.dict(os.environ, REQUIRED_ENV)
     def setUpClass(cls):
-        init_plugin_loader()
-        variables = {"ansible_managed": "Ansible managed"}
-        for path in sorted((ROLE / "defaults/main").glob("*.yml")):
-            variables.update(yaml.safe_load(path.read_text(encoding="utf-8")) or {})
-        variables["openbao_platform_env"] = _PlatformEnv()
-        # A runtime fact; its entries render as apps/<name>, never killtest/.
-        variables["llm_router_key_catalog_facts"] = {"openbao_router_key_catalog": {}}
-        policies = _templar(variables).template(trust_as_template("{{ openbao_policies }}"))
+        cls.variables = role_defaults()
+        cls.approles = render(cls.variables, "{{ openbao_approles }}")
+        policies = render(cls.variables, "{{ openbao_policies }}")
         cls.rendered, cls.failed = {}, {}
         for policy in policies:
             source = (ROLE / "templates" / policy["template"]).read_text(encoding="utf-8")
             try:
-                cls.rendered[policy["name"]] = _templar({**variables, "item": policy}).template(
-                    trust_as_template(source))
+                cls.rendered[policy["name"]] = render({**cls.variables, "item": policy}, source)
             except Exception as error:  # noqa: BLE001 - every unrendered policy is reported
                 cls.failed[policy["name"]] = str(error).splitlines()[0]
+        server, base = _dev_server()
+        try:
+            cls.caps, cls.rejected = {}, {}
+            for name, text in cls.rendered.items():
+                status, body = _call(base, "root", "PUT", f"sys/policies/acl/{name}", {"policy": text})
+                if status != 204:
+                    cls.rejected[name] = body
+                    continue
+                status, body = _call(base, "root", "POST", "auth/token/create",
+                                     {"policies": [name], "no_default_policy": True})
+                assert status == 200, (name, body)
+                status, body = _call(base, "root", "POST", "sys/capabilities", {
+                    "token": body["auth"]["client_token"], "paths": [DATA, METADATA]})
+                assert status == 200, (name, body)
+                cls.caps[name] = {path: sorted(body[path]) for path in (DATA, METADATA)}
+        finally:
+            server.terminate()
+            server.wait(timeout=30)
 
-    def test_every_policy_renders(self):
+    def _holders(self, path):
+        return {name: caps[path] for name, caps in self.caps.items() if caps[path] != ["deny"]}
+
+    def test_every_policy_renders_and_loads(self):
         self.assertEqual(self.failed, {})
-        self.assertGreater(len(self.rendered), 50)
+        self.assertEqual(self.rejected, {})
+        self.assertGreater(len(self.caps), 50)
 
-    def test_only_allowlisted_policies_reach_the_killtest_leaf(self):
-        holders = {name for name, text in self.rendered.items() if _reach(text, LEAVES[0])}
-        self.assertEqual(holders - ALLOWED, set())
-        # Metadata holds no value; a read/list auditor there is fine, a writer is not.
-        metadata_writers = {
-            name for name, text in self.rendered.items()
-            if _reach(text, LEAVES[1]) - {"read", "list"}
+    def test_the_data_leaf_holders_are_exact(self):
+        self.assertEqual(self._holders(DATA), DATA_HOLDERS)
+
+    def test_the_metadata_leaf_holders_are_exact(self):
+        self.assertEqual(self._holders(METADATA), METADATA_HOLDERS)
+
+    def test_the_approles_inheriting_a_data_holder_are_exact(self):
+        inheriting = {
+            role["name"] for role in self.approles
+            if set(role.get("token_policies") or [role.get("policy")]) & set(DATA_HOLDERS)
         }
-        self.assertEqual(metadata_writers - ALLOWED, set())
-        self.assertIn("hatchet-killtest", holders)
-        self.assertEqual(_reach(self.rendered["hatchet-killtest"], LEAVES[0]), {"read"})
-        self.assertEqual(_reach(self.rendered["ansible-converge"], LEAVES[0]),
-                         {"create", "update", "read"})
-
-    def test_the_glob_rules_match_openbao(self):
-        self.assertTrue(_matches("secret/*", LEAVES[0]))
-        self.assertTrue(_matches("secret/data/+/hatchet", LEAVES[0]))
-        self.assertTrue(_matches("*", LEAVES[0]))
-        self.assertFalse(_matches("secret/data/apps/*", LEAVES[0]))
-        self.assertFalse(_matches("secret/data/killtest", LEAVES[0]))
-        self.assertEqual(_reach('path "secret/*" {\n  capabilities = ["deny"]\n}', LEAVES[0]), set())
+        self.assertEqual(inheriting, DATA_HOLDER_APPROLES)
 
 
 if __name__ == "__main__":
