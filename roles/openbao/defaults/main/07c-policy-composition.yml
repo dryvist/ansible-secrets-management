@@ -10,6 +10,8 @@
 # (see ansible-converge-policy.hcl.j2) — never a wildcard. Adding a publishing
 # role means adding its name here; forgetting to makes the publish fail loudly
 # with a permission denied rather than silently skipping.
+# Shared source for the publisher app and the AI global-read exclusion.
+openbao_fan_control_write_kv_path: apps/fan-control-write
 openbao_credential_publish_apps:
   - traefik
   - authelia
@@ -34,7 +36,7 @@ openbao_credential_publish_apps:
   # ansible-proxmox-ai's qdrant_docker role and merged into this bucket.
   - open-llm
   # The service-generated API credential used by the fan-control role.
-  - fan-control-write
+  - "{{ openbao_fan_control_write_kv_path | regex_replace('^apps/', '') }}"
   # The Hatchet eval worker's Langfuse project keys and router key, published by
   # the existing langfuse_project_keys and openbao_secrets seeding modules. Its own
   # leaf, so this grant never reaches the Hatchet keysets in apps/hatchet.

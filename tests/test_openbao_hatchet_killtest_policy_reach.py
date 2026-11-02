@@ -28,6 +28,11 @@ from test_openbao_global_read_all_policy import _environment as policy_environme
 ROOT = Path(__file__).resolve().parents[1]
 ROLE = ROOT / "roles/openbao"
 DATA, METADATA = "secret/data/killtest/hatchet", "secret/metadata/killtest/hatchet"
+PARENT_METADATA = "secret/metadata/killtest/"
+RUSTFS_DATA, RUSTFS_METADATA = "secret/data/infra/rustfs", "secret/metadata/infra/rustfs"
+FAN_CONTROL_DATA = "secret/data/apps/fan-control-write"
+FAN_CONTROL_METADATA = "secret/metadata/apps/fan-control-write"
+APPS_PARENT_METADATA = "secret/metadata/apps/"
 # The dedicated reader, its publisher, and the human-gated or reconcile identities.
 DATA_HOLDERS = {
     "hatchet-killtest": ["read"],
@@ -152,8 +157,8 @@ def _dev_server():
 
 
 @mock.patch.dict(os.environ, REQUIRED_ENV)
-def reach(paths):
-    """Render every policy, load it into a dev server, and ask its capabilities on `paths`."""
+def reach(paths, approle_names=()):
+    """Render every policy and ask OpenBao's dev server about `paths`."""
     variables = role_defaults()
     result = {"approles": render(variables, "{{ openbao_approles }}"), "failed": {}, "rejected": {}, "caps": {}}
     rendered = {}
@@ -173,6 +178,15 @@ def reach(paths):
             {"data": {"value": "dev-server fixture"}},
         )
         assert status == 200, body
+        if FAN_CONTROL_DATA in paths:
+            status, body = _call(
+                base,
+                "root",
+                "PUT",
+                FAN_CONTROL_DATA,
+                {"data": {"value": "fan-control fixture"}},
+            )
+            assert status == 200, body
         for name, text in rendered.items():
             status, body = _call(base, "root", "PUT", f"sys/policies/acl/{name}", {"policy": text})
             if status != 204:
@@ -194,6 +208,16 @@ def reach(paths):
                 base, [variables["openbao_operator_human_policy_name"]], DATA
             ),
         }
+        role_by_name = {role["name"]: role for role in result["approles"]}
+        result["approle_reads"] = {}
+        for name in approle_names:
+            role = role_by_name[name]
+            policies = role.get("token_policies") or [role["policy"]]
+            if isinstance(policies, str):
+                policies = [policies]
+            result["approle_reads"][name] = _read_with_policies(
+                base, policies, FAN_CONTROL_DATA
+            )
     finally:
         server.terminate()
         server.wait(timeout=30)
@@ -214,10 +238,23 @@ class HatchetKillTestPolicyReach(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        found = reach([DATA, METADATA])
+        found = reach(
+            [
+                DATA,
+                METADATA,
+                PARENT_METADATA,
+                RUSTFS_DATA,
+                RUSTFS_METADATA,
+                FAN_CONTROL_DATA,
+                FAN_CONTROL_METADATA,
+                APPS_PARENT_METADATA,
+            ],
+            approle_names=("ai-readonly", "ai-elevated"),
+        )
         cls.approles, cls.failed, cls.rejected, cls.caps = (
             found["approles"], found["failed"], found["rejected"], found["caps"])
         cls.reads = found["reads"]
+        cls.approle_reads = found["approle_reads"]
 
     def _holders(self, path):
         return holders(self.caps, path)
@@ -245,6 +282,38 @@ class HatchetKillTestPolicyReach(unittest.TestCase):
         status, body = self.reads["operator_human"]
         self.assertEqual(status, 200)
         self.assertEqual(body["data"]["data"]["value"], "dev-server fixture")
+
+    def test_ai_global_read_cannot_list_parent_but_operator_human_can(self):
+        self.assertEqual(self.caps["ai-global-read"][PARENT_METADATA], ["deny"])
+        self.assertIn("list", self.caps["operator-human"][PARENT_METADATA])
+
+    def test_actuating_leaves_are_denied_to_ai_global_read_and_readable_by_operator(self):
+        for data_path, metadata_path in (
+            (DATA, METADATA),
+            (RUSTFS_DATA, RUSTFS_METADATA),
+            (FAN_CONTROL_DATA, FAN_CONTROL_METADATA),
+        ):
+            with self.subTest(data_path=data_path):
+                for path in (data_path, metadata_path):
+                    self.assertEqual(self.caps["ai-global-read"][path], ["deny"])
+                    self.assertIn("read", self.caps["operator-human"][path])
+
+    def test_ai_read_roles_cannot_read_fan_control(self):
+        for name in ("ai-readonly", "ai-elevated"):
+            with self.subTest(approle=name):
+                status, body = self.approle_reads[name]
+                self.assertEqual(status, 403)
+                self.assertIn(b"permission denied", body.lower())
+
+    def test_ai_sessions_backup_still_cannot_read_the_rustfs_admin_leaf(self):
+        self.assertEqual(self.caps["ai-sessions-backup"][RUSTFS_DATA], ["deny"])
+        self.assertEqual(self.caps["ai-sessions-backup"][RUSTFS_METADATA], ["deny"])
+
+    def test_ai_global_read_can_still_list_the_shared_apps_parent(self):
+        self.assertNotEqual(
+            self.caps["ai-global-read"][APPS_PARENT_METADATA], ["deny"]
+        )
+        self.assertIn("list", self.caps["ai-global-read"][APPS_PARENT_METADATA])
 
 
 if __name__ == "__main__":

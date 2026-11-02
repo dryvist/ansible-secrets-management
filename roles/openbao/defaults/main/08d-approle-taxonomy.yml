@@ -45,7 +45,6 @@ openbao_approle_class_map: >-
     'github-enterprise-read': 'operator-admin',
     'github-exporter': 'service-runtime',
     'hatchet-eval-status': 'service-runtime',
-    'hatchet-killtest': 'converge-automation',
     'github-write': 'trusted-agent-write',
     'github-read': 'trusted-agent-read',
     'github-repo-create': 'operator-admin',
@@ -105,6 +104,7 @@ openbao_approle_class_map: >-
     'vikunja': 'service-runtime',
     'vikunja-mcp': 'service-runtime'
   } -%}
+  {%- set _ = _classes.update({openbao_hatchet_killtest_approle_name: 'converge-automation'}) -%}
   {%- for role in openbao_ai_apply_approles -%}
   {%- set _ = _classes.update({role.name: 'operator-admin'}) -%}
   {%- endfor -%}

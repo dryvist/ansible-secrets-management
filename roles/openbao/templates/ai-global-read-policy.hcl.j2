@@ -10,3 +10,11 @@ path "{{ openbao_kv_mount }}/metadata/{{ leaf }}" {
   capabilities = ["deny"]
 }
 {% endfor %}
+{% for parent in openbao_actuating_credential_leaves | map('dirname') | unique %}
+{% if parent in openbao_actuating_credential_dedicated_parents %}
+# Shared parents stay listable so unrelated sibling names remain visible.
+path "{{ openbao_kv_mount }}/metadata/{{ parent }}/" {
+  capabilities = ["deny"]
+}
+{% endif %}
+{% endfor %}

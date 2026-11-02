@@ -56,6 +56,9 @@ class BoundRequired(unittest.TestCase):
         self.assertEqual(
             _rendered("openbao_approle_bound_required_unbound", renamed, OPENBAO_MANAGEMENT_CIDRS=""),
             ["killtest-renamed"])
+        classes = _rendered("openbao_approle_class_map", renamed)
+        self.assertEqual(classes["killtest-renamed"], "converge-automation")
+        self.assertNotIn("hatchet-killtest", classes)
 
     def test_the_refusal_runs_before_creation_and_ignores_the_hatch(self):
         names = [task["name"] for task in yaml.safe_load(APPROLE_TASKS.read_text(encoding="utf-8"))]

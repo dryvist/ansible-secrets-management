@@ -5,6 +5,8 @@ openbao_cribl_edge_mac_a_policy_name: cribl-edge-mac-a
 openbao_cribl_edge_mac_a_approle_name: cribl-edge-mac-a
 openbao_cribl_edge_mac_b_policy_name: cribl-edge-mac-b
 openbao_cribl_edge_mac_b_approle_name: cribl-edge-mac-b
+# Account-wide RustFS admin credential, outside secret/apps/*.
+openbao_rustfs_admin_kv_path: infra/rustfs
 openbao_hatchet_killtest_policy_name: hatchet-killtest
 openbao_hatchet_killtest_approle_name: hatchet-killtest
 # Outside secret/apps/*, which standing AI readers cover.
@@ -13,6 +15,11 @@ openbao_hatchet_killtest_kv_path: killtest/hatchet
 # Add future actuating leaves here; the AI global-read policy denies each one.
 openbao_actuating_credential_leaves:
   - "{{ openbao_hatchet_killtest_kv_path }}"
+  - "{{ openbao_rustfs_admin_kv_path }}"
+  - "{{ openbao_fan_control_write_kv_path }}"
+# Only the kill-test leaf has a parent dedicated to actuating credentials.
+openbao_actuating_credential_dedicated_parents:
+  - "{{ openbao_hatchet_killtest_kv_path | dirname }}"
 openbao_apps_read_excluded_generated_apps:
   - "{{ openbao_cribl_edge_mac_a_app }}"
   - "{{ openbao_cribl_edge_mac_b_app }}"

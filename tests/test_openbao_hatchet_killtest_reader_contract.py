@@ -105,7 +105,7 @@ class HatchetKillTestReaderContract(unittest.TestCase):
         self.assertEqual(rendered_class, "machine")
         self.assertNotEqual(rendered_class, "unbound")
         taxonomy =(DEFAULTS / "08d-approle-taxonomy.yml").read_text(encoding="utf-8")
-        self.assertIn("'hatchet-killtest': 'converge-automation'", taxonomy)
+        self.assertIn("openbao_hatchet_killtest_approle_name: 'converge-automation'", taxonomy)
 
         agent_sources = [
             path for path in DEFAULTS.glob("*.yml")
