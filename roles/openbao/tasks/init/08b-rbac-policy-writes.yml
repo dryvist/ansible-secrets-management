@@ -146,6 +146,13 @@
     label: "{{ item.name }}"
   no_log: true
   changed_when: true
+  register: openbao_rbac_policy_write_results
+  failed_when: >-
+    (rc | default(1) | int) != 0
+    and not (
+      openbao_reconcile_mode | default(false) | bool
+      and item.name in openbao_reconcile_pinned_policy_names
+    )
   when:
     - openbao_bootstrap_token is defined
     - >-
@@ -154,6 +161,50 @@
       (openbao_existing_policy_map | default({})).get(item.name, '')
       !=
       (openbao_rendered_policy_map | default({})).get(item.name, '')
+
+- name: Resolve pinned RBAC policy write outcomes
+  ansible.builtin.set_fact:
+    openbao_pinned_rbac_write_outcomes: >-
+      {%- set denied = [] -%}
+      {%- set other_failures = [] -%}
+      {%- for result in (openbao_rbac_policy_write_results.results | default([])) -%}
+      {%- if not (result.skipped | default(false))
+         and result.item.name in openbao_reconcile_pinned_policy_names
+         and (result.rc | default(1) | int) != 0 -%}
+      {%- set message = result.stderr | default('') | lower -%}
+      {%- set target = denied if 'permission denied' in message else other_failures -%}
+      {%- set _ = target.append(result.item.name) -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {{ {
+        'permission_denied': denied | unique | sort | list,
+        'other_failures': other_failures | unique | sort | list
+      } }}
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_reconcile_mode | default(false) | bool
+
+- name: Fail when a pinned RBAC policy write has another error
+  ansible.builtin.fail:
+    msg: >-
+      Pinned RBAC policy writes failed for reasons other than permission
+      denied: {{ openbao_pinned_rbac_write_outcomes.other_failures | join(', ') }}.
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_reconcile_mode | default(false) | bool
+    - openbao_pinned_rbac_write_outcomes.other_failures | length > 0
+
+- name: OpenBao pinned RBAC policies need a provisioning run
+  ansible.builtin.debug:
+    msg: >-
+      needs provisioning run:
+      {{ openbao_pinned_rbac_write_outcomes.permission_denied | join(', ') }}
+  # Reported as changed: the converge telemetry counts ok and skipped alike, and the Splunk alert keys on changed>0.
+  changed_when: true
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_reconcile_mode | default(false) | bool
+    - openbao_pinned_rbac_write_outcomes.permission_denied | length > 0
 
 # Named retired policies (07c-approle-undeclared-exceptions.yml) are deleted
 # during reconcile. Prefix-discovered Terrakube policy cleanup requires a
