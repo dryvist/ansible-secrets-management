@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.57.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.56.0...v0.57.0) (2026-11-02)
+
+
+### Features
+
+* **openbao:** add AppRoles for the vikunja-clerk and docs-updater fleet agents ([#416](https://github.com/dryvist/ansible-secrets-management/issues/416)) ([06f7bc9](https://github.com/dryvist/ansible-secrets-management/commit/06f7bc946307eb3ef0593e39708c93e1863c5935))
+* **openbao:** add the converge-published apps/hatchet/eval leaf ([#417](https://github.com/dryvist/ansible-secrets-management/issues/417)) ([316ae2f](https://github.com/dryvist/ansible-secrets-management/commit/316ae2f1973e344fbf338f65787075754bfbeaaf))
+* **openbao:** add the role-eval-status GitHub set and hatchet-eval-status AppRole ([#418](https://github.com/dryvist/ansible-secrets-management/issues/418)) ([0f6fd09](https://github.com/dryvist/ansible-secrets-management/commit/0f6fd09b1e16d16cc75d5d830c5122547648f577))
+
 ## [0.56.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.55.0...v0.56.0) (2026-11-02)
 
 
