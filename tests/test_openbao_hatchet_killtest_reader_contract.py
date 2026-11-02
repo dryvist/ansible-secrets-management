@@ -36,6 +36,13 @@ def _grants(source):
     ]
 
 
+def _duration_seconds(value):
+    match = re.fullmatch(r"([1-9][0-9]*)([smhd])", str(value))
+    if match is None:
+        return 0
+    return int(match.group(1)) * {"s": 1, "m": 60, "h": 3600, "d": 86400}[match.group(2)]
+
+
 class HatchetKillTestReaderContract(unittest.TestCase):
     def setUp(self):
         self.names = _yaml("05h-cribl-edge-readers.yml")
@@ -75,6 +82,7 @@ class HatchetKillTestReaderContract(unittest.TestCase):
         self.assertEqual(self.names["openbao_hatchet_killtest_policy_name"], "hatchet-killtest")
         self.assertEqual(self.names["openbao_hatchet_killtest_approle_name"], "hatchet-killtest")
         self.assertEqual(self.reader["policy"], POLICY_NAME)
+        self.assertNotIn("token_policies", self.reader)
         attached_roles = [role for role in self.roles if role.get("policy") == POLICY_NAME]
         self.assertEqual(len(attached_roles), 1)
         self.assertEqual(attached_roles[0]["name"], APPROLE_NAME)
@@ -83,10 +91,46 @@ class HatchetKillTestReaderContract(unittest.TestCase):
         self.assertNotIn("role_id", self.reader)
         self.assertNotIn("secret_id", self.reader)
 
-        self.assertEqual(self.reader["secret_id_num_uses"], "{{ openbao_approle_per_call_secret_id_num_uses }}")
-        self.assertEqual(_yaml("08a-admin-and-ttls.yml")["openbao_approle_per_call_secret_id_num_uses"], 1)
-        self.assertEqual(self.reader["secret_id_ttl"], "{{ openbao_approle_per_call_secret_id_ttl }}")
-        self.assertEqual(self.reader["token_max_ttl"], "15m")
+        ttl_defaults = _yaml("08a-admin-and-ttls.yml")
+        rendered_reader = {
+            **self.reader,
+            "name": _render(self.reader["name"], self.names),
+            "policy": _render(self.reader["policy"], self.names),
+            "secret_id_ttl": _render(self.reader["secret_id_ttl"], ttl_defaults),
+            "secret_id_num_uses": _render(self.reader["secret_id_num_uses"], ttl_defaults),
+            "token_ttl": _render(self.reader["token_ttl"], self.names),
+            "token_max_ttl": _render(self.reader["token_max_ttl"], self.names),
+        }
+        rendered_parameters = _render(
+            _yaml("08b-cidr-and-unlock.yml")["openbao_approle_cli_parameters"],
+            {
+                "openbao_approles": [rendered_reader],
+                "openbao_approle_cidr_class_map": {"hatchet-killtest": "machine"},
+                "openbao_approle_cidr_classes": {"machine": "192.0.2.0/24"},
+                "openbao_approle_bind_secret_id": True,
+                "openbao_approle_token_ttl": "1h",
+                "openbao_approle_token_max_ttl": "4h",
+                "openbao_approle_secret_id_ttl_overrides": {},
+                "openbao_approle_secret_id_ttl": "24h",
+                "openbao_approle_secret_id_num_uses_overrides": {},
+                "openbao_approle_secret_id_num_uses": 30,
+            },
+        )["hatchet-killtest"]
+        self.assertEqual(rendered_parameters["token_policies"].split(","), ["hatchet-killtest"])
+        rendered_secret_id_ttl = _duration_seconds(rendered_parameters["secret_id_ttl"])
+        documented_secret_id_ttl = _duration_seconds(
+            ttl_defaults["openbao_approle_per_call_secret_id_ttl"]
+        )
+        self.assertGreater(rendered_secret_id_ttl, 0)
+        self.assertGreater(documented_secret_id_ttl, 0)
+        self.assertLessEqual(rendered_secret_id_ttl, documented_secret_id_ttl)
+        self.assertEqual(
+            int(rendered_parameters["secret_id_num_uses"]),
+            ttl_defaults["openbao_approle_per_call_secret_id_num_uses"],
+        )
+        self.assertEqual(rendered_parameters["token_ttl"], "15m")
+        self.assertEqual(rendered_parameters["token_max_ttl"], "15m")
+        self.assertNotIn("token_num_uses", rendered_parameters)
 
         # Minted only for Semaphore runs, so it keeps the default machine CIDR class.
         cidr = _yaml("08b-cidr-and-unlock.yml")
