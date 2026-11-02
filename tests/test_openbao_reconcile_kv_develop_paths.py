@@ -12,13 +12,11 @@ from openbao_reconcile_bounds_helpers import (
     _trust,
     rendered_defaults,
 )
-import subprocess
 
 from ansible.template import trust_as_template
 
-# Snapshot fallback for depth-one CI checkouts where origin/develop is absent.
-# When the ref exists, the regression test renders its actual policy template.
-# Metadata grants are outside this data-path regression check.
+# Fixed snapshot of the KV data grants before exact-leaf bounding; a test never
+# reads a moving branch. Metadata grants are outside this data-path check.
 DEVELOP_KV_DATA_GRANTS = """
 {% for mount in openbao_kv_mounts | default([]) %}
 path "{{ mount.path | default(mount) }}/*" {
@@ -54,25 +52,11 @@ def _render_template_text(values, template):
     templar._loader.set_basedir(str(ROOT / "roles" / "openbao"))
     return templar.template(trust_as_template(template))
 
-def _develop_reconcile_template():
-    result = subprocess.run(
-        [
-            "git",
-            "show",
-            "origin/develop:roles/openbao/templates/openbao-reconcile-policy.hcl.j2",
-        ],
-        cwd=ROOT,
-        capture_output=True,
-        check=False,
-        text=True,
-    )
-    return result.stdout if result.returncode == 0 else DEVELOP_KV_DATA_GRANTS
-
 def test_reconcile_kv_data_grants_preserve_develop_paths_or_explain_removal(
     rendered_defaults,
 ):
     values, _approles, _policies = rendered_defaults
-    develop_rendered = _render_template_text(values, _develop_reconcile_template())
+    develop_rendered = _render_template_text(values, DEVELOP_KV_DATA_GRANTS)
     all_develop_stanzas = dict(_stanzas(develop_rendered))
     mounts = _render_value(values, values["openbao_kv_mounts"])
     mount_wildcards = {
