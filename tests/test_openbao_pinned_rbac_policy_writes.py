@@ -184,7 +184,20 @@ class PinnedWriteOutcomes(unittest.TestCase):
 
     def test_non_pinned_write_keeps_the_existing_loop_command_and_redaction(self):
         write = _task(WRITE_TASK)
-        self.assertEqual(write["loop"], "{{ openbao_reachable_policies }}")
+        selected = [{"name": "apps"}]
+        all_policies = [*selected, {"name": "ssh-ca"}]
+        self.assertEqual(
+            _render(write["loop"], {
+                "openbao_rbac_policy_name": "apps",
+                "openbao_rbac_policy_targets": selected,
+                "openbao_reachable_policies": all_policies,
+            }),
+            selected,
+        )
+        self.assertEqual(
+            _render(write["loop"], {"openbao_reachable_policies": all_policies}),
+            all_policies,
+        )
         self.assertEqual(write["ansible.builtin.command"]["cmd"], "bao policy write {{ item.name }} -")
         self.assertTrue(write["no_log"])
         self.assertTrue(write["changed_when"])

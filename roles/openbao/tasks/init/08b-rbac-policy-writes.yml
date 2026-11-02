@@ -22,6 +22,16 @@
   no_log: true
   changed_when: false
   check_mode: false
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_roster_live_policy_names is not defined
+
+- name: Resolve existing RBAC policy names from the roster audit or list result
+  ansible.builtin.set_fact:
+    openbao_existing_policy_names: >-
+      {{ openbao_roster_live_policy_names
+         if openbao_roster_live_policy_names is defined
+         else (openbao_policies_raw.stdout | default('[]', true) | from_json) }}
   when: openbao_bootstrap_token is defined
 
 - name: Read existing RBAC policy contents
@@ -34,7 +44,10 @@
   become: "{{ openbao_cli_become }}"
   vars:
     ansible_become: "{{ openbao_cli_become }}"
-  loop: "{{ openbao_reachable_policies }}"
+  loop: >-
+    {{ openbao_rbac_policy_targets
+       if openbao_rbac_policy_name | default('', true) | length > 0
+       else openbao_reachable_policies }}
   loop_control:
     label: "{{ item.name }}"
   register: openbao_existing_policy_reads
@@ -49,7 +62,26 @@
   failed_when: false
   when:
     - openbao_bootstrap_token is defined
-    - item.name in (openbao_policies_raw.stdout | from_json)
+    - item.name in openbao_existing_policy_names
+
+- name: FAIL -- an existing RBAC policy read was DENIED, so absence cannot be concluded
+  vars:
+    _denied: >-
+      {{ openbao_existing_policy_reads.results | default([])
+         | rejectattr('skipped', 'defined')
+         | selectattr('rc', 'defined')
+         | rejectattr('rc', 'equalto', 0)
+         | selectattr('stderr', 'search', '403')
+         | map(attribute='item') | map(attribute='name') | list }}
+  ansible.builtin.assert:
+    that:
+      - _denied | length == 0
+    fail_msg: >-
+      Existing RBAC policy reads were denied (403) for: {{ _denied | join(', ') }}.
+      A denied read does not mean the policy is absent, so this run must not
+      attempt a write based on that result.
+    quiet: true
+  when: openbao_bootstrap_token is defined
 
 # Both sides are `trim`ed and read from the CORRECT key, because the write below
 # is a no-op only when the two compare equal -- and it was never equal:
@@ -89,8 +121,10 @@
   ansible.builtin.set_fact:
     openbao_changed_policy_names: >-
       {%- set _names = [] -%}
-      {%- for policy in openbao_reachable_policies -%}
-      {%- if policy.name not in (openbao_policies_raw.stdout | from_json)
+      {%- for policy in (openbao_rbac_policy_targets
+                         if openbao_rbac_policy_name | default('', true) | length > 0
+                         else openbao_reachable_policies) -%}
+      {%- if policy.name not in openbao_existing_policy_names
          or (openbao_existing_policy_map | default({})).get(policy.name, '')
             != (openbao_rendered_policy_map | default({})).get(policy.name, '') -%}
       {%- set _ = _names.append(policy.name) -%}
@@ -120,10 +154,10 @@
   vars:
     _retired: >-
       {{ openbao_retired_policies
-         | select('in', openbao_policies_raw.stdout | default('[]', true) | from_json)
+         | select('in', openbao_existing_policy_names)
          | list
          + ([] if (openbao_reconcile_mode | default(false) | bool)
-            else (openbao_policies_raw.stdout | default('[]', true) | from_json
+            else (openbao_existing_policy_names
                   | select('match', '^' ~ (openbao_retired_terrakube_prefix | regex_escape)) | list)) }}
   when:
     - ansible_check_mode
@@ -141,7 +175,10 @@
   become: "{{ openbao_cli_become }}"
   vars:
     ansible_become: "{{ openbao_cli_become }}"
-  loop: "{{ openbao_reachable_policies }}"
+  loop: >-
+    {{ openbao_rbac_policy_targets
+       if openbao_rbac_policy_name | default('', true) | length > 0
+       else openbao_reachable_policies }}
   loop_control:
     label: "{{ item.name }}"
   no_log: true
@@ -156,7 +193,7 @@
   when:
     - openbao_bootstrap_token is defined
     - >-
-      item.name not in (openbao_policies_raw.stdout | from_json)
+      item.name not in openbao_existing_policy_names
       or
       (openbao_existing_policy_map | default({})).get(item.name, '')
       !=
@@ -221,9 +258,9 @@
     ansible_become: "{{ openbao_cli_become }}"
   loop: >-
     {{ openbao_retired_policies
-       | select('in', openbao_policies_raw.stdout | default('[]', true) | from_json) | list
+       | select('in', openbao_existing_policy_names) | list
        + ([] if (openbao_reconcile_mode | default(false) | bool)
-          else (openbao_policies_raw.stdout | default('[]', true) | from_json
+          else (openbao_existing_policy_names
                 | select('match', '^' ~ (openbao_retired_terrakube_prefix | regex_escape)) | list)) }}
   no_log: true
   changed_when: true

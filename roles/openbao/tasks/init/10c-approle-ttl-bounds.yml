@@ -70,7 +70,9 @@
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
   delegate_to: "{{ openbao_cli_host }}"
   become: "{{ openbao_cli_become }}"
-  loop: "{{ openbao_manageable_approles | zip(openbao_approle_checks.results | default([])) | list }}"
+  loop: >-
+    {{ (openbao_approle_config_targets | default(openbao_manageable_approles))
+       | zip(openbao_approle_checks.results | default([])) | list }}
   loop_control:
     label: "{{ item.0.name }}"
   no_log: true

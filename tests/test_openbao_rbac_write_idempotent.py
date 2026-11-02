@@ -31,19 +31,24 @@ from ansible.template import Templar, trust_as_template
 
 ROOT = Path(__file__).resolve().parents[1]
 TASKS = ROOT / "roles" / "openbao" / "tasks" / "init" / "08b-rbac-policy-writes.yml"
+POLICY_TASKS = ROOT / "roles" / "openbao" / "tasks" / "init" / "08-rbac-policies.yml"
+POLICY_DECLARATION_TASKS = ROOT / "roles" / "openbao" / "tasks" / "init" / "08-policy-declaration-assertions.yml"
+SELECTOR_TASKS = ROOT / "roles" / "openbao" / "tasks" / "init" / "select-single-object.yml"
 EXISTING_TASK = "Build the existing RBAC policy content map"
 WRITE_TASK = "Write the RBAC policies that are missing or changed"
+DENIED_READ_TASK = "FAIL -- an existing RBAC policy read was DENIED, so absence cannot be concluded"
+POLICY_NAMES_TASK = "Resolve existing RBAC policy names from the roster audit or list result"
 
 # What the CLI actually returns: no `data` envelope, trailing newline appended.
 POLICY_BODY = 'path "sys/policies/acl/apps" {\n  capabilities = ["read"]\n}\n'
 SERVER_STORED = POLICY_BODY + "\n"
 
 
-def _task(name):
-    for t in yaml.safe_load(TASKS.read_text(encoding="utf-8")):
+def _task(name, path=TASKS):
+    for t in yaml.safe_load(path.read_text(encoding="utf-8")):
         if t.get("name") == name:
             return t
-    raise AssertionError(f"task {name!r} not found in {TASKS}")
+    raise AssertionError(f"task {name!r} not found in {path}")
 
 
 def _render(expr, variables, wrap=False):
@@ -79,7 +84,7 @@ def write_fires(name, existing, rendered):
         cond[0],
         {
             "item": {"name": name},
-            "openbao_policies_raw": {"stdout": json.dumps([name])},
+            "openbao_existing_policy_names": [name],
             "openbao_existing_policy_map": existing,
             "openbao_rendered_policy_map": rendered,
         },
@@ -155,6 +160,137 @@ class CombineLoopCollapseIsEquivalent(unittest.TestCase):
 
     def test_old_and_new_reductions_agree(self):
         self.assertEqual(self._old_combine_result(), self._new_pairs_result())
+
+
+class SinglePolicySelection(unittest.TestCase):
+    CANDIDATES = [{"name": "apps"}, {"name": "ssh-ca"}]
+
+    def _targets(self, selector):
+        expression = _task("Resolve the selected OpenBao object", SELECTOR_TASKS)[
+            "ansible.builtin.set_fact"]["openbao_single_object_targets"]
+        return _render(expression, {
+            "openbao_single_object_candidates": self.CANDIDATES,
+            "openbao_single_object_selector": selector,
+        })
+
+    def _policy_loop(self, task_name, selector="", selected=None):
+        expression = _task(task_name)["loop"]
+        return _render(expression, {
+            "openbao_rbac_policy_name": selector,
+            "openbao_rbac_policy_targets": selected or [],
+            "openbao_reachable_policies": self.CANDIDATES,
+        })
+
+    def test_selected_target_is_an_exact_single_match(self):
+        self.assertEqual(self._targets("ssh-ca"), [{"name": "ssh-ca"}])
+
+    def test_unknown_and_ambiguous_targets_do_not_match_exactly_once(self):
+        self.assertEqual(self._targets("unknown"), [])
+        duplicate = [{"name": "apps"}, {"name": "apps"}]
+        expression = _task("Resolve the selected OpenBao object", SELECTOR_TASKS)[
+            "ansible.builtin.set_fact"]["openbao_single_object_targets"]
+        duplicate_targets = _render(expression, {
+            "openbao_single_object_candidates": duplicate,
+            "openbao_single_object_selector": "apps",
+        })
+        self.assertEqual(duplicate_targets, duplicate)
+        exactly_one = _task("Require the OpenBao selector to match exactly one managed object", SELECTOR_TASKS)
+        condition = exactly_one["ansible.builtin.assert"]["that"][0]
+        self.assertFalse(_render(condition, {"openbao_single_object_targets": []}, wrap=True))
+        self.assertFalse(_render(condition, {"openbao_single_object_targets": duplicate}, wrap=True))
+        self.assertTrue(_render(condition, {"openbao_single_object_targets": [duplicate[0]]}, wrap=True))
+
+    def test_empty_selector_keeps_the_full_policy_target_list(self):
+        for task_name in (
+            "Read existing RBAC policy contents",
+            WRITE_TASK,
+        ):
+            self.assertEqual(self._policy_loop(task_name), self.CANDIDATES)
+
+    def test_valid_selector_limits_only_the_policy_read_and_write_loops(self):
+        selected = [self.CANDIDATES[1]]
+        self.assertEqual(
+            self._policy_loop("Read existing RBAC policy contents", "ssh-ca", selected),
+            selected,
+        )
+        self.assertEqual(self._policy_loop(WRITE_TASK, "ssh-ca", selected), selected)
+
+    def test_reconcile_guard_rejects_single_object_selection(self):
+        guard = _task("Reject an OpenBao single-object selector during reconcile", SELECTOR_TASKS)
+        expression = guard["ansible.builtin.assert"]["that"][0]
+        self.assertFalse(_render(expression, {"openbao_reconcile_mode": True}, wrap=True))
+        self.assertTrue(_render(expression, {"openbao_reconcile_mode": False}, wrap=True))
+
+    def test_policy_selection_candidate_is_the_reachable_declared_set(self):
+        task = _task("Select one RBAC policy when a policy name was requested", POLICY_TASKS)
+        candidates = task["vars"]["openbao_single_object_candidates"]
+        self.assertIn("openbao_reachable_policies", candidates)
+        self.assertIn("openbao_policies", candidates)
+        self.assertIn("openbao_rbac_policy_name", task["vars"]["openbao_single_object_selector"])
+
+        task_names = [task.get("name") for task in yaml.safe_load(POLICY_TASKS.read_text(encoding="utf-8"))]
+        self.assertLess(
+            task_names.index("Assert no scheduled RBAC policy rendered empty"),
+            task_names.index("Select one RBAC policy when a policy name was requested"),
+        )
+        self.assertLess(
+            task_names.index("Select one RBAC policy when a policy name was requested"),
+            task_names.index("Refuse live objects that collide with roster agent names"),
+        )
+
+    def test_policy_full_render_and_empty_guard_remain_global(self):
+        render = _task("Render the RBAC policies on the controller", POLICY_TASKS)
+        pairs = render["vars"]["_openbao_rendered_policy_pairs"]
+        self.assertIn("for item in openbao_reachable_policies", pairs)
+        empty_guard = _task("Assert no scheduled RBAC policy rendered empty", POLICY_TASKS)
+        self.assertIn("openbao_reachable_policies", empty_guard["vars"]["_openbao_empty_rendered_policies"])
+
+    def test_declaration_assertions_are_imported_before_policy_work(self):
+        imported = _task("Assert RBAC policy declaration invariants", POLICY_TASKS)
+        self.assertEqual(
+            imported["ansible.builtin.import_tasks"], "08-policy-declaration-assertions.yml"
+        )
+        tasks = yaml.safe_load(POLICY_DECLARATION_TASKS.read_text(encoding="utf-8"))
+        self.assertEqual(
+            [task["name"] for task in tasks],
+            [
+                "Assert every Terrakube workspace policy names the workspace it points at",
+                "Assert no AI domain name is a wildcard or the all rollup",
+            ],
+        )
+        self.assertTrue(all(task.get("run_once") for task in tasks))
+
+
+class LiveNameReuseAndDeniedReads(unittest.TestCase):
+    def test_policy_list_reuses_the_roster_fact_or_parses_the_fallback(self):
+        expression = _task(POLICY_NAMES_TASK)["ansible.builtin.set_fact"][
+            "openbao_existing_policy_names"]
+        self.assertEqual(_render(expression, {
+            "openbao_roster_live_policy_names": ["apps", "ssh-ca"],
+            "openbao_policies_raw": {"stdout": '["fallback"]'},
+        }), ["apps", "ssh-ca"])
+        self.assertEqual(_render(expression, {
+            "openbao_policies_raw": {"stdout": '["fallback"]'},
+        }), ["fallback"])
+
+    def test_policy_list_fallback_runs_only_without_roster_fact(self):
+        task = _task("List existing policies")
+        self.assertIn("openbao_roster_live_policy_names is not defined", task["when"])
+        self.assertNotIn("failed_when", task)
+
+    def test_a_denied_existing_policy_read_fails_instead_of_becoming_absent(self):
+        task = _task(DENIED_READ_TASK)
+        denied = _render(task["vars"]["_denied"], {
+            "openbao_existing_policy_reads": {"results": [{
+                "item": {"name": "apps"},
+                "rc": 1,
+                "stderr": "permission denied (403)",
+            }]},
+        })
+        self.assertEqual(denied, ["apps"])
+        self.assertFalse(_render(
+            task["ansible.builtin.assert"]["that"][0], {"_denied": denied}, wrap=True
+        ))
 
 
 if __name__ == "__main__":
