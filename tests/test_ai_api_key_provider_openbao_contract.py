@@ -87,16 +87,18 @@ def test_legacy_internal_provider_area_remains_denied():
     assert "externally configured leaves" in local_policy
 
 
-def test_local_llm_reads_only_exact_app_agent_token_leaves():
+def test_each_agent_tier_reader_policy_reads_only_its_own_leaf():
     policy_defaults = _read("roles/openbao/defaults/main/05k-agent-tier-secret-paths.yml")
     local_policy = _read("roles/openbao/templates/local-llm-policy.hcl.j2")
+    reader_policy = _read("roles/openbao/templates/app-agent-tier-reader-policy.hcl.j2")
     paths = yaml.safe_load(policy_defaults)
     mount = paths["openbao_agent_tier_mount"]
-    leaves = paths["openbao_app_agent_tier_paths"]
+    readers = paths["openbao_app_agent_tier_readers"]
 
-    assert "{% for tier_path in openbao_app_agent_tier_paths %}" in local_policy
-    assert 'path "{{ openbao_agent_tier_mount }}/data/{{ tier_path }}"' in local_policy
-    assert 'path "{{ openbao_agent_tier_mount }}/metadata/{{ tier_path }}"' in local_policy
+    assert "openbao_agent_tier_mount" not in local_policy
+    assert 'path "{{ openbao_agent_tier_mount }}/data/{{ item.tier }}"' in reader_policy
+    assert 'path "{{ openbao_agent_tier_mount }}/metadata/{{ item.tier }}"' in reader_policy
+    leaves = [reader["tier"] for reader in readers]
     assert len(leaves) == len(set(leaves))
     assert all("*" not in leaf and "+" not in leaf for leaf in leaves)
     assert mount == "agent-tier"

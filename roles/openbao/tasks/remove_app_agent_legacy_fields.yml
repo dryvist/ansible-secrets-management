@@ -1,0 +1,73 @@
+---
+# Remove only fields whose replacement is already present in its dedicated
+# agent-tier leaf. A 403 or 404 on either read means the source is not
+# provisioned yet; it must not turn the routine seed into a failure.
+- name: Check whether the dedicated agent-tier leaf is provisioned
+  ansible.builtin.uri:
+    url: "{{ openbao_cli_addr }}/v1/{{ openbao_agent_tier_mount }}/data/{{ openbao_agent_tier_reader.tier }}"
+    method: GET
+    headers:
+      X-Vault-Token: "{{ openbao_bootstrap_token }}"
+    status_code: [200, 403, 404]
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
+  register: openbao_agent_tier_current
+  changed_when: false
+  no_log: true
+
+- name: Read the legacy shared app leaf when the dedicated leaf exists
+  ansible.builtin.uri:
+    url: "{{ openbao_cli_addr }}/v1/{{ openbao_kv_mount }}/data/{{ openbao_agent_tier_reader.legacy_app_path }}"
+    method: GET
+    headers:
+      X-Vault-Token: "{{ openbao_bootstrap_token }}"
+    status_code: [200, 403, 404]
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
+  register: openbao_agent_tier_legacy_current
+  changed_when: false
+  no_log: true
+  when: openbao_agent_tier_current.status | default(0) == 200
+
+- name: Prepare the legacy leaf with only provisioned tier fields removed
+  ansible.builtin.set_fact:
+    openbao_agent_tier_legacy_remove_fields: >-
+      {{ openbao_agent_tier_reader.generated_fields
+         | intersect((openbao_agent_tier_current.json.data.data | default({}, true)) | list)
+         | intersect((openbao_agent_tier_legacy_current.json.data.data | default({}, true)) | list) }}
+    openbao_agent_tier_legacy_kept_data: >-
+      {{ (openbao_agent_tier_legacy_current.json.data.data | default({}, true)
+          | dict2items
+          | rejectattr('key', 'in', openbao_agent_tier_legacy_remove_fields)
+          | items2dict) }}
+  no_log: true
+  when:
+    - openbao_agent_tier_current.status | default(0) == 200
+    - openbao_agent_tier_legacy_current.status | default(0) == 200
+
+- name: Remove migrated fields from the legacy leaf with a check-and-set write
+  ansible.builtin.uri:
+    url: "{{ openbao_cli_addr }}/v1/{{ openbao_kv_mount }}/data/{{ openbao_agent_tier_reader.legacy_app_path }}"
+    method: POST
+    headers:
+      X-Vault-Token: "{{ openbao_bootstrap_token }}"
+    body_format: json
+    body:
+      data: "{{ openbao_agent_tier_legacy_kept_data }}"
+      options:
+        cas: "{{ openbao_agent_tier_legacy_current.json.data.metadata.version | int }}"
+    status_code: [200, 204]
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
+  no_log: true
+  changed_when: true
+  when:
+    - openbao_agent_tier_current.status | default(0) == 200
+    - openbao_agent_tier_legacy_current.status | default(0) == 200
+    - openbao_agent_tier_legacy_remove_fields | default([]) | length > 0

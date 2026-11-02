@@ -158,8 +158,18 @@ def test_eval_leaf_adds_only_its_exact_read_grant_for_the_apps_reader(leaf):
 def test_vikunja_generated_password_coexists_with_promoted_fields():
     generated = _yaml(GENERATED_FILE)["openbao_generated_app_secrets"]["vikunja"]
     promoted = _yaml(PROMOTED_FILE)["openbao_promoted_app_secrets"]["vikunja"]
+    readers = _yaml(DEFAULTS / "05k-agent-tier-secret-paths.yml")[
+        "openbao_app_agent_tier_readers"
+    ]
+    tier_fields = {
+        field
+        for reader in readers
+        if reader["tier"].startswith("vikunja-")
+        for field in reader["generated_fields"]
+    }
 
-    assert {"vikunja_agent_read_password", "vikunja_agent_write_password"} <= set(generated)
+    assert {"vikunja_agent_read_password", "vikunja_agent_write_password"} == tier_fields
+    assert not tier_fields.intersection(generated)
     assert promoted
     assert not set(generated).intersection(promoted)
     assert "vikunja" in _read_apps(_yaml(NAMES_FILE))
@@ -168,8 +178,13 @@ def test_vikunja_generated_password_coexists_with_promoted_fields():
 def test_zammad_agent_write_token_is_generated_with_the_app_credentials():
     generated = _yaml(GENERATED_FILE)["openbao_generated_app_secrets"]
     promoted = _yaml(PROMOTED_FILE)["openbao_promoted_app_secrets"]
+    readers = _yaml(DEFAULTS / "05k-agent-tier-secret-paths.yml")[
+        "openbao_app_agent_tier_readers"
+    ]
+    zammad_reader = next(reader for reader in readers if reader["tier"] == "zammad-write")
 
-    assert "zammad_agent_write_api_token" in generated["zammad"]
+    assert zammad_reader["generated_fields"] == ["zammad_agent_write_api_token"]
+    assert "zammad_agent_write_api_token" not in generated["zammad"]
     assert len(generated["zammad"]) == len(set(generated["zammad"]))
     assert "zammad_agent_write_api_token" not in promoted.get("zammad", {})
 

@@ -91,7 +91,8 @@ def test_eval_namespace_grants_are_exact_specialist_platform_leaves() -> None:
 def test_agent_tier_mount_has_exact_publisher_and_router_grants_only() -> None:
     defaults = yaml.safe_load(AGENT_PATH_DEFAULTS.read_text(encoding="utf-8"))
     mount = defaults["openbao_agent_tier_mount"]
-    leaves = defaults["openbao_app_agent_tier_paths"]
+    readers = defaults["openbao_app_agent_tier_readers"]
+    leaves = [reader["tier"] for reader in readers]
     assert leaves and mount != "secret"
     environment = jinja2.Environment()
     environment.filters["comment"] = lambda value: ""
@@ -100,6 +101,7 @@ def test_agent_tier_mount_has_exact_publisher_and_router_grants_only() -> None:
         "openbao_kv_mount": "secret",
         "openbao_agent_tier_mount": mount,
         "openbao_app_agent_tier_paths": leaves,
+        "openbao_app_agent_tier_readers": readers,
     }
 
     def mount_grants(name: str) -> set[tuple[str, tuple[str, ...]]]:
@@ -116,7 +118,28 @@ def test_agent_tier_mount_has_exact_publisher_and_router_grants_only() -> None:
     assert mount_grants("ansible-converge-policy.hcl.j2") == {
         (path, ("create", "update", "read")) for path in data
     } | metadata
-    assert mount_grants("local-llm-policy.hcl.j2") == {(path, ("read",)) for path in data} | metadata
+    assert mount_grants("local-llm-policy.hcl.j2") == set()
+
+    for reader in readers:
+        reader_context = context | {"item": reader}
+        source = (ROOT / "roles/openbao/templates/app-agent-tier-reader-policy.hcl.j2").read_text(
+            encoding="utf-8"
+        )
+        rendered = environment.from_string(source).render(**reader_context)
+        grants = {
+            (path, tuple(re.findall(r'"([^\"]+)"', caps)))
+            for path, caps in PATH_BLOCK.findall(rendered)
+        }
+        assert grants == {
+            (f"{mount}/data/{reader['tier']}", ("read",)),
+            (f"{mount}/metadata/{reader['tier']}", ("read",)),
+        }
+        assert not any("list" in caps for _path, caps in grants)
+        assert not any(
+            f"{mount}/data/{other}" in path
+            for path, _caps in grants
+            for other in set(leaves) - {reader["tier"]}
+        )
 
     # Every other non-admin policy must not reach the mount at all: no reference to
     # the mount variable or name, and no pattern that matches any tier endpoint.
@@ -133,7 +156,7 @@ def test_agent_tier_mount_has_exact_publisher_and_router_grants_only() -> None:
     for template in (ROOT / "roles/openbao/templates").glob("*.hcl.j2"):
         if template.name in {
             "ansible-converge-policy.hcl.j2",
-            "local-llm-policy.hcl.j2",
+            "app-agent-tier-reader-policy.hcl.j2",
             *PRIVILEGED_POLICY_TEMPLATES,
         }:
             continue
@@ -149,7 +172,12 @@ def test_agent_tier_mount_has_exact_publisher_and_router_grants_only() -> None:
                 f"{template.name} path {path} reaches the {mount} mount"
             )
 
-    # Data-driven policy paths come from role defaults; only the tier file names the mount.
-    for path in (ROOT / "roles/openbao/defaults/main").glob("*.yml"):
-        if path != AGENT_PATH_DEFAULTS:
-            assert mount not in path.read_text(encoding="utf-8"), path.name
+    # Seed-path and policy-registry defaults may name the mount and reader
+    # policies. Actual grants remain limited to the templates checked above.
+    for template in (ROOT / "roles/openbao/templates").glob("*.hcl.j2"):
+        if template.name not in {
+            "ansible-converge-policy.hcl.j2",
+            "app-agent-tier-reader-policy.hcl.j2",
+            "openbao-reconcile-policy.hcl.j2",
+        }:
+            assert "openbao_agent_tier_mount" not in template.read_text(encoding="utf-8"), template.name

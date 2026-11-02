@@ -13,18 +13,6 @@ path "{{ openbao_kv_mount }}/metadata/ai/*" {
   capabilities = ["read", "list"]
 }
 
-# App-agent tokens are private leaves outside the broad ai/* reader. The router
-# receives only the three declared data and metadata paths.
-{% for tier_path in openbao_app_agent_tier_paths %}
-path "{{ openbao_agent_tier_mount }}/data/{{ tier_path }}" {
-  capabilities = ["read"]
-}
-
-path "{{ openbao_agent_tier_mount }}/metadata/{{ tier_path }}" {
-  capabilities = ["read"]
-}
-{% endfor %}
-
 # Keep the retired internal provider-key area out of the broad ai/* grant.
 # Current provider keys live only on exact externally configured leaves attached
 # through provider policies; no override of this legacy deny exists.

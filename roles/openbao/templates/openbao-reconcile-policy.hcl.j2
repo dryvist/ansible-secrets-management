@@ -204,6 +204,14 @@ path "{{ mount.path | default(mount) }}/metadata/*" {
   allowed_parameters = { "custom_metadata" = [] }
 }
 {% endfor %}
+{% for reader in openbao_app_agent_tier_readers %}
+path "{{ openbao_agent_tier_mount }}/data/{{ reader.tier }}" {
+  capabilities = ["create", "read", "update"]
+}
+path "{{ openbao_agent_tier_mount }}/metadata/{{ reader.tier }}" {
+  capabilities = ["read"]
+}
+{% endfor %}
 # Permission sets are named objects on the GitHub engine, not the raw token
 # endpoint — minting a token is a consumer's job, never the reconciler's.
 {% for _github_mount in [openbao_github_mount]

@@ -306,6 +306,7 @@ openbao_base_approles_core:
 openbao_base_approles: >-
   {{ openbao_base_approles_core + openbao_base_approles_elevated
      + openbao_hermes_private_agent_approles + openbao_sandbox_agent_approles
+     + openbao_app_agent_tier_reader_approles
      + openbao_dify_agent_approles + openbao_seed_writer_approles }}
 openbao_roster_agent_approles: >-
   {%- set _entries = [] -%}
