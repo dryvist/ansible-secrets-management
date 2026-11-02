@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.60.3](https://github.com/dryvist/ansible-secrets-management/compare/v0.60.2...v0.60.3) (2026-11-02)
+
+
+### Bug Fixes
+
+* **openbao:** let sandbox job tokens renew for the full job budget ([#450](https://github.com/dryvist/ansible-secrets-management/issues/450)) ([fa2345e](https://github.com/dryvist/ansible-secrets-management/commit/fa2345e3f60815aac0c9a2b7eaf7e70aba049bf2))
+
 ## [0.60.2](https://github.com/dryvist/ansible-secrets-management/compare/v0.60.1...v0.60.2) (2026-11-02)
 
 
