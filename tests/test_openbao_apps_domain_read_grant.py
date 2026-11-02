@@ -155,6 +155,25 @@ def test_eval_leaf_adds_only_its_exact_read_grant_for_the_apps_reader(leaf):
     )
 
 
+def test_vikunja_generated_password_coexists_with_promoted_fields():
+    generated = _yaml(GENERATED_FILE)["openbao_generated_app_secrets"]["vikunja"]
+    promoted = _yaml(PROMOTED_FILE)["openbao_promoted_app_secrets"]["vikunja"]
+
+    assert "vikunja_agent_read_password" in generated
+    assert promoted
+    assert not set(generated).intersection(promoted)
+    assert "vikunja" in _read_apps(_yaml(NAMES_FILE))
+
+
+def test_zammad_agent_write_token_is_generated_with_the_app_credentials():
+    generated = _yaml(GENERATED_FILE)["openbao_generated_app_secrets"]
+    promoted = _yaml(PROMOTED_FILE)["openbao_promoted_app_secrets"]
+
+    assert "zammad_agent_write_api_token" in generated["zammad"]
+    assert len(generated["zammad"]) == len(set(generated["zammad"]))
+    assert "zammad_agent_write_api_token" not in promoted.get("zammad", {})
+
+
 def test_idrac_console_user_paths_are_optional_and_have_exact_reads():
     paths = _domain("apps")["paths"]
     console_paths = {
