@@ -176,6 +176,17 @@ openbao_github_router_snapshot_permission_sets: >-
        'repositories': [openbao_github_oidc_docs_repository.split('/') | last],
        'permissions': openbao_github_docs_publisher_permissions}]
      if openbao_github_oidc_docs_repository | length > 0 else [] }}
+# The Hatchet eval worker can post commit statuses to one repository only.
+openbao_github_role_eval_status_set_name: role-eval-status
+openbao_github_role_eval_status_permissions:
+  statuses: write
+  metadata: read
+openbao_github_role_eval_status_permission_sets:
+  - name: "{{ openbao_github_role_eval_status_set_name }}"
+    tier: agents
+    installation_id: "{{ openbao_github_dryvist_installation_id }}"
+    repositories: [ansible-proxmox-ai]
+    permissions: "{{ openbao_github_role_eval_status_permissions }}"
 openbao_github_docs_publisher_permission_sets: >-
   {{ [{'name': openbao_github_docs_publisher_set_name,
        'tier': 'publish',
@@ -254,7 +265,8 @@ openbao_github_admin_permission_sets: >-
   {{ openbao_github_base_permission_sets + openbao_github_org_secrets_permission_sets
      + openbao_github_docs_publisher_permission_sets
      + openbao_github_ci_resolver_permission_sets
-     + openbao_github_router_snapshot_permission_sets }}
+     + openbao_github_router_snapshot_permission_sets
+     + openbao_github_role_eval_status_permission_sets }}
 # Every set on every GitHub mount, each tagged with its mount, for the policy
 # templates.
 openbao_github_permission_sets: >-
