@@ -612,11 +612,10 @@ def test_reconcile_pins_the_two_human_gated_policy_bodies_and_attachments(render
         assert _allowed_parameters(body) == {
             "policy": [policy_text]
         }
-        required = re.search(
-            r"(?m)^\s*required_parameters\s*=\s*(\[[^\n]*\])\s*$", body
-        )
-        assert required
-        assert json.loads(required.group(1)) == ["policy"]
+        capabilities = re.search(r"capabilities\s*=\s*(\[[^\]]*\])", body)
+        assert capabilities and "read" in json.loads(capabilities.group(1))
+        # A required parameter also applies to read, which carries no body.
+        assert "required_parameters" not in body
 
     policy_write_tasks = yaml.safe_load(POLICY_WRITE_TASKS.read_text(encoding="utf-8"))
     policy_write = next(
@@ -690,3 +689,16 @@ def test_reconcile_does_not_grant_per_app_mount_configuration(rendered_defaults)
     for mount in per_app_mounts:
         assert f"{mount['mount']}/permissionset/*" in paths
     assert not any(path.startswith("sys/mounts/github-") for path in paths)
+
+
+def test_reconcile_policy_paths_it_reads_carry_no_required_parameters(rendered_defaults):
+    values, _approles, _policies = rendered_defaults
+    reconcile = _render(RECONCILE, values)
+    readable = [
+        path for path, body in _stanzas(reconcile)
+        if path.startswith("sys/policies/acl/")
+        and (caps := re.search(r"capabilities\s*=\s*(\[[^\]]*\])", body))
+        and "read" in json.loads(caps.group(1))
+        and "required_parameters" in body
+    ]
+    assert readable == []
