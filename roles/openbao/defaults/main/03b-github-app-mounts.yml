@@ -79,6 +79,13 @@ openbao_github_agents_permission_set_definitions:
       pull_requests: read
       issues: read
       checks: read
+  - name: "{{ openbao_dify_agent_vikunja_triage_policy_name }}"
+    tier: read
+    permissions:
+      contents: read
+      pull_requests: read
+      issues: read
+      checks: read
   - name: "{{ openbao_dify_agent_docs_updater_policy_name }}"
     tier: read
     permissions:

@@ -49,15 +49,17 @@
             openbao_dify_agent_code_simplifier_policy_name,
             openbao_dify_agent_ci_fixer_policy_name,
             openbao_dify_agent_vikunja_clerk_policy_name,
+            openbao_dify_agent_vikunja_triage_policy_name,
             openbao_dify_agent_docs_updater_policy_name]
       - >-
         openbao_github_agents_permission_sets | map(attribute='tier') | list
-        == ['read', 'write', 'review', 'ci-fix', 'read', 'read']
+        == ['read', 'write', 'review', 'ci-fix', 'read', 'read', 'read']
       - >-
         openbao_github_agents_permission_sets | map(attribute='permissions') | list
         == [openbao_github_agents_read_permissions, openbao_github_agents_write_permissions,
             {'pull_requests': 'write', 'contents': 'read'},
             {'contents': 'write', 'pull_requests': 'write', 'checks': 'read', 'actions': 'read'},
+            {'contents': 'read', 'pull_requests': 'read', 'issues': 'read', 'checks': 'read'},
             {'contents': 'read', 'pull_requests': 'read', 'issues': 'read', 'checks': 'read'},
             {'contents': 'read', 'pull_requests': 'read', 'issues': 'read', 'checks': 'read'}]
       - >-

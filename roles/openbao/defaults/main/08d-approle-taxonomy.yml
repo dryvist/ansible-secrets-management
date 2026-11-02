@@ -92,6 +92,7 @@ openbao_approle_class_map: >-
     'agent-code-simplifier': 'service-runtime',
     'agent-ci-fixer': 'service-runtime',
     'agent-vikunja-clerk': 'service-runtime',
+    'agent-vikunja-triage': 'service-runtime',
     'agent-docs-updater': 'service-runtime',
     'semaphore': 'converge-automation',
     'secret-age-audit': 'service-runtime',

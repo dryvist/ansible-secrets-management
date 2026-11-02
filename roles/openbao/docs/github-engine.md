@@ -15,7 +15,7 @@ configuration, so each App's own grant caps every token its mount mints:
 | --- | --- | --- |
 | `github` | everyday | read sets and the raw `github/token` write endpoint |
 | `github-admin` | admin | admin, repo-create, docs-publisher, ci-resolver, runner, exporter |
-| `github-agents` | agents | public-read/write and four least-privilege fleet-agent sets, scoped to public dryvist repositories |
+| `github-agents` | agents | public-read/write and five least-privilege fleet-agent sets, scoped to public dryvist repositories |
 | `github-hermes` | hermes | `hermes-review-{public,private}`, `hermes-read-public`, `hermes-author-public`, split by repository visibility |
 | `github-work` | work | a derived `read` set and the raw token endpoint for write; the App's grant is the only write ceiling |
 | `github-personal` | user-owned App | `personal-write`, pinned to its configured installation |
@@ -113,13 +113,14 @@ Token access is tiered; the tier IS the privilege boundary:
   `secrets-external/ai/saas/zai`, and the role IDs for its sandbox roles.
   Machine-class AppRole bound to one /32; 15m token, renewable to 60m.
 - **fleet agent roles (`agent-code-simplifier`, `agent-ci-fixer`,
-  `agent-vikunja-clerk`, `agent-docs-updater`)** — each role mints only its
-  same-named set on `github-agents`, scoped to public dryvist repositories.
+  `agent-vikunja-clerk`, `agent-vikunja-triage`, and `agent-docs-updater`)** —
+  each role mints only its same-named set on `github-agents`, scoped to public
+  dryvist repositories.
   The code simplifier gets `pull_requests: write` and `contents: read`; the CI
   fixer gets `contents` and `pull_requests` write with `checks` and `actions`
-  read. The Vikunja clerk and docs updater each get only `contents`,
-  `pull_requests`, `issues`, and `checks` read. These roles have no KV grants,
-  use the `service-runtime` identity class, and are created only when
+  read. The Vikunja clerk, Vikunja triage, and docs updater each get only
+  `contents`, `pull_requests`, `issues`, and `checks` read. These roles have no
+  KV grants, use the `service-runtime` identity class, and are created only when
   `OPENBAO_DIFY_AGENT_CIDR` is set. Their SecretIDs last 720h and are bound to
   the configured CIDR; OpenBao tokens are capped at 15m.
 - **hermes (`hermes-public`, `hermes-private`)** — four sets on

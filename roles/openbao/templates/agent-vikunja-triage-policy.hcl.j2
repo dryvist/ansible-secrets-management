@@ -1,0 +1,5 @@
+{{ ansible_managed | comment }}
+# Reads public dryvist repositories without write permission.
+path "{{ openbao_github_agents_mount }}/token/{{ openbao_dify_agent_vikunja_triage_policy_name }}" {
+  capabilities = ["create", "update"]
+}

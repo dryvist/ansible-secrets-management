@@ -28,15 +28,16 @@ They share the sandbox CIDR, token lifetime, and one-use SecretID settings.
 The dispatcher can read each role ID and mint wrapped SecretIDs for each role.
 
 The Dify fleet `agent-code-simplifier`, `agent-ci-fixer`,
-`agent-vikunja-clerk`, and `agent-docs-updater` AppRoles each mint only their
-matching named set on `github-agents`. All four sets are scoped to public
-dryvist repositories. The code simplifier can write pull-request reviews and
-read contents; the CI fixer can write contents and pull requests, and read
-checks and actions; the Vikunja clerk and docs updater can read contents, pull
-requests, issues, and checks. These roles read no KV paths. They use the
-`service-runtime` identity class and are created only when
-`OPENBAO_DIFY_AGENT_CIDR` is set. Their SecretIDs last 720 hours, use the
-configured CIDR binding, and produce OpenBao tokens capped at 15 minutes.
+`agent-vikunja-clerk`, `agent-vikunja-triage`, and `agent-docs-updater`
+AppRoles each mint only their matching named set on `github-agents`. All five
+sets are scoped to public dryvist repositories. The code simplifier can write
+pull-request reviews and read contents; the CI fixer can write contents and
+pull requests, and read checks and actions; the Vikunja clerk, Vikunja triage,
+and docs updater can read contents, pull requests, issues, and checks. These
+roles read no KV paths; they use the `service-runtime` identity class and are
+created only when `OPENBAO_DIFY_AGENT_CIDR` is set. Their SecretIDs last 720
+hours, use the configured CIDR binding, and produce OpenBao tokens capped at
+15 minutes.
 
 `roles/openbao/defaults/main/08d-approle-taxonomy.yml` maps declared AppRoles
 to the six identity classes. The AppRole initialization fails if any declared
@@ -133,6 +134,7 @@ plans):
 | `agent-code-simplifier` | — | — | No KV grants; GitHub public repo `contents: read`, `pull_requests: write`; `service-runtime`; 15m token |
 | `agent-ci-fixer` | — | — | No KV grants; GitHub public repo `contents`/`pull_requests: write`, `checks`/`actions: read`; `service-runtime`; 15m token |
 | `agent-vikunja-clerk` | — | — | No KV grants; GitHub public repo `contents`/`pull_requests`/`issues`/`checks: read`; `service-runtime`; 15m token |
+| `agent-vikunja-triage` | — | — | No KV grants; GitHub public repo `contents`/`pull_requests`/`issues`/`checks: read`; `service-runtime`; 15m token |
 | `agent-docs-updater` | — | — | No KV grants; GitHub public repo `contents`/`pull_requests`/`issues`/`checks: read`; `service-runtime`; 15m token |
 | `config-read` | all of `config/` | — | **Default** reader; mount-wide wildcard is correct here; shipped ambiently |
 | `config-write` *(policy, no AppRole)* | all of `config/` | `config/` values: create/update/patch/soft-delete | Attached to the 3 IaC authors[^config-write] |
