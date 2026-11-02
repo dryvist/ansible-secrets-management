@@ -50,5 +50,21 @@ class RouterKeyPrefixRegeneration(unittest.TestCase):
         self.assertNotIn("valid_pattern", field)
 
 
+class AppFormatPatternRegeneration(unittest.TestCase):
+    def test_hatchet_admin_password_takes_its_app_pattern(self):
+        field = _field_declaration("hatchet_admin_password")
+        pattern = DEFAULTS["openbao_app_secret_valid_patterns"]["hatchet_admin_password"]
+        self.assertEqual(field["valid_pattern"], pattern)
+        self.assertEqual(field["charset"], "alnum")
+
+    def test_hatchet_pattern_rejects_a_lowercase_only_value(self):
+        import re
+
+        pattern = DEFAULTS["openbao_app_secret_valid_patterns"]["hatchet_admin_password"]
+        self.assertIsNone(re.match(pattern, "a1" * 24))
+        self.assertIsNone(re.match(pattern, "Aa1" * 22))
+        self.assertIsNotNone(re.match(pattern, "Aa1" * 13))
+
+
 if __name__ == "__main__":
     unittest.main()
