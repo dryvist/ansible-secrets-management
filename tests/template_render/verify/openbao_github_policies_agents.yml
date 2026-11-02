@@ -117,6 +117,7 @@
     - "{{ openbao_dify_agent_code_simplifier_policy_name }}"
     - "{{ openbao_dify_agent_ci_fixer_policy_name }}"
     - "{{ openbao_dify_agent_vikunja_clerk_policy_name }}"
+    - "{{ openbao_dify_agent_vikunja_triage_policy_name }}"
     - "{{ openbao_dify_agent_docs_updater_policy_name }}"
 
 - name: Read fleet agent GitHub policies
@@ -126,6 +127,7 @@
     - "{{ openbao_dify_agent_code_simplifier_policy_name }}"
     - "{{ openbao_dify_agent_ci_fixer_policy_name }}"
     - "{{ openbao_dify_agent_vikunja_clerk_policy_name }}"
+    - "{{ openbao_dify_agent_vikunja_triage_policy_name }}"
     - "{{ openbao_dify_agent_docs_updater_policy_name }}"
   register: _fleet_agent_policies
 
