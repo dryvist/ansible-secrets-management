@@ -1,0 +1,7 @@
+{{ ansible_managed | comment }}
+path "{{ openbao_kv_mount }}/data/apps/claude-code" {
+  capabilities = ["read"]
+}
+path "{{ openbao_kv_mount }}/metadata/apps/claude-code" {
+  capabilities = ["read"]
+}

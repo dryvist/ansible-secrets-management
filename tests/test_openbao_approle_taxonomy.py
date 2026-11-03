@@ -107,6 +107,19 @@ class TestAppRoleTaxonomy(unittest.TestCase):
         self.assertEqual(class_map["agent-workstation"], "trusted-agent-read")
         self.assertEqual(class_map["hatchet-eval-status"], "service-runtime")
         self.assertEqual(cidr_class_map["hatchet-eval-status"], "machine")
+        router_key_name = variables["openbao_claude_code_router_key_approle_name"]
+        router_key_role = next(role for role in roles if role["name"] == router_key_name)
+        self.assertEqual(class_map[router_key_name], "service-runtime")
+        self.assertEqual(cidr_class_map[router_key_name], "workstation")
+        self.assertEqual(
+            router_key_role["policy"],
+            variables["openbao_claude_code_router_key_policy_name"],
+        )
+        self.assertEqual(router_key_role["secret_id_num_uses"], 100)
+        self.assertEqual(
+            secret_id_ttls[router_key_name],
+            variables["openbao_rotated_domain_secret_id_ttl"],
+        )
         for reader in variables["openbao_app_agent_tier_readers"]:
             self.assertEqual(
                 cidr_class_map[f"app-agent-{reader['tier']}"], reader["cidr_class"]

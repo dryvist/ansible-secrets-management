@@ -62,6 +62,7 @@ class TestCidrClassMap(unittest.TestCase):
             {"name": "flow-lock"},
             {"name": "approle-issuer"},
             {"name": "openbao-reconcile"},
+            {"name": "claude-code-router-key"},
         ]
         self.variables["openbao_management_cidrs"] = "10.0.1.0/24,10.0.2.0/24"
         self.variables["openbao_workstation_cidrs"] = "10.0.9.10/32"
@@ -94,6 +95,10 @@ class TestCidrClassMap(unittest.TestCase):
     def test_openbao_reconcile_resolves_to_the_union_class(self):
         class_map = _render("openbao_approle_cidr_class_map", self.variables)
         self.assertEqual(class_map["openbao-reconcile"], "machine_or_workstation")
+
+    def test_claude_code_router_key_resolves_to_the_workstation_class(self):
+        class_map = _render("openbao_approle_cidr_class_map", self.variables)
+        self.assertEqual(class_map["claude-code-router-key"], "workstation")
 
     def test_ai_apply_roles_resolve_to_the_union_class(self):
         # Generated from openbao_ai_domains ([ai, apps]) plus ai-apply-all.
