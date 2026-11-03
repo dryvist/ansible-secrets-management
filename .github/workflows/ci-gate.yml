@@ -164,6 +164,58 @@ jobs:
       - name: Verify every non-expiring secret_id has a compensating control
         run: ansible-playbook tests/nonexpiring_secret_ids/verify.yml
 
+  # The full pytest suite runs in its own job so each job stays inside the
+  # pull-request timeout policy.
+  pytest:
+    name: Role pytest suite
+    needs: changes
+    if: ${{ needs.changes.outputs.tiny != 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ github.event_name == 'pull_request' && 5 || 10 }}
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.14"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: "latest"
+
+      - name: Install Ansible, pytest, PyYAML and Jinja2
+        run: uv pip install --system 'ansible-core>=2.16' pytest pyyaml jinja2
+
+      # Exact cache hits force-refresh only the floating homelab-contracts v5
+      # tag; misses run the forced install for the full requirement set.
+      # Same path and key as the shared Ansible CI and _molecule.yml, so one
+      # saved cache serves every job.
+      - name: Cache Ansible Galaxy content
+        id: galaxy-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: |
+            ~/.ansible/collections
+            ~/.ansible/roles
+          key: ansible-galaxy-v2-${{ runner.os }}-${{ hashFiles('requirements.yml') }}
+
+      - name: Install the collection's dependencies
+        if: steps.galaxy-cache.outputs.cache-hit != 'true'
+        run: ansible-galaxy collection install -r requirements.yml
+
+      - name: Refresh homelab-contracts major tag
+        if: steps.galaxy-cache.outputs.cache-hit == 'true'
+        run: >-
+          ansible-galaxy collection install
+          'git+https://github.com/dryvist/homelab-contracts.git#/ansible/,v5' --force
+        env:
+          ANSIBLE_GALAXY_SERVER_TIMEOUT: "60"
+
       - name: Install Nix
         uses: DeterminateSystems/determinate-nix-action@8d87e8d5e5b8a8309d4281094560f127d9a265f1 # v3
 
@@ -174,12 +226,12 @@ jobs:
 
   gate:
     name: Merge Gate
-    needs: [ci, changes, molecule, tests]
+    needs: [ci, changes, molecule, tests, pytest]
     if: ${{ always() && !cancelled() }}
     runs-on: ubuntu-latest
     steps:
       - name: Check all results
         uses: re-actors/alls-green@b5b5b37504aa4183270bd3d855c52a67f212be35 # release/v1
         with:
-          allowed-skips: ${{ needs.ci.outputs.tiny == 'true' && 'molecule,tests' || 'molecule' }}
+          allowed-skips: ${{ needs.ci.outputs.tiny == 'true' && 'molecule,tests,pytest' || 'molecule' }}
           jobs: ${{ toJSON(needs) }}
