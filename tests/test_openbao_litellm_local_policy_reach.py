@@ -16,7 +16,7 @@ DATA_HOLDERS = {
     "apps-rotate": ["read", "update"],
     "apps-seed": ["create", "read", "update"],
     "write-apps": ["create", "delete", "patch", "update"],
-    # seed_generated asserts exactly create, read and update on the data leaf.
+    # The generated-seed grant in openbao-reconcile-policy.hcl.j2:206 is create, read and update.
     "openbao-reconcile": ["create", "read", "update"],
     "operator-human": ["read"],
     # Global read reaches every KV leaf except the actuating credentials it denies.
