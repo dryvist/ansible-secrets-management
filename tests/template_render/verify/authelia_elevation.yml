@@ -31,6 +31,9 @@
       openbao_ui: x
       bao_elevate_trusted: x
       bao_elevate_policy_sync: x
+      youtrack: x
+      vikunja: x
+      leantime: x
     ingress_domain: example.test
     grafana_hostname: grafana
 

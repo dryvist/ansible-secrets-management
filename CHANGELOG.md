@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.61.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.60.3...v0.61.0) (2026-11-02)
+
+
+### Features
+
+* **authelia:** add YouTrack, Leantime and Vikunja OIDC clients ([#453](https://github.com/dryvist/ansible-secrets-management/issues/453)) ([c46cf17](https://github.com/dryvist/ansible-secrets-management/commit/c46cf17302ebebe7b5fcba461937104fb528c167))
+
 ## [0.60.3](https://github.com/dryvist/ansible-secrets-management/compare/v0.60.2...v0.60.3) (2026-11-02)
 
 

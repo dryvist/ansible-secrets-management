@@ -7,6 +7,11 @@ openbao_workstation_approles:
     policy: proxman
     token_ttl: 15m
     token_max_ttl: 30m
+  # claude-code-router-key: workstation reader with a bounded secret_id that
+  # scheduled rotation republishes to Doppler.
+  - name: "{{ openbao_claude_code_router_key_approle_name }}"
+    policy: "{{ openbao_claude_code_router_key_policy_name }}"
+    secret_id_num_uses: 100
   # Workstation prefetch uses separate, single-use roles for these domains.
   # The machine-facing domain roles retain their scheduled credentials; each
   # workstation alias shares only the same read policy and is minted per call.

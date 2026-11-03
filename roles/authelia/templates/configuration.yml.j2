@@ -65,6 +65,10 @@ identity_providers:
           - email_verified
           - preferred_username
           - name
+      # Leantime's claims policy, from the same guide as its client block below.
+      leantime_claims_policy:
+        id_token:
+          - email
     # Device codes are bearer-equivalent until approved. Five minutes bounds the
     # window in which a code shown on a phone can be approved (default is 10).
     lifespans:
@@ -261,6 +265,63 @@ identity_providers:
         authorization_policy: two_factor
         require_pkce: false
         token_endpoint_auth_method: client_secret_basic
+      - client_id: '{{ authelia_oidc_youtrack_client_id }}'
+        client_name: YouTrack
+        client_secret: '{{ authelia_oidc_client_secret_hashes.youtrack }}'
+        public: false
+        redirect_uris:
+          - '{{ authelia_oidc_youtrack_redirect_uri }}'
+        scopes:
+          - openid
+          - profile
+          - email
+        grant_types:
+          - authorization_code
+        response_types:
+          - code
+        authorization_policy: two_factor
+        require_pkce: false
+        token_endpoint_auth_method: client_secret_basic
+      - client_id: '{{ authelia_oidc_vikunja_client_id }}'
+        client_name: Vikunja
+        client_secret: '{{ authelia_oidc_client_secret_hashes.vikunja }}'
+        public: false
+        redirect_uris:
+          - '{{ authelia_oidc_vikunja_redirect_uri }}'
+        scopes:
+          - openid
+          - profile
+          - email
+        grant_types:
+          - authorization_code
+        response_types:
+          - code
+        authorization_policy: two_factor
+        require_pkce: false
+        token_endpoint_auth_method: client_secret_basic
+      # Leantime only: client_secret_post and PKCE S256 per Authelia's Leantime guide, not client_secret_basic.
+      - client_id: '{{ authelia_oidc_leantime_client_id }}'
+        client_name: Leantime
+        client_secret: '{{ authelia_oidc_client_secret_hashes.leantime }}'
+        public: false
+        redirect_uris:
+          - '{{ authelia_oidc_leantime_redirect_uri }}'
+        scopes:
+          - openid
+          - groups
+          - email
+          - profile
+        grant_types:
+          - authorization_code
+        response_types:
+          - code
+        authorization_policy: two_factor
+        require_pkce: true
+        pkce_challenge_method: S256
+        token_endpoint_auth_method: client_secret_post
+        claims_policy: leantime_claims_policy
+        access_token_signed_response_alg: none
+        userinfo_signed_response_alg: none
 {% if authelia_oidc_openbao_ui_enabled | bool %}
       # OpenBao UI and CLI use the same confidential authorization-code client.
       # Authelia includes the groups and preferred_username claims OpenBao binds.

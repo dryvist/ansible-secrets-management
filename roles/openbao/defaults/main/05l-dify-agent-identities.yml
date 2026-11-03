@@ -5,5 +5,20 @@ openbao_dify_agent_ci_fixer_policy_name: agent-ci-fixer
 openbao_dify_agent_ci_fixer_approle_name: agent-ci-fixer
 openbao_dify_agent_vikunja_clerk_policy_name: agent-vikunja-clerk
 openbao_dify_agent_vikunja_clerk_approle_name: agent-vikunja-clerk
+openbao_dify_agent_vikunja_triage_policy_name: agent-vikunja-triage
+openbao_dify_agent_vikunja_triage_approle_name: agent-vikunja-triage
 openbao_dify_agent_docs_updater_policy_name: agent-docs-updater
 openbao_dify_agent_docs_updater_approle_name: agent-docs-updater
+
+# 07c-base-policies.yml includes this list in openbao_base_policies.
+openbao_dify_agent_policies:
+  - name: "{{ openbao_dify_agent_code_simplifier_policy_name }}"
+    template: agent-code-simplifier-policy.hcl.j2
+  - name: "{{ openbao_dify_agent_ci_fixer_policy_name }}"
+    template: agent-ci-fixer-policy.hcl.j2
+  - name: "{{ openbao_dify_agent_vikunja_clerk_policy_name }}"
+    template: agent-vikunja-clerk-policy.hcl.j2
+  - name: "{{ openbao_dify_agent_vikunja_triage_policy_name }}"
+    template: agent-vikunja-triage-policy.hcl.j2
+  - name: "{{ openbao_dify_agent_docs_updater_policy_name }}"
+    template: agent-docs-updater-policy.hcl.j2

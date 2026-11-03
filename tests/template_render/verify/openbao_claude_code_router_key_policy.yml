@@ -1,0 +1,46 @@
+---
+- name: Render and verify the Claude Code router-key policy
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    ansible_become: false
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    _fixture_dir: "{{ render_tmp }}"
+    ansible_managed: "test fixture"
+
+  tasks:
+    - name: Load the OpenBao role defaults
+      ansible.builtin.include_vars:
+        dir: "../../../roles/openbao/defaults/main"
+
+    - name: Render the Claude Code router-key policy
+      ansible.builtin.template:
+        src: "../../../roles/openbao/templates/claude-code-router-key-policy.hcl.j2"
+        dest: "{{ _fixture_dir }}/claude-code-router-key-policy.hcl"
+        mode: "0644"
+
+    - name: Read the rendered policy
+      ansible.builtin.slurp:
+        src: "{{ _fixture_dir }}/claude-code-router-key-policy.hcl"
+      register: _policy_raw
+
+    - name: Assert the policy grants only read on the two exact Claude Code paths
+      vars:
+        _policy: "{{ _policy_raw.content | b64decode }}"
+        _paths: "{{ _policy | regex_findall('(?m)^path \"([^\"]+)\"') }}"
+        _capabilities: "{{ _policy | regex_findall('(?m)^  capabilities = \\[\"([^\"]+)\"\\]$') }}"
+      ansible.builtin.assert:
+        that:
+          - >-
+            _paths == [openbao_kv_mount ~ '/data/apps/claude-code',
+                       openbao_kv_mount ~ '/metadata/apps/claude-code']
+          - _capabilities == ['read', 'read']
+          - _policy is not search('[*]')
+          - _policy is not search('apps/[*]')
+          - _policy is not search('(?i)write|update|delete')
+        fail_msg: >-
+          The Claude Code router-key policy must contain exactly its KV data
+          and metadata leaves, each with only read capability.
+        quiet: true

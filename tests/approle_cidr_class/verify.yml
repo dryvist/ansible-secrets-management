@@ -108,6 +108,16 @@
           The unattended admin identity declares class '{{ cls }}'; it is
           redeemed only from the workstation.
 
+    - name: The Claude Code router key identity is redeemed from the workstation
+      vars:
+        cls: "{{ openbao_approle_cidr_class_map[openbao_claude_code_router_key_approle_name] }}"
+      ansible.builtin.assert:
+        that:
+          - cls == 'workstation'
+        fail_msg: >-
+          The Claude Code router key identity declares class '{{ cls }}'; it is
+          redeemed only from the workstation.
+
     - name: The human-gated rotators are redeemed from the workstation
       vars:
         names: [ai-rotate, apps-rotate, rustfs-rotate, approle-secret-id-rotate]

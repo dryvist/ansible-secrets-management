@@ -40,6 +40,7 @@ openbao_rotate_doppler_sync_domains: >-
       'local-cloud',
       'observability',
       openbao_herdr_hail_approle_name,
+      openbao_claude_code_router_key_approle_name,
       openbao_bao_elevate_client_approle_name]
      + ([openbao_roster_gateway_key_reader_name]
         if openbao_roster_gateway_key_reader_name in openbao_roster_key_reader_approle_names
@@ -49,4 +50,5 @@ openbao_rotate_doppler_sync_domains: >-
 openbao_rotate_doppler_only_domains:
   - "{{ openbao_agent_workstation_approle_name }}"
   - "{{ openbao_herdr_hail_approle_name }}"
+  - "{{ openbao_claude_code_router_key_approle_name }}"
   - "{{ openbao_bao_elevate_client_approle_name }}"
