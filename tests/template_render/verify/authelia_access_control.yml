@@ -43,6 +43,9 @@
       youtrack: x
       vikunja: x
       leantime: x
+    # The YouTrack redirect URI names the Hub auth module id read from the store.
+    bao_apps_secrets:
+      authelia_oidc_youtrack_auth_module_id: test-auth-module
     authelia_operator_group: openbao-operators-test
     authelia_openbao_ui_public_url: https://openbao.example.test
     # Supplied by inventory/group_vars/all.yml at run time.

@@ -34,6 +34,9 @@
       youtrack: x
       vikunja: x
       leantime: x
+    # The YouTrack redirect URI names the Hub auth module id read from the store.
+    bao_apps_secrets:
+      authelia_oidc_youtrack_auth_module_id: test-auth-module
     ingress_domain: example.test
     grafana_hostname: grafana
 
