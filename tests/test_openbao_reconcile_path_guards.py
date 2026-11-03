@@ -73,4 +73,8 @@ def test_path_guard_covers_template_sources_and_precedes_policy_write():
         seed_paths["ansible.builtin.set_fact"]
     )
     assert "openbao_rotation_exempt" in str(rotation_paths)
+    leaves_name = "Add the reconcile read leaves used by the reconcile policy"
+    leaves = next(task for task in tasks if task.get("name") == leaves_name)
+    assert "openbao_reconcile_read_leaves" in str(leaves)
+    assert names.index(leaves_name) < names.index(guard_name)
     assert names.index(guard_name) < names.index(write_name)

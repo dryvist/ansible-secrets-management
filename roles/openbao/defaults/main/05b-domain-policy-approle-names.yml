@@ -199,6 +199,15 @@ openbao_github_oidc_docs_token_ttl: 10m
 openbao_github_oidc_docs_token_max_ttl: 15m
 openbao_reconcile_policy_name: openbao-reconcile
 openbao_reconcile_approle_name: openbao-reconcile
+# Exact KV data leaves the reconcile identity reads, as mount:path. Read only,
+# declared once here: the reconcile policy and the policy-sync key guard both
+# derive from this list.
+openbao_reconcile_read_leaves:
+  - "{{ openbao_config_mount }}:{{ openbao_platform_env_path }}"
+  - "{{ openbao_kv_mount }}:{{ openbao_platform_env_path }}"
+  - "{{ openbao_kv_mount }}:platform/terrakube/main"
+  - "{{ openbao_kv_mount }}:apps/semaphore"
+  - "{{ openbao_kv_mount }}:platform/splunk/main"
 openbao_tofu_state_admin_policy_name: tofu-state-admin
 openbao_github_mount_config_policy_name: github-mount-config
 openbao_reconcile_pinned_policy_names:

@@ -161,6 +161,17 @@
     - openbao_bootstrap_token is defined
     - openbao_reconcile_mode | default(false)
 
+- name: Add the reconcile read leaves used by the reconcile policy
+  ansible.builtin.set_fact:
+    openbao_reconcile_kv_policy_keys: >-
+      {{ openbao_reconcile_kv_policy_keys + item.split(':', 1) }}
+  loop: "{{ openbao_reconcile_read_leaves | default([]) }}"
+  loop_control:
+    label: "{{ item }}"
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_reconcile_mode | default(false)
+
 - name: Assert reconcile KV grant keys are literal path components
   ansible.builtin.assert:
     that:

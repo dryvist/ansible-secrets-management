@@ -211,10 +211,13 @@ path "{{ openbao_transit_mount }}/keys/{{ openbao_github_org_secrets_state_trans
 {% for app in (openbao_caller_gateway_generated_app_secrets | default({})).keys() %}
 {% set _ = kv_data_grants.update({openbao_kv_mount ~ '/data/apps/' ~ app: ['create', 'read', 'update']}) %}
 {% endfor %}
-{# Retain the exact read target used by the Semaphore dispatch helper. #}
-{% set _ = kv_data_grants.setdefault(openbao_kv_mount ~ '/data/apps/semaphore', ['read']) %}
-{# Splunk HEC/search wiring reads its shared service credentials through reconcile. #}
-{% set _ = kv_data_grants.setdefault(openbao_kv_mount ~ '/data/platform/splunk/main', ['read']) %}
+{# Exact read-only KV leaves, declared once in openbao_reconcile_read_leaves as
+   mount:path. A grant built above keeps its own capabilities. #}
+{% for leaf in openbao_reconcile_read_leaves %}
+{% set _mount = leaf.split(':', 1)[0] %}
+{% set _path = leaf.split(':', 1)[1] %}
+{% set _ = kv_data_grants.setdefault(_mount ~ '/data/' ~ _path, ['read']) %}
+{% endfor %}
 {% for path in kv_data_grants | sort %}
 path "{{ path }}" {
   capabilities = {{ kv_data_grants[path] | tojson }}
