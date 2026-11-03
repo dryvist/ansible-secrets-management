@@ -129,6 +129,7 @@ plans):
 | `local-llm` | `secret/ai/*` | — | The LLM serving stack itself |
 | `clickhouse` | `secret/ai/clickhouse` data + metadata | — | Dedicated reader for the application and integration passwords |
 | `clickhouse-ingest` | `secret/ai/clickhouse-ingest` data + metadata | — | Dedicated reader for the ClickHouse ingest writer password |
+| `hatchet-killtest` | `secret/killtest/hatchet` | — | Power-only PVE token; per-call one-use secret_id; machine CIDR; 15m[^hatchet-killtest] |
 | `hermes` | `secret/ai/hermes`, `secret/ai/mcp/splunk` | — | Dedicated least-privilege reader for Hermes; NO broad `secret/ai/*` |
 | `hermes-write` | `secret/ai/hermes` | `secret/ai/hermes` | Narrow one-time credential seed writer; shared MCP publication belongs to `ansible-converge` |
 | `agent-code-simplifier` | — | — | No KV grants; GitHub public repo `contents: read`, `pull_requests: write`; `service-runtime`; 15m token |
@@ -172,6 +173,21 @@ reconciliation.
     `terraform-apply` (OpenTofu), `ansible-converge` (Ansible), and the
     per-workspace Terrakube JWT roles. It withholds `destroy` and `delete` on
     `metadata/*`, the two capabilities that permanently erase version history.
+
+[^hatchet-killtest]: Its policy reads only the `secret/data/killtest/hatchet`
+    leaf, outside `secret/apps/*`, so no standing AI reader reaches it.
+    `approle-issuer` mints its one-use secret_id per Semaphore run; the issuer
+    itself is `machine_or_workstation`, so a workstation can mint one, while
+    redemption stays bound to the machine CIDR class; init refuses to create the
+    role with an empty secret_id or token CIDR, even with the unbound escape
+    hatch set. Four other policies reach the leaf: `ansible-converge`, which
+    publishes the token; `openbao-reconcile` and the `ai-admin` break-glass
+    policy, through `secret/*`; and `operator-human`, read only. AppRoles
+    carrying them: `ansible-converge`, `ansible-converge-writer`, `semaphore`,
+    `openbao-reconcile`, `openbao-policy-sync`, and break-glass `ai-admin`,
+    `ai-admin-session`, `admin`. `secret-age-audit` reads only metadata.
+    `tests/test_openbao_hatchet_killtest_policy_reach.py` asks an OpenBao dev
+    server and fails on any other holder or AppRole.
 
 [^ai-tiers]: Task-scoped AI actor roles. Authorization is by task/blast-radius
     and human-gated, never by model capability (model is an audit claim). Every
