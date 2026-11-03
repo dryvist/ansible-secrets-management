@@ -10,7 +10,7 @@
 # filter. Molecule consumes its scenario output; other local jobs retain their
 # existing CI dependencies. The local "Merge Gate" aggregates every job.
 #
-# Lint, Role tests and Molecule restore the Galaxy content cache under the key
+# Lint, Role tests, Role pytest suite and Molecule restore the Galaxy content cache under the key
 # ansible-galaxy-v2-<os>-<hash of requirements.yml>. Runs on pushes to develop
 # and main save it, and pull request runs restore it.
 
@@ -98,7 +98,8 @@ jobs:
       molecule_scenario_arg: matrix
 
   # Role tests moved from the consuming repository, run with the same
-  # invocations that repository used: the verify playbooks, then pytest.
+  # invocations that repository used: the verify playbooks here, the full pytest
+  # suite in the pytest job below.
   tests:
     name: Role tests
     needs: changes
