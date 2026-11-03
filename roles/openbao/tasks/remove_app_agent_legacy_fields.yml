@@ -257,6 +257,14 @@
       {%- endif -%}
       {%- endfor -%}
       {{ _ns.fields }}
+  no_log: true
+  when:
+    - openbao_agent_tier_reader.login_path is defined
+    - openbao_agent_tier_current.status | default(0) == 200
+    - openbao_agent_tier_token_current.status | default(0) == 200
+
+- name: Keep the token leaf fields that are not removed
+  ansible.builtin.set_fact:
     openbao_agent_tier_token_kept_data: >-
       {{ (openbao_agent_tier_token_current.json.data.data | default({}, true)
           | dict2items
