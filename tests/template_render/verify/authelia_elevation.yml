@@ -182,11 +182,11 @@
       vars:
         _elevate: "{{ _authelia_config['identity_providers']['oidc']['authorization_policies']['elevate'] }}"
 
-    - name: Assert the device-code lifespan is five minutes
+    - name: Assert the device-code lifespan is fifteen minutes
       ansible.builtin.assert:
         that:
-          - _lifespans.device_code == '5m'
-        fail_msg: "device_code lifespan is not 5m (got {{ _lifespans.device_code | default('ABSENT') }})"
+          - _lifespans.device_code == '15m'
+        fail_msg: "device_code lifespan is not 15m (got {{ _lifespans.device_code | default('ABSENT') }})"
       vars:
         _lifespans: "{{ _authelia_config['identity_providers']['oidc']['lifespans'] }}"
 
@@ -196,4 +196,4 @@
           Authelia elevation assertions passed:
           - all three OpenBao elevation clients are device-code only
           - the elevate policy is deny-by-default with one operator rule scoped to the approval networks
-          - the device-code lifespan is five minutes
+          - the device-code lifespan is fifteen minutes
