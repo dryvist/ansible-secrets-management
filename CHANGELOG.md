@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.63.1](https://github.com/dryvist/ansible-secrets-management/compare/v0.63.0...v0.63.1) (2026-11-03)
+
+
+### Bug Fixes
+
+* **openbao:** split the legacy kept-fields set_fact into its own task ([#464](https://github.com/dryvist/ansible-secrets-management/issues/464)) ([4af5fe7](https://github.com/dryvist/ansible-secrets-management/commit/4af5fe7daca8fa9a8a270f61c9cb498b8d73e639))
+
 ## [0.63.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.62.0...v0.63.0) (2026-11-03)
 
 
