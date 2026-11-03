@@ -10,6 +10,8 @@
 # (see ansible-converge-policy.hcl.j2) — never a wildcard. Adding a publishing
 # role means adding its name here; forgetting to makes the publish fail loudly
 # with a permission denied rather than silently skipping.
+# Shared source for the publisher app and the AI global-read exclusion.
+openbao_fan_control_write_kv_path: apps/fan-control-write
 openbao_credential_publish_apps:
   - traefik
   - authelia
@@ -34,7 +36,7 @@ openbao_credential_publish_apps:
   # ansible-proxmox-ai's qdrant_docker role and merged into this bucket.
   - open-llm
   # The service-generated API credential used by the fan-control role.
-  - fan-control-write
+  - "{{ openbao_fan_control_write_kv_path | regex_replace('^apps/', '') }}"
   # The Hatchet eval worker's Langfuse project keys and router key, published by
   # the existing langfuse_project_keys and openbao_secrets seeding modules. Its own
   # leaf, so this grant never reaches the Hatchet keysets in apps/hatchet.
@@ -42,6 +44,12 @@ openbao_credential_publish_apps:
   # The Dify evaluation instance's router key, converge-published by the shared
   # seeding module. Its own leaf, so this grant never reaches apps/dify.
   - dify/eval
+
+# Credential leaves outside secret/apps/* that a converge publishes back, as full
+# paths under the KV mount. Same exact-path grant as the list above.
+openbao_credential_publish_paths:
+  # ansible-proxmox's pve_api_tokens publishes the power-only kill-test token.
+  - "{{ openbao_hatchet_killtest_kv_path }}"
 
 # Policies whose template emits a `path` stanza only for a configured input.
 # With that input unset the mount they govern is not created either (see

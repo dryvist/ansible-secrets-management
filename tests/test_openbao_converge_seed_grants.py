@@ -6,10 +6,13 @@ import re
 
 import jinja2
 import yaml
+from test_openbao_global_read_all_policy import _environment as policy_environment
 
 
 ROOT = Path(__file__).resolve().parents[1]
 POLICY = ROOT / "roles/openbao/templates/ansible-converge-policy.hcl.j2"
+# The policy includes its publish half; read both as one rendered source.
+PUBLISH = POLICY.with_name("ansible-converge-publish-policy.hcl.j2")
 DEFAULTS = ROOT / "roles/openbao/defaults/main/07c-policy-composition.yml"
 PATH_BLOCK = re.compile(
     r'path "([^"]+)"\s*\{\s*capabilities\s*=\s*\[([^]]+)\]\s*\}',
@@ -28,7 +31,7 @@ PRIVILEGED_POLICY_TEMPLATES = {
 def _grants() -> list[tuple[str, tuple[str, ...]]]:
     return [
         (path, tuple(re.findall(r'"([^"]+)"', capabilities)))
-        for path, capabilities in PATH_BLOCK.findall(POLICY.read_text(encoding="utf-8"))
+        for path, capabilities in PATH_BLOCK.findall((POLICY.read_text(encoding="utf-8") + PUBLISH.read_text(encoding="utf-8")))
     ]
 
 
@@ -63,13 +66,14 @@ def test_new_app_publisher_buckets_are_listed_once_with_exact_template_paths() -
     for app in PUBLISH_APPS:
         assert apps.count(app) == 1
 
-    policy = POLICY.read_text(encoding="utf-8")
+    policy = (POLICY.read_text(encoding="utf-8") + PUBLISH.read_text(encoding="utf-8"))
+    assert "openbao_credential_publish_apps | map('regex_replace', '^', 'apps/')" in policy
     assert (
-        'path "{{ openbao_kv_mount }}/data/apps/{{ app }}" {\n'
+        'path "{{ openbao_kv_mount }}/data/{{ leaf }}" {\n'
         '  capabilities = ["create", "update", "read"]\n}'
     ) in policy
     assert (
-        'path "{{ openbao_kv_mount }}/metadata/apps/{{ app }}" {\n'
+        'path "{{ openbao_kv_mount }}/metadata/{{ leaf }}" {\n'
         '  capabilities = ["read"]\n}'
     ) in policy
     assert 'path "{{ openbao_kv_mount }}/data/apps/*"' not in policy
@@ -95,7 +99,7 @@ def test_agent_tier_mount_has_exact_publisher_and_router_grants_only() -> None:
     leaves = [reader["tier"] for reader in readers]
     login_paths = [reader["login_path"] for reader in readers if reader.get("login_path")]
     assert leaves and mount != "secret"
-    environment = jinja2.Environment()
+    environment = jinja2.Environment(loader=policy_environment().loader)
     environment.filters["comment"] = lambda value: ""
     context = {
         "ansible_managed": "",
