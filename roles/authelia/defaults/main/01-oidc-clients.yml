@@ -90,11 +90,17 @@ authelia_oidc_grafana_client_secret_plain: >-
 authelia_oidc_grafana_client_secret_hash_file: "{{ authelia_secrets_dir }}/oidc_grafana_client_secret_hash"
 
 # YouTrack (JetBrains, Hub-based OAuth 2.0 auth module) — confidential client,
-# same shape as Grafana. The redirect is the Hub's OAuth callback per Authelia's
-# YouTrack integration guide; the YouTrack 2026 OIDC wizard shows the exact URI
-# and it must be confirmed at setup.
+# same shape as Grafana. Hub gives each OAuth 2.0 auth module its own callback,
+# .../oauth2/interactive/login/<auth module id>/land, so the redirect carries the
+# id of the Hub module that signs users in through Authelia. The id is
+# instance-specific and lives beside the client secret in OpenBao.
 authelia_oidc_youtrack_client_id: youtrack
-authelia_oidc_youtrack_redirect_uri: "https://youtrack.{{ authelia_cookie_domain }}/hub/api/rest/oauth2/auth"
+authelia_oidc_youtrack_auth_module_id: >-
+  {{ (bao_apps_secrets.authelia_oidc_youtrack_auth_module_id | default('', true))
+     or undef(hint='authelia_oidc_youtrack_auth_module_id missing from OpenBao secret/apps/authelia') }}
+authelia_oidc_youtrack_redirect_uri: >-
+  {{ 'https://youtrack.' ~ authelia_cookie_domain ~ '/hub/api/rest/oauth2/interactive/login/'
+     ~ authelia_oidc_youtrack_auth_module_id ~ '/land' }}
 authelia_oidc_youtrack_client_secret_plain: >-
   {{ (bao_apps_secrets.authelia_oidc_youtrack_client_secret | default('', true))
      or undef(hint='authelia_oidc_youtrack_client_secret missing from OpenBao secret/apps/authelia') }}
