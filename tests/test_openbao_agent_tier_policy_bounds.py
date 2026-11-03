@@ -160,6 +160,10 @@ def _login_migration(tasks, field, destination, token_source, legacy_source):
         task for task in tasks
         if task.get("name") == "Prepare the login leaf without overwriting an existing password"
     )["ansible.builtin.set_fact"]
+    merge = next(
+        task for task in tasks
+        if task.get("name") == "Merge the migrated login fields into the existing login leaf"
+    )["ansible.builtin.set_fact"]
     variables = {
         "openbao_agent_tier_reader": {"tier": "vikunja-read", "login_fields": [field]},
         "openbao_agent_tier_login_existing": {"json": {"data": {"data": destination}}},
@@ -167,9 +171,14 @@ def _login_migration(tasks, field, destination, token_source, legacy_source):
         "openbao_agent_tier_legacy_migration_source": {"json": {"data": {"data": legacy_source}}},
     }
     results = {}
-    for name, expression in prepare.items():
-        results[name] = ast.literal_eval(_render(expression, variables).strip())
-        variables[name] = results[name]
+    # Every key of one set_fact renders against the facts from before that task.
+    for set_fact in (prepare, merge):
+        rendered = {
+            name: ast.literal_eval(_render(expression, variables).strip())
+            for name, expression in set_fact.items()
+        }
+        results.update(rendered)
+        variables.update(rendered)
     return results
 
 
