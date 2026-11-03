@@ -83,6 +83,16 @@
       {%- endif -%}
       {%- endfor -%}
       {{ _ns.fields }}
+  no_log: true
+  when:
+    - openbao_agent_tier_reader.login_path is defined
+    - openbao_agent_tier_login_existing.status | default(0) in [200, 404]
+    - >-
+      openbao_agent_tier_token_migration_source.status | default(0) == 200 or
+      openbao_agent_tier_legacy_migration_source.status | default(0) == 200
+
+- name: Merge the migrated login fields into the existing login leaf
+  ansible.builtin.set_fact:
     openbao_agent_tier_login_migrated_data: >-
       {{ (openbao_agent_tier_login_existing.json.data.data | default({}, true))
          | combine(openbao_agent_tier_login_migrate_fields) }}
