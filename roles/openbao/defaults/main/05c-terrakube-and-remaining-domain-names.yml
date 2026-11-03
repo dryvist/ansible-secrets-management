@@ -103,6 +103,7 @@ openbao_ansible_converge_writer_approle_name: ansible-converge-writer
 # grants from these two declarations, so the path is written once.
 openbao_platform_env_path: platform/ansible/env
 openbao_platform_env_mounts:
+  - "{{ openbao_config_mount }}"
   - "{{ openbao_kv_mount }}"
   - secrets-external
 # semaphore — the unattended execution plane's own identity. It attaches the
