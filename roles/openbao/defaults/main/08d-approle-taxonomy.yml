@@ -35,6 +35,7 @@ openbao_approle_class_map: >-
     'ci-resolver': 'service-runtime',
     'clickhouse': 'service-runtime',
     'clickhouse-ingest': 'service-runtime',
+    'clickhouse-wall': 'service-runtime',
     'config-read': 'service-runtime',
     'cribl-edge-mac-a': 'service-runtime',
     'cribl-edge-mac-b': 'service-runtime',
@@ -106,6 +107,7 @@ openbao_approle_class_map: >-
     'vikunja': 'service-runtime',
     'vikunja-mcp': 'service-runtime'
   } -%}
+  {%- set _ = _classes.update({openbao_hatchet_killtest_approle_name: 'converge-automation'}) -%}
   {%- for role in openbao_ai_apply_approles -%}
   {%- set _ = _classes.update({role.name: 'operator-admin'}) -%}
   {%- endfor -%}

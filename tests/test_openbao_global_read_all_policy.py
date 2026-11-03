@@ -1,6 +1,7 @@
 """Global read-all stays limited to KV and approved non-secret metadata."""
 
 from pathlib import Path
+import posixpath
 import re
 
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
@@ -104,16 +105,34 @@ def _environment():
         undefined=StrictUndefined,
     )
     environment.filters["comment"] = lambda value: "# " + str(value)
+    environment.filters["dirname"] = posixpath.dirname
     return environment
 
 
 def _render(template):
     values = _defaults()
+    environment = _environment()
     values["openbao_kv_mounts"] = [{"path": path} for path in _mounts()]
-    return _environment().get_template(template).render(
+    values["openbao_actuating_credential_leaves"] = [
+        environment.from_string(str(leaf)).render(**values)
+        for leaf in values["openbao_actuating_credential_leaves"]
+    ]
+    values["openbao_actuating_credential_dedicated_parents"] = [
+        environment.from_string(str(parent)).render(**values)
+        for parent in values["openbao_actuating_credential_dedicated_parents"]
+    ]
+    return environment.get_template(template).render(
         ansible_managed="managed",
         **values,
     )
+
+
+def _actuating_credential_leaves(values):
+    environment = _environment()
+    return [
+        environment.from_string(str(leaf)).render(**values)
+        for leaf in values["openbao_actuating_credential_leaves"]
+    ]
 
 
 def _grants(policy):
@@ -160,6 +179,33 @@ def test_both_global_read_policies_account_for_every_role_created_kv_mount():
         any(pattern.search(f"{mount}/data/*") for pattern in EXCLUDED_PATHS)
         for mount in excluded
     )
+
+
+def test_actuating_credential_leaves_are_denied_only_for_ai_global_read():
+    values = _defaults()
+    leaves = _actuating_credential_leaves(values)
+    environment = _environment()
+    dedicated_parents = [
+        environment.from_string(str(parent)).render(**values)
+        for parent in values["openbao_actuating_credential_dedicated_parents"]
+    ]
+    ai_grants = _grants(_render("ai-global-read-policy.hcl.j2"))
+    operator_grants = _grants(_render("operator-human-policy.hcl.j2"))
+
+    assert leaves
+    assert all("deny" not in capabilities for capabilities in operator_grants.values())
+    for leaf in leaves:
+        for kind in ("data", "metadata"):
+            path = f"{values['openbao_kv_mount']}/{kind}/{leaf}"
+            assert ai_grants[path] == {"deny"}
+    for parent in {posixpath.dirname(leaf) for leaf in leaves}:
+        path = f"{values['openbao_kv_mount']}/metadata/{parent}/"
+        if parent in dedicated_parents:
+            assert ai_grants[path] == {"deny"}
+        else:
+            assert ai_grants.get(path) != {"deny"}
+    assert "apps" not in dedicated_parents
+    assert ai_grants.get(f"{values['openbao_kv_mount']}/metadata/apps/") != {"deny"}
 
 
 def test_shared_read_all_block_has_only_read_and_list():

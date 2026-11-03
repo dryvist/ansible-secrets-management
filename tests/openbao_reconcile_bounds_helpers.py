@@ -9,6 +9,7 @@ import pytest
 import yaml
 from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar, trust_as_template
+from jinja2 import FileSystemLoader
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -124,6 +125,9 @@ def _render(template, values, *, policy_exclusions=None):
         context["openbao_reconcile_policy_excluded_names"] = policy_exclusions
     templar = _templar(_trust(context))
     templar._loader.set_basedir(str(ROOT / "roles" / "openbao"))
+    # Mirrors Ansible's search path so a bare include in a converge template resolves.
+    templar.environment.loader = FileSystemLoader([
+        str(ROOT / "roles" / "openbao" / "templates"), str(ROOT / "roles" / "openbao")])
     return templar.template(
         trust_as_template(template.read_text(encoding="utf-8"))
     )

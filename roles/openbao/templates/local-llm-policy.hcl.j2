@@ -41,3 +41,12 @@ path "{{ openbao_kv_mount }}/data/ai/clickhouse-ingest" {
 path "{{ openbao_kv_mount }}/metadata/ai/clickhouse-ingest" {
   capabilities = ["deny"]
 }
+
+# The ClickHouse wall reader password is read only through the clickhouse-wall AppRole.
+path "{{ openbao_kv_mount }}/data/ai/clickhouse-wall" {
+  capabilities = ["deny"]
+}
+
+path "{{ openbao_kv_mount }}/metadata/ai/clickhouse-wall" {
+  capabilities = ["deny"]
+}

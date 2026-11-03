@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.64.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.63.1...v0.64.0) (2026-11-03)
+
+
+### Features
+
+* **openbao:** hatchet-killtest per-call reader of the power-only PVE token ([#431](https://github.com/dryvist/ansible-secrets-management/issues/431)) ([13b3682](https://github.com/dryvist/ansible-secrets-management/commit/13b36824185427fb19c822675eb05ed1232d994b))
+
 ## [0.63.1](https://github.com/dryvist/ansible-secrets-management/compare/v0.63.0...v0.63.1) (2026-11-03)
 
 

@@ -5,7 +5,7 @@
 # buckets. It needs exactly one secret: the six scoped bucket keys. Nothing else.
 #
 # Deliberately NOT granted the shared object-store credential at
-# {{ openbao_kv_mount }}/data/infra/rustfs. That record holds the account-wide
+# {{ openbao_kv_mount }}/data/{{ openbao_rustfs_admin_kv_path }}. That record holds the account-wide
 # admin key, so reading it merely to discover an endpoint would hand this job
 # the ability to touch every bucket in the store — the exact blast radius the
 # per-bucket keys exist to remove. The endpoint is not a secret and is composed
@@ -15,7 +15,7 @@
 # catalog (openbao/openbao-plugins) ships AWS, Azure, GCP, GCPKMS, Nomad and
 # Consul, and none of them speak to an S3-compatible store that is not AWS IAM.
 # This is the "values nothing can mint" case the plugins-first rule carves out,
-# the same reason infra/rustfs is KV today.
+# the same reason {{ openbao_rustfs_admin_kv_path }} is KV today.
 
 path "{{ openbao_kv_mount }}/data/apps/ai-sessions" {
   capabilities = ["read"]

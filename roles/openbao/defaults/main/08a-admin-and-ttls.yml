@@ -109,6 +109,7 @@ openbao_approle_secret_id_ttl_overrides_base:
   local-llm: "{{ openbao_rotated_domain_secret_id_ttl }}"
   clickhouse: "{{ openbao_rotated_domain_secret_id_ttl }}"
   clickhouse-ingest: "{{ openbao_rotated_domain_secret_id_ttl }}"
+  clickhouse-wall: "{{ openbao_rotated_domain_secret_id_ttl }}"
   local-llm-workstation: "{{ openbao_rotated_domain_secret_id_ttl }}"
   cribl-edge-mac-a: "{{ openbao_rotated_domain_secret_id_ttl }}"
   cribl-edge-mac-b: "{{ openbao_rotated_domain_secret_id_ttl }}"
