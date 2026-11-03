@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.66.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.65.0...v0.66.0) (2026-11-03)
+
+
+### Features
+
+* **openbao:** add one read path to an agent policy ([#482](https://github.com/dryvist/ansible-secrets-management/issues/482)) ([1421d5a](https://github.com/dryvist/ansible-secrets-management/commit/1421d5a29ba3072815e402f533a1ef7365745ef4))
+
 ## [0.65.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.64.0...v0.65.0) (2026-11-03)
 
 
