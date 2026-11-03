@@ -1,8 +1,9 @@
 ---
 # The `hermes` policy grants exactly the paths ansible-proxmox-ai's `hermes`
-# domain reads (ai/hermes, ai/mcp/splunk, ai/mcp/zammad, and the one Home
-# Assistant config record) plus the four operating-profile router keys, data +
-# metadata where listed, and nothing else. The hermes AppRole is in the
+# domain reads (ai/hermes, ai/mcp/splunk, ai/mcp/zammad, the one Home Assistant
+# config record, and the exact Dify leaf ai/hermes/dify, data read only) plus
+# the four operating-profile router keys, data + metadata where listed, and
+# nothing else. The hermes AppRole is in the
 # scheduled rotation set with a TTL that outlasts a missed run.
 - name: Verify the hermes policy path set and its rotation
   hosts: localhost
@@ -38,7 +39,7 @@
           {{ _policy_text | regex_findall('(?m)^path "([^"]+)"') | sort }}
         _data_leaves: >-
           {{ ['ai/hermes', 'ai/mcp/splunk', 'ai/mcp/zammad',
-              'ai/public/homeassistant']
+              'ai/public/homeassistant', 'ai/hermes/dify']
              + openbao_hermes_router_key_apps | map('regex_replace', '^', 'apps/') | list }}
         _metadata_leaves: >-
           {{ ['ai/hermes', 'ai/mcp/splunk', 'ai/mcp/zammad']

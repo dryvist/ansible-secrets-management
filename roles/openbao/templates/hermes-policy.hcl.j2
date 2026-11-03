@@ -42,6 +42,12 @@ path "{{ openbao_kv_mount }}/data/ai/public/homeassistant" {
   capabilities = ["read"]
 }
 
+# Dify app keys for the event relay (one field per route). Exact leaf, data
+# read only: no metadata, no list.
+path "{{ openbao_kv_mount }}/data/ai/hermes/dify" {
+  capabilities = ["read"]
+}
+
 # Router virtual keys for the Hermes operating profiles
 # (openbao_hermes_router_key_apps) — one secret/apps/<name> leaf each,
 # shared across profiles by this one AppRole for now.
