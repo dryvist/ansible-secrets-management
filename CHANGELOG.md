@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.66.1](https://github.com/dryvist/ansible-secrets-management/compare/v0.66.0...v0.66.1) (2026-11-03)
+
+
+### Bug Fixes
+
+* **openbao:** grant the semaphore identity read on the config env document ([f1ab58f](https://github.com/dryvist/ansible-secrets-management/commit/f1ab58f4de8600239f23594d9f4cf0f7bf5628bd))
+* **openbao:** grant the Semaphore policy read on the config-mount env document ([#485](https://github.com/dryvist/ansible-secrets-management/issues/485)) ([f1ab58f](https://github.com/dryvist/ansible-secrets-management/commit/f1ab58f4de8600239f23594d9f4cf0f7bf5628bd))
+
 ## [0.66.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.65.0...v0.66.0) (2026-11-03)
 
 
