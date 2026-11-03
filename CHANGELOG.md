@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.62.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.61.0...v0.62.0) (2026-11-03)
+
+
+### Features
+
+* **openbao:** add the agent-vikunja-triage Dify agent identity ([#455](https://github.com/dryvist/ansible-secrets-management/issues/455)) ([0ce24be](https://github.com/dryvist/ansible-secrets-management/commit/0ce24bebfaa6d5ff9a7163ddfda5496151036391))
+* **openbao:** add the claude-code-router-key workstation AppRole ([#456](https://github.com/dryvist/ansible-secrets-management/issues/456)) ([9215b8a](https://github.com/dryvist/ansible-secrets-management/commit/9215b8a7dd273c6af1a4b622d7aedd3354c15bbf))
+
 ## [0.61.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.60.3...v0.61.0) (2026-11-02)
 
 
