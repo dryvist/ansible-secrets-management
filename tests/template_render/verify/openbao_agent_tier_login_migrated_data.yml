@@ -1,0 +1,81 @@
+---
+# One set_fact templates every key against the facts that existed before it
+# ran, so openbao_agent_tier_login_migrated_data cannot read its sibling
+# openbao_agent_tier_login_migrate_fields. It is set by the task that follows.
+- name: Verify the migrated login data is built from the prepared migrate fields
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    ansible_become: false
+    _fixture_dir: "{{ render_tmp }}"
+    _tasks_file: ../../../roles/openbao/tasks/remove_app_agent_legacy_fields.yml
+    _login_task_names:
+      - Prepare the login leaf without overwriting an existing password
+      - Merge the migrated login fields into the existing login leaf
+    # A login leaf that already holds its password, read at version 3.
+    openbao_agent_tier_reader:
+      tier: vikunja-read
+      login_path: vikunja-read-login
+      legacy_app_path: vikunja
+      login_fields: [vikunja_agent_read_password, vikunja_agent_read_username]
+    openbao_agent_tier_login_existing:
+      status: 200
+      json:
+        data:
+          data:
+            vikunja_agent_read_password: existing-login-password
+          metadata:
+            version: 3
+    # The token leaf still carries the username the login leaf lacks.
+    openbao_agent_tier_token_migration_source:
+      status: 200
+      json:
+        data:
+          data:
+            vikunja_agent_read_username: agent-reader
+            vikunja_agent_read_token: unrelated-token
+          metadata:
+            version: 1
+    openbao_agent_tier_legacy_migration_source:
+      status: 404
+      json:
+        errors: []
+
+  tasks:
+    - name: Select the two login set_fact tasks from the role task file
+      ansible.builtin.set_fact:
+        _login_tasks: >-
+          {{ lookup('file', _tasks_file) | from_yaml
+             | selectattr('name', 'in', _login_task_names) | list }}
+
+    - name: Assert the migrated data is set by its own task directly after the prepare task
+      ansible.builtin.assert:
+        that:
+          - _login_tasks | map(attribute='name') | list == _login_task_names
+          - "'openbao_agent_tier_login_migrated_data' not in _login_tasks[0]['ansible.builtin.set_fact']"
+          - _login_tasks[1]['ansible.builtin.set_fact'] | list == ['openbao_agent_tier_login_migrated_data']
+          - _login_tasks[1].no_log | bool
+          - _login_tasks[1].when == _login_tasks[0].when
+        quiet: true
+
+    - name: Write the selected tasks as a fixture task file
+      ansible.builtin.copy:
+        content: "{{ _login_tasks | to_nice_yaml(width=1000) }}"
+        dest: "{{ _fixture_dir }}/login_tasks.yml"
+        mode: "0644"
+
+    - name: Run the selected tasks against the faked leaf reads
+      ansible.builtin.include_tasks: "{{ _fixture_dir }}/login_tasks.yml"
+
+    - name: Assert the merged login data keeps the password and gains the missing username
+      ansible.builtin.assert:
+        that:
+          - openbao_agent_tier_login_migrated_data is defined
+          - openbao_agent_tier_login_migrate_conflicts == []
+          - "openbao_agent_tier_login_migrate_fields == {'vikunja_agent_read_username': 'agent-reader'}"
+          - openbao_agent_tier_login_migrated_data.vikunja_agent_read_password == 'existing-login-password'
+          - openbao_agent_tier_login_migrated_data.vikunja_agent_read_username == 'agent-reader'
+          - "'vikunja_agent_read_token' not in openbao_agent_tier_login_migrated_data"
+        quiet: true
