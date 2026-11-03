@@ -33,29 +33,26 @@ RUSTFS_DATA, RUSTFS_METADATA = "secret/data/infra/rustfs", "secret/metadata/infr
 FAN_CONTROL_DATA = "secret/data/apps/fan-control-write"
 FAN_CONTROL_METADATA = "secret/metadata/apps/fan-control-write"
 APPS_PARENT_METADATA = "secret/metadata/apps/"
-# The dedicated reader, its publisher, and the human-gated or reconcile identities.
+# The dedicated reader, its publisher (converge), and the human-gated identities.
+# openbao-reconcile is absent: no reconcile task seeds this leaf, so it holds no grant.
 DATA_HOLDERS = {
     "hatchet-killtest": ["read"],
     "ansible-converge": ["create", "read", "update"],
     "operator-human": ["read"],
-    "openbao-reconcile": ["create", "list", "read", "update"],
     "ai-admin": ["create", "delete", "list", "patch", "read", "update"],
 }
 # Metadata holds no value; secret-age-audit reads only its timestamps.
 METADATA_HOLDERS = {
     "ansible-converge": ["read"],
     "operator-human": ["list", "read"],
-    "openbao-reconcile": ["list", "patch", "read"],
     "ai-admin": ["create", "delete", "list", "patch", "read", "update"],
     "secret-age-audit": ["list", "read"],
 }
-# ai-admin-session and admin carry ai-admin (07f) as accepted break-glass; semaphore,
-# ansible-converge-writer and openbao-policy-sync carry ansible-converge or
-# openbao-reconcile.
+# ai-admin-session and admin carry ai-admin (07f) as accepted break-glass; semaphore and
+# ansible-converge-writer carry ansible-converge.
 DATA_HOLDER_APPROLES = {
-    "hatchet-killtest", "ansible-converge", "openbao-reconcile", "ai-admin",
+    "hatchet-killtest", "ansible-converge", "ai-admin",
     "ai-admin-session", "admin", "semaphore", "ansible-converge-writer",
-    "openbao-policy-sync",
 }
 
 # Values the role reads from the process environment and refuses when empty.
