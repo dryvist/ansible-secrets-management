@@ -42,6 +42,8 @@
             authelia_approve_subject: user:ci
             authelia_approve_networks: [192.0.2.0/24]
             authelia_wall_kiosk_networks: [192.0.2.10/32]
+            bao_apps_secrets:
+              authelia_oidc_youtrack_auth_module_id: test-auth-module
             authelia_oidc_hmac_secret: ci-only-dummy-hmac-secret-0123456789abcdef0123456789abcdef0123456789abcdef
           no_log: true
 
