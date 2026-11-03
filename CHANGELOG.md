@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.65.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.64.0...v0.65.0) (2026-11-03)
+
+
+### Features
+
+* **openbao:** clickhouse-wall secret domain ([#467](https://github.com/dryvist/ansible-secrets-management/issues/467)) ([9b73d1b](https://github.com/dryvist/ansible-secrets-management/commit/9b73d1be868ef5954edd0137a82af0bb5f352d0d))
+
+
+### Bug Fixes
+
+* **authelia:** extend the device-code lifespan to fifteen minutes ([#474](https://github.com/dryvist/ansible-secrets-management/issues/474)) ([4d88088](https://github.com/dryvist/ansible-secrets-management/commit/4d88088b7c93eb73d01ea36540469f0be450795a))
+* **authelia:** register the YouTrack Hub auth module callback ([#472](https://github.com/dryvist/ansible-secrets-management/issues/472)) ([1e82b76](https://github.com/dryvist/ansible-secrets-management/commit/1e82b76acaee9019179cff694abd46a301195a63))
+
 ## [0.64.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.63.1...v0.64.0) (2026-11-03)
 
 
