@@ -1,0 +1,95 @@
+---
+- name: Render the reconcile, converge and execution-plane policies and verify their environment and Terrakube reads
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    ansible_become: false
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    _fixture_dir: "{{ render_tmp }}"
+    _template_dir: ../../../roles/openbao/templates
+    ansible_managed: "test fixture"
+
+  tasks:
+    - name: Load the openbao role defaults
+      ansible.builtin.include_vars:
+        dir: ../../../roles/openbao/defaults/main
+
+    - name: Set public example workspace names for the policy baseline
+      ansible.builtin.set_fact:
+        openbao_terrakube_network_workspace: example-network
+        openbao_terrakube_aws_workspace: example-aws
+
+    - name: Render the reconcile, converge and execution-plane policies
+      ansible.builtin.template:
+        src: "{{ _template_dir }}/{{ item }}"
+        dest: "{{ _fixture_dir }}/{{ item | regex_replace('\\.j2$', '') }}"
+        mode: "0644"
+      loop:
+        - openbao-reconcile-policy.hcl.j2
+        - ansible-converge-policy.hcl.j2
+        - semaphore-policy.hcl.j2
+
+    - name: Read the rendered policies
+      ansible.builtin.slurp:
+        src: "{{ _fixture_dir }}/{{ item }}"
+      loop:
+        - openbao-reconcile-policy.hcl
+        - ansible-converge-policy.hcl
+        - semaphore-policy.hcl
+      register: _rendered_policies
+
+    - name: Assert each workstation reconcile leaf is one read-only grant
+      ansible.builtin.assert:
+        that:
+          - >-
+            (_reconcile_text | regex_findall('(?m)^path "' ~ item
+            ~ '" \\{\\s*capabilities = \\["read"\\]\\s*\\}') | length) == 1
+        fail_msg: "{{ item }} is not exactly one read-only grant in the reconcile policy"
+        quiet: true
+      loop:
+        - config/data/platform/ansible/env
+        - secret/data/platform/ansible/env
+        - secret/data/platform/terrakube/main
+      vars:
+        _reconcile_text: "{{ _rendered_policies.results[0].content | b64decode }}"
+
+    - name: Assert the reconcile policy has no mount-wide config grant
+      ansible.builtin.assert:
+        that:
+          - >-
+            _reconcile_text is not search('path "config/data/\\*"')
+          - >-
+            _reconcile_text is not search('path "config/\\*"')
+        fail_msg: "The reconcile policy grants the config mount beyond its declared leaves"
+        quiet: true
+      vars:
+        _reconcile_text: "{{ _rendered_policies.results[0].content | b64decode }}"
+
+    - name: Assert the converge policy reads the environment document on every declared mount
+      ansible.builtin.assert:
+        that:
+          - >-
+            (_converge_text | regex_findall('(?m)^path "' ~ item
+            ~ '" \\{\\s*capabilities = \\["read"\\]\\s*\\}') | length) == 1
+        fail_msg: "{{ item }} is not exactly one read-only grant in the converge policy"
+        quiet: true
+      loop:
+        - config/data/platform/ansible/env
+        - config/metadata/platform/ansible/env
+        - secret/data/platform/ansible/env
+        - secret/metadata/platform/ansible/env
+        - secrets-external/data/platform/ansible/env
+        - secrets-external/metadata/platform/ansible/env
+      vars:
+        _converge_text: "{{ _rendered_policies.results[1].content | b64decode }}"
+
+    - name: Assert the execution-plane delta does not repeat the environment document grant
+      ansible.builtin.assert:
+        that:
+          - _semaphore_text is not search('platform/ansible/env')
+        fail_msg: "The execution-plane delta repeats the environment document grant"
+        quiet: true
+      vars:
+        _semaphore_text: "{{ _rendered_policies.results[2].content | b64decode }}"
