@@ -163,6 +163,42 @@
     - ansible_check_mode
     - openbao_bootstrap_token is defined
 
+# A full-set run rewrites every existing policy whose rendered text differs from
+# live. That replaces the stored text outright, so a dropped capability lands
+# silently. Name each such policy in openbao_policy_change_ack, or stop before
+# any write. Missing policies need no ack. A single-object run counts as its
+# own ack, so the check applies only to the full set.
+- name: Resolve existing RBAC policies whose rendered text differs from live
+  ansible.builtin.set_fact:
+    openbao_policy_text_changes: >-
+      {%- set _names = [] -%}
+      {%- for policy in openbao_reachable_policies -%}
+      {%- if policy.name in openbao_existing_policy_names
+         and (openbao_existing_policy_map | default({})).get(policy.name, '')
+            != (openbao_rendered_policy_map | default({})).get(policy.name, '') -%}
+      {%- set _ = _names.append(policy.name) -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {{ _names | sort }}
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_rbac_policy_name | default('', true) | length == 0
+
+- name: Refuse policy text changes that are not acknowledged
+  ansible.builtin.assert:
+    that:
+      - openbao_policy_text_changes | difference(openbao_policy_change_ack | default([])) | length == 0
+    fail_msg: >-
+      Existing RBAC policies would have their stored text replaced, and they are
+      not named in openbao_policy_change_ack: {{ openbao_policy_text_changes
+      | difference(openbao_policy_change_ack | default([])) | sort | join(', ') }}.
+      Review the change, then re-run with those names in openbao_policy_change_ack,
+      or use a single-object run (openbao_rbac_policy_name) for one policy.
+    quiet: true
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_rbac_policy_name | default('', true) | length == 0
+
 - name: Write the RBAC policies that are missing or changed
   ansible.builtin.command:
     cmd: "bao policy write {{ item.name }} -"
