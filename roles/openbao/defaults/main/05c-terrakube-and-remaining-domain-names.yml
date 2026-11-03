@@ -250,6 +250,7 @@ openbao_secrets_domain_approle_names: >-
      + [openbao_agent_ssh_sign_approle_name,
       openbao_agent_workstation_approle_name,
       openbao_herdr_hail_approle_name,
+      openbao_slack_approvals_approle_name,
       openbao_claude_code_router_key_approle_name,
       openbao_bao_elevate_client_approle_name,
       openbao_hermes_approle_name,
