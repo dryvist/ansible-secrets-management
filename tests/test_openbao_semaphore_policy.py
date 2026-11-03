@@ -40,17 +40,8 @@ def test_router_app_entries_render_as_exact_read_only_kv_v2_grants():
     assert f'path "{kv_mount}/metadata/apps/*"' not in policy
 
 
-def test_run_environment_document_is_readable_on_the_config_mount():
+def test_run_environment_document_is_declared_by_the_converge_policy_only():
     policy = _render("secrets-store", config_mount="topology-config")
 
-    assert (
-        'path "topology-config/data/platform/ansible/env" {\n'
-        '  capabilities = ["read"]\n'
-        "}"
-    ) in policy
-    assert (
-        'path "topology-config/metadata/platform/ansible/env" {\n'
-        '  capabilities = ["read"]\n'
-        "}"
-    ) in policy
+    assert "platform/ansible/env" not in policy
     assert 'path "topology-config/data/*"' not in policy

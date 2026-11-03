@@ -53,16 +53,6 @@ path "{{ openbao_kv_mount }}/metadata/platform/splunk/main" {
   capabilities = ["read", "list"]
 }
 
-# The run wrapper also reads the topology document on the config mount with
-# the same identity; the policy names that one path, nothing wider.
-path "{{ openbao_config_mount }}/data/platform/ansible/env" {
-  capabilities = ["read"]
-}
-
-path "{{ openbao_config_mount }}/metadata/platform/ansible/env" {
-  capabilities = ["read"]
-}
-
 # ansible-proxmox-ai's router secret prefetch consumes these two app entries.
 path "{{ openbao_kv_mount }}/data/apps/benchmark" {
   capabilities = ["read"]
