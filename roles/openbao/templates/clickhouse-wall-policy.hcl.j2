@@ -1,0 +1,9 @@
+{{ ansible_managed | comment }}
+# OpenBao policy for the clickhouse-wall AppRole. Reads only the ClickHouse
+# wall reader password at the exact internal KV leaf.
+path "{{ openbao_kv_mount }}/data/ai/clickhouse-wall" {
+  capabilities = ["read"]
+}
+path "{{ openbao_kv_mount }}/metadata/ai/clickhouse-wall" {
+  capabilities = ["read"]
+}

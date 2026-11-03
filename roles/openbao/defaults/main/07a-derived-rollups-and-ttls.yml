@@ -166,6 +166,11 @@ openbao_clickhouse_approle_name: clickhouse
 openbao_clickhouse_ingest_policy_name: clickhouse-ingest
 openbao_clickhouse_ingest_approle_name: clickhouse-ingest
 
+# clickhouse-wall — read-only reader of the ClickHouse wall reader password
+# at the exact internal secret/ai/clickhouse-wall leaf.
+openbao_clickhouse_wall_policy_name: clickhouse-wall
+openbao_clickhouse_wall_approle_name: clickhouse-wall
+
 # The set of non-root AppRoles to provision, each {name, policy}. Driving the
 # bootstrap from this list keeps init.yml DRY as groups are added. Per-identity
 # `secret_id_bound_cidrs` / `token_bound_cidrs` binding is resolved from the

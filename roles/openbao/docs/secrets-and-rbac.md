@@ -129,6 +129,7 @@ plans):
 | `local-llm` | `secret/ai/*` | — | The LLM serving stack itself |
 | `clickhouse` | `secret/ai/clickhouse` data + metadata | — | Dedicated reader for the application and integration passwords |
 | `clickhouse-ingest` | `secret/ai/clickhouse-ingest` data + metadata | — | Dedicated reader for the ClickHouse ingest writer password |
+| `clickhouse-wall` | `secret/ai/clickhouse-wall` data + metadata | — | Dedicated reader for the ClickHouse wall reader password |
 | `hatchet-killtest` | `secret/killtest/hatchet` | — | Power-only PVE token; per-call one-use secret_id; machine CIDR; 15m[^hatchet-killtest] |
 | `hermes` | `secret/ai/hermes`, `secret/ai/mcp/splunk` | — | Dedicated least-privilege reader for Hermes; NO broad `secret/ai/*` |
 | `hermes-write` | `secret/ai/hermes` | `secret/ai/hermes` | Narrow one-time credential seed writer; shared MCP publication belongs to `ansible-converge` |
