@@ -85,7 +85,8 @@ class PinnedWriteOutcomes(unittest.TestCase):
                 PIN_NAMES_VAR: self.pinned_names,
             }
             if rc is not None:
-                variables["rc"] = rc
+                # ansible-core 2.19+ exposes the item's result only through the register name.
+                variables["openbao_rbac_policy_write_results"] = {"rc": rc}
             return bool(
                 _render(
                     expression,
@@ -100,6 +101,9 @@ class PinnedWriteOutcomes(unittest.TestCase):
         self.assertTrue(fails(self.pinned_names[0], None, False))
         self.assertTrue(fails("other-policy", 1, True))
         self.assertFalse(fails(self.pinned_names[0], 0, True))
+        # A successful write outside reconcile mode must pass.
+        self.assertFalse(fails(self.pinned_names[0], 0, False))
+        self.assertFalse(fails("other-policy", 0, False))
 
     def test_outcomes_split_permission_denials_from_every_other_pinned_error(self):
         expression = _task(OUTCOMES_TASK)["ansible.builtin.set_fact"][OUTCOMES_VAR]

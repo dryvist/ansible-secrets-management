@@ -185,7 +185,7 @@
   changed_when: true
   register: openbao_rbac_policy_write_results
   failed_when: >-
-    (rc | default(1) | int) != 0
+    (openbao_rbac_policy_write_results.rc | default(1) | int) != 0
     and not (
       openbao_reconcile_mode | default(false) | bool
       and item.name in openbao_reconcile_pinned_policy_names

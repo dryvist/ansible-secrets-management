@@ -1,5 +1,52 @@
 # Changelog
 
+## [0.61.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.60.3...v0.61.0) (2026-11-02)
+
+
+### Features
+
+* **authelia:** add YouTrack, Leantime and Vikunja OIDC clients ([#453](https://github.com/dryvist/ansible-secrets-management/issues/453)) ([c46cf17](https://github.com/dryvist/ansible-secrets-management/commit/c46cf17302ebebe7b5fcba461937104fb528c167))
+
+## [0.60.3](https://github.com/dryvist/ansible-secrets-management/compare/v0.60.2...v0.60.3) (2026-11-02)
+
+
+### Bug Fixes
+
+* **openbao:** let sandbox job tokens renew for the full job budget ([#450](https://github.com/dryvist/ansible-secrets-management/issues/450)) ([fa2345e](https://github.com/dryvist/ansible-secrets-management/commit/fa2345e3f60815aac0c9a2b7eaf7e70aba049bf2))
+
+## [0.60.2](https://github.com/dryvist/ansible-secrets-management/compare/v0.60.1...v0.60.2) (2026-11-02)
+
+
+### Bug Fixes
+
+* **openbao:** read the policy write rc from its registered result ([#445](https://github.com/dryvist/ansible-secrets-management/issues/445)) ([835ac61](https://github.com/dryvist/ansible-secrets-management/commit/835ac61b471711104dc4c70ba4797c95381173ca))
+* **tests:** render the KV develop-path baseline from the in-file snapshot ([#447](https://github.com/dryvist/ansible-secrets-management/issues/447)) ([3ea4871](https://github.com/dryvist/ansible-secrets-management/commit/3ea48715b83561ae723e65c1795f300646e6413d))
+
+## [0.60.1](https://github.com/dryvist/ansible-secrets-management/compare/v0.60.0...v0.60.1) (2026-11-02)
+
+
+### Bug Fixes
+
+* **openbao:** bound reconcile KV grants to exact declared leaves ([#400](https://github.com/dryvist/ansible-secrets-management/issues/400)) ([e35697b](https://github.com/dryvist/ansible-secrets-management/commit/e35697be33b80efff76feaff90d9fdd5d70c6787))
+
+## [0.60.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.59.0...v0.60.0) (2026-11-02)
+
+
+### Features
+
+* **authelia:** require WebAuthn user verification and guard the UV flag ([#433](https://github.com/dryvist/ansible-secrets-management/issues/433)) ([fd0b4a5](https://github.com/dryvist/ansible-secrets-management/commit/fd0b4a55af13ac17515e42638e27997f350f9862))
+* **openbao:** add global read for the operator and trusted AI roles ([#440](https://github.com/dryvist/ansible-secrets-management/issues/440)) ([8d552aa](https://github.com/dryvist/ansible-secrets-management/commit/8d552aa401553c2d04783194271b256fa584bad4))
+* **openbao:** add single-object policy and AppRole selectors ([8ba7a5e](https://github.com/dryvist/ansible-secrets-management/commit/8ba7a5e935b775eca8c93458a24996002dc5ee70))
+* **openbao:** generate hermes_eval_api_server_key at apps/hermes-eval ([#434](https://github.com/dryvist/ansible-secrets-management/issues/434)) ([ded1a52](https://github.com/dryvist/ansible-secrets-management/commit/ded1a52d229ea931bfd6e350b0727e596f80105d))
+* **openbao:** let the apps reader read the OpenCode Go key ([#439](https://github.com/dryvist/ansible-secrets-management/issues/439)) ([fd3c21c](https://github.com/dryvist/ansible-secrets-management/commit/fd3c21c312e285eef7bba6b7f17c30efe3704774))
+* **openbao:** single-object selectors for policy and AppRole runs ([#437](https://github.com/dryvist/ansible-secrets-management/issues/437)) ([8ba7a5e](https://github.com/dryvist/ansible-secrets-management/commit/8ba7a5e935b775eca8c93458a24996002dc5ee70))
+
+
+### Bug Fixes
+
+* **authelia:** require discoverable WebAuthn credentials for passkey login ([#435](https://github.com/dryvist/ansible-secrets-management/issues/435)) ([e2a7385](https://github.com/dryvist/ansible-secrets-management/commit/e2a73853e26302c9e40a316ed16103f0761df574))
+* **openbao:** let reconcile read the two pinned human-gated policies ([#441](https://github.com/dryvist/ansible-secrets-management/issues/441)) ([1eef962](https://github.com/dryvist/ansible-secrets-management/commit/1eef962bc5d89fab99661005728bb8229605ee40))
+
 ## [0.59.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.58.0...v0.59.0) (2026-11-02)
 
 

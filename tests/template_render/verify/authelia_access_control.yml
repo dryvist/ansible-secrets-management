@@ -40,6 +40,9 @@
       litellm: x
       openbao_ui: x
       bao_elevate_trusted: x
+      youtrack: x
+      vikunja: x
+      leantime: x
     authelia_operator_group: openbao-operators-test
     authelia_openbao_ui_public_url: https://openbao.example.test
     # Supplied by inventory/group_vars/all.yml at run time.

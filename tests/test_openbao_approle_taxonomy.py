@@ -65,7 +65,7 @@ class TestAppRoleTaxonomy(unittest.TestCase):
 
         self.assertEqual(unclassified, [])
         self.assertEqual(invalid_classes, {})
-        for tool in ("zcode", "opencode"):
+        for tool in ("agent", "zcode", "opencode"):
             for tier in ("read", "write"):
                 name = f"sandbox-{tool}-{tier}"
                 self.assertEqual(class_map[name], "untrusted-sandbox")
@@ -74,7 +74,7 @@ class TestAppRoleTaxonomy(unittest.TestCase):
                 self.assertEqual(role["secret_id_ttl"], "15m")
                 self.assertEqual(role["secret_id_num_uses"], 1)
                 self.assertEqual(role["token_ttl"], "15m")
-                self.assertEqual(role["token_max_ttl"], "15m")
+                self.assertEqual(role["token_max_ttl"], "60m")
                 self.assertFalse(role["manage_secret_id"])
         approle_names = _dify_agent_names(variables, "_approle_name")
         self.assertEqual(approle_names, _dify_agent_names(variables, "_policy_name"))
@@ -107,6 +107,19 @@ class TestAppRoleTaxonomy(unittest.TestCase):
         self.assertEqual(class_map["agent-workstation"], "trusted-agent-read")
         self.assertEqual(class_map["hatchet-eval-status"], "service-runtime")
         self.assertEqual(cidr_class_map["hatchet-eval-status"], "machine")
+        router_key_name = variables["openbao_claude_code_router_key_approle_name"]
+        router_key_role = next(role for role in roles if role["name"] == router_key_name)
+        self.assertEqual(class_map[router_key_name], "service-runtime")
+        self.assertEqual(cidr_class_map[router_key_name], "workstation")
+        self.assertEqual(
+            router_key_role["policy"],
+            variables["openbao_claude_code_router_key_policy_name"],
+        )
+        self.assertEqual(router_key_role["secret_id_num_uses"], 100)
+        self.assertEqual(
+            secret_id_ttls[router_key_name],
+            variables["openbao_rotated_domain_secret_id_ttl"],
+        )
         for reader in variables["openbao_app_agent_tier_readers"]:
             self.assertEqual(
                 cidr_class_map[f"app-agent-{reader['tier']}"], reader["cidr_class"]

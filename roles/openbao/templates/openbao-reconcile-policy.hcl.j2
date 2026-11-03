@@ -34,16 +34,16 @@
 {% for policy_name in managed_policies %}
 path "sys/policies/acl/{{ policy_name }}" {
   capabilities = ["create", "read", "update"]
+{# No required_parameters here: the ACL applies it to read too, and the
+   pre-write read must succeed. The policy API already requires "policy". #}
 {% if policy_name == openbao_tofu_state_admin_policy_name %}
   allowed_parameters = {
     "policy" = [{{ (lookup('template', 'tofu-state-admin-policy.hcl.j2') | trim | regex_replace('$', '\n')) | tojson }}]
   }
-  required_parameters = ["policy"]
 {% elif policy_name == openbao_github_mount_config_policy_name %}
   allowed_parameters = {
     "policy" = [{{ (lookup('template', 'github-mount-config-policy.hcl.j2') | trim | regex_replace('$', '\n')) | tojson }}]
   }
-  required_parameters = ["policy"]
 {% endif %}
 }
 {% endfor %}
@@ -189,19 +189,72 @@ path "{{ openbao_transit_mount }}/keys/{{ openbao_tofu_state_transit_key }}" {
 path "{{ openbao_transit_mount }}/keys/{{ openbao_github_org_secrets_state_transit_key }}" {
   capabilities = ["read", "update"]
 }
-{% for mount in openbao_kv_mounts | default([]) %}
-path "{{ mount.path | default(mount) }}/*" {
-  capabilities = ["create", "read", "update", "list"]
+{# KV paths are the declared seed and promotion targets that init/03 actually touches. #}
+{% set kv_data_grants = {} %}
+{% for app in (openbao_promoted_app_secrets | default({})).keys() %}
+{% set _ = kv_data_grants.update({openbao_kv_mount ~ '/data/apps/' ~ app: ['create', 'read', 'update']}) %}
+{% endfor %}
+{% for app in (openbao_promoted_external_secrets | default({})).keys() %}
+{% set _ = kv_data_grants.update({'secrets-external/data/' ~ app: ['create', 'read', 'update']}) %}
+{% endfor %}
+{% for path in (openbao_promoted_config_values | default({})).keys() %}
+{% set _ = kv_data_grants.update({openbao_config_mount ~ '/data/' ~ path: ['create', 'read', 'update']}) %}
+{% endfor %}
+{% for app in (openbao_seeded_generated_app_secrets | default({})).keys() %}
+{% set seed_path = openbao_generated_app_secret_paths | default({}) %}
+{% set seed_path = seed_path.get(app, 'apps/' ~ app) %}
+{% set _ = kv_data_grants.update({openbao_kv_mount ~ '/data/' ~ seed_path: ['create', 'read', 'update']}) %}
+{% endfor %}
+{% for app in (openbao_roster_agent_generated_app_secrets | default({})).keys() %}
+{% set _ = kv_data_grants.update({openbao_kv_mount ~ '/data/apps/' ~ app: ['create', 'read', 'update']}) %}
+{% endfor %}
+{% for app in (openbao_caller_gateway_generated_app_secrets | default({})).keys() %}
+{% set _ = kv_data_grants.update({openbao_kv_mount ~ '/data/apps/' ~ app: ['create', 'read', 'update']}) %}
+{% endfor %}
+{# Retain the exact read target used by the Semaphore dispatch helper. #}
+{% set _ = kv_data_grants.setdefault(openbao_kv_mount ~ '/data/apps/semaphore', ['read']) %}
+{# Splunk HEC/search wiring reads its shared service credentials through reconcile. #}
+{% set _ = kv_data_grants.setdefault(openbao_kv_mount ~ '/data/platform/splunk/main', ['read']) %}
+{% for path in kv_data_grants | sort %}
+path "{{ path }}" {
+  capabilities = {{ kv_data_grants[path] | tojson }}
 }
-# The rotation-exempt marker (tasks/tag_rotation_exempt.yml) is a metadata
-# PATCH. This longer prefix REPLACES the wildcard's list for metadata/, so it
-# re-states read+list and deliberately drops create/update: nothing here PUTs
-# metadata, and a full metadata write carries the version-destroy knobs.
-# `allowed_parameters` confines the PATCH body to `custom_metadata` for the
-# same reason the rotator policies do (see apps-rotate-policy.hcl.j2).
-path "{{ mount.path | default(mount) }}/metadata/*" {
-  capabilities       = ["read", "list", "patch"]
-  allowed_parameters = { "custom_metadata" = [] }
+{% endfor %}
+# Exact KV v2 config paths declared for retention; the tuning task updates max_versions.
+{% for mount in openbao_kv_tuned_mounts | default([]) %}
+path "{{ mount.path | default(mount) }}/config" {
+  capabilities       = ["read", "update"]
+  allowed_parameters = {
+    "max_versions" = [{{ mount.max_versions | string | tojson }}]
+  }
+}
+{% endfor %}
+# The rotation-exempt marker and roster leaf ownership require exact metadata
+# PATCH paths.
+{% set kv_metadata_grants = {} %}
+{% for entry in openbao_rotation_exempt | default([]) %}
+{% set metadata_path = entry.split(':', 1) %}
+{% set _ = kv_metadata_grants.update({metadata_path[0] ~ '/metadata/' ~ metadata_path[1]: ['read', 'patch']}) %}
+{% endfor %}
+{% for app in (openbao_roster_agent_generated_app_secrets | default({})).keys() %}
+{% set _ = kv_metadata_grants.update({openbao_kv_mount ~ '/metadata/apps/' ~ app: ['read', 'patch']}) %}
+{% endfor %}
+{% for app in (openbao_caller_gateway_generated_app_secrets | default({})).keys() %}
+{% set _ = kv_metadata_grants.update({openbao_kv_mount ~ '/metadata/apps/' ~ app: ['read', 'patch']}) %}
+{% endfor %}
+{% for agent in (openbao_ai_agents | default({})).keys() %}
+{% if (agent | string | regex_search(openbao_roster_agent_name_pattern)) is not none %}
+{% set _ = kv_metadata_grants.update({openbao_kv_mount ~ '/metadata/ai/' ~ agent: ['read']}) %}
+{% endif %}
+{% endfor %}
+{% for path in kv_metadata_grants | sort %}
+path "{{ path }}" {
+  capabilities       = {{ kv_metadata_grants[path] | tojson }}
+{% if 'patch' in kv_metadata_grants[path] or 'update' in kv_metadata_grants[path] %}
+  allowed_parameters = {
+    "custom_metadata" = []
+  }
+{% endif %}
 }
 {% endfor %}
 {% for reader in openbao_app_agent_tier_readers %}
