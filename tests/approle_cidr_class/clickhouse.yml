@@ -22,7 +22,7 @@
       - clickhouse_roles | length == 1
       - clickhouse_policies | length == 1
       - clickhouse_domains | length == 1
-      - clickhouse_domains[0].paths == ['ai/clickhouse', 'ai/clickhouse-ingest']
+      - clickhouse_domains[0].paths == ['ai/clickhouse', 'ai/clickhouse-ingest', 'ai/clickhouse-wall']
       - clickhouse_policies[0].template == 'clickhouse-policy.hcl.j2'
       - clickhouse_roles[0].policy == openbao_clickhouse_policy_name
       - clickhouse_roles[0].token_policies is not defined
@@ -71,12 +71,19 @@
       path "{{ openbao_kv_mount }}/metadata/ai/clickhouse-ingest" {
         capabilities = ["read"]
       }
+      path "{{ openbao_kv_mount }}/data/ai/clickhouse-wall" {
+        capabilities = ["read"]
+      }
+      path "{{ openbao_kv_mount }}/metadata/ai/clickhouse-wall" {
+        capabilities = ["read"]
+      }
   ansible.builtin.assert:
     that:
       - clickhouse_policy == (clickhouse_expected_policy | regex_replace('\s+', ''))
     fail_msg: >-
-      The ClickHouse policy must grant only read on the exact ai/clickhouse and
-      ai/clickhouse-ingest data and metadata paths, with no listing or additional stanzas.
+      The ClickHouse policy must grant only read on the exact ai/clickhouse,
+      ai/clickhouse-ingest and ai/clickhouse-wall data and metadata paths, with no
+      listing or additional stanzas.
 
 - name: Assert the broad local-llm read grant cannot reach the ClickHouse leaf
   vars:
@@ -165,6 +172,47 @@
       one domain, one AppRole on its own policy, on the shared machine_or_workstation
       class and rotated TTL.
 
+- name: Assert the ClickHouse wall reader password is one generated field at its own leaf
+  vars:
+    llm_router_key_catalog_facts:
+      openbao_router_key_catalog: {}
+    clickhouse_wall_fields: [WALL_READER_PASSWORD]
+    clickhouse_wall_domains: >-
+      {{ clickhouse_domain_defaults.openbao_secrets_domains
+         | selectattr('name', 'equalto', 'clickhouse-wall') | list }}
+  ansible.builtin.assert:
+    that:
+      - openbao_generated_app_secrets['clickhouse-wall'] == clickhouse_wall_fields
+      - openbao_seeded_generated_app_secrets['clickhouse-wall'] == clickhouse_wall_fields
+      - openbao_generated_app_secret_paths['clickhouse-wall'] == 'ai/clickhouse-wall'
+      - "'clickhouse-wall' not in openbao_apps_read_apps"
+      - "'clickhouse-wall' not in openbao_roster_agent_apps_leaf_names"
+      - clickhouse_wall_domains | length == 1
+      - clickhouse_wall_domains[0].paths == ['ai/clickhouse-wall']
+      # The clickhouse domain fetches the wall leaf, so the ClickHouse host resolves
+      # WALL_READER_PASSWORD from the same leaf its policy grants.
+      - >-
+        'ai/clickhouse-wall' in (clickhouse_domain_defaults.openbao_secrets_domains
+        | selectattr('name', 'equalto', 'clickhouse') | first).paths
+      - >-
+        openbao_generated_app_secret_paths['clickhouse-wall'] in (clickhouse_domain_defaults.openbao_secrets_domains
+        | selectattr('name', 'equalto', 'clickhouse') | first).paths
+      - openbao_clickhouse_wall_policy_name == 'clickhouse-wall'
+      - openbao_clickhouse_wall_approle_name == 'clickhouse-wall'
+      - openbao_approles | selectattr('name', 'equalto', 'clickhouse-wall') | list | length == 1
+      - >-
+        (openbao_approles | selectattr('name', 'equalto', 'clickhouse-wall') | list | first).policy
+        == 'clickhouse-wall'
+      - openbao_base_policies_static | selectattr('name', 'equalto', 'clickhouse-wall')
+        | map(attribute='template') | list == ['clickhouse-wall-policy.hcl.j2']
+      - openbao_approle_cidr_class_map['clickhouse-wall'] == 'machine_or_workstation'
+      - openbao_approle_secret_id_ttl_overrides['clickhouse-wall'] == openbao_rotated_domain_secret_id_ttl
+      - openbao_clickhouse_wall_approle_name in openbao_secrets_domain_approle_names
+    fail_msg: >-
+      clickhouse-wall must be one generated WALL_READER_PASSWORD field at ai/clickhouse-wall,
+      one domain, one AppRole on its own policy, on the shared machine_or_workstation
+      class and rotated TTL.
+
 - name: Assert the ClickHouse ingest policy is read-only on exactly its data and metadata
   vars:
     ansible_managed: test fixture
@@ -184,6 +232,26 @@
     fail_msg: >-
       The clickhouse-ingest policy must grant only read on the exact
       ai/clickhouse-ingest data and metadata paths.
+
+- name: Assert the ClickHouse wall policy is read-only on exactly its data and metadata
+  vars:
+    ansible_managed: test fixture
+    clickhouse_wall_policy: >-
+      {{ lookup('template', playbook_dir ~ '/../../roles/openbao/templates/clickhouse-wall-policy.hcl.j2')
+         | regex_replace('(?m)^\s*#.*$', '') | regex_replace('\s+', '') }}
+    clickhouse_wall_expected_policy: |
+      path "{{ openbao_kv_mount }}/data/ai/clickhouse-wall" {
+        capabilities = ["read"]
+      }
+      path "{{ openbao_kv_mount }}/metadata/ai/clickhouse-wall" {
+        capabilities = ["read"]
+      }
+  ansible.builtin.assert:
+    that:
+      - clickhouse_wall_policy == (clickhouse_wall_expected_policy | regex_replace('\s+', ''))
+    fail_msg: >-
+      The clickhouse-wall policy must grant only read on the exact
+      ai/clickhouse-wall data and metadata paths.
 
 - name: Assert the ClickHouse leaves are readable only through the intended policy templates
   vars:
@@ -216,6 +284,37 @@
       ai/clickhouse-ingest must be named only by the clickhouse-ingest reader, the
       clickhouse reader and the local-llm deny, and must never create an apps/ leaf.
 
+- name: Assert the ClickHouse wall leaf is readable only through the intended policy templates
+  vars:
+    clickhouse_wall_grep: >-
+      {{ playbook_dir ~ '/../../roles/openbao/templates' }}
+  ansible.builtin.command:
+    argv: [grep, -rl, 'ai/clickhouse-wall', '{{ clickhouse_wall_grep }}']
+  # The templates live on the controller; under Molecule the target is a container without them.
+  delegate_to: localhost
+  become: false
+  register: clickhouse_wall_templates
+  changed_when: false
+  check_mode: false
+
+- name: Assert the wall leaf is named only by the two readers and the local-llm deny
+  vars:
+    clickhouse_wall_named: >-
+      {{ clickhouse_wall_templates.stdout_lines | map('basename') | sort | list }}
+  ansible.builtin.assert:
+    that:
+      - >-
+        clickhouse_wall_named == [
+          'clickhouse-policy.hcl.j2', 'clickhouse-wall-policy.hcl.j2', 'local-llm-policy.hcl.j2']
+      - openbao_generated_app_secret_paths['clickhouse-wall'] is match('^ai/')
+      - >-
+        (clickhouse_domain_defaults.openbao_secrets_domains
+         | selectattr('name', 'equalto', 'clickhouse-wall') | first).paths
+        | select('match', '^apps/') | list == []
+    fail_msg: >-
+      ai/clickhouse-wall must be named only by the clickhouse-wall reader, the
+      clickhouse reader and the local-llm deny, and must never create an apps/ leaf.
+
 - name: Assert local-llm still denies the ClickHouse leaves
   vars:
     ansible_managed: test fixture
@@ -230,5 +329,12 @@
       - >-
         ('path"' ~ openbao_kv_mount ~ '/metadata/ai/clickhouse-ingest"{capabilities=["deny"]}')
         in local_llm_policy
+      - >-
+        ('path"' ~ openbao_kv_mount ~ '/data/ai/clickhouse-wall"{capabilities=["deny"]}')
+        in local_llm_policy
+      - >-
+        ('path"' ~ openbao_kv_mount ~ '/metadata/ai/clickhouse-wall"{capabilities=["deny"]}')
+        in local_llm_policy
     fail_msg: >-
-      The local-llm policy must deny the exact ai/clickhouse-ingest data and metadata paths.
+      The local-llm policy must deny the exact ai/clickhouse-ingest and ai/clickhouse-wall
+      data and metadata paths.
