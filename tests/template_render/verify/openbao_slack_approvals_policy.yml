@@ -1,0 +1,42 @@
+---
+- name: Render and verify the slack-approvals policy
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    ansible_become: false
+    ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    _fixture_dir: "{{ render_tmp }}"
+    ansible_managed: "test fixture"
+
+  tasks:
+    - name: Render the slack-approvals policy
+      ansible.builtin.template:
+        src: "../../../roles/openbao/templates/slack-approvals-policy.hcl.j2"
+        dest: "{{ _fixture_dir }}/slack-approvals-policy.hcl"
+        mode: "0644"
+
+    - name: Read the rendered policy
+      ansible.builtin.slurp:
+        src: "{{ _fixture_dir }}/slack-approvals-policy.hcl"
+      register: _policy_raw
+
+    - name: Assert the policy grants only read on the one approvals entry
+      vars:
+        _policy: "{{ _policy_raw.content | b64decode }}"
+        _body: "{{ _policy.splitlines() | reject('match', '#') | join('\n') }}"
+        _paths: "{{ _body | regex_findall('(?m)^path \"([^\"]+)\"') }}"
+        _capabilities: "{{ _body | regex_findall('(?m)^  capabilities = \\[\"([^\"]+)\"\\]$') }}"
+      ansible.builtin.assert:
+        that:
+          - _paths == ['secrets-external/data/platform/slack-approvals']
+          - _capabilities == ['read']
+          - _body is not search('[*]')
+          - _body is not search('(?i)create|update|delete|list|patch')
+          - _body is not search('platform/slack-ops|platform/slack-admin|slack-app-')
+        fail_msg: >-
+          The slack-approvals policy must grant only read on the one
+          platform/slack-approvals entry, with no wildcard and no other
+          Slack identity's path.
+        quiet: true
