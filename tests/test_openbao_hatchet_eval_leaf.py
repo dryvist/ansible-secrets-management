@@ -9,7 +9,7 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULTS = ROOT / "roles/openbao/defaults/main"
 CATALOG = ROOT / "playbooks/group_vars/all/openbao_secrets.yml"
-EVAL_LEAVES = ("hatchet/eval", "dify/eval")
+EVAL_LEAVES = ("hatchet/eval",)
 
 
 def _defaults(name):
