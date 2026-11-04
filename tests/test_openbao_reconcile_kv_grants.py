@@ -53,6 +53,7 @@ def test_reconcile_kv_grants_match_named_consumers_and_keep_flow_lock_separate(
         "secret/data/apps/agent-one": ["create", "read", "update"],
         "secret/data/apps/caller-gw": ["create", "read", "update"],
         "secret/data/apps/semaphore": ["read"],
+        "secret/data/apps/grafana": ["read"],
         "secret/data/platform/splunk/main": ["read"],
         "config/data/platform/ansible/env": ["read"],
         "secret/data/platform/ansible/env": ["read"],
