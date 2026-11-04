@@ -41,9 +41,6 @@ openbao_credential_publish_apps:
   # the existing langfuse_project_keys and openbao_secrets seeding modules. Its own
   # leaf, so this grant never reaches the Hatchet keysets in apps/hatchet.
   - hatchet/eval
-  # The Dify evaluation instance's router key, converge-published by the shared
-  # seeding module. Its own leaf, so this grant never reaches apps/dify.
-  - dify/eval
 
 # Credential leaves outside secret/apps/* that a converge publishes back, as full
 # paths under the KV mount. Same exact-path grant as the list above.
