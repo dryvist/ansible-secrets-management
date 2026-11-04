@@ -301,8 +301,8 @@
       - session_role.token_policies == ['ai-admin', 'ai-admin-guard', 'tofu-state-admin']
       - session_role.token_type == 'service'
       - session_role.token_ttl == '1h'
-      - session_role.token_max_ttl == '8h'
-      - session_role.token_explicit_max_ttl == '8h'
+      - session_role.token_max_ttl == '12h'
+      - session_role.token_explicit_max_ttl == '12h'
       - session_role.manage_secret_id == false
       - session_role.secret_id_num_uses == 1
     fail_msg: >-
