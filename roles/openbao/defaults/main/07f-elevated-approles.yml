@@ -46,7 +46,7 @@ openbao_base_approles_elevated:
     secret_id_num_uses: 1
   # ai-admin-session: the human-gated, alerted policy and the narrow
   # OpenTofu state-key policy for the renewable service-token session; the
-  # explicit maximum bounds it to eight hours, and ai-admin-guard keeps it
+  # explicit maximum bounds it to twelve hours, and ai-admin-guard keeps it
   # from extending or re-minting itself.
   - name: "{{ openbao_ai_admin_session_approle_name }}"
     token_policies:
