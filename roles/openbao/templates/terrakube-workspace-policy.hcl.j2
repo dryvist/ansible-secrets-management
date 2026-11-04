@@ -44,6 +44,10 @@ path "{{ openbao_kv_mount }}/data/{{ path }}" {
 path "secrets-external/data/{{ path }}" {
   capabilities = ["create", "read", "update"]
 }
+
+path "secrets-external/metadata/{{ path }}" {
+  capabilities = ["read"]
+}
 {% endfor %}
 {% for path in item.workspace.kv_write_config | default([]) %}
 
