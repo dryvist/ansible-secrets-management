@@ -2,7 +2,7 @@
 # --- Version ----------------------------------------------------------------
 # Pinned to a known-good upstream release. Version bumps follow the repo's
 # pinning convention (Renovate keeps the .deb/checksums pin fresh; see
-# renovate.json and AGENTS.md "Version management"). Do NOT scatter the
+# renovate.json and AGENTS.md "Working rules"). Do NOT scatter the
 # version across multiple files — change it here only.
 openbao_version: "2.7.2"
 
