@@ -50,11 +50,14 @@ path "{{ openbao_kv_mount }}/metadata/ai/agents/*" {
   capabilities = ["read", "list"]
 }
 
-# Mint only the two administrator-defined GitHub App permission sets. The raw
-# github/token endpoint and the engine's config/permissionset administration
-# paths are intentionally absent, so this identity cannot widen the token.
+# Mint the administrator-defined GitHub App permission sets, minus the tiers
+# rejected below. The raw github/token endpoint and the engine's
+# config/permissionset administration paths are intentionally absent, so this
+# identity cannot widen the token.
 # The publish, ci-resolver, agents, and write tiers are rejected: their sets
-# carry permission maps reserved for their respective identities. A set with
+# carry permission maps reserved for their respective identities.
+# The admin tier (the full-automation sets) is rejected too: it stays
+# human-gated and is never minted by a standing AI identity. A set with
 # no tier at all (or any other tier) is kept — rejectattr compares false,
 # never raises, on a missing attribute, so it never strips this identity's
 # other grants.
@@ -62,7 +65,8 @@ path "{{ openbao_kv_mount }}/metadata/ai/agents/*" {
    | rejectattr('tier', 'equalto', 'publish')
    | rejectattr('tier', 'equalto', 'ci-resolver')
    | rejectattr('tier', 'equalto', 'agents')
-   | rejectattr('tier', 'equalto', 'write') %}
+   | rejectattr('tier', 'equalto', 'write')
+   | rejectattr('tier', 'equalto', 'admin') %}
 path "{{ permission_set.mount }}/token/{{ permission_set.name }}" {
   capabilities = ["update"]
 }

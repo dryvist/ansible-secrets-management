@@ -6,7 +6,10 @@
 # unlimited like the other scheduled-rotation domains.
 openbao_seed_writer_approles:
   - name: "{{ openbao_ansible_converge_writer_approle_name }}"
-    policy: "{{ openbao_ansible_converge_policy_name }}"
+    # The Authelia signing leaf is written by this login alone (07c, authelia-signing-writer).
+    token_policies:
+      - "{{ openbao_ansible_converge_policy_name }}"
+      - "{{ openbao_authelia_signing_writer_policy_name }}"
     token_type: batch
     token_ttl: "{{ openbao_approle_token_max_ttl }}"
     token_max_ttl: "{{ openbao_approle_token_max_ttl }}"

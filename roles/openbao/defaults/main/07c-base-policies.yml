@@ -79,6 +79,14 @@ openbao_base_policies_static:
     template: backblaze-admin-policy.hcl.j2
   - name: "{{ openbao_ansible_converge_policy_name }}"
     template: ansible-converge-policy.hcl.j2
+  # Attached to the seed-writer AppRole only (07i), never to semaphore: the
+  # shared converge policy above is carried by semaphore too.
+  - name: "{{ openbao_authelia_signing_writer_policy_name }}"
+    template: authelia-signing-writer-policy.hcl.j2
+  # Attached to iac-platform-deploy only (07f). Denies the signing leaf that its
+  # read-apps grant would otherwise reach.
+  - name: "{{ openbao_iac_platform_deploy_signing_deny_policy_name }}"
+    template: iac-platform-deploy-signing-deny-policy.hcl.j2
   # Placed next to ansible-converge because it is that policy's delta, not an
   # independent grant set. Safe to insert here despite the Terrakube
   # index-drift hazard above: the assert in tasks/init/08-rbac-policies.yml
