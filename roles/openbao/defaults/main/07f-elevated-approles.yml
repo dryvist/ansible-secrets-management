@@ -190,3 +190,4 @@ openbao_base_approles_elevated:
     token_ttl: "{{ openbao_slack_approvals_token_ttl }}"
     token_max_ttl: "{{ openbao_slack_approvals_token_ttl }}"
     manage_secret_id: false
+    secret_id_num_uses: 100
