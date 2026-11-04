@@ -20,6 +20,9 @@ openbao_authelia_service_secrets_kv_path: apps/authelia-signing
 # The seed writer's own grant on that leaf. A separate policy, attached to the
 # seed-writer AppRole only: the shared converge policy is also carried by semaphore.
 openbao_authelia_signing_writer_policy_name: authelia-signing-writer
+# Explicit deny on that leaf for iac-platform-deploy, a standing CI identity that
+# reads apps/* through read-apps. Attached to that AppRole only.
+openbao_iac_platform_deploy_signing_deny_policy_name: iac-platform-deploy-signing-deny
 # Credentials that trigger external actions must stay outside ambient AI reads.
 # Add future actuating leaves here; the AI global-read policy denies each one.
 openbao_actuating_credential_leaves:

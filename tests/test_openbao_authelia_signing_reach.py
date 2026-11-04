@@ -24,9 +24,9 @@ from test_openbao_hatchet_killtest_policy_reach import (
 ROLE = Path(__file__).resolve().parents[1] / "roles/openbao"
 DATA = "secret/data/apps/authelia-signing"
 # Break-glass and human-unlocked identities, the human operator, and the apps/*
-# writers (Terraform seed, rotation, platform deploy). No standing AI reader:
+# writers (the seed writer, apps seed and rotation). No standing AI reader:
 # ai-readonly and ai-elevated carry ai-global-read, whose deny on this leaf
-# overrides read-apps.
+# overrides read-apps. The standing CI deploy identity is denied explicitly.
 READERS = {
     "admin",
     "ai-admin",
@@ -36,7 +36,6 @@ READERS = {
     "apps-rotate",
     "ansible-converge-writer",
     "apps-seed",
-    "iac-platform-deploy",
     "operator-workstation",
 }
 # Policies no reader of a client secret may combine into a key read: the
@@ -111,3 +110,10 @@ def test_client_secret_readers_cannot_reach_the_signing_key(reach_by_approle):
     _, policy_caps = reach_by_approle
     for name in CLIENT_SECRET_READERS:
         assert policy_caps[name] == ["deny"], name
+
+
+def test_the_standing_ci_deploy_identity_is_denied_the_signing_key(reach_by_approle):
+    # iac-platform-deploy reads apps/* through read-apps, so it holds a client-secret
+    # read on the same leaf family. Denied at the AppRole's full policy list.
+    caps, _ = reach_by_approle
+    assert caps["iac-platform-deploy"] == ["deny"]

@@ -1,0 +1,11 @@
+{{ ansible_managed | comment }}
+# Explicit deny on the Authelia signing leaf, data and metadata. The deploy
+# identity reads apps/* through read-apps, which this deny overrides on the one
+# leaf. Attached to iac-platform-deploy only, so no other identity changes.
+path "{{ openbao_kv_mount }}/data/{{ openbao_authelia_service_secrets_kv_path }}" {
+  capabilities = ["deny"]
+}
+
+path "{{ openbao_kv_mount }}/metadata/{{ openbao_authelia_service_secrets_kv_path }}" {
+  capabilities = ["deny"]
+}
