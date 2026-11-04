@@ -25,8 +25,8 @@ opens every Traefik route whose tofu ingress row carries `sso = true`; the
 - **State**: local SQLite on the persistent `/var/lib/authelia` mount
   (passkey registrations survive rebuilds). Sessions are in-memory: a service
   restart just re-prompts the browser.
-- **Mail**: identity-verification mails go to the internal SMTP relay
-  (Mailpit) — open its UI to click verification links.
+- **Notifications**: the filesystem notifier writes one-time codes to
+  `authelia_notification_file`; no SMTP relay is used.
 
 ## OIDC clients
 
@@ -68,8 +68,8 @@ controller environment through `AUTHELIA_APPROVE_NETWORKS`; OpenBao reads
 `OPENBAO_AUTHELIA_ISSUER_URL`, `OPENBAO_ELEVATE_SUBJECT` and
 `OPENBAO_WORKSTATION_CIDRS` the same way. The documented Authelia and OpenBao
 converges use Doppler-wrapped Ansible invocations, which provide the runtime
-environment to those lookups. They do not set either Ansible role flag. No
-tracked vars file enables the gates.
+environment to those lookups. ansible-proxmox-apps sets both flags in its
+`inventory/group_vars/openbao_group.yml` and `authelia_group.yml`.
 
 ## Secrets — OpenBao is authoritative, the guest holds copies
 

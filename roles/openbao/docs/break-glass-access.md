@@ -8,7 +8,7 @@ change.
 
 `admin` used to be standing: `role_id` plus a non-expiring, unlimited-use
 `secret_id` in a personal keychain. It is now inert and bounded like every other
-break-glass tier (1h token, 2h ceiling, 15m single-use `secret_id`), which only
+break-glass tier (15m token, 30m ceiling, 15m single-use `secret_id`), which only
 works because there is a way to mint the next one without holding a standing
 credential. That way is the `human-unlock` policy, attached to the operator's
 own `userpass` user rather than to an AppRole — a person is not a workload, so
@@ -52,7 +52,7 @@ explicitly present), and if the user does not exist the converge fails with an
 instruction rather than creating a passwordless administrator.
 
 The policy/AppRole set is driven by `openbao_policies` / `openbao_approles` in
-`defaults/main.yml` — add a row to grow the RBAC surface (a new policy template
+`defaults/main/` — add a row to grow the RBAC surface (a new policy template
 goes beside the others in `templates/`). Adding a row **after** the cluster is
 already initialized needs a privileged token supplied via `BAO_TOKEN` (see
 [Idempotency](operations.md#idempotency)) — only the newly-added identities get created and
