@@ -24,9 +24,13 @@
   ansible.builtin.include_role:
     name: dryvist.homelab.inventory_resolve
   vars:
+    # Scheduled mode reads the object-storage path with the converge login exported as BAO_TOKEN
+    # by homelab-contracts scripts/run-ansible. The rotator token has no read on that path.
     inventory_resolve_openbao_token: >-
-      {{ (((rotate_login | default({})).json | default({})).auth | default({})).client_token
-         | default(lookup('env', 'BAO_TOKEN'), true) }}
+      {{ lookup('env', 'BAO_TOKEN') | default('', true)
+         if rotate_scheduled_mode | default(false) | bool
+         else (((rotate_login | default({})).json | default({})).auth | default({})).client_token
+              | default(lookup('env', 'BAO_TOKEN'), true) }}
     inventory_resolve_path: >-
       {{ rotate_roster_guard_inventory_path
          | default(lookup('env', 'TOFU_INVENTORY_PATH'), true) }}
