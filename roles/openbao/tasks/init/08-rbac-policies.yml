@@ -273,20 +273,21 @@
 # it, and everything after it, unwritten.
 - name: FAIL -- the reconcile identity cannot manage every declared policy
   ansible.builtin.fail:
-    msg: >-
+    msg: |
       The openbao-reconcile identity is declared as managing
       {{ openbao_manageable_policies | length }} policies but the live
       openbao-reconcile policy grants update on none of these
       {{ openbao_ungranted_policy_names | length }}:
-      {{ openbao_ungranted_policy_names | join(', ') }}. Every other declared
-      policy was written above. Reconcile CANNOT widen its own grants --
-      openbao-reconcile is in openbao_reconcile_excluded_policies by design --
-      so this clears with one human-approved policy-sync run from the
-      controller: doppler run -- openbao-unlock --via yubikey
-      openbao-policy-sync -- bash -c 'export
-      OPENBAO_PROVISIONING_TOKEN="$BAO_TOKEN"; unset BAO_TOKEN VAULT_TOKEN;
-      exec scripts/run-ansible.sh playbooks/site.yml --tags openbao_rbac -e
-      "{\"openbao_reconcile_mode\": true}" --limit openbao_group,localhost'
+      {{ openbao_ungranted_policy_names | join(', ') }}. Every other declared policy was written above.
+      Reconcile CANNOT widen its own grants --
+      openbao-reconcile is in openbao_reconcile_excluded_policies by design.
+      Run one non-reconcile single-object command per listed policy, then
+      re-run the converge. If a listed name is still reported, stop and escalate:
+      {% for name in openbao_ungranted_policy_names %}
+      semaphore-run-ansible.sh --rail-sec=600 ./scripts/run-ansible.sh \
+        playbooks/site.yml --tags openbao_rbac --limit openbao_group,localhost \
+        --diff -e '{"openbao_rbac_policy_name":"{{ name }}"}'
+      {% endfor %}
   when:
     - openbao_bootstrap_token is defined
     - openbao_reconcile_mode | default(false)

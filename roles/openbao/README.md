@@ -72,6 +72,16 @@ semaphore-run-ansible.sh --rail-sec=600 ./scripts/run-ansible.sh playbooks/site.
   -e '{"openbao_approle_config_name":"<approle-name>"}'
 ```
 
+A full-set RBAC run replaces the stored text of every existing policy whose
+rendered text differs from live. Before any write, that run stops unless each
+such policy is named in `openbao_policy_change_ack`. The failure message names
+the policies and never their text. Creating a missing policy needs no ack, and
+a single-object run (`openbao_rbac_policy_name`) is its own ack.
+
+```sh
+-e '{"openbao_policy_change_ack":["<policy-name>"]}'
+```
+
 When a config or unit change notifies a restart, only the voters that changed
 restart. They restart one at a time, with the active voter last. Each voter
 must report initialized, unsealed and joined before the next one restarts. If
