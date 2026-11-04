@@ -34,6 +34,7 @@ READERS = {
     "ai-apply-all",
     "ai-apply-apps",
     "apps-rotate",
+    "ansible-converge-writer",
     "apps-seed",
     "iac-platform-deploy",
     "operator-workstation",
@@ -93,6 +94,11 @@ def test_the_approles_that_can_read_the_signing_key_are_exact(reach_by_approle):
     caps, _ = reach_by_approle
     readers = {name for name, held in caps.items() if "read" in held or "root" in held}
     assert readers == READERS
+
+
+def test_the_seed_writer_holds_exactly_create_read_update_on_the_signing_key(reach_by_approle):
+    caps, _ = reach_by_approle
+    assert caps["ansible-converge-writer"] == ["create", "read", "update"]
 
 
 def test_no_standing_ai_reader_reaches_the_signing_key(reach_by_approle):
