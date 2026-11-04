@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.68.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.67.1...v0.68.0) (2026-11-04)
+
+
+### Features
+
+* **openbao:** let the reconcile identity read apps/grafana ([#498](https://github.com/dryvist/ansible-secrets-management/issues/498)) ([d61a6b3](https://github.com/dryvist/ansible-secrets-management/commit/d61a6b338367001710bc992d1b87d6860712fcb9))
+* **openbao:** raise the ai-admin-session hard max to 12h ([#495](https://github.com/dryvist/ansible-secrets-management/issues/495)) ([a2bbc42](https://github.com/dryvist/ansible-secrets-management/commit/a2bbc42662ee75e33349e6f90fa84bec3aaaef1d))
+
 ## [0.67.1](https://github.com/dryvist/ansible-secrets-management/compare/v0.67.0...v0.67.1) (2026-11-04)
 
 
