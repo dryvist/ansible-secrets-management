@@ -273,3 +273,22 @@ def test_only_trusted_ai_roles_attach_global_read_and_elevation_split_is_unchang
         "name": "{{ openbao_ai_global_read_policy_name }}",
         "template": "ai-global-read-policy.hcl.j2",
     } in policies
+
+
+def test_authelia_signing_leaf_is_denied_to_ai_global_read():
+    """The key that signs elevation tokens is never in the ambient AI read tier."""
+    values = _defaults()
+    leaves = _actuating_credential_leaves(values)
+    leaf = values["openbao_authelia_service_secrets_kv_path"]
+    assert leaf in leaves
+    ai_grants = _grants(_render("ai-global-read-policy.hcl.j2"))
+    for kind in ("data", "metadata"):
+        assert ai_grants[f"{values['openbao_kv_mount']}/{kind}/{leaf}"] == {"deny"}
+
+
+def test_authelia_signing_leaf_matches_the_authelia_role():
+    """Both roles name the same leaf, so the deny always covers what the seed writes."""
+    authelia = yaml.safe_load(
+        (ROOT / "roles" / "authelia" / "defaults" / "main" / "00-core.yml").read_text(encoding="utf-8")
+    )
+    assert _defaults()["openbao_authelia_service_secrets_kv_path"] == authelia["authelia_service_secrets_kv_path"]
