@@ -6,11 +6,11 @@
 #   ai-readonly   read/plan/scan            (default, ambient, standing)
 #   ai-apply-<d>  scoped WRITE to domain d  (per-window, human-unlocked, 6h/12h)
 #   ai-admin         break-glass FULL admin (per-window, human-unlocked, <=1h)
-#   ai-admin-session FULL admin session     (human-unlocked, 1h renewals, <=8h)
+#   ai-admin-session FULL admin session     (human-unlocked, 1h renewals, <=12h)
 #
 # Containment is primarily temporal, procedural, and observational:
 #   * TEMPORAL      — tokens renew hourly; the session role has an explicit
-#                     eight-hour hard maximum, after which it must be re-unlocked.
+#                     twelve-hour hard maximum, after which it must be re-unlocked.
 #   * PROCEDURAL    — NEVER STANDING. manage_secret_id:false; the converge creates
 #                     the inert role only. A usable token exists solely after a
 #                     one-shot human "unlock" response-wraps a single-use

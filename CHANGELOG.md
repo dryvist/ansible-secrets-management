@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.67.1](https://github.com/dryvist/ansible-secrets-management/compare/v0.67.0...v0.67.1) (2026-11-04)
+
+
+### Bug Fixes
+
+* **openbao:** grant KV metadata read on external write paths ([#496](https://github.com/dryvist/ansible-secrets-management/issues/496)) ([3ee8492](https://github.com/dryvist/ansible-secrets-management/commit/3ee84924fb9ace777333bcf19a3bcdedbd6c4724))
+* **openbao:** grant metadata read on external KV paths written by Terrakube workspaces ([3ee8492](https://github.com/dryvist/ansible-secrets-management/commit/3ee84924fb9ace777333bcf19a3bcdedbd6c4724))
+
 ## [0.67.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.66.1...v0.67.0) (2026-11-04)
 
 
