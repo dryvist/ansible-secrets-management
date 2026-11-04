@@ -52,7 +52,7 @@ explicitly present), and if the user does not exist the converge fails with an
 instruction rather than creating a passwordless administrator.
 
 The policy/AppRole set is driven by `openbao_policies` / `openbao_approles` in
-`defaults/main.yml` — add a row to grow the RBAC surface (a new policy template
+`defaults/main/` — add a row to grow the RBAC surface (a new policy template
 goes beside the others in `templates/`). Adding a row **after** the cluster is
 already initialized needs a privileged token supplied via `BAO_TOKEN` (see
 [Idempotency](operations.md#idempotency)) — only the newly-added identities get created and
