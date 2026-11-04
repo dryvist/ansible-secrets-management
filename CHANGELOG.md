@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.67.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.66.1...v0.67.0) (2026-11-04)
+
+
+### Features
+
+* **openbao:** add the slack-approvals AppRole ([#490](https://github.com/dryvist/ansible-secrets-management/issues/490)) ([a8e1ea9](https://github.com/dryvist/ansible-secrets-management/commit/a8e1ea9c63774e456d5e6aa37235b8be6cb68220))
+* **openbao:** name one command per policy and gate full-set text changes ([#487](https://github.com/dryvist/ansible-secrets-management/issues/487)) ([8fe8256](https://github.com/dryvist/ansible-secrets-management/commit/8fe825675bc13cd8fdedf29fe9dcbe1d038f1008))
+
+
+### Bug Fixes
+
+* **openbao:** declare the platform env and Terrakube read leaves ([#486](https://github.com/dryvist/ansible-secrets-management/issues/486)) ([5c0a984](https://github.com/dryvist/ansible-secrets-management/commit/5c0a98493b2143596498a544e935835c0d40da0c))
+* **openbao:** pass the runtime token to inventory resolution in scheduled mode ([#489](https://github.com/dryvist/ansible-secrets-management/issues/489)) ([e072003](https://github.com/dryvist/ansible-secrets-management/commit/e072003f605c306f817a57a19ece9062adf8422f))
+
 ## [0.66.1](https://github.com/dryvist/ansible-secrets-management/compare/v0.66.0...v0.66.1) (2026-11-03)
 
 
