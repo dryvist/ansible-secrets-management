@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.69.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.68.0...v0.69.0) (2026-11-04)
+
+
+### Features
+
+* **openbao:** add the grafana-alerts secret domain ([#501](https://github.com/dryvist/ansible-secrets-management/issues/501)) ([0f166a5](https://github.com/dryvist/ansible-secrets-management/commit/0f166a577b49e7c73834fe5ce3e5bb0c2b550762))
+
 ## [0.68.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.67.1...v0.68.0) (2026-11-04)
 
 
