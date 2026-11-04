@@ -47,3 +47,10 @@ openbao_slack_ops_approle_name: slack-ops
 # slack-admin's: non-expiring, bounded by its 08b source-address class.
 openbao_slack_ops_token_ttl: 15m
 openbao_slack_ops_secret_id_ttl: "0s"
+
+# slack-approvals: read-only on the single secrets-external KV-v2 entry holding
+# the OpenBao Approvals bot token (chat:write only). Its secret_id is rotated
+# and republished to Doppler by the scheduled rotation, not minted at converge.
+# Its policy and AppRole names are declared with the other workstation names in
+# 05c, because the rotation domain list there reads them.
+openbao_slack_approvals_token_ttl: 15m

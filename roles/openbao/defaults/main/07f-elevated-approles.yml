@@ -182,3 +182,12 @@ openbao_base_approles_elevated:
     token_ttl: "{{ openbao_slack_ops_token_ttl }}"
     token_max_ttl: "{{ openbao_slack_ops_token_ttl }}"
     secret_id_ttl: "{{ openbao_slack_ops_secret_id_ttl }}"
+  # slack-approvals: workstation approvals bot. manage_secret_id false: converge
+  # mints no secret_id here, so no unpublished credential lands on disk. The
+  # scheduled rotation mints the first one and republishes it to Doppler.
+  - name: "{{ openbao_slack_approvals_approle_name }}"
+    policy: "{{ openbao_slack_approvals_policy_name }}"
+    token_ttl: "{{ openbao_slack_approvals_token_ttl }}"
+    token_max_ttl: "{{ openbao_slack_approvals_token_ttl }}"
+    manage_secret_id: false
+    secret_id_num_uses: 100

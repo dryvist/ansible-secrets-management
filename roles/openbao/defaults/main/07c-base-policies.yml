@@ -263,6 +263,8 @@ openbao_base_policies_static:
     template: slack-admin-policy.hcl.j2
   - name: "{{ openbao_slack_ops_policy_name }}"
     template: slack-ops-policy.hcl.j2
+  - name: "{{ openbao_slack_approvals_policy_name }}"
+    template: slack-approvals-policy.hcl.j2
   - name: "{{ openbao_github_org_secrets_read_policy_name }}"
     template: github-org-secrets-read-policy.hcl.j2
   - name: "{{ openbao_splunk_mcp_rotate_policy_name }}"

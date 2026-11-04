@@ -248,6 +248,17 @@ class ReachableWritesSurviveAnUngrantedName(unittest.TestCase):
         self.assertIn("uicheck", msg)
         self.assertIn("Every other declared policy was written above", msg)
 
+    def test_b2_the_remediation_is_one_single_object_command_per_policy(self):
+        # The printed fix never re-runs the whole reconcile set: each listed
+        # policy gets its own non-reconcile single-object run.
+        ungranted = ["uicheck", "other-policy"]
+        msg = final_fail_msg(NAMES + ["uicheck", "other-policy"], ungranted)
+        self.assertIn('"openbao_rbac_policy_name":"uicheck"', msg)
+        self.assertIn('"openbao_rbac_policy_name":"other-policy"', msg)
+        self.assertEqual(msg.count("--tags openbao_rbac"), 2)
+        self.assertNotIn("openbao_reconcile_mode", msg)
+        self.assertNotIn("--via yubikey", msg)
+
     def test_c_with_everything_granted_nothing_changes(self):
         # (c) no ungranted names -> reachable is the full declared set, the
         # final fail's `when` does not fire, nothing is refused.

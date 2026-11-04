@@ -1,7 +1,8 @@
 """Rendered reconcile KV grants match their named consumers."""
 
 from openbao_reconcile_bounds_helpers import (
-    _allowed_parameters, _capabilities, _render, _stanzas, rendered_defaults, FLOW_LOCK, RECONCILE
+    _allowed_parameters, _attached_stanzas, _capabilities, _effective_policy_union, _render,
+    _stanzas, rendered_defaults, FLOW_LOCK, RECONCILE
 )
 
 def test_reconcile_does_not_grant_per_app_mount_configuration(rendered_defaults):
@@ -53,6 +54,9 @@ def test_reconcile_kv_grants_match_named_consumers_and_keep_flow_lock_separate(
         "secret/data/apps/caller-gw": ["create", "read", "update"],
         "secret/data/apps/semaphore": ["read"],
         "secret/data/platform/splunk/main": ["read"],
+        "config/data/platform/ansible/env": ["read"],
+        "secret/data/platform/ansible/env": ["read"],
+        "secret/data/platform/terrakube/main": ["read"],
     }
     actual_data_paths = {
         path for path in reconcile_stanzas
@@ -146,3 +150,17 @@ def test_reconcile_splunk_read_uses_the_declared_mount_and_setdefault(
 
     assert _capabilities(stanzas[splunk_path]) == ["create", "read", "update"]
     assert "secret/data/platform/splunk/main" not in stanzas
+
+def test_workstation_reconcile_identity_reads_its_declared_leaves(rendered_defaults):
+    values, approles, policies = rendered_defaults
+    attached_stanzas = _attached_stanzas(
+        values, approles, policies, values["openbao_reconcile_approle_name"]
+    )
+    env_path = values["openbao_platform_env_path"]
+
+    for path in (
+        f"{values['openbao_config_mount']}/data/{env_path}",
+        f"{values['openbao_kv_mount']}/data/{env_path}",
+        f"{values['openbao_kv_mount']}/data/platform/terrakube/main",
+    ):
+        assert _effective_policy_union(attached_stanzas, path) == {"read"}, path

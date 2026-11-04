@@ -98,6 +98,14 @@ openbao_ansible_converge_policy_name: ansible-converge
 openbao_ansible_converge_approle_name: ansible-converge
 # Seed plays use the same policy through a short-lived batch-token identity.
 openbao_ansible_converge_writer_approle_name: ansible-converge-writer
+# The machine-identity environment document. Each converge identity reads one
+# document per mount listed here; ansible-converge-policy.hcl.j2 derives its
+# grants from these two declarations, so the path is written once.
+openbao_platform_env_path: platform/ansible/env
+openbao_platform_env_mounts:
+  - "{{ openbao_config_mount }}"
+  - "{{ openbao_kv_mount }}"
+  - secrets-external
 # semaphore — the unattended execution plane's own identity. It attaches the
 # ansible-converge policy PLUS this delta (semaphore-policy.hcl.j2), and signs
 # its SSH certificates under its own principal rather than borrowing
@@ -205,6 +213,8 @@ openbao_agent_workstation_policy_name: agent-workstation
 openbao_agent_workstation_approle_name: agent-workstation
 openbao_herdr_hail_policy_name: herdr-hail
 openbao_herdr_hail_approle_name: herdr-hail
+openbao_slack_approvals_policy_name: slack-approvals
+openbao_slack_approvals_approle_name: slack-approvals
 openbao_claude_code_router_key_policy_name: claude-code-router-key
 openbao_claude_code_router_key_approle_name: claude-code-router-key
 openbao_bao_elevate_client_policy_name: bao-elevate-client
@@ -240,6 +250,7 @@ openbao_secrets_domain_approle_names: >-
      + [openbao_agent_ssh_sign_approle_name,
       openbao_agent_workstation_approle_name,
       openbao_herdr_hail_approle_name,
+      openbao_slack_approvals_approle_name,
       openbao_claude_code_router_key_approle_name,
       openbao_bao_elevate_client_approle_name,
       openbao_hermes_approle_name,

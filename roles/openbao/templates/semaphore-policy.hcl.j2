@@ -53,12 +53,6 @@ path "{{ openbao_kv_mount }}/metadata/platform/splunk/main" {
   capabilities = ["read", "list"]
 }
 
-# The converge wrapper reads the machine-identity env document with the
-# identity it logged in as.
-path "{{ openbao_kv_mount }}/data/platform/ansible/env" {
-  capabilities = ["read"]
-}
-
 # ansible-proxmox-ai's router secret prefetch consumes these two app entries.
 path "{{ openbao_kv_mount }}/data/apps/benchmark" {
   capabilities = ["read"]

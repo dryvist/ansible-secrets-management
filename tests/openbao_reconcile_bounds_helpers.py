@@ -132,6 +132,18 @@ def _render(template, values, *, policy_exclusions=None):
         trust_as_template(template.read_text(encoding="utf-8"))
     )
 
+def _attached_stanzas(values, approles, policies, approle_name):
+    role = next(role for role in approles if role["name"] == approle_name)
+    policy_by_name = {policy["name"]: policy for policy in policies}
+    stanzas = []
+    for policy_name in _role_policies(role):
+        policy = policy_by_name.get(policy_name)
+        if policy is None:
+            continue
+        context = dict(values, item=policy)
+        stanzas.append(dict(_stanzas(_render(TEMPLATES / policy["template"], context))))
+    return stanzas
+
 def _writable_policy_names(rendered):
     writable = set()
     for path, body in _stanzas(rendered):

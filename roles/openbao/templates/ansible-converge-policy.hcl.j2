@@ -283,12 +283,12 @@ path "secrets-external/metadata/platform/backblaze-splunk" {
 # wrapper on the execution plane reads all three at task start and exports
 # them; the playbooks read plain environment variables and stay indifferent to
 # the store behind them. Exact paths, read only — a converge never writes here.
-{% for mount in [openbao_kv_mount, 'secrets-external'] %}
-path "{{ mount }}/data/platform/ansible/env" {
+{% for mount in openbao_platform_env_mounts %}
+path "{{ mount }}/data/{{ openbao_platform_env_path }}" {
   capabilities = ["read"]
 }
 
-path "{{ mount }}/metadata/platform/ansible/env" {
+path "{{ mount }}/metadata/{{ openbao_platform_env_path }}" {
   capabilities = ["read"]
 }
 
