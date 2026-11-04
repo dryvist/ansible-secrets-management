@@ -24,8 +24,8 @@
   ansible.builtin.include_role:
     name: dryvist.homelab.inventory_resolve
   vars:
-    # Scheduled mode reads the object-storage path with the execution plane's token (BAO_TOKEN, set by
-    # openbao-exec-env.sh). The rotator token has no read on platform/object-storage and must not be used here.
+    # Scheduled mode reads the object-storage path with the converge login exported as BAO_TOKEN
+    # by homelab-contracts scripts/run-ansible. The rotator token has no read on that path.
     inventory_resolve_openbao_token: >-
       {{ lookup('env', 'BAO_TOKEN') | default('', true)
          if rotate_scheduled_mode | default(false) | bool
