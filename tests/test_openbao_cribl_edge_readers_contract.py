@@ -113,6 +113,8 @@ def _matches_apps_reader_contract(policy: str, apps: set[str]) -> bool:
         ("secrets-external/data/backblaze/dryvist-nautobot-backups/rw", ("read",)),
         ("secrets-external/metadata/backblaze/dryvist-nautobot-backups/rw", ("read",)),
         ("secrets-external/data/ai/saas/opencode", ("read",)),
+        ("secrets-external/data/platform/grafana-alerts", ("read",)),
+        ("secrets-external/metadata/platform/grafana-alerts", ("read",)),
     }
     return sorted(_grants(policy)) == sorted(expected)
 

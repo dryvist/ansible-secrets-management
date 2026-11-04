@@ -72,3 +72,13 @@ path "secrets-external/metadata/backblaze/dryvist-nautobot-backups/rw" {
 path "secrets-external/data/ai/saas/opencode" {
   capabilities = ["read"]
 }
+
+# Exact-path read of the Grafana alert Slack leaf (grafana-alerts domain).
+# One leaf, no wildcard.
+path "secrets-external/data/platform/grafana-alerts" {
+  capabilities = ["read"]
+}
+
+path "secrets-external/metadata/platform/grafana-alerts" {
+  capabilities = ["read"]
+}
