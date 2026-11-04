@@ -213,6 +213,8 @@ openbao_agent_workstation_policy_name: agent-workstation
 openbao_agent_workstation_approle_name: agent-workstation
 openbao_herdr_hail_policy_name: herdr-hail
 openbao_herdr_hail_approle_name: herdr-hail
+openbao_slack_approvals_policy_name: slack-approvals
+openbao_slack_approvals_approle_name: slack-approvals
 openbao_claude_code_router_key_policy_name: claude-code-router-key
 openbao_claude_code_router_key_approle_name: claude-code-router-key
 openbao_bao_elevate_client_policy_name: bao-elevate-client
@@ -248,6 +250,7 @@ openbao_secrets_domain_approle_names: >-
      + [openbao_agent_ssh_sign_approle_name,
       openbao_agent_workstation_approle_name,
       openbao_herdr_hail_approle_name,
+      openbao_slack_approvals_approle_name,
       openbao_claude_code_router_key_approle_name,
       openbao_bao_elevate_client_approle_name,
       openbao_hermes_approle_name,

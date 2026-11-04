@@ -100,6 +100,7 @@ openbao_approle_class_map: >-
     'secret-age-audit': 'service-runtime',
     'slack-admin': 'operator-admin',
     'slack-ops': 'service-runtime',
+    'slack-approvals': 'service-runtime',
     'snapshot': 'service-runtime',
     'splunk-mcp-rotate': 'converge-automation',
     'terraform': 'converge-automation',
