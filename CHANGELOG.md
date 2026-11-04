@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.70.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.69.0...v0.70.0) (2026-11-04)
+
+
+### Features
+
+* **openbao:** separate Authelia's service secrets and pin who can read them ([#506](https://github.com/dryvist/ansible-secrets-management/issues/506)) ([cb85798](https://github.com/dryvist/ansible-secrets-management/commit/cb8579829d4b99b6005685604caf8a46d30399ce))
+
 ## [0.69.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.68.0...v0.69.0) (2026-11-04)
 
 

@@ -30,7 +30,7 @@ def test_seed_runs_the_shared_contract_on_the_controller_with_the_converge_token
     }
     inputs = call["vars"]
     assert inputs["openbao_secrets_seed_mount"] == "secret"
-    assert inputs["openbao_secrets_seed_path"] == "apps/authelia"
+    assert inputs["openbao_secrets_seed_path"] == "{{ authelia_service_secrets_kv_path }}"
     assert inputs["openbao_secrets_seed_token"] == "{{ lookup('env', 'BAO_TOKEN') | default('', true) }}"
     assert inputs["openbao_secrets_seed_addr"] == "{{ lookup('env', 'BAO_ADDR') | default('', true) }}"
     assert inputs["openbao_secrets_seed_check_capabilities"] is True
@@ -85,3 +85,11 @@ def test_contracts_pin_is_the_latest_tag():
         if item["name"] == "https://github.com/dryvist/homelab-contracts.git#/ansible/"
     )
     assert contracts["version"] == "v5.46.0"
+
+
+def test_service_secrets_live_apart_from_the_client_secret_leaf():
+    """The signing and session material never shares a leaf with the OIDC client secrets."""
+    defaults = yaml.safe_load(DEFAULTS.read_text(encoding="utf-8"))
+    path = defaults["authelia_service_secrets_kv_path"]
+    assert path == "apps/authelia-signing"
+    assert path != "apps/authelia"

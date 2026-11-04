@@ -165,9 +165,9 @@ authelia_session_remember_me: "1w"
 # --- Users ---------------------------------------------------------------------
 # File backend, seeded once (create-if-absent — the live users.yml is never
 # overwritten, it accumulates WebAuthn state via the portal). The bootstrap
-# password is stored in OpenBao (apps/authelia, field bootstrap_password) and
-# written root-only for one-time retrieval on the first run, while users.yml is
-# absent; day-to-day login is the passkey.
+# password is stored in OpenBao (secret/<authelia_service_secrets_kv_path>, field
+# bootstrap_password) and written root-only for one-time retrieval on the first
+# run, while users.yml is absent; day-to-day login is the passkey.
 # The estate's operator identity, from the same DEFAULT_USERNAME env the vikunja
 # role provisions its operator from — one source, not a per-role literal. The
 # users template puts this user in the `admins` group, so setting it here is what
@@ -198,10 +198,19 @@ authelia_service_users:
 authelia_service_users_rotate_passwords: false
 
 # --- Service secrets: OpenBao is authoritative, the guest holds copies -------
-# The JWT / session / storage-encryption secrets and the OIDC signing key live in
-# OpenBao at secret/apps/authelia (tasks/service_secrets.yml). The files below
-# are guest copies on the persistent mount, fed to Authelia via *_FILE env vars.
-# They are never rendered into the config.
+# The JWT / session / storage-encryption secrets, the OIDC signing key and the
+# bootstrap password live in OpenBao at secret/<authelia_service_secrets_kv_path>
+# (tasks/service_secrets.yml). The files below are guest copies on the persistent
+# mount, fed to Authelia via *_FILE env vars. They are never rendered into the
+# config.
+#
+# The leaf is separate from secret/apps/authelia, which holds the OIDC client
+# secrets other systems read. A reader of a client secret never reaches the key
+# that signs Authelia's tokens. The openbao role denies this leaf to the AI
+# global-read tier (openbao_authelia_service_secrets_kv_path, same value; a test
+# keeps the two equal). The first converge after the move seeds the new leaf
+# from the guest copies, so the values carry over and nothing rotates.
+authelia_service_secrets_kv_path: apps/authelia-signing
 authelia_secrets_dir: "{{ authelia_data_dir }}/secrets"
 authelia_secret_files:
   jwt_secret: "{{ authelia_secrets_dir }}/jwt_secret"

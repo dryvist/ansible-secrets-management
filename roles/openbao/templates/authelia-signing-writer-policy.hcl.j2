@@ -1,0 +1,12 @@
+{{ ansible_managed | comment }}
+# The Authelia service-secrets seed writes the signing leaf: create, update and
+# read on its data path, read on its metadata. Exact path, no wildcard. This
+# policy is attached to the seed-writer AppRole only; semaphore and the shared
+# converge policy never carry it, and no delete is granted.
+path "{{ openbao_kv_mount }}/data/{{ openbao_authelia_service_secrets_kv_path }}" {
+  capabilities = ["create", "update", "read"]
+}
+
+path "{{ openbao_kv_mount }}/metadata/{{ openbao_authelia_service_secrets_kv_path }}" {
+  capabilities = ["read"]
+}

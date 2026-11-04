@@ -100,13 +100,13 @@
     src: /tmp/ai-orchestrator-policy.hcl
   register: bao_ai_orchestrator_policy
 
-- name: Assert ai-orchestrator can mint only named GitHub permission sets
+- name: Assert ai-orchestrator can mint only named, non-admin GitHub permission sets
   ansible.builtin.assert:
     that:
-      - "'github-admin/token/dryvist-full-automation' in (bao_ai_orchestrator_policy.content | b64decode)"
-      - "'github-admin/token/personal-full-automation' in (bao_ai_orchestrator_policy.content | b64decode)"
+      - "'github-admin/token/dryvist-full-automation' not in (bao_ai_orchestrator_policy.content | b64decode)"
+      - "'github-admin/token/personal-full-automation' not in (bao_ai_orchestrator_policy.content | b64decode)"
       - "'github/token/*' not in (bao_ai_orchestrator_policy.content | b64decode)"
-    fail_msg: "ai-orchestrator policy does not preserve the named GitHub token boundary"
+    fail_msg: "ai-orchestrator policy reaches an admin-tier GitHub set or a token wildcard"
 
 - name: Assert the maintenance-window credential grant stays read-only
   vars:

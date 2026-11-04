@@ -74,14 +74,17 @@ environment to those lookups. ansible-proxmox-apps sets both flags in its
 ## Secrets — OpenBao is authoritative, the guest holds copies
 
 - **JWT / session / storage-encryption secrets and the OIDC signing key**: stored
-  at `secret/apps/authelia` in OpenBao. The shared `seed_generated` task seeds
+  at `secret/apps/authelia-signing` in OpenBao (`authelia_service_secrets_kv_path`),
+  apart from the OIDC client secrets at `secret/apps/authelia`. A system that
+  reads a client secret never reaches the key that signs Authelia's tokens, and
+  the AI global-read tier is denied this leaf. The shared `seed_generated` task seeds
   any missing field with the converge token from the controller, and it never
   replaces a stored field. A guest copy in the secrets directory is fed to the
   process via `AUTHELIA_*_FILE` env vars in the systemd unit, and is never
   rendered into config. A missing copy is written from OpenBao. A copy that
   differs from OpenBao fails the converge and changes nothing. The storage
   encryption key is immutable once the database exists.
-- **Bootstrap password**: stored at `secret/apps/authelia` in OpenBao as
+- **Bootstrap password**: stored at `secret/apps/authelia-signing` in OpenBao as
   `bootstrap_password`. The shared `seed_generated` task creates the field only
   when absent and keeps an existing value. On the first run, while `users.yml`
   is absent, the role writes the value root-only at
