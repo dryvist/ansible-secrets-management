@@ -201,7 +201,7 @@ reconciliation.
     `auth/token/create`, or the IaC kernel (`secret/infra/*`). A bootstrap guard
     refuses to render a leaf for a forbidden subtree. Only human-gated
     administrator roles attach the self-modify policy; both are alerted, and
-    the session role has an explicit 8h hard maximum.
+    the session role has an explicit 12h hard maximum.
     The operator runbook covers the full grant/redeem flow.
 
 [^elevate]: JWT roles on the `authelia` mount. Each binds one client audience

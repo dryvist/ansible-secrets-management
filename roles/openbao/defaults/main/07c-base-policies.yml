@@ -234,7 +234,7 @@ openbao_base_policies_static:
   # they are ACTOR roles that attach the base read-/write- capability leaves
   # (generated below into openbao_ai_capability_policies). ai-admin remains a
   # standalone policy shared only by the human-gated administrator roles; it is
-  # NOT composed from capability leaves. The session role has an 8h hard cap.
+  # NOT composed from capability leaves. The session role has a 12h hard cap.
   # Containment also comes from human unlock, alerting, and the enumerated paths.
   - name: "{{ openbao_ai_admin_policy_name }}"
     template: ai-admin-policy.hcl.j2
