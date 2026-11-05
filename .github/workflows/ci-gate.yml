@@ -190,7 +190,7 @@ jobs:
           version: "latest"
 
       - name: Install Ansible, pytest, PyYAML and Jinja2
-        run: uv pip install --system 'ansible-core>=2.16' pytest pyyaml jinja2
+        run: uv pip install --system 'ansible-core>=2.16' pytest pytest-xdist pyyaml jinja2
 
       # Exact cache hits force-refresh only the floating homelab-contracts v5
       # tag; misses run the forced install for the full requirement set.
@@ -223,7 +223,7 @@ jobs:
       - name: Run the full pytest suite
         run: >-
           nix shell --inputs-from . nixpkgs#openbao
-          --command python3 -m pytest -q tests/
+          --command python3 -m pytest -q -n auto tests/
 
   gate:
     name: Merge Gate
