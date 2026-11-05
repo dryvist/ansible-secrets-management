@@ -46,6 +46,7 @@ def test_dev_server_enforces_config_and_metadata_parameter_bounds(
             "server",
             "-dev",
             "-dev-root-token-id=root",
+            "-dev-no-store-token",
             f"-dev-listen-address=127.0.0.1:{port}",
         ],
         stdout=subprocess.DEVNULL,

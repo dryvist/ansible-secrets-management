@@ -111,6 +111,7 @@ def agent_workstation_token():
             "server",
             "-dev",
             "-dev-root-token-id=root",
+            "-dev-no-store-token",
             f"-dev-listen-address=127.0.0.1:{port}",
         ],
         stdout=subprocess.DEVNULL,

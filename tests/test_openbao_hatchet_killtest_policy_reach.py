@@ -138,7 +138,7 @@ def _dev_server():
     port = loopback_port()
     base = f"http://127.0.0.1:{port}"
     server = subprocess.Popen(
-        [binary, "server", "-dev", "-dev-root-token-id=root", f"-dev-listen-address=127.0.0.1:{port}"],
+        [binary, "server", "-dev", "-dev-root-token-id=root", "-dev-no-store-token", f"-dev-listen-address=127.0.0.1:{port}"],
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     for _ in range(60):
         try:
