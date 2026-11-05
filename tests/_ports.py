@@ -16,19 +16,31 @@ _WORKER_SLOTS = 100
 def _worker_slot() -> int:
     # pytest-xdist names workers gw0, gw1, ...; a run without xdist has no name.
     worker = os.environ.get("PYTEST_XDIST_WORKER", "gw0")
-    return int(worker.removeprefix("gw")) % _WORKER_SLOTS
+    slot = int(worker.removeprefix("gw"))
+    if slot >= _WORKER_SLOTS:
+        raise RuntimeError(f"{worker} has no port slice; the range holds {_WORKER_SLOTS} workers")
+    return slot
+
+
+def _is_free(port: int) -> bool:
+    with socket.socket() as sock:
+        try:
+            sock.bind(("127.0.0.1", port))
+        except OSError:
+            return False
+        return True
 
 
 def loopback_port() -> int:
-    """Return a port free on 127.0.0.1 from this worker's slice."""
+    """Return a port free on 127.0.0.1 from this worker's slice.
+
+    The server also binds the port above its API port, so each candidate and the
+    port above it are checked, and the slice's last port is never returned.
+    """
     start = _RANGE_START + _worker_slot() * _PORTS_PER_WORKER
-    for port in range(start, start + _PORTS_PER_WORKER):
-        with socket.socket() as sock:
-            try:
-                sock.bind(("127.0.0.1", port))
-            except OSError:
-                continue
+    for port in range(start, start + _PORTS_PER_WORKER - 1):
+        if _is_free(port) and _is_free(port + 1):
             return port
     raise RuntimeError(
-        f"no free loopback port in {start}-{start + _PORTS_PER_WORKER - 1}"
+        f"no free loopback port in {start}-{start + _PORTS_PER_WORKER - 2}"
     )
