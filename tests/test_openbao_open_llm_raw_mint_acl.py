@@ -12,7 +12,6 @@ Run with a bao binary on PATH, for example:
 
 import json
 import shutil
-import socket
 import subprocess
 import time
 import urllib.error
@@ -20,6 +19,7 @@ import urllib.request
 
 import pytest
 
+from _ports import loopback_port
 from test_openbao_router_key_catalog import _render_open_llm_policy
 
 INSTALLATION = "4242"
@@ -29,12 +29,6 @@ READ_ROLE_ID = "auth/approle/role/sandbox-agent-read/role-id"
 WRITE_ROLE_ID = "auth/approle/role/sandbox-agent-write/role-id"
 OTHER_ROLE_ID = "auth/approle/role/open-llm/role-id"
 SANDBOX_ROLE_IDS = (READ_ROLE_ID, WRITE_ROLE_ID)
-
-
-def _free_port():
-    with socket.socket() as sock:
-        sock.bind(("127.0.0.1", 0))
-        return sock.getsockname()[1]
 
 
 def _call(base, token, method, path, body=None):
@@ -55,7 +49,7 @@ def _call(base, token, method, path, body=None):
 def minter():
     binary = shutil.which("bao")
     assert binary, "the bao binary must be on PATH: this test runs a real OpenBao dev server"
-    port = _free_port()
+    port = loopback_port()
     base = f"http://127.0.0.1:{port}"
     server = subprocess.Popen(
         [binary, "server", "-dev", "-dev-root-token-id=root", f"-dev-listen-address=127.0.0.1:{port}"],

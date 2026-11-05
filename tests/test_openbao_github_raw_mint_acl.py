@@ -3,7 +3,6 @@
 import json
 import re
 import shutil
-import socket
 import subprocess
 import time
 import urllib.error
@@ -13,6 +12,8 @@ from pathlib import Path
 import pytest
 import yaml
 from jinja2 import Environment, FileSystemLoader
+
+from _ports import loopback_port
 
 ROOT = Path(__file__).resolve().parents[1]
 TEMPLATES = ROOT / "roles" / "openbao" / "templates"
@@ -106,12 +107,6 @@ def _assert_installation_id_denied(stanza):
     assert '"installation_id"' not in stanza.split("denied_parameters", 1)[0]
 
 
-def _free_port():
-    with socket.socket() as sock:
-        sock.bind(("127.0.0.1", 0))
-        return sock.getsockname()[1]
-
-
 def _call(base, token, method, path, body=None):
     request = urllib.request.Request(
         f"{base}/v1/{path}",
@@ -130,7 +125,7 @@ def _call(base, token, method, path, body=None):
 def minter():
     binary = shutil.which("bao")
     assert binary, "the bao binary must be on PATH: this test runs a real OpenBao dev server"
-    port = _free_port()
+    port = loopback_port()
     base = f"http://127.0.0.1:{port}"
     server = subprocess.Popen(
         [binary, "server", "-dev", "-dev-root-token-id=root", f"-dev-listen-address=127.0.0.1:{port}"],
