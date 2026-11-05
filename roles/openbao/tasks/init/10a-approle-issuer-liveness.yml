@@ -3,6 +3,7 @@
 # declarations. The first scoped converge selects openbao_rbac and
 # openbao_approle, so issuer grants exist before this probe runs. This executes
 # on every initialized cluster, even when a provisioning token is present.
+# The probe is skipped in check mode.
 - name: Authenticate to approle-issuer for the reconcile liveness probe
   community.hashi_vault.vault_login:
     url: "{{ openbao_reconcile_addr }}"
@@ -15,7 +16,9 @@
   register: openbao_reconcile_liveness_issuer_login
   no_log: true
   changed_when: false
-  when: openbao_status.initialized
+  when:
+    - openbao_status.initialized
+    - not ansible_check_mode
 
 - name: Mint a reconcile liveness secret_id through approle-issuer
   community.hashi_vault.vault_write:
@@ -30,7 +33,9 @@
   register: openbao_reconcile_liveness_secret_id
   no_log: true
   changed_when: false
-  when: openbao_status.initialized
+  when:
+    - openbao_status.initialized
+    - not ansible_check_mode
 
 - name: Revoke the reconcile liveness secret_id by accessor
   community.hashi_vault.vault_write:
@@ -47,4 +52,6 @@
     ansible_become: false
   no_log: true
   changed_when: false
-  when: openbao_status.initialized
+  when:
+    - openbao_status.initialized
+    - not ansible_check_mode
