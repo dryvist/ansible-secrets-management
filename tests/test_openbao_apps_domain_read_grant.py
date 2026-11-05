@@ -344,7 +344,7 @@ def test_grafana_alerts_domain_reads_one_exact_external_leaf_for_the_apps_reader
     assert domain["paths"] == [
         {
             "mount": "secrets-external",
-            "path": "platform/grafana-alerts",
+            "path": "platform/slack-ops",
             "optional": True,
         }
     ]
@@ -356,17 +356,17 @@ def test_grafana_alerts_path_has_exact_read_only_data_and_metadata_grants():
 
     for kind in ("data", "metadata"):
         assert (
-            f'path "secrets-external/{kind}/platform/grafana-alerts" {{\n'
+            f'path "secrets-external/{kind}/platform/slack-ops" {{\n'
             '  capabilities = ["read"]\n}'
         ) in policy
     assert {
-        ("secrets-external/data/platform/grafana-alerts", ("read",)),
-        ("secrets-external/metadata/platform/grafana-alerts", ("read",)),
+        ("secrets-external/data/platform/slack-ops", ("read",)),
+        ("secrets-external/metadata/platform/slack-ops", ("read",)),
     } <= grants
     assert not any(
         WRITE_CAPABILITIES.intersection(capabilities)
         for path, capabilities in grants
-        if "grafana-alerts" in path
+        if "platform/slack-ops" in path
     )
     assert 'path "secrets-external/data/platform/*"' not in policy
     assert 'path "secrets-external/metadata/platform/*"' not in policy
