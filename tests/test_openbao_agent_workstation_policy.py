@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import re
 import shutil
-import socket
 import subprocess
 import time
 import urllib.error
@@ -15,6 +14,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+from _ports import loopback_port
 from test_openbao_rbac_policy_render import render as render_policy_pairs
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -57,12 +57,6 @@ def _render_policy() -> tuple[str, str]:
     pairs = render_policy_pairs([{"name": policy_name, "template": template}])
     assert len(pairs) == 1
     return policy_name, pairs[0]["value"]
-
-
-def _free_port() -> int:
-    with socket.socket() as sock:
-        sock.bind(("127.0.0.1", 0))
-        return sock.getsockname()[1]
 
 
 def _call(base: str, token: str, method: str, path: str, body=None):
@@ -109,7 +103,7 @@ def test_rendered_agent_workstation_policy_contains_only_the_two_exact_reads():
 def agent_workstation_token():
     binary = shutil.which("bao")
     assert binary, "the bao binary must be on PATH: this test runs a real OpenBao dev server"
-    port = _free_port()
+    port = loopback_port()
     base = f"http://127.0.0.1:{port}"
     server = subprocess.Popen(
         [
@@ -117,6 +111,7 @@ def agent_workstation_token():
             "server",
             "-dev",
             "-dev-root-token-id=root",
+            "-dev-no-store-token",
             f"-dev-listen-address=127.0.0.1:{port}",
         ],
         stdout=subprocess.DEVNULL,

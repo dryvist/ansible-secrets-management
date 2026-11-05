@@ -11,7 +11,6 @@ import json
 import os
 from pathlib import Path
 import shutil
-import socket
 import subprocess
 import time
 import unittest
@@ -23,6 +22,7 @@ from ansible.parsing.dataloader import DataLoader
 from ansible.plugins.loader import init_plugin_loader
 from ansible.template import Templar, trust_as_template
 import yaml
+from _ports import loopback_port
 from test_openbao_global_read_all_policy import _environment as policy_environment
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -135,12 +135,10 @@ def _read_with_policies(base, policies, path):
 def _dev_server():
     binary = shutil.which("bao")
     assert binary, "the bao binary must be on PATH: this test runs a real OpenBao dev server"
-    with socket.socket() as sock:
-        sock.bind(("127.0.0.1", 0))
-        port = sock.getsockname()[1]
+    port = loopback_port()
     base = f"http://127.0.0.1:{port}"
     server = subprocess.Popen(
-        [binary, "server", "-dev", "-dev-root-token-id=root", f"-dev-listen-address=127.0.0.1:{port}"],
+        [binary, "server", "-dev", "-dev-root-token-id=root", "-dev-no-store-token", f"-dev-listen-address=127.0.0.1:{port}"],
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     for _ in range(60):
         try:

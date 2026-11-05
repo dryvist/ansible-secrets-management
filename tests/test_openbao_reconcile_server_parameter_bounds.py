@@ -3,10 +3,10 @@
 from openbao_reconcile_bounds_helpers import (
     _render, _templar, _trust, rendered_defaults, RECONCILE
 )
+from _ports import loopback_port
 import json
 import pytest
 import shutil
-import socket
 import subprocess
 import time
 import urllib.error
@@ -38,9 +38,7 @@ def test_dev_server_enforces_config_and_metadata_parameter_bounds(
     values, _approles, _policies = rendered_defaults
     mount = values["openbao_config_mount"]
     declared_max_versions = str(values["openbao_config_mount_max_versions"])
-    with socket.socket() as sock:
-        sock.bind(("127.0.0.1", 0))
-        port = sock.getsockname()[1]
+    port = loopback_port()
     base = f"http://127.0.0.1:{port}"
     server = subprocess.Popen(
         [
@@ -48,6 +46,7 @@ def test_dev_server_enforces_config_and_metadata_parameter_bounds(
             "server",
             "-dev",
             "-dev-root-token-id=root",
+            "-dev-no-store-token",
             f"-dev-listen-address=127.0.0.1:{port}",
         ],
         stdout=subprocess.DEVNULL,
