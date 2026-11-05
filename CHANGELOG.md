@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.71.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.70.0...v0.71.0) (2026-11-05)
+
+
+### Features
+
+* **openbao:** read the grafana-alerts domain from the Slack ops leaf ([#510](https://github.com/dryvist/ansible-secrets-management/issues/510)) ([5447766](https://github.com/dryvist/ansible-secrets-management/commit/5447766db075d40ec1cd7d480c139856c2113385))
+
 ## [0.70.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.69.0...v0.70.0) (2026-11-04)
 
 

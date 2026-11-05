@@ -4,12 +4,19 @@
 import unittest
 from pathlib import Path
 
+import jinja2
 import yaml
 
 REPO = Path(__file__).resolve().parent.parent
 INIT = REPO / "roles" / "openbao" / "tasks" / "init"
 RECONCILE = INIT / "02-initialize-cluster.yml"
 LIVENESS = INIT / "10a-approle-issuer-liveness.yml"
+_JINJA = jinja2.Environment()
+
+
+def _when_holds(task, **facts):
+    conditions = task["when"] if isinstance(task["when"], list) else [task["when"]]
+    return all(_JINJA.compile_expression(condition)(**facts) for condition in conditions)
 
 
 def _tasks(node):
@@ -122,7 +129,7 @@ class ReconcileIdentityPaths(unittest.TestCase):
         mint = tasks["Mint a reconcile liveness secret_id through approle-issuer"]
         destroy = tasks["Revoke the reconcile liveness secret_id by accessor"]
         for task in (issuer_login, mint, destroy):
-            self.assertEqual(task["when"], "openbao_status.initialized")
+            self.assertIn("openbao_status.initialized", task["when"])
             self.assertTrue(task["no_log"])
             self.assertNotIn("openbao_bootstrap_token", str(task["when"]))
             self.assertNotIn("openbao_provisioning_token", str(task["when"]))
@@ -132,6 +139,25 @@ class ReconcileIdentityPaths(unittest.TestCase):
                 "secret-id-accessor/destroy"
             )
         )
+
+    def test_issuer_liveness_probe_is_skipped_in_check_mode_and_runs_when_initialized(self):
+        tasks = self.liveness_tasks
+        probe = (
+            tasks["Authenticate to approle-issuer for the reconcile liveness probe"],
+            tasks["Mint a reconcile liveness secret_id through approle-issuer"],
+            tasks["Revoke the reconcile liveness secret_id by accessor"],
+        )
+        for task in probe:
+            with self.subTest(task=task["name"]):
+                self.assertFalse(
+                    _when_holds(task, ansible_check_mode=True, openbao_status={"initialized": True})
+                )
+                self.assertTrue(
+                    _when_holds(task, ansible_check_mode=False, openbao_status={"initialized": True})
+                )
+                self.assertFalse(
+                    _when_holds(task, ansible_check_mode=False, openbao_status={"initialized": False})
+                )
 
     def test_scoped_bootstrap_orders_rbac_before_roles_and_issuer_probe(self):
         init = yaml.safe_load((REPO / "roles/openbao/tasks/init.yml").read_text())
