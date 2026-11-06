@@ -6,6 +6,7 @@ import time
 from openbao_reconcile_bounds_helpers import (
     RECONCILE,
     TEMPLATES,
+    _allowed_parameters,
     _capabilities,
     _render,
     _stanzas,
@@ -29,6 +30,12 @@ DENIED_PATHS = [
     "auth/approle/role/ordinary/secret-id", "auth/approle/role/ordinary/custom-secret-id",
     "auth/approle/role/ordinary", "auth/jwt/role/fixture",
 ]
+
+
+def _session_policies(values):
+    role = next(role for role in values["openbao_approles"]
+                if role["name"] == values["openbao_ai_admin_session_approle_name"])
+    return role["token_policies"] + ["default"]
 
 
 @pytest.mark.parametrize("service_name", ["github"])
@@ -86,8 +93,27 @@ def test_guard_retains_protected_roles_and_policies(rendered_defaults):
         "openbao_ai_admin_policy_name", "openbao_ai_admin_guard_policy_name",
         "openbao_human_unlock_policy_name", "openbao_human_unlock_untrusted_policy_name",
     ):
-        assert _capabilities(stanzas[f"sys/policies/acl/{values[key]}"]) == ["deny"]
-    assert _capabilities(stanzas["sys/policies/acl/window-github"]) == ["deny"]
+        for suffix in ("", "/*"):
+            assert _capabilities(stanzas[f"sys/policies/acl/{values[key]}{suffix}"]) == ["deny"]
+    for name in _session_policies(values) + ["window-github"]:
+        for suffix in ("", "/*"):
+            assert _capabilities(stanzas[f"sys/policies/acl/{name}{suffix}"]) == ["deny"]
+
+
+def test_guard_pins_child_token_parameters(rendered_defaults):
+    values, _, _ = rendered_defaults
+    body = dict(_stanzas(_render(GUARD, values)))["auth/token/create"]
+    assert _allowed_parameters(body) == {name: [value] for name, value in _request().items()}
+
+
+def test_guard_protects_additional_attached_policy(rendered_defaults):
+    values, approles, _ = rendered_defaults
+    session = next(role for role in approles
+                   if role["name"] == values["openbao_ai_admin_session_approle_name"])
+    session["token_policies"] = session["token_policies"] + ["fixture-attached"]
+    stanzas = dict(_stanzas(_render(GUARD, values)))
+    for suffix in ("", "/*"):
+        assert _capabilities(stanzas[f"sys/policies/acl/fixture-attached{suffix}"]) == ["deny"]
 
 
 def test_no_declared_services_denies_child_issuance(rendered_defaults):
@@ -118,9 +144,7 @@ def window_server(rendered_defaults):
 
 def _parent(base, values, ttl="1h"):
     status, result = _call(base, "root", "POST", "auth/token/create", {
-        "policies": [values["openbao_ai_admin_policy_name"],
-                     values["openbao_ai_admin_guard_policy_name"],
-                     values["openbao_tofu_state_admin_policy_name"]],
+        "policies": _session_policies(values),
         "ttl": ttl,
     })
     assert status == 200
@@ -138,13 +162,30 @@ def test_native_composition_denies_dangerous_and_protected_paths(window_server):
     paths = DENIED_PATHS + [f"sys/policies/acl/{values[key]}" for key in (
         "openbao_ai_admin_policy_name", "openbao_ai_admin_guard_policy_name",
         "openbao_human_unlock_policy_name", "openbao_human_unlock_untrusted_policy_name",
-    )] + ["sys/policies/acl/window-github"]
+    )] + [f"sys/policies/acl/{name}{suffix}"
+          for name in _session_policies(values) + ["window-github"]
+          for suffix in ("", "/nested", "/nested/descendant")]
     status, result = _call(base, "root", "POST", "sys/capabilities", {"token": parent, "paths": paths})
     assert status == 200
     assert {path: result[path] for path in paths} == dict.fromkeys(paths, ["deny"])
     status, result = _call(base, parent, "GET", "auth/token/lookup-self")
     assert status == 200, result if status != 200 else ""
     assert _call(base, parent, "POST", "auth/token/renew-self", {})[0] == 200
+
+
+def test_native_session_cannot_write_attached_policies_or_widen_issuance(window_server):
+    base, values, _ = window_server
+    parent = _parent(base, values)
+    policy = ('path "auth/token/create" { capabilities = ["create", "update", "sudo"] }\n'
+              'path "sys/rekey/init" { capabilities = ["update", "sudo"] }')
+    for name in _session_policies(values):
+        for suffix in ("", "/nested", "/nested/descendant"):
+            path = f"sys/policies/acl/{name}{suffix}"
+            for method in ("POST", "PUT", "DELETE"):
+                assert _call(base, parent, method, path, {"policy": policy})[0] == 403
+    assert _call(base, parent, "POST", "auth/token/create", _request())[0] == 200
+    assert _call(base, parent, "POST", "auth/token/create", _request() | {"ttl": "1h"})[0] == 403
+    assert _call(base, parent, "POST", "auth/token/create", _request() | {"policies": ["ai-admin"]})[0] == 403
 
 
 def test_native_child_is_scoped_and_stops_with_parent(window_server):
