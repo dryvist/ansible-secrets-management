@@ -152,12 +152,15 @@ plans):
 | `snapshot` | `sys/storage/raft/snapshot` | — | least-priv backup identity |
 
 The `ai-admin-session` role also attaches `ai-admin-guard`, which
-denies orphan and role-based token creation, edits or secret_id minting for
-human-gated AppRoles, reads of or changes to `ai-admin`, `ai-admin-guard`, or either
+denies orphan and role-based token creation, AppRole changes or secret_id minting,
+reads of or changes to `ai-admin`, `ai-admin-guard`, or either
 human-unlock policy, enabling, disabling or tuning auth methods and audit
 devices, userpass or MFA settings, and
-moving or retuning the Enterprise owner-token mount. Plain child-token creation
-and listing auth methods and audit devices remain allowed. The one-shot
+moving or retuning the Enterprise owner-token mount. Window child tokens carry
+exactly one declared service policy, use the shared batch-token defaults, and stop
+working with their parent session. The guard also denies seal, unseal, rekey,
+rotation, and root or recovery token generation. Listing auth methods and audit
+devices remains allowed. The one-shot
 `ai-admin` role stays unguarded; provisioning runs that change these objects use it.
 The separate `tofu-state-admin` policy grants `update` only on the configured
 Transit data-key plaintext and decrypt paths for the OpenTofu state key. The

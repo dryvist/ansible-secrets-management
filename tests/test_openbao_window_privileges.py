@@ -1,6 +1,7 @@
 """Window service declarations render isolated, inert credential identities."""
 
 import pytest
+import time
 
 from openbao_reconcile_bounds_helpers import (
     RECONCILE,
@@ -13,6 +14,21 @@ from openbao_reconcile_bounds_helpers import (
     rendered_defaults,
 )
 from test_openbao_rbac_policy_render import render as render_policies
+from test_openbao_hatchet_killtest_policy_reach import _call, _dev_server
+
+GUARD = TEMPLATES / "ai-admin-guard-policy.hcl.j2"
+DENIED_PATHS = [
+    "sys/seal", "sys/seal/child", "sys/unseal", "sys/unseal/child",
+    "sys/rekey", "sys/rekey/init", "sys/rekey/verify", "sys/rekey-recovery-key/init",
+    "sys/generate-root/attempt", "sys/generate-root-token/attempt",
+    "sys/generate-recovery-token/attempt", "sys/rotate", "sys/rotate/keyring",
+    "sys/rotate/keyring/config", "sys/rotate/root/init", "sys/rotate/recovery/update",
+    "sys/raw/core/keyring", "auth/token/create-orphan", "auth/token/create/fixture",
+    "auth/token/roles/fixture", "auth/token/revoke-orphan",
+    "auth/approle/role/window-github", "auth/approle/role/window-github/secret-id",
+    "auth/approle/role/ordinary/secret-id", "auth/approle/role/ordinary/custom-secret-id",
+    "auth/approle/role/ordinary", "auth/jwt/role/fixture",
+]
 
 
 @pytest.mark.parametrize("service_name", ["github"])
@@ -57,3 +73,127 @@ def test_generic_template_does_not_grant_undeclared_paths(rendered_defaults):
     item = {"service": {"name": "fixture", "credential_paths": [], "scope": ["read"], "lifetime": "15m"}}
     text = _render(TEMPLATES / "window-service-policy.hcl.j2", dict(values, item=item))
     assert dict(_stanzas(text)) == {}
+
+
+def test_guard_retains_protected_roles_and_policies(rendered_defaults):
+    values, approles, _ = rendered_defaults
+    stanzas = dict(_stanzas(_render(GUARD, values)))
+    for role in approles:
+        if role.get("manage_secret_id") is False or role["name"] == "admin":
+            for suffix in ("", "/*"):
+                assert _capabilities(stanzas[f"auth/approle/role/{role['name']}{suffix}"]) == ["deny"]
+    for key in (
+        "openbao_ai_admin_policy_name", "openbao_ai_admin_guard_policy_name",
+        "openbao_human_unlock_policy_name", "openbao_human_unlock_untrusted_policy_name",
+    ):
+        assert _capabilities(stanzas[f"sys/policies/acl/{values[key]}"]) == ["deny"]
+    assert _capabilities(stanzas["sys/policies/acl/window-github"]) == ["deny"]
+
+
+def test_no_declared_services_denies_child_issuance(rendered_defaults):
+    values, _, _ = rendered_defaults
+    text = _render(GUARD, dict(values, openbao_window_service_policies=[]))
+    assert _capabilities(dict(_stanzas(text))["auth/token/create"]) == ["deny"]
+
+
+@pytest.fixture
+def window_server(rendered_defaults):
+    values, _, policies = rendered_defaults
+    window = next(policy for policy in policies if policy["name"] == "window-github")
+    rendered = {
+        values["openbao_ai_admin_policy_name"]: _render(TEMPLATES / "ai-admin-policy.hcl.j2", values),
+        values["openbao_ai_admin_guard_policy_name"]: _render(GUARD, values),
+        values["openbao_tofu_state_admin_policy_name"]: _render(TEMPLATES / "tofu-state-admin-policy.hcl.j2", values),
+        window["name"]: _render(TEMPLATES / window["template"], dict(values, item=window)),
+    }
+    server, base = _dev_server()
+    try:
+        for name, text in rendered.items():
+            assert _call(base, "root", "PUT", f"sys/policies/acl/{name}", {"policy": text})[0] == 204
+        yield base, values, window
+    finally:
+        server.terminate()
+        server.wait(timeout=30)
+
+
+def _parent(base, values, ttl="1h"):
+    status, result = _call(base, "root", "POST", "auth/token/create", {
+        "policies": [values["openbao_ai_admin_policy_name"],
+                     values["openbao_ai_admin_guard_policy_name"],
+                     values["openbao_tofu_state_admin_policy_name"]],
+        "ttl": ttl,
+    })
+    assert status == 200
+    return result["auth"]["client_token"]
+
+
+def _request():
+    return {"policies": ["window-github"], "type": "batch", "ttl": "15m",
+            "no_parent": False, "no_default_policy": True, "renewable": False}
+
+
+def test_native_composition_denies_dangerous_and_protected_paths(window_server):
+    base, values, _ = window_server
+    parent = _parent(base, values)
+    paths = DENIED_PATHS + [f"sys/policies/acl/{values[key]}" for key in (
+        "openbao_ai_admin_policy_name", "openbao_ai_admin_guard_policy_name",
+        "openbao_human_unlock_policy_name", "openbao_human_unlock_untrusted_policy_name",
+    )] + ["sys/policies/acl/window-github"]
+    status, result = _call(base, "root", "POST", "sys/capabilities", {"token": parent, "paths": paths})
+    assert status == 200
+    assert {path: result[path] for path in paths} == dict.fromkeys(paths, ["deny"])
+    status, result = _call(base, parent, "GET", "auth/token/lookup-self")
+    assert status == 200, result if status != 200 else ""
+    assert _call(base, parent, "POST", "auth/token/renew-self", {})[0] == 200
+
+
+def test_native_child_is_scoped_and_stops_with_parent(window_server):
+    base, values, window = window_server
+    parent = _parent(base, values)
+    status, result = _call(base, parent, "POST", "auth/token/create", _request())
+    assert status == 200, result if status != 200 else ""
+    assert result["auth"]["token_type"] == "batch"
+    assert result["auth"]["policies"] == ["window-github"]
+    assert result["auth"]["renewable"] is False
+    assert result["auth"]["lease_duration"] <= 900
+    child = result["auth"]["client_token"]
+    allowed = window["service"]["credential_paths"]
+    denied = ["secret/data/apps/fixture", "secrets-external/data/fixture", "aws/sts/fixture",
+              "github-admin/config", "github-admin/token", "github-admin/token/undeclared",
+              "auth/token/create", "auth/token/create-orphan", "sys/seal"]
+    status, result = _call(base, "root", "POST", "sys/capabilities", {"token": child, "paths": allowed + denied})
+    assert status == 200
+    assert all(result[path] == ["create", "update"] for path in allowed)
+    assert all(result[path] == ["deny"] for path in denied)
+    assert _call(base, "root", "POST", "auth/token/revoke", {"token": parent})[0] == 204
+    assert _call(base, "root", "POST", "sys/capabilities", {"token": child, "paths": allowed})[0] == 400
+
+
+def test_native_child_stops_when_remaining_window_expires(window_server):
+    base, values, window = window_server
+    parent = _parent(base, values, "2s")
+    status, result = _call(base, parent, "POST", "auth/token/create", _request())
+    assert status == 200, result if status != 200 else ""
+    child = result["auth"]["client_token"]
+    time.sleep(3)
+    assert _call(base, "root", "POST", "sys/capabilities", {
+        "token": child, "paths": window["service"]["credential_paths"],
+    })[0] == 400
+
+
+def test_native_issuance_rejects_policy_lifetime_and_orphan_overrides(window_server):
+    base, values, _ = window_server
+    parent = _parent(base, values)
+    changes = [
+        {"policies": ["root"]}, {"policies": []}, {"policies": ["ai-admin"]},
+        {"policies": ["window-github", "default"]}, {"type": "service"},
+        {"ttl": "16m"}, {"no_parent": True}, {"no_default_policy": False},
+        {"renewable": True}, {"period": "1h"}, {"role_name": "fixture"},
+        {"entity_alias": "fixture"},
+    ]
+    for change in changes:
+        assert _call(base, parent, "POST", "auth/token/create", _request() | change)[0] == 403
+    for parameter in _request():
+        request = _request()
+        del request[parameter]
+        assert _call(base, parent, "POST", "auth/token/create", request)[0] == 403
