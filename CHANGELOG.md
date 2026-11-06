@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.73.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.72.0...v0.73.0) (2026-11-06)
+
+
+### Features
+
+* **openbao:** seed the langflow router key leaf ([#521](https://github.com/dryvist/ansible-secrets-management/issues/521)) ([c10584c](https://github.com/dryvist/ansible-secrets-management/commit/c10584c964c1950b3c2c92c8ce3813bf4884ebbb))
+
+## [0.72.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.71.0...v0.72.0) (2026-11-05)
+
+
+### Features
+
+* **openbao:** add two read-only paths to the agent-workstation policy ([#517](https://github.com/dryvist/ansible-secrets-management/issues/517)) ([5cad2df](https://github.com/dryvist/ansible-secrets-management/commit/5cad2df078d8f6f3eb896d8119b40174e297b27c))
+* **openbao:** let agent-workstation read the YouTrack agent token and Dify app keys ([5cad2df](https://github.com/dryvist/ansible-secrets-management/commit/5cad2df078d8f6f3eb896d8119b40174e297b27c))
+
+
+### Bug Fixes
+
+* **openbao:** skip the approle-issuer liveness probe in check mode ([#514](https://github.com/dryvist/ansible-secrets-management/issues/514)) ([12057f4](https://github.com/dryvist/ansible-secrets-management/commit/12057f4d9993df29eef13c260a14596b406abf9b))
+
 ## [0.71.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.70.0...v0.71.0) (2026-11-05)
 
 

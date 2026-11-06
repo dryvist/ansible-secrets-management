@@ -1,4 +1,4 @@
-"""The agent-workstation AppRole reads only its two declared KV leaves."""
+"""The agent-workstation AppRole reads only its declared KV leaves."""
 
 from __future__ import annotations
 
@@ -24,12 +24,15 @@ ROLE_NAME_VARIABLE = "{{ openbao_agent_workstation_approle_name }}"
 READS = (
     "secret/data/apps/nautobot",
     "secret/data/ai/mcp",
+    "secret/data/ai/youtrack",
+    "secret/data/ai/dify/agent-apps/test-app",
 )
 DENIED_READS = (
     "secret/data/ai/hermes",
     "secret/data/ai/hermes/embedding",
     "secret/data/ai/mcp/hermes",
     "secret/data/apps/sandbox-agent",
+    "secret/data/apps/youtrack",
 )
 DENIED_WRITES = READS + (
     "secret/data/ai/hermes/embedding",
@@ -87,7 +90,7 @@ def test_agent_workstation_approle_attaches_only_its_dedicated_policy():
     assert "token_policies" not in rows[0]
 
 
-def test_rendered_agent_workstation_policy_contains_only_the_two_exact_reads():
+def test_rendered_agent_workstation_policy_contains_only_the_four_exact_reads():
     _, policy = _render_policy()
     stanzas = re.findall(
         r'(?ms)^path "([^"]+)" \{\s*capabilities = (\[[^\]]+\])\s*\}',
@@ -96,6 +99,8 @@ def test_rendered_agent_workstation_policy_contains_only_the_two_exact_reads():
     assert stanzas == [
         ("secret/data/apps/nautobot", '["read"]'),
         ("secret/data/ai/mcp", '["read"]'),
+        ("secret/data/ai/youtrack", '["read"]'),
+        ("secret/data/ai/dify/agent-apps/*", '["read"]'),
     ]
 
 
@@ -231,7 +236,7 @@ def agent_workstation_token():
 
 
 @pytest.mark.parametrize("path", READS)
-def test_direct_agent_workstation_token_can_read_its_two_leaves(
+def test_direct_agent_workstation_token_can_read_its_declared_leaves(
     agent_workstation_token, path
 ):
     assert agent_workstation_token("GET", path)[0] == 200
