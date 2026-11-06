@@ -40,9 +40,15 @@ class RouterKeyPrefixRegeneration(unittest.TestCase):
         self.assertEqual(field["valid_pattern"], "^sk-")
 
     def test_namespaced_router_field_requires_prefix(self):
-        field = _field_declaration("open_webui_llm_router_key")
-        self.assertEqual(field["prefix"], "sk-")
-        self.assertEqual(field["valid_pattern"], "^sk-")
+        for name in (
+            "open_webui_llm_router_key",
+            "langflow_llm_router_key",
+            "grafana_llm_router_key",
+        ):
+            with self.subTest(field=name):
+                field = _field_declaration(name)
+                self.assertEqual(field["prefix"], "sk-")
+                self.assertEqual(field["valid_pattern"], "^sk-")
 
     def test_ordinary_field_has_no_router_repair_pattern(self):
         field = _field_declaration("ordinary_password")
