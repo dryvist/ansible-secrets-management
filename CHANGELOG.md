@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.74.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.73.0...v0.74.0) (2026-11-06)
+
+
+### Features
+
+* seed Home Assistant router key ([#520](https://github.com/dryvist/ansible-secrets-management/issues/520)) ([4c1393f](https://github.com/dryvist/ansible-secrets-management/commit/4c1393ffd53122c3039807e8b9ef42ed3909f865))
+
+
+### Bug Fixes
+
+* **openbao:** generate and authorize the Langflow and Grafana router keys ([#524](https://github.com/dryvist/ansible-secrets-management/issues/524)) ([3814fb7](https://github.com/dryvist/ansible-secrets-management/commit/3814fb7b5a8a34be51b30c16d7c3ac2fda069b55))
+
 ## [0.73.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.72.0...v0.73.0) (2026-11-06)
 
 
