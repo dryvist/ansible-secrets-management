@@ -128,6 +128,39 @@ def test_every_apps_domain_path_is_granted_to_the_apps_reader():
     )
 
 
+@pytest.mark.parametrize("app,field", [
+    ("langflow", "langflow_llm_router_key"),
+    ("grafana-llm", "grafana_llm_router_key"),
+])
+def test_generated_router_apps_have_exact_read_only_grants(app, field):
+    names = _yaml(NAMES_FILE)
+    assert _yaml(GENERATED_FILE)["openbao_generated_app_secrets"][app] == [field]
+    assert app not in names["openbao_apps_read_published_apps"]
+    assert app not in _yaml(GENERATED_PATHS_FILE)["openbao_generated_app_secret_paths"]
+
+    grants = _policy_grants(_render_apps_policy(_read_apps(names)))
+    app_grants = {
+        (path, capabilities)
+        for path, capabilities in grants
+        if path.endswith(f"/apps/{app}")
+    }
+    assert app_grants == {
+        (f"secret/data/apps/{app}", ("read",)),
+        (f"secret/metadata/apps/{app}", ("read", "list")),
+    }
+
+
+def test_grafana_service_bucket_stays_outside_the_apps_reader():
+    assert "grafana" not in _yaml(GENERATED_FILE)["openbao_generated_app_secrets"]
+    assert "grafana" not in _read_apps(_yaml(NAMES_FILE))
+    grants = _policy_grants(_render_apps_policy(_read_apps(_yaml(NAMES_FILE))))
+    for kind in ("data", "metadata"):
+        assert not any(
+            path in {f"secret/{kind}/apps/grafana", f"secret/{kind}/apps/*"}
+            for path, _ in grants
+        )
+
+
 @pytest.mark.parametrize("leaf", EVAL_LEAVES)
 def test_eval_leaf_adds_only_its_exact_read_grant_for_the_apps_reader(leaf):
     names = _yaml(NAMES_FILE)
