@@ -109,7 +109,7 @@ openbao_approle_class_map: >-
     'vikunja-mcp': 'service-runtime'
   } -%}
   {%- set _ = _classes.update({openbao_hatchet_killtest_approle_name: 'converge-automation'}) -%}
-  {%- for role in openbao_ai_apply_approles -%}
+  {%- for role in openbao_ai_apply_approles + openbao_window_service_approles -%}
   {%- set _ = _classes.update({role.name: 'operator-admin'}) -%}
   {%- endfor -%}
   {%- for role in openbao_github_write_scope_approles -%}
