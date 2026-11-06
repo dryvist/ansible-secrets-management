@@ -1,0 +1,46 @@
+---
+# Window identities use the native credential engine's declared scope.
+openbao_window_service_defaults:
+  token_ttl: 15m
+  token_max_ttl: 15m
+  token_type: batch
+  manage_secret_id: false
+  secret_id_ttl: "{{ openbao_approle_per_call_secret_id_ttl }}"
+  secret_id_num_uses: 1
+  cidr_class: workstation
+
+# GitHub plugin v2.3.2 leases installation tokens and implements lease revocation.
+# https://github.com/martinbaillie/vault-plugin-secrets-github/blob/v2.3.2/github/backend.go
+# Accessed 2026-11-06. Window children assign their leases to the parent session.
+openbao_window_services:
+  - name: github
+    credential_paths: >-
+      {%- set _paths = [] -%}
+      {%- for permission_set in openbao_github_permission_sets
+          | selectattr('tier', 'equalto', 'admin') -%}
+      {%- set _ = _paths.append(permission_set.mount ~ '/token/' ~ permission_set.name) -%}
+      {%- endfor -%}
+      {{ _paths }}
+    scope: [create, update]
+    lifetime: 1h
+
+openbao_window_service_approles: >-
+  {%- set _roles = [] -%}
+  {%- for service in openbao_window_services -%}
+  {%- set _name = 'window-' ~ service.name -%}
+  {%- set _ = _roles.append(openbao_window_service_defaults
+      | combine({'name': _name, 'policy': _name})) -%}
+  {%- endfor -%}
+  {{ _roles }}
+
+openbao_window_service_cidr_classes: >-
+  {{ dict(openbao_window_service_approles | map(attribute='name')
+      | zip(openbao_window_service_approles | map(attribute='cidr_class'))) }}
+
+openbao_window_service_policies: >-
+  {%- set _policies = [] -%}
+  {%- for service in openbao_window_services -%}
+  {%- set _ = _policies.append({'name': 'window-' ~ service.name,
+      'template': 'window-service-policy.hcl.j2', 'service': service}) -%}
+  {%- endfor -%}
+  {{ _policies }}
