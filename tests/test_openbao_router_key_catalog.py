@@ -136,6 +136,13 @@ def test_glance_tile_key_is_generated_and_readable_by_the_apps_reader():
     assert 'path "secret/data/apps/glance"' in _render_apps_policy({})
 
 
+def test_langflow_router_key_is_generated_and_readable_by_the_apps_reader():
+    generated = DEFAULTS_DATA["openbao_generated_app_secrets"]
+    assert generated["langflow"] == ["langflow_llm_router_key"]
+    assert "langflow" in _read_apps({})
+    assert 'path "secret/data/apps/langflow"' in _render_apps_policy({})
+
+
 def test_sandbox_agent_router_key_is_generated_and_readable_by_the_apps_reader():
     generated = DEFAULTS_DATA["openbao_generated_app_secrets"]
     excluded = EXCLUDED_DATA["openbao_apps_read_excluded_generated_apps"]
