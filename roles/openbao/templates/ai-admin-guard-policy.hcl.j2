@@ -110,6 +110,19 @@ path "sys/policies/acl/{{ policy_name }}{{ suffix }}" {
 {% endfor %}
 {% endfor %}
 
+# OpenBao 2.7.x identity API documentation, accessed 2026-11-06:
+# https://openbao.org/docs/api/secret/identity/entity/
+# https://openbao.org/docs/api/secret/identity/entity-alias/
+# https://openbao.org/docs/api/secret/identity/group/
+# https://openbao.org/docs/api/secret/identity/group-alias/
+{% for family in ['entity', 'entity-alias', 'group', 'group-alias'] %}
+{% for suffix in ['', '/*', '*'] %}
+path "identity/{{ family }}{{ suffix }}" {
+  capabilities = ["deny"]
+}
+{% endfor %}
+{% endfor %}
+
 {% for path in [
      'auth/userpass/*',
      'identity/mfa/*',

@@ -18,6 +18,7 @@ from test_openbao_rbac_policy_render import render as render_policies
 from test_openbao_hatchet_killtest_policy_reach import _call, _dev_server
 
 GUARD = TEMPLATES / "ai-admin-guard-policy.hcl.j2"
+IDENTITY_FAMILIES = ["entity", "entity-alias", "group", "group-alias"]
 DENIED_PATHS = [
     "sys/seal", "sys/seal/child", "sys/unseal", "sys/unseal/child",
     "sys/rekey", "sys/rekey/init", "sys/rekey/verify", "sys/rekey-recovery-key/init",
@@ -29,7 +30,9 @@ DENIED_PATHS = [
     "auth/approle/role/window-github", "auth/approle/role/window-github/secret-id",
     "auth/approle/role/ordinary/secret-id", "auth/approle/role/ordinary/custom-secret-id",
     "auth/approle/role/ordinary", "auth/jwt/role/fixture",
-]
+] + [f"identity/{family}{suffix}"
+     for family in IDENTITY_FAMILIES
+     for suffix in ("", "/id/fixture", "/name/fixture", "/id/fixture/nested", "-fixture")]
 
 
 def _session_policies(values):
@@ -104,6 +107,14 @@ def test_guard_pins_child_token_parameters(rendered_defaults):
     values, _, _ = rendered_defaults
     body = dict(_stanzas(_render(GUARD, values)))["auth/token/create"]
     assert _allowed_parameters(body) == {name: [value] for name, value in _request().items()}
+
+
+@pytest.mark.parametrize("family", IDENTITY_FAMILIES)
+def test_guard_denies_identity_family_and_descendants(family, rendered_defaults):
+    values, _, _ = rendered_defaults
+    stanzas = dict(_stanzas(_render(GUARD, values)))
+    for suffix in ("", "/*", "*"):
+        assert _capabilities(stanzas[f"identity/{family}{suffix}"]) == ["deny"]
 
 
 def test_guard_protects_additional_attached_policy(rendered_defaults):
@@ -186,6 +197,27 @@ def test_native_session_cannot_write_attached_policies_or_widen_issuance(window_
     assert _call(base, parent, "POST", "auth/token/create", _request())[0] == 200
     assert _call(base, parent, "POST", "auth/token/create", _request() | {"ttl": "1h"})[0] == 403
     assert _call(base, parent, "POST", "auth/token/create", _request() | {"policies": ["ai-admin"]})[0] == 403
+
+
+@pytest.mark.parametrize("family", ["entity", "group"])
+def test_native_session_cannot_attach_policy_through_identity(family, window_server):
+    base, values, _ = window_server
+    parent = _parent(base, values)
+    policy_name = "fixture-identity-policy"
+    policy = 'path "sys/rekey/init" { capabilities = ["update", "sudo"] }'
+    assert _call(base, parent, "PUT", f"sys/policies/acl/{policy_name}", {"policy": policy})[0] == 204
+    path = f"identity/{family}"
+    status, result = _call(base, "root", "POST", path, {"name": "fixture", "policies": []})
+    assert status == 200
+    identity_id = result["data"]["id"]
+    request = {"name": "fixture", "policies": [policy_name]}
+    for target in (path, f"{path}/id/{identity_id}", f"{path}/name/fixture"):
+        for method in ("POST", "PUT", "DELETE"):
+            assert _call(base, parent, method, target, request)[0] == 403
+    assert _call(base, parent, "POST", path, request | {"name": "fixture-new"})[0] == 403
+    status, result = _call(base, "root", "GET", f"{path}/id/{identity_id}")
+    assert status == 200
+    assert result["data"]["policies"] == []
 
 
 def test_native_child_is_scoped_and_stops_with_parent(window_server):
