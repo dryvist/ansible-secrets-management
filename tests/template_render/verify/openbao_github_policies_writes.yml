@@ -127,7 +127,7 @@
     src: "{{ _fixture_dir }}/set-pepper-policy.hcl"
   register: _pepper_policy_raw
 
-- name: Assert the Pepper set is exact and its token path is exclusive
+- name: Assert Pepper has exact reads and its token path is exclusive
   vars:
     _pepper_sets: "{{ openbao_github_pepper_permission_sets }}"
     _pepper_mounts: >-
@@ -164,6 +164,16 @@
       - _pepper_global_sets[0].mount == openbao_github_pepper_mount
       - _pepper_global_sets[0].tier == openbao_github_pepper_read_tier
       - _pepper_global_sets[0].repositories == ['fixture-repo']
+      - >-
+        _pepper_policy_paths == [
+          _pepper_path,
+          openbao_kv_mount ~ '/data/youtrack/pepper/rw',
+          'secrets-external/data/slack/pepper/rw',
+          'secrets-external/metadata/slack/pepper/rw',
+          openbao_kv_mount ~ '/data/apps/pepper'
+        ]
+      - openbao_kv_mount ~ '/data/ai/pepper' not in _pepper_policy_paths
+      - openbao_kv_mount ~ '/data/ai/pepper/*' not in _pepper_policy_paths
       - _pepper_github_paths == [_pepper_path]
       - openbao_github_pepper_mount ~ '/token' not in _pepper_policy_paths
       - >-
