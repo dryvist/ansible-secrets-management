@@ -29,11 +29,10 @@ def test_native_collection_selection(tmp_path, selection, cap, expected, failure
         "name": "Verify object selection",
         "hosts": "localhost", "connection": "local", "gather_facts": False,
         "tasks": [
-            {"name": "Resolve selection through the collection role",
-             "ansible.builtin.include_role": {
-                 "name": "dryvist.secrets_management.openbao",
-                 "tasks_from": "init/selection-preflight.yml",
-                 "apply": {"tags": ["always"]}},
+            # An absolute import keeps the file-relative nested includes the real play uses,
+            # which tasks_from would not, and leaves out role dependencies selection never reads.
+            {"name": "Resolve selection through the role's task files",
+             "ansible.builtin.import_tasks": str(ROOT / "roles/openbao/tasks/init/selection-preflight.yml"),
              "tags": ["always"]},
             {"name": "Assert the selected targets", "ansible.builtin.assert": {
                 "that": ["openbao_selected_objects == expected"]}, "tags": ["always"]},
@@ -41,6 +40,7 @@ def test_native_collection_selection(tmp_path, selection, cap, expected, failure
     }]))
     variables = {
         "openbao_select": selection, "openbao_select_max": cap, "expected": expected,
+        "openbao_cli_host": "localhost",
         "openbao_select_profiles": {
             "policies": {"candidates": [{"name": "apps"}, {"name": "read-apps"}]},
             "approles": {"candidates": [{"name": "backup"}]},
