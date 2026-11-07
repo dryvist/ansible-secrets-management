@@ -141,6 +141,7 @@ openbao_approle_secret_id_ttl_overrides_base:
   github-runner: "0s"
   github-exporter: "0s"
   hatchet-eval-status: "0s"
+  ai-sessions-backup: "0s"
 openbao_approle_secret_id_ttl_overrides: >-
   {{ openbao_approle_secret_id_ttl_overrides_base
      | combine(dict(openbao_roster_agent_valid_names
@@ -174,6 +175,7 @@ openbao_approle_secret_id_num_uses_overrides:
   github-runner: 0  # runner bao agent, redeemed per job
   github-exporter: 0  # Cribl token proxy agent can reauthenticate with the standing secret_id
   hatchet-eval-status: 0  # per-eval login; bounded by the machine class and 15m token TTL
+  ai-sessions-backup: 0  # archive login per run; bounded by the workstation class
   slack-admin: 0  # slack-admin rotator timer, redeemed per run
   slack-ops: 0  # workstation Slack helper, redeemed per call
   # github-read / github-write moved to their 07b declarations, next to the
