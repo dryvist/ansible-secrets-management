@@ -1,0 +1,68 @@
+---
+- name: Validate the OpenBao selection mapping and cap
+  ansible.builtin.assert:
+    that:
+      - openbao_select | default({}) is mapping
+      - openbao_select_max | default(25) is integer
+      - openbao_select_max | default(25) > 0
+    fail_msg: openbao_select must be a mapping and openbao_select_max a positive integer.
+    quiet: true
+
+- name: Validate the selectors for this OpenBao kind
+  ansible.builtin.assert:
+    that:
+      - _selectors is sequence and _selectors is not string and _selectors is not mapping
+      - _selectors | reject('string') | list | length == 0
+      - "'' not in _selectors"
+    fail_msg: "openbao_select.{{ openbao_select_kind }} must be a list of nonempty strings."
+    quiet: true
+  vars:
+    _selectors: "{{ (openbao_select | default({})).get(openbao_select_kind, []) }}"
+
+- name: Match every selector against the declared OpenBao candidates
+  ansible.builtin.set_fact:
+    openbao_selector_matches: >-
+      {%- set matches = [] -%}
+      {%- for selector in (openbao_select | default({})).get(openbao_select_kind, []) -%}
+      {%- set _ = matches.append({'selector': selector, 'names':
+          (openbao_select_candidates | map(attribute='name')
+           | select('dryvist.secrets_management.openbao_glob', selector) | unique | sort | list)}) -%}
+      {%- endfor -%}
+      {{ matches }}
+
+- name: Require every OpenBao selector to match a declared object
+  ansible.builtin.assert:
+    that:
+      - item.names | length > 0
+    fail_msg: "openbao_select.{{ openbao_select_kind }} entry '{{ item.selector }}' matched no declared objects."
+    quiet: true
+  loop: "{{ openbao_selector_matches }}"
+  loop_control:
+    label: "{{ item.selector }}"
+
+- name: Resolve the selected OpenBao objects for this kind
+  ansible.builtin.set_fact:
+    openbao_object_targets: >-
+      {{ openbao_select_candidates
+         | selectattr('name', 'in', openbao_selector_matches | map(attribute='names') | flatten | unique | list)
+         | list if openbao_select | default({}) | length > 0 else openbao_select_candidates }}
+
+- name: Cap the resolved OpenBao selection
+  ansible.builtin.assert:
+    that:
+      - openbao_object_targets | length <= openbao_select_max | default(25)
+    fail_msg: >-
+      openbao_select.{{ openbao_select_kind }} resolved {{ openbao_object_targets | length }} objects,
+      exceeding openbao_select_max={{ openbao_select_max | default(25) }}.
+    quiet: true
+  when: openbao_select | default({}) | length > 0
+
+- name: Report the resolved OpenBao object names
+  ansible.builtin.debug:
+    msg: "{{ openbao_object_targets | map(attribute='name') | sort | list }}"
+  when: openbao_select | default({}) | length > 0
+
+- name: Keep the resolved OpenBao selection by kind
+  ansible.builtin.set_fact:
+    openbao_selected_objects: >-
+      {{ openbao_selected_objects | default({}) | combine({openbao_select_kind: openbao_object_targets}) }}
