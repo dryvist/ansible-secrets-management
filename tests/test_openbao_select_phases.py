@@ -90,7 +90,7 @@ def test_total_cap_counts_objects_across_kinds():
 
 def test_preflight_precedes_every_phase_import():
     init = yaml.safe_load(INIT.read_text())
-    assert init[2]["ansible.builtin.import_tasks"] == "init/02-initialize-cluster.yml"
+    assert init[3]["ansible.builtin.import_tasks"] == "init/02-initialize-cluster.yml"
     initialize = yaml.safe_load((ROLE / "tasks/init/02-initialize-cluster.yml").read_text())
     names = [n.get("name") for n in initialize]
     assert names.index("Resolve the RBAC set this run's identity may manage") < names.index(

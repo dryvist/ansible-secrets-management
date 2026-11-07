@@ -84,26 +84,40 @@ def test_native_collection_selection(tmp_path, selection, cap, expected, failure
     ({"openbao_approle_config_name": "backup"}, {"policies": [], "approles": [{"name": "backup"}]}),
 ])
 def test_retired_inputs_still_select_one_object(tmp_path, inputs, expected):
-    output, returncode = _run_selection(tmp_path, inputs, 25, expected)
+    output, returncode = _run_selection(tmp_path, inputs, 25, expected, role_inputs=True)
     assert returncode == 0, output
 
 
-def test_retired_input_beside_the_selection_is_refused(tmp_path):
-    inputs = {"openbao_rbac_policy_name": "apps", "openbao_select": {"approles": ["backup"]}}
-    output, returncode = _run_selection(tmp_path, inputs, 25, {})
+def test_no_input_keeps_the_full_set_through_the_role_defaults(tmp_path):
+    expected = {"policies": [{"name": "apps"}, {"name": "read-apps"}], "approles": [{"name": "backup"}]}
+    output, returncode = _run_selection(tmp_path, {}, 25, expected, role_inputs=True)
+    assert returncode == 0, output
+
+
+@pytest.mark.parametrize("selection", [{"approles": ["backup"]}, {}])
+def test_retired_input_beside_a_different_selection_is_refused(tmp_path, selection):
+    inputs = {"openbao_rbac_policy_name": "apps", "openbao_select": selection}
+    output, returncode = _run_selection(tmp_path, inputs, 25, {}, role_inputs=True)
     assert returncode != 0 and "Use openbao_select alone" in output, output
+    assert "TASK [Assert the selected targets]" not in output
 
 
-def _run_selection(tmp_path, inputs, cap, expected):
+def _run_selection(tmp_path, inputs, cap, expected, role_inputs=False):
     collection_root = tmp_path / "collections"
     namespace = collection_root / "ansible_collections/dryvist"
     namespace.mkdir(parents=True)
     (namespace / "secrets_management").symlink_to(ROOT, target_is_directory=True)
     playbook = tmp_path / "select.yml"
+    refusal = next(
+        task for task in yaml.safe_load((ROOT / "roles/openbao/tasks/init.yml").read_text(encoding="utf-8"))
+        if task.get("name", "").startswith("Refuse a retired")
+    )
+    defaults = ROOT / "roles/openbao/defaults/main/00-install-and-node.yml"
     playbook.write_text(yaml.safe_dump([{
         "name": "Verify object selection",
         "hosts": "localhost", "connection": "local", "gather_facts": False,
-        "tasks": [
+        "vars_files": [str(defaults)] if role_inputs else [],
+        "tasks": ([refusal] if role_inputs else []) + [
             # An absolute import keeps the file-relative nested includes the real play uses,
             # which tasks_from would not, and leaves out role dependencies selection never reads.
             {"name": "Resolve selection through the role's task files",

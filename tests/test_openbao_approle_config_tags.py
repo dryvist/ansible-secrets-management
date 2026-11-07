@@ -118,7 +118,7 @@ def test_role_config_tag_does_not_select_secret_id_issuance():
 
 def test_approle_config_uses_the_shared_per_kind_selector():
     defaults = yaml.safe_load(DEFAULTS.read_text(encoding="utf-8"))
-    assert defaults["openbao_select"] == {}
+    assert defaults["openbao_select"] == "{{ openbao_select_retired_inputs }}"
 
     selection = _task(APPROLE_TASKS, "Select AppRole config objects")
     assert selection["ansible.builtin.import_tasks"] == "select-objects.yml"

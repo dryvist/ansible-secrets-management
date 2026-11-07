@@ -1,29 +1,4 @@
 ---
-# Rename shim: without it, an old single-object input would silently widen to a full run.
-- name: Refuse a retired single-object input beside openbao_select
-  ansible.builtin.assert:
-    that:
-      - openbao_select | default({}) | length == 0
-    fail_msg: >-
-      Use openbao_select alone. openbao_rbac_policy_name and openbao_approle_config_name
-      are retired names for its policies and approles kinds.
-    quiet: true
-  when: >-
-    (openbao_rbac_policy_name | default('') | length > 0)
-    or (openbao_approle_config_name | default('') | length > 0)
-
-- name: Translate retired single-object inputs into the selection
-  ansible.builtin.set_fact:
-    openbao_select: >-
-      {{ {}
-         | combine({'policies': [openbao_rbac_policy_name]}
-                   if openbao_rbac_policy_name | default('') | length > 0 else {})
-         | combine({'approles': [openbao_approle_config_name]}
-                   if openbao_approle_config_name | default('') | length > 0 else {}) }}
-  when: >-
-    (openbao_rbac_policy_name | default('') | length > 0)
-    or (openbao_approle_config_name | default('') | length > 0)
-
 - name: Validate the requested OpenBao kinds
   ansible.builtin.assert:
     that:

@@ -51,7 +51,7 @@ def test_selection_defaults_keep_full_set_behavior():
     defaults = yaml.safe_load(
         (ROLE / "defaults/main/00-install-and-node.yml").read_text()
     )
-    assert defaults["openbao_select"] == {}
+    assert defaults["openbao_select"] == "{{ openbao_select_retired_inputs }}"
     assert defaults["openbao_select_max"] == 25
 
 

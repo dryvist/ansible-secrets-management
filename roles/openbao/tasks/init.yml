@@ -20,6 +20,16 @@
 # written into the repo or onto a target host, and the `bao` invocations that
 # touch them run with no_log: true.
 
+- name: Refuse a retired single-object input beside a different openbao_select
+  ansible.builtin.assert:
+    that:
+      - openbao_select_retired_inputs | length == 0 or openbao_select == openbao_select_retired_inputs
+    fail_msg: >-
+      Use openbao_select alone. openbao_rbac_policy_name and openbao_approle_config_name
+      are retired names for its policies and approles kinds.
+    quiet: true
+  tags: always
+
 - name: Reject caller IDs that also belong to the tofu roster
   ansible.builtin.import_tasks: init/00-caller-roster-collision-guard.yml
   tags:

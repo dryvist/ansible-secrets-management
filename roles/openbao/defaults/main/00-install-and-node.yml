@@ -92,7 +92,14 @@ openbao_cli_addr: "{{ openbao_reconcile_addr | default(openbao_write_addr, true)
 openbao_cli_become: "{{ openbao_reconcile_addr | length == 0 }}"
 
 # --- Optional per-kind object selection ------------------------------------
-openbao_select: {}
+# Rename shim: the retired single-object inputs still select that one object.
+openbao_select_retired_inputs: >-
+  {{ {}
+     | combine({'policies': [openbao_rbac_policy_name]}
+               if openbao_rbac_policy_name | default('') | length > 0 else {})
+     | combine({'approles': [openbao_approle_config_name]}
+               if openbao_approle_config_name | default('') | length > 0 else {}) }}
+openbao_select: "{{ openbao_select_retired_inputs }}"
 openbao_select_max: 25
 
 # --- Ingress addresses whose X-Forwarded-For header is trusted ---------------
