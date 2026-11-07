@@ -9,3 +9,9 @@ path "{{ openbao_kv_mount }}/data/ai/donna" {
 path "{{ openbao_kv_mount }}/metadata/ai/donna" {
   capabilities = ["read", "list"]
 }
+path "secrets-external/data/slack/donna/rw" {
+  capabilities = ["read"]
+}
+path "secrets-external/metadata/slack/donna/rw" {
+  capabilities = ["read"]
+}
