@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.78.1](https://github.com/dryvist/ansible-secrets-management/compare/v0.78.0...v0.78.1) (2026-11-07)
+
+
+### Bug Fixes
+
+* **authelia:** correct the Phoenix redirect URI ([#544](https://github.com/dryvist/ansible-secrets-management/issues/544)) ([b6ef72e](https://github.com/dryvist/ansible-secrets-management/commit/b6ef72e8362b1b979c818899f47e7b98288fd26f))
+* **authelia:** register the Phoenix OAuth2 tokens callback ([b6ef72e](https://github.com/dryvist/ansible-secrets-management/commit/b6ef72e8362b1b979c818899f47e7b98288fd26f))
+
 ## [0.78.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.77.0...v0.78.0) (2026-11-07)
 
 
