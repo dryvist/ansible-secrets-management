@@ -1,0 +1,24 @@
+{{ ansible_managed | comment }}
+# OpenBao policy for the media-rotate AppRole: human-gated rotation of the
+# media stack's internal credentials, same shape as apps-rotate. A human wraps
+# a single-use secret_id and `rotate-key.yml` unwraps it for one run.
+# read/update on data/: the rotator reads the entry before its CAS write and
+# reads it back afterward. No `create` (rotation only replaces a field on an
+# existing path) and no `delete`. Metadata `patch` is limited to
+# custom_metadata, which the playbook stamps with the rotation time; the
+# version-destroy knobs (max_versions, delete_version_after) stay refused.
+# Vendor-issued credentials on secrets-external are operator-rotated, so this
+# identity has no grant there.
+{% for path in ['sonarr/main/rw', 'radarr/main/rw', 'prowlarr/main/rw',
+                'seerr/main/rw', 'qbittorrent/main/admin', 'sortarr/main/admin',
+                'autobrr/main/admin'] %}
+
+path "{{ openbao_kv_mount }}/data/{{ path }}" {
+  capabilities = ["read", "update"]
+}
+
+path "{{ openbao_kv_mount }}/metadata/{{ path }}" {
+  capabilities       = ["read", "patch"]
+  allowed_parameters = { "custom_metadata" = [] }
+}
+{% endfor %}

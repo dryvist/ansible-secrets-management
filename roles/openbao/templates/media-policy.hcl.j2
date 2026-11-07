@@ -2,6 +2,7 @@
 # OpenBao policy for the media AppRole — the *arr/qBittorrent/Plex stack.
 # Read-only, no access to the infra kernel or other app/platform services.
 
+# Remove the apps/media/* grants after cutover.
 path "{{ openbao_kv_mount }}/data/apps/media/*" {
   capabilities = ["read"]
 }
@@ -9,3 +10,87 @@ path "{{ openbao_kv_mount }}/data/apps/media/*" {
 path "{{ openbao_kv_mount }}/metadata/apps/media/*" {
   capabilities = ["read", "list"]
 }
+
+path "{{ openbao_kv_mount }}/data/sonarr/main/rw" {
+  capabilities = ["read"]
+}
+
+path "{{ openbao_kv_mount }}/metadata/sonarr/main/rw" {
+  capabilities = ["read"]
+}
+
+path "{{ openbao_kv_mount }}/data/radarr/main/rw" {
+  capabilities = ["read"]
+}
+
+path "{{ openbao_kv_mount }}/metadata/radarr/main/rw" {
+  capabilities = ["read"]
+}
+
+path "{{ openbao_kv_mount }}/data/prowlarr/main/rw" {
+  capabilities = ["read"]
+}
+
+path "{{ openbao_kv_mount }}/metadata/prowlarr/main/rw" {
+  capabilities = ["read"]
+}
+
+path "{{ openbao_kv_mount }}/data/seerr/main/rw" {
+  capabilities = ["read"]
+}
+
+path "{{ openbao_kv_mount }}/metadata/seerr/main/rw" {
+  capabilities = ["read"]
+}
+
+path "{{ openbao_kv_mount }}/data/qbittorrent/main/admin" {
+  capabilities = ["read"]
+}
+
+path "{{ openbao_kv_mount }}/metadata/qbittorrent/main/admin" {
+  capabilities = ["read"]
+}
+
+path "{{ openbao_kv_mount }}/data/sortarr/main/admin" {
+  capabilities = ["read"]
+}
+
+path "{{ openbao_kv_mount }}/metadata/sortarr/main/admin" {
+  capabilities = ["read"]
+}
+
+path "{{ openbao_kv_mount }}/data/autobrr/main/admin" {
+  capabilities = ["read"]
+}
+
+path "{{ openbao_kv_mount }}/metadata/autobrr/main/admin" {
+  capabilities = ["read"]
+}
+
+path "{{ openbao_kv_mount }}/data/autobrr/priority/ro" {
+  capabilities = ["read"]
+}
+
+path "{{ openbao_kv_mount }}/metadata/autobrr/priority/ro" {
+  capabilities = ["read"]
+}
+
+path "secrets-external/data/plex/main/rw" {
+  capabilities = ["read"]
+}
+
+path "secrets-external/metadata/plex/main/rw" {
+  capabilities = ["read"]
+}
+
+{# Vendor names arrive at converge time; see openbao_media_external_paths. #}
+{% for path in openbao_media_external_paths %}
+
+path "secrets-external/data/{{ path }}" {
+  capabilities = ["read"]
+}
+
+path "secrets-external/metadata/{{ path }}" {
+  capabilities = ["read"]
+}
+{% endfor %}
