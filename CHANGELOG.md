@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.76.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.75.0...v0.76.0) (2026-11-07)
+
+
+### Features
+
+* **openbao:** add the Pepper agent identity ([#530](https://github.com/dryvist/ansible-secrets-management/issues/530)) ([cd1d8a9](https://github.com/dryvist/ansible-secrets-management/commit/cd1d8a98f8161b5a6aafc5576fd53c0b98f671e2))
+
+
+### Bug Fixes
+
+* **openbao:** keep session backup credentials valid between runs ([2c5395f](https://github.com/dryvist/ansible-secrets-management/commit/2c5395fd8f738bb6606e20958e83b100bdceb78c))
+* **openbao:** keep the ai-sessions-backup secret_id alive between runs ([#529](https://github.com/dryvist/ansible-secrets-management/issues/529)) ([2c5395f](https://github.com/dryvist/ansible-secrets-management/commit/2c5395fd8f738bb6606e20958e83b100bdceb78c))
+* **openbao:** let the roster check read roster AppRoles and keep upgrades out of policy runs ([#532](https://github.com/dryvist/ansible-secrets-management/issues/532)) ([8fbd6bf](https://github.com/dryvist/ansible-secrets-management/commit/8fbd6bf55a522df2c8987b3cfe495f7905d7a668))
+
 ## [0.75.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.74.0...v0.75.0) (2026-11-07)
 
 
