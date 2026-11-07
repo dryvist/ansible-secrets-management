@@ -1,4 +1,8 @@
 {{ ansible_managed | comment }}
+path "{{ openbao_github_pepper_mount }}/token/{{ openbao_github_pepper_read_set_name }}" {
+  capabilities = ["create", "update"]
+}
+
 path "{{ openbao_kv_mount }}/data/ai/pepper" {
   capabilities = ["read"]
 }

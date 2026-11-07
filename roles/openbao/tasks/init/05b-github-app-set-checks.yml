@@ -60,6 +60,25 @@
     label: "{{ item.name }}"
   when: gm.mount == openbao_github_agents_mount
 
+- name: "Assert the dedicated read set on mount {{ gm.mount }}"
+  ansible.builtin.assert:
+    that:
+      - gm.permission_sets | length == 1
+      - _pepper_set.name | default('') == openbao_github_pepper_read_set_name
+      - _pepper_set.tier | default('') == openbao_github_pepper_read_tier
+      - >-
+        _pepper_set.installation_id | default('') | string
+        == openbao_github_pepper_installation_id | string
+      - _pepper_set.repositories | default([]) == [openbao_github_pepper_repository]
+      - _pepper_set.permissions | default({}) == openbao_github_pepper_read_permissions
+      - openbao_github_pepper_repository is match('^[A-Za-z0-9_.-]+$')
+    fail_msg: >-
+      {{ gm.mount }} must declare only its one repository-scoped read set.
+    quiet: true
+  vars:
+    _pepper_set: "{{ gm.permission_sets | first | default({}) }}"
+  when: gm.mount == openbao_github_pepper_mount
+
 # ponytail: one page of 100; add pagination when a list passes 100 repos.
 - name: "Resolve the set repository lists on mount {{ gm.mount }}"
   ansible.builtin.set_fact:

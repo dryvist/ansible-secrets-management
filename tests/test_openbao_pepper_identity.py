@@ -17,6 +17,12 @@ from openbao_reconcile_bounds_helpers import (
 def pepper_defaults(monkeypatch):
     monkeypatch.setenv("OPENBAO_TERRAKUBE_NETWORK_WORKSPACE", "fixture-network")
     monkeypatch.setenv("OPENBAO_TERRAKUBE_AWS_WORKSPACE", "fixture-aws")
+    for name in (
+        "OPENBAO_GITHUB_PEPPER_APP_ID",
+        "OPENBAO_GITHUB_PEPPER_APP_PRIVATE_KEY",
+        "OPENBAO_GITHUB_PEPPER_REPOSITORY",
+    ):
+        monkeypatch.delenv(name, raising=False)
     values = {}
     for path in sorted(DEFAULTS.glob("*.yml")):
         values.update(yaml.safe_load(path.read_text(encoding="utf-8")) or {})
@@ -28,13 +34,23 @@ def pepper_defaults(monkeypatch):
     return values
 
 
-def test_pepper_has_one_registered_read_only_policy(pepper_defaults):
+def test_pepper_policy_mints_its_set_and_reads_only_its_secret_paths(pepper_defaults):
     policies = _render_value(pepper_defaults, "{{ openbao_policies }}")
     pepper = [policy for policy in policies if policy["name"] == "pepper"]
     assert len(pepper) == 1
     stanzas = dict(_stanzas(_render(TEMPLATES / pepper[0]["template"], pepper_defaults)))
-    assert list(stanzas) == ["secret/data/ai/pepper", "secret/data/ai/pepper/*"]
-    assert all(_capabilities(body) == ["read"] for body in stanzas.values())
+    token_path = "github-pepper/token/pepper-vault-read"
+    assert list(stanzas) == [
+        token_path,
+        "secret/data/ai/pepper",
+        "secret/data/ai/pepper/*",
+    ]
+    assert _capabilities(stanzas[token_path]) == ["create", "update"]
+    assert all(
+        _capabilities(body) == ["read"]
+        for path, body in stanzas.items()
+        if path != token_path
+    )
 
 
 def test_pepper_approle_uses_only_its_guest_and_scheduled_rotation(pepper_defaults):
@@ -80,3 +96,130 @@ def test_pepper_cidr_can_arrive_from_the_environment(pepper_defaults, monkeypatc
     monkeypatch.setenv("OPENBAO_PEPPER_SECRET_ID_CIDR", "fallback-fixture-cidr")
     roles = _render_value(pepper_defaults, "{{ openbao_pepper_approles }}")
     assert roles[0]["secret_id_bound_cidrs"] == "fallback-fixture-cidr"
+
+
+def _configure_pepper_mount(monkeypatch, values, *, repository="fixture-repo"):
+    monkeypatch.setenv("OPENBAO_GITHUB_PEPPER_APP_ID", "fixture-app-id")
+    monkeypatch.setenv("OPENBAO_GITHUB_PEPPER_APP_PRIVATE_KEY", "fixture-private-key")
+    monkeypatch.setenv("OPENBAO_GITHUB_PEPPER_REPOSITORY", repository)
+    values["openbao_platform_env"]["OPENBAO_GITHUB_PEPPER_INSTALLATION_ID"] = (
+        "fixture-installation"
+    )
+
+
+def _pepper_sets_and_mounts(values):
+    sets = _render_value(values, "{{ openbao_github_pepper_permission_sets }}")
+    mounts = _render_value(values, "{{ openbao_github_app_mounts }}")
+    pepper_mounts = [
+        mount for mount in mounts if mount["mount"] == "github-pepper"
+    ]
+    return sets, pepper_mounts
+
+
+def test_pepper_mount_and_set_are_absent_without_inputs(pepper_defaults):
+    sets, mounts = _pepper_sets_and_mounts(pepper_defaults)
+    assert sets == []
+    assert mounts == []
+
+
+@pytest.mark.parametrize(
+    "missing_input",
+    [
+        "OPENBAO_GITHUB_PEPPER_APP_ID",
+        "OPENBAO_GITHUB_PEPPER_APP_PRIVATE_KEY",
+        "OPENBAO_GITHUB_PEPPER_INSTALLATION_ID",
+        "OPENBAO_GITHUB_PEPPER_REPOSITORY",
+    ],
+)
+def test_pepper_mount_is_absent_when_any_input_is_missing(
+    pepper_defaults, monkeypatch, missing_input
+):
+    _configure_pepper_mount(monkeypatch, pepper_defaults)
+    if missing_input == "OPENBAO_GITHUB_PEPPER_INSTALLATION_ID":
+        pepper_defaults["openbao_platform_env"].pop(missing_input)
+    else:
+        monkeypatch.delenv(missing_input, raising=False)
+
+    sets, mounts = _pepper_sets_and_mounts(pepper_defaults)
+    assert sets == []
+    assert mounts == []
+
+
+def test_pepper_mount_is_absent_for_a_repository_value_with_a_slash(
+    pepper_defaults, monkeypatch
+):
+    _configure_pepper_mount(
+        monkeypatch, pepper_defaults, repository="fixture-owner/fixture-repo"
+    )
+    sets, mounts = _pepper_sets_and_mounts(pepper_defaults)
+    assert sets == []
+    assert mounts == []
+
+
+def test_pepper_mount_has_exactly_one_repository_scoped_read_set(
+    pepper_defaults, monkeypatch
+):
+    _configure_pepper_mount(monkeypatch, pepper_defaults)
+    sets, mounts = _pepper_sets_and_mounts(pepper_defaults)
+
+    assert sets == [
+        {
+            "name": "pepper-vault-read",
+            "tier": "pepper-read",
+            "installation_id": "fixture-installation",
+            "repositories": ["fixture-repo"],
+            "permissions": {"contents": "read", "metadata": "read"},
+        }
+    ]
+    assert len(mounts) == 1
+    assert mounts[0]["app_id"] == "fixture-app-id"
+    assert mounts[0]["private_key"] == "fixture-private-key"
+    assert mounts[0]["permission_sets"] == sets
+
+    registered_sets = _render_value(
+        pepper_defaults, "{{ openbao_github_permission_sets }}"
+    )
+    pepper_registered = [
+        permission_set
+        for permission_set in registered_sets
+        if permission_set["name"] == "pepper-vault-read"
+    ]
+    assert pepper_registered == [dict(sets[0], mount="github-pepper")]
+
+
+def test_pepper_policy_grants_only_its_named_set_on_github_mounts(
+    pepper_defaults, monkeypatch
+):
+    _configure_pepper_mount(monkeypatch, pepper_defaults)
+    policy = _render(TEMPLATES / "pepper-policy.hcl.j2", pepper_defaults)
+    stanzas = dict(_stanzas(policy))
+    token_path = "github-pepper/token/pepper-vault-read"
+    github_paths = [
+        path
+        for path in stanzas
+        if path == "github" or path.startswith("github-")
+    ]
+
+    assert github_paths == [token_path]
+    assert _capabilities(stanzas[token_path]) == ["create", "update"]
+    assert "github-pepper/token" not in stanzas
+
+
+def test_other_identity_policies_do_not_grant_the_pepper_token_path(
+    pepper_defaults, monkeypatch
+):
+    _configure_pepper_mount(monkeypatch, pepper_defaults)
+    token_path = "github-pepper/token/pepper-vault-read"
+    for template_name in (
+        "github-mint-policy.hcl.j2",
+        "github-read-policy.hcl.j2",
+        "open-llm-policy.hcl.j2",
+        "ai-orchestrator-policy.hcl.j2",
+    ):
+        policy = _render(TEMPLATES / template_name, pepper_defaults)
+        assert token_path not in dict(_stanzas(policy)), template_name
+
+    agent_sets = _render_value(
+        pepper_defaults, "{{ openbao_github_agents_permission_sets }}"
+    )
+    assert all(item["name"] != "pepper-vault-read" for item in agent_sets)

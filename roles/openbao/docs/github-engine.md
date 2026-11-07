@@ -19,6 +19,7 @@ configuration, so each App's own grant caps every token its mount mints:
 | `github-hermes` | hermes | `hermes-review-{public,private}`, `hermes-read-public`, `hermes-author-public`, split by repository visibility |
 | `github-work` | work | a derived `read` set and the raw token endpoint for write; the App's grant is the only write ceiling |
 | `github-personal` | user-owned App | `personal-write`, pinned to its configured installation |
+| `github-pepper` | Pepper | `pepper-vault-read` (one repository; contents and metadata read) |
 | `github-enterprise-read` | read-only Enterprise App | none: raw token endpoint, pinned to its installation |
 | `github-enterprise` | admin Enterprise App | none: raw token endpoint, pinned to its installation |
 | `github-runner` | runner App | none: raw token endpoint accepts only `org_name` |
@@ -214,3 +215,17 @@ installation ID comes from `OPENBAO_GITHUB_PERSONAL_INSTALLATION_ID` in the
 env document, and the installation owner must be present in
 `OPENBAO_GITHUB_APP_INSTALL_ALLOWLIST`. The mount and `personal-write` set are
 omitted while that installation ID is empty.
+
+The `github-pepper` mount gives the local Pepper agent a short-lived token
+for one configured repository. Its `pepper-vault-read` set grants only `contents: read` and
+`metadata: read`; the policy does not grant the raw token endpoint. The mount
+and set are omitted unless all four inputs are present, and the repository
+input must be one repository name without a slash:
+
+- `OPENBAO_GITHUB_PEPPER_APP_ID`
+- `OPENBAO_GITHUB_PEPPER_APP_PRIVATE_KEY`
+- `OPENBAO_GITHUB_PEPPER_INSTALLATION_ID`
+- `OPENBAO_GITHUB_PEPPER_REPOSITORY`
+
+The App ID, private key, and repository are environment inputs. The
+installation ID comes from the environment document.
