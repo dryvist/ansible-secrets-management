@@ -23,6 +23,10 @@ openbao_hermes_private_agent_secret_id_cidr: >-
   {{ openbao_platform_env.get('OPENBAO_HERMES_PRIVATE_AGENT_SECRET_ID_CIDR', '')
      | default(lookup('env', 'OPENBAO_HERMES_PRIVATE_AGENT_SECRET_ID_CIDR'), true)
      | default('', true) }}
+openbao_pepper_secret_id_cidr: >-
+  {{ openbao_platform_env.get('OPENBAO_PEPPER_SECRET_ID_CIDR', '')
+     | default(lookup('env', 'OPENBAO_PEPPER_SECRET_ID_CIDR'), true)
+     | default('', true) }}
 openbao_dify_agent_cidrs: >-
   {{ openbao_platform_env.get('OPENBAO_DIFY_AGENT_CIDR', '')
      | default(lookup('env', 'OPENBAO_DIFY_AGENT_CIDR'), true)

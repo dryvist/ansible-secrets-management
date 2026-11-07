@@ -5,6 +5,8 @@ openbao_hermes_policy_name: hermes
 openbao_hermes_approle_name: hermes
 openbao_hermes_private_agent_policy_name: hermes-private-agent
 openbao_hermes_private_agent_approle_name: hermes-private-agent
+openbao_pepper_policy_name: pepper
+openbao_pepper_approle_name: "{{ openbao_pepper_policy_name }}"
 # The auth role name is distinct from the private Hermes domain's env prefix.
 openbao_approle_env_prefix_overrides:
   hermes-private-agent: hermes-private
