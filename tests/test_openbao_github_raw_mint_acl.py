@@ -269,11 +269,12 @@ def test_personal_write_raw_grant_is_pinned_only_when_installation_is_configured
     configured_paths = _stanzas(configured_policy)
     personal = _raw(configured_policy, "github-personal/token")
     assert re.search(r'capabilities\s*=\s*\["create",\s*"update"\]', personal)
-    assert 'required_parameters = ["installation_id"]' in personal
-    assert re.search(
-        r'allowed_parameters\s*=\s*\{\s*"installation_id"\s*=\s*\["4242"\]\s*\}',
-        personal,
-    )
+    assert 'required_parameters = ["installation_id", "repositories"]' in personal
+    assert re.search(r'"installation_id"\s*=\s*\["4242"\]', personal)
+    # A repo-scoped claim sends repositories and permissions; both must be allowed.
+    assert re.search(r'"repositories"\s*=\s*\[\]', personal)
+    assert re.search(r'"permissions"\s*=\s*\[\]', personal)
+    assert "org_name" not in personal
     assert [path for path in configured_paths if path.startswith("github-personal/")] == [
         "github-personal/token"
     ]
