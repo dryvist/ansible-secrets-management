@@ -20,6 +20,16 @@
 # written into the repo or onto a target host, and the `bao` invocations that
 # touch them run with no_log: true.
 
+- name: Refuse a retired single-object input beside a different openbao_select
+  ansible.builtin.assert:
+    that:
+      - openbao_select_retired_inputs | length == 0 or openbao_select == openbao_select_retired_inputs
+    fail_msg: >-
+      Use openbao_select alone. openbao_rbac_policy_name and openbao_approle_config_name
+      are retired names for its policies and approles kinds.
+    quiet: true
+  tags: always
+
 - name: Reject caller IDs that also belong to the tofu roster
   ansible.builtin.import_tasks: init/00-caller-roster-collision-guard.yml
   tags:
@@ -63,13 +73,16 @@
   ansible.builtin.import_tasks: init/03-kv-mounts-and-seed-secrets.yml
   tags:
     - openbao_kv_seed
+  when: openbao_select | default({}) | length == 0
 
 - name: Register and configure the AWS secrets engine
   ansible.builtin.import_tasks: init/04-aws-engine.yml
   tags:
     - openbao_engines
     - aws
-  when: not (openbao_reconcile_mode | default(false))
+  when:
+    - not (openbao_reconcile_mode | default(false))
+    - openbao_select | default({}) | length == 0
 
 - name: Register and configure the Azure secrets engine
   ansible.builtin.import_tasks: init/04b-azure-engine.yml
@@ -79,25 +92,31 @@
   when:
     - not (openbao_reconcile_mode | default(false))
     - openbao_azure_engine_enabled | bool
+    - openbao_select | default({}) | length == 0
 
 - name: Configure the Transit secrets engine for OpenTofu state encryption
   ansible.builtin.import_tasks: init/04c-transit-engine.yml
   tags:
     - openbao_engines
+  when: openbao_select | default({}) | length == 0
 
 - name: Register and configure the GitHub secrets engine
   ansible.builtin.import_tasks: init/05-github-engine.yml
   tags:
     - openbao_engines
     - github
-  when: not (openbao_reconcile_mode | default(false))
+  when:
+    - not (openbao_reconcile_mode | default(false))
+    - openbao_select | default({}) | length == 0
 
 - name: Register and configure the OAuthapp secrets engine
   ansible.builtin.import_tasks: init/06-oauth-engine.yml
   tags:
     - openbao_engines
     - oauth
-  when: not (openbao_reconcile_mode | default(false))
+  when:
+    - not (openbao_reconcile_mode | default(false))
+    - openbao_select | default({}) | length == 0
 
 - name: Configure the SSH CA and its signing roles
   ansible.builtin.import_tasks: init/07-ssh-ca-engine.yml
@@ -115,6 +134,7 @@
         - etcd_pki
   tags:
     - etcd_pki
+  when: openbao_select | default({}) | length == 0
 
 - name: Render and reconcile the RBAC policies
   ansible.builtin.import_tasks: init/08-rbac-policies.yml
@@ -126,6 +146,7 @@
   tags:
     - openbao_rbac
   when:
+    - openbao_select | default({}) | length == 0
     - openbao_bootstrap_token is defined
     - openbao_reconcile_mode | default(false) | bool
 
@@ -158,6 +179,7 @@
       {{ openbao_github_app_mounts | default([]) | map(attribute='mount')
          | map('regex_replace', '^', 'sys/mounts/') | list }}
   when:
+    - openbao_select | default({}) | length == 0
     - openbao_bootstrap_token is defined
     - openbao_github_engine_enabled | bool
     - >-
@@ -188,7 +210,9 @@
   loop_control:
     loop_var: ga
     label: "{{ ga.app_id }}"
-  when: not (openbao_reconcile_mode | default(false))
+  when:
+    - not (openbao_reconcile_mode | default(false))
+    - openbao_select | default({}) | length == 0
 
 - name: Enable AppRole/JWT auth and reconcile Terrakube workspace JWT roles
   ansible.builtin.import_tasks: init/09-auth-methods-and-terrakube-jwt.yml
@@ -201,7 +225,9 @@
   # failed_when: false — which reads as "absent" and triggers exactly the
   # privileged create that cannot succeed. Enabling an auth method is bootstrap
   # work; it needs OPENBAO_PROVISIONING_TOKEN.
-  when: not (openbao_reconcile_mode | default(false))
+  when:
+    - not (openbao_reconcile_mode | default(false))
+    - openbao_select | default({}) | length == 0
 
 - name: Declare AppRoles and reconcile their policy and TTL bounds
   ansible.builtin.import_tasks: init/10-approles.yml
@@ -216,11 +242,13 @@
   ansible.builtin.import_tasks: init/10a-approle-issuer-liveness.yml
   tags:
     - openbao_approle
+  when: openbao_select | default({}) | length == 0
 
 - name: Issue per-call and stored AppRole credentials
   ansible.builtin.import_tasks: init/10b-approle-secret-ids.yml
   tags:
     - openbao_approle
+  when: openbao_select | default({}) | length == 0
 
 # --- Rotation-exempt tagging (idempotent, write-if-changed) ------------------
 # Stamp custom_metadata.rotation=exempt on every operator-declared
@@ -238,13 +266,21 @@
 # via a plain `tags:` on the include statement -- `apply: {tags: [...]}` is
 # the mechanism, and it re-tags the templated content at the moment this
 # include actually runs, once per loop iteration.
+- name: Select rotation-exempt metadata objects
+  ansible.builtin.import_tasks: init/select-objects.yml
+  vars:
+    openbao_select_kind: rotation_exempt
+    openbao_select_candidates: "{{ openbao_select_profiles.rotation_exempt.candidates }}"
+  tags:
+    - openbao_rotation_exempt
+
 - name: Tag operator-declared rotation-exempt paths (write-if-changed)
   ansible.builtin.include_tasks:
     file: tag_rotation_exempt.yml
     apply:
       tags:
         - openbao_rotation_exempt
-  loop: "{{ openbao_rotation_exempt }}"
+  loop: "{{ openbao_selected_objects.rotation_exempt | map(attribute='name') | list }}"
   loop_control:
     loop_var: openbao_rotation_exempt_entry
   tags:
@@ -260,4 +296,6 @@
 # reconciled.
 - name: Declare the disclosure-denylist entry's custom_metadata (write-if-changed)
   ansible.builtin.include_tasks: declare_disclosure_denylist_metadata.yml
-  when: openbao_bootstrap_token is defined
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_select | default({}) | length == 0

@@ -137,6 +137,18 @@
          | list }}
   when: openbao_bootstrap_token is defined
 
+- name: Select RBAC policy objects
+  ansible.builtin.import_tasks: select-objects.yml
+  vars:
+    openbao_select_kind: policies
+    openbao_select_declared_candidates: "{{ openbao_policies }}"
+    openbao_select_candidates: >-
+      {{ openbao_reachable_policies | default(openbao_manageable_policies | default(openbao_policies)) }}
+
+- name: Keep the selected RBAC policy objects
+  ansible.builtin.set_fact:
+    openbao_rbac_policy_targets: "{{ openbao_object_targets }}"
+
 # Rendered on the CONTROLLER, not the target. The previous shape wrote each
 # policy to the guest with `template`, read it back with `slurp`, and deleted it
 # again -- three remote round trips per policy purely to move content this
@@ -167,7 +179,7 @@
   vars:
     _openbao_rendered_policy_pairs: >-
       {%- set _pairs = [] -%}
-      {%- for item in openbao_reachable_policies -%}
+      {%- for item in openbao_rbac_policy_targets -%}
       {%- set _rendered = lookup('template', item.template, template_vars={'item': item}) | trim -%}
       {%- set _ = _pairs.append({'key': item.name, 'value': _rendered}) -%}
       {%- endfor -%}
@@ -227,7 +239,9 @@
 # would then happily overwrite a live policy with a document that grants
 # nothing, reporting success. Refuse before that write ever runs, for EVERY
 # policy scheduled to be written, not one hardcoded name: a future
-# conditionally-rendered policy is covered by construction.
+# conditionally-rendered policy is covered by construction. In selective mode,
+# the selection is resolved before rendering, so only selected policy templates
+# are evaluated and checked.
 - name: Assert no scheduled RBAC policy rendered empty
   ansible.builtin.assert:
     that:
@@ -243,7 +257,7 @@
       genuinely meant to grant nothing, remove it from
       openbao_reachable_policies instead of writing an empty ACL.
     success_msg: >-
-      All {{ openbao_reachable_policies | length }} scheduled RBAC policies
+      All {{ openbao_rbac_policy_targets | length }} scheduled RBAC policies
       rendered with at least one path stanza.
   vars:
     _openbao_rendered: "{{ openbao_rendered_policy_map | default({}) }}"
@@ -252,24 +266,9 @@
          | selectattr('value', 'search', 'path\s+"')
          | map(attribute='key') | list }}
     _openbao_empty_rendered_policies: >-
-      {{ openbao_reachable_policies | map(attribute='name') | list
+      {{ openbao_rbac_policy_targets | map(attribute='name') | list
          | reject('in', _openbao_non_empty_names) | list | sort }}
   when: openbao_bootstrap_token is defined
-
-- name: Select one RBAC policy when a policy name was requested
-  ansible.builtin.import_tasks: select-single-object.yml
-  vars:
-    openbao_single_object_selector: "{{ openbao_rbac_policy_name | default('', true) }}"
-    openbao_single_object_candidates: >-
-      {{ openbao_reachable_policies
-         | default(openbao_manageable_policies | default(openbao_policies)) }}
-    openbao_single_object_label: RBAC policy
-  when: openbao_rbac_policy_name | default('', true) | length > 0
-
-- name: Keep the selected RBAC policy targets for the read and write loops
-  ansible.builtin.set_fact:
-    openbao_rbac_policy_targets: "{{ openbao_single_object_targets }}"
-  when: openbao_rbac_policy_name | default('', true) | length > 0
 
 - name: Refuse live objects that collide with roster agent names
   ansible.builtin.import_tasks: 08a-roster-live-collisions.yml
@@ -294,14 +293,12 @@
       {{ openbao_ungranted_policy_names | join(', ') }}. Every other declared policy was written above.
       Reconcile CANNOT widen its own grants --
       openbao-reconcile is in openbao_reconcile_excluded_policies by design.
-      Run one non-reconcile single-object command per listed policy, then
-      re-run the converge. If a listed name is still reported, stop and escalate:
-      {% for name in openbao_ungranted_policy_names %}
+      These names need the human-gated path. Select them together, then re-run the converge:
       semaphore-run-ansible.sh --rail-sec=600 ./scripts/run-ansible.sh \
         playbooks/site.yml --tags openbao_rbac --limit openbao_group,localhost \
-        --diff -e '{"openbao_rbac_policy_name":"{{ name }}"}'
-      {% endfor %}
+        --diff -e '{{ {"openbao_select": {"policies": openbao_ungranted_policy_names}} | to_json }}'
   when:
+    - openbao_select | default({}) | length == 0
     - openbao_bootstrap_token is defined
     - openbao_reconcile_mode | default(false)
     - openbao_ungranted_policy_names | default([]) | length > 0

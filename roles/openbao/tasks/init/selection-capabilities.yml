@@ -1,0 +1,67 @@
+---
+- name: Resolve the API paths addressed by selected OpenBao objects
+  ansible.builtin.set_fact:
+    openbao_selected_paths: >-
+      {%- set paths = [] -%}
+      {%- for kind, profile in openbao_select_profiles.items() -%}
+      {%- for object in openbao_selected_objects[kind] -%}
+      {%- for suffix in profile.suffixes -%}
+      {%- set _ = paths.append({
+          'name': kind ~ ': ' ~ object.name,
+          'path': profile.prefix ~ (object.name | regex_replace(
+              profile.name_pattern | default('^'), profile.name_replacement | default(''))) ~ suffix,
+          'capability': profile.capability}) -%}
+      {%- endfor -%}
+      {%- endfor -%}
+      {%- endfor -%}
+      {{ paths }}
+
+- name: Ask the server which selected objects this identity may actually write
+  ansible.builtin.command:
+    argv: >-
+      {{ ['bao', 'write', '-format=json', 'sys/capabilities-self']
+         + (openbao_selected_paths | map(attribute='path') | unique(case_sensitive=true)
+            | map('regex_replace', '^', 'paths=') | list) }}
+  environment:
+    BAO_ADDR: "{{ openbao_cli_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
+  register: openbao_selected_capabilities_raw
+  check_mode: false
+  changed_when: false
+  failed_when: false
+  no_log: true
+  when: openbao_selected_paths | length > 0
+
+- name: Require a successful capability probe for the selected OpenBao objects
+  ansible.builtin.assert:
+    that:
+      - openbao_selected_capabilities_raw.rc | default(1) == 0
+    fail_msg: >-
+      The selected-object capability probe failed for
+      {{ openbao_selected_paths | map(attribute='name') | unique | sort | join(', ') }}.
+      These objects need the human-gated path until their live grants can be verified.
+    quiet: true
+  when: openbao_selected_paths | length > 0
+
+- name: Resolve the selected-object capability response
+  ansible.builtin.set_fact:
+    openbao_selected_capabilities: "{{ _body.get('data', {}) | combine(_body) }}"
+  vars:
+    _body: "{{ openbao_selected_capabilities_raw.stdout | default('{}') | from_json }}"
+  when: openbao_selected_paths | length > 0
+
+- name: Require a live write grant on every selected OpenBao object
+  ansible.builtin.assert:
+    that:
+      - item.capability in _capabilities or 'root' in _capabilities
+    fail_msg: "Selected {{ item.name }} needs the human-gated path; its live write grant is absent."
+    quiet: true
+  vars:
+    _capabilities: "{{ openbao_selected_capabilities.get(item.path, []) }}"
+  loop: "{{ openbao_selected_paths }}"
+  loop_control:
+    label: "{{ item.name }}"

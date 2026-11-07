@@ -45,9 +45,7 @@
   vars:
     ansible_become: "{{ openbao_cli_become }}"
   loop: >-
-    {{ openbao_rbac_policy_targets
-       if openbao_rbac_policy_name | default('', true) | length > 0
-       else openbao_reachable_policies }}
+    {{ openbao_rbac_policy_targets }}
   loop_control:
     label: "{{ item.name }}"
   register: openbao_existing_policy_reads
@@ -121,9 +119,7 @@
   ansible.builtin.set_fact:
     openbao_changed_policy_names: >-
       {%- set _names = [] -%}
-      {%- for policy in (openbao_rbac_policy_targets
-                         if openbao_rbac_policy_name | default('', true) | length > 0
-                         else openbao_reachable_policies) -%}
+      {%- for policy in openbao_rbac_policy_targets -%}
       {%- if policy.name not in openbao_existing_policy_names
          or (openbao_existing_policy_map | default({})).get(policy.name, '')
             != (openbao_rendered_policy_map | default({})).get(policy.name, '') -%}
@@ -160,14 +156,12 @@
             else (openbao_existing_policy_names
                   | select('match', '^' ~ (openbao_retired_terrakube_prefix | regex_escape)) | list)) }}
   when:
+    - openbao_select | default({}) | length == 0
     - ansible_check_mode
     - openbao_bootstrap_token is defined
 
-# A full-set run rewrites every existing policy whose rendered text differs from
-# live. That replaces the stored text outright, so a dropped capability lands
-# silently. Name each such policy in openbao_policy_change_ack, or stop before
-# any write. Missing policies need no ack. A single-object run counts as its
-# own ack, so the check applies only to the full set.
+# Selecting policy objects acknowledges their text changes. Full-set runs
+# require an explicit selection before replacing existing policy text.
 - name: Resolve existing RBAC policies whose rendered text differs from live
   ansible.builtin.set_fact:
     openbao_policy_text_changes: >-
@@ -182,22 +176,21 @@
       {{ _names | sort }}
   when:
     - openbao_bootstrap_token is defined
-    - openbao_rbac_policy_name | default('', true) | length == 0
+    - openbao_select | default({}) | length == 0
 
 - name: Refuse policy text changes that are not acknowledged
   ansible.builtin.assert:
     that:
-      - openbao_policy_text_changes | difference(openbao_policy_change_ack | default([])) | length == 0
+      - openbao_policy_text_changes | length == 0
     fail_msg: >-
-      Existing RBAC policies would have their stored text replaced, and they are
-      not named in openbao_policy_change_ack: {{ openbao_policy_text_changes
-      | difference(openbao_policy_change_ack | default([])) | sort | join(', ') }}.
-      Review the change, then re-run with those names in openbao_policy_change_ack,
-      or use a single-object run (openbao_rbac_policy_name) for one policy.
+      Existing RBAC policy text changes require selection:
+      {{ openbao_policy_text_changes | join(', ') }}.
+      Run exactly these policies with
+      -e '{{ {"openbao_select": {"policies": openbao_policy_text_changes}} | to_json }}'.
     quiet: true
   when:
     - openbao_bootstrap_token is defined
-    - openbao_rbac_policy_name | default('', true) | length == 0
+    - openbao_select | default({}) | length == 0
 
 - name: Write the RBAC policies that are missing or changed
   ansible.builtin.command:
@@ -212,9 +205,7 @@
   vars:
     ansible_become: "{{ openbao_cli_become }}"
   loop: >-
-    {{ openbao_rbac_policy_targets
-       if openbao_rbac_policy_name | default('', true) | length > 0
-       else openbao_reachable_policies }}
+    {{ openbao_rbac_policy_targets }}
   loop_control:
     label: "{{ item.name }}"
   no_log: true
@@ -300,4 +291,6 @@
                 | select('match', '^' ~ (openbao_retired_terrakube_prefix | regex_escape)) | list)) }}
   no_log: true
   changed_when: true
-  when: openbao_bootstrap_token is defined
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_select | default({}) | length == 0

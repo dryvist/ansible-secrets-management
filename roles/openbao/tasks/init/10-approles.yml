@@ -125,18 +125,16 @@
     quiet: true
   when: openbao_bootstrap_token is defined
 
-- name: Select one AppRole config when an AppRole name was requested
-  ansible.builtin.import_tasks: select-single-object.yml
+- name: Select AppRole config objects
+  ansible.builtin.import_tasks: select-objects.yml
   vars:
-    openbao_single_object_selector: "{{ openbao_approle_config_name | default('', true) }}"
-    openbao_single_object_candidates: "{{ openbao_manageable_approles | default(openbao_approles) }}"
-    openbao_single_object_label: AppRole config
-  when: openbao_approle_config_name | default('', true) | length > 0
+    openbao_select_kind: approles
+    openbao_select_declared_candidates: "{{ openbao_approles }}"
+    openbao_select_candidates: "{{ openbao_manageable_approles | default(openbao_approles) }}"
 
-- name: Keep the selected AppRole config targets for the read and write loops
+- name: Keep the selected AppRole config objects
   ansible.builtin.set_fact:
-    openbao_approle_config_targets: "{{ openbao_single_object_targets }}"
-  when: openbao_approle_config_name | default('', true) | length > 0
+    openbao_approle_config_targets: "{{ openbao_object_targets }}"
 
 # The complementary half of the two asserts above: those catch a role this
 # converge CREATES with no source-address class. This one catches a role that

@@ -48,14 +48,34 @@ including rolling expansion and seal-key rotation, are in
 [Installation and usage](docs/installation-and-usage.md) and
 [Operations](docs/operations.md).
 
-### Single-object RBAC and AppRole config runs
+### Selective object runs
 
-The optional `openbao_rbac_policy_name` and `openbao_approle_config_name`
-variables select one exact declared and manageable policy or AppRole. They are
-empty by default, which keeps the full-set behavior. A selected run rejects an
-unknown or ambiguous name and cannot run with `openbao_reconcile_mode: true`.
-Policy templates and global collision/undeclared-role/CIDR checks still cover
-the full declared set. AppRole config runs do not issue secret IDs.
+`openbao_select` maps object kinds to lists of exact names or shell globs
+(`*`, `?`, and bracket ranges). Its default `{}` keeps full-set behavior.
+The retired `openbao_rbac_policy_name` and `openbao_approle_config_name` inputs still
+select one object. Passing either beside `openbao_select` fails the run.
+Supported kinds are `policies`, `approles`, `ssh_roles`, and `rotation_exempt`.
+Rotation-exempt names use the declared `mount:path` form. Every selector must
+match a declared, manageable object. Names are printed before phase writes.
+`openbao_select_max` caps the combined resolved set across kinds at 25 by
+default; set a larger positive integer for a larger reviewed batch.
+
+With a nonempty selection, omitted kinds are skipped, and retired-object
+deletes and credential issuance are skipped. Policy templates render only for
+selected policies. Global collision, undeclared-role, and CIDR checks retain the
+full declared set.
+AppRole selection changes only config, policy attachments, and bounds.
+Reconcile mode requires both a manageable declaration and a live capability
+grant for every selected write endpoint before phase writes. A protected or
+ungranted selection fails with its name and requires the human-gated path.
+
+KV seeding also writes a separate policy, so selective runs skip that phase.
+Engine and auth setup also write mounts, keys, and shared configuration;
+credential issuance also publishes credentials. Those phases, human-gated
+AppRole attachment updates, policy sync, and the singleton disclosure metadata
+declaration run only in full-set mode. SSH engine and CA setup likewise stay
+in full-set mode; SSH signing-role objects remain selectable.
+
 Roster collision checks compare AppRole policy attachments through per-field
 reads with the declared policy parameter; reconcile retains the write bounds.
 Runs limited to `openbao_rbac` or `openbao_approle_config` use the existing
@@ -63,30 +83,19 @@ installation and running service. Package installation and upgrades use
 `openbao_install`; server configuration and startup use `openbao_config`.
 Full role and `openbao_bootstrap` runs include both phases.
 
-Run one target per invocation through the approved runner and provisioning-token
-path:
+Select a batch across kinds through the approved runner:
 
 ```sh
 semaphore-run-ansible.sh --rail-sec=600 ./scripts/run-ansible.sh playbooks/site.yml \
-  --tags openbao_rbac --limit openbao_group,localhost --diff \
-  -e '{"openbao_rbac_policy_name":"<policy-name>"}'
-```
-
-```sh
-semaphore-run-ansible.sh --rail-sec=600 ./scripts/run-ansible.sh playbooks/site.yml \
-  --tags openbao_approle_config --limit openbao_group,localhost --diff \
-  -e '{"openbao_approle_config_name":"<approle-name>"}'
+  --tags openbao_rbac,openbao_approle_config --limit openbao_group,localhost --diff \
+  -e '{"openbao_select":{"policies":["read-apps","terrakube-*"],"approles":["ai-sessions-backup"]}}'
 ```
 
 A full-set RBAC run replaces the stored text of every existing policy whose
-rendered text differs from live. Before any write, that run stops unless each
-such policy is named in `openbao_policy_change_ack`. The failure message names
-the policies and never their text. Creating a missing policy needs no ack, and
-a single-object run (`openbao_rbac_policy_name`) is its own ack.
-
-```sh
--e '{"openbao_policy_change_ack":["<policy-name>"]}'
-```
+rendered text differs from live. Before the RBAC write loop, changed existing
+text stops the run and prints an exact selection command naming those policies.
+Selection acknowledges text changes only for the selected objects. Creating
+missing policies requires no text-change acknowledgement.
 
 When a config or unit change notifies a restart, only the voters that changed
 restart. They restart one at a time, with the active voter last. Each voter

@@ -1,0 +1,34 @@
+---
+- name: Validate the requested OpenBao kinds
+  ansible.builtin.assert:
+    that:
+      - openbao_select | default({}) is mapping
+      - openbao_select | default({}) | difference(openbao_select_profiles) | length == 0
+    fail_msg: >-
+      openbao_select must map supported kinds to selector lists.
+      Supported kinds: {{ openbao_select_profiles.keys() | sort | join(', ') }}.
+    quiet: true
+
+- name: Start a fresh OpenBao selection
+  ansible.builtin.set_fact:
+    openbao_selected_objects: {}
+
+- name: Resolve every OpenBao kind before phase writes
+  ansible.builtin.include_tasks:
+    file: select-objects.yml
+    apply:
+      tags: always
+  vars:
+    openbao_select_kind: "{{ openbao_kind.key }}"
+    openbao_select_candidates: "{{ openbao_kind.value.candidates }}"
+    openbao_select_declared_candidates: "{{ openbao_kind.value.declared | default(openbao_kind.value.candidates) }}"
+  loop: "{{ openbao_select_profiles | dict2items }}"
+  loop_control:
+    loop_var: openbao_kind
+    label: "{{ openbao_kind.key }}"
+
+- name: Check every selected object's live reconcile grant before phase writes
+  ansible.builtin.import_tasks: selection-capabilities.yml
+  when:
+    - openbao_select | default({}) | length > 0
+    - openbao_reconcile_mode | default(false) | bool
