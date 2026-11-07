@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.77.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.76.0...v0.77.0) (2026-11-07)
+
+
+### Features
+
+* **openbao:** grant the media stack's four-segment secret paths ([#539](https://github.com/dryvist/ansible-secrets-management/issues/539)) ([21d8ff3](https://github.com/dryvist/ansible-secrets-management/commit/21d8ff3c04000a01dc6e01381435f263279fa384))
+
 ## [0.76.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.75.0...v0.76.0) (2026-11-07)
 
 
