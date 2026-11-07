@@ -44,10 +44,27 @@ def _dify_agent_names(defaults, suffix):
 
 
 class TestAppRoleTaxonomy(unittest.TestCase):
-    def test_every_declared_approle_has_one_identity_class(self):
-        variables = {}
+    def setUp(self):
+        self.variables = {}
         for path in sorted((ROOT / "roles/openbao/defaults/main").glob("*.yml")):
-            variables.update(yaml.safe_load(path.read_text(encoding="utf-8")) or {})
+            self.variables.update(yaml.safe_load(path.read_text(encoding="utf-8")) or {})
+
+    def test_sessions_backup_has_a_standing_workstation_credential(self):
+        variables = self.variables
+        name = variables["openbao_ai_sessions_backup_approle_name"]
+        roles = _render("{{ openbao_approles }}", variables)
+        role = next(role for role in roles if role["name"] == name)
+        ttls = _render("{{ openbao_approle_secret_id_ttl_overrides }}", variables)
+        uses = variables["openbao_approle_secret_id_num_uses_overrides"]
+        cidr_classes = _render("{{ openbao_approle_cidr_class_map }}", variables)
+
+        self.assertEqual(role.get("secret_id_ttl", ttls.get(name)), "0s")
+        self.assertEqual(role.get("secret_id_num_uses", uses.get(name)), 0)
+        self.assertEqual(cidr_classes[name], "workstation")
+        self.assertNotIn(name, _render("{{ openbao_secrets_domain_approle_names }}", variables))
+
+    def test_every_declared_approle_has_one_identity_class(self):
+        variables = self.variables
         variables["openbao_platform_env"] = {
             "OPENBAO_DIFY_AGENT_CIDR": "192.0.2.10/32",
         }
