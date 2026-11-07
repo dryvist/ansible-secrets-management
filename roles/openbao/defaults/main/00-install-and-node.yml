@@ -95,6 +95,10 @@ openbao_cli_become: "{{ openbao_reconcile_addr | length == 0 }}"
 openbao_rbac_policy_name: ""
 openbao_approle_config_name: ""
 
+# --- Optional per-kind object selection ------------------------------------
+openbao_select: {}
+openbao_select_max: 25
+
 # --- Ingress addresses whose X-Forwarded-For header is trusted ---------------
 # Every ingress instance's own address plus the floating ingress VIP, both
 # derived from the inventory exactly as the keepalived role derives them — no
