@@ -18,7 +18,7 @@ configuration, so each App's own grant caps every token its mount mints:
 | `github-agents` | agents | public-read/write and five least-privilege fleet-agent sets, scoped to public dryvist repositories |
 | `github-hermes` | hermes | `hermes-review-{public,private}`, `hermes-read-public`, `hermes-author-public`, split by repository visibility |
 | `github-work` | work | a derived `read` set and the raw token endpoint for write; the App's grant is the only write ceiling |
-| `github-personal` | user-owned App | `personal-write`, pinned to its configured installation |
+| `github-personal` | user-owned App | `personal-write` and a raw token path, pinned to its configured installation |
 | `github-pepper` | Pepper | `pepper-vault-read` (one repository; contents and metadata read) |
 | `github-enterprise-read` | read-only Enterprise App | none: raw token endpoint, pinned to its installation |
 | `github-enterprise` | admin Enterprise App | none: raw token endpoint, pinned to its installation |
@@ -64,7 +64,8 @@ Token access is tiered; the tier IS the privilege boundary:
   fixed to its installation with `contents`, `pull_requests`, and `workflows`
   write plus `checks`, `statuses`, and `metadata` read. The set has no
   repository list, so GitHub's installation selection is its repository
-  boundary. The existing `github-write` policy grants this named path;
+  boundary. The `github-write` policy also grants `github-personal/token` with
+  `installation_id` pinned to the configured personal installation.
   `github-mint` remains limited to read-tier sets, and `ai-orchestrator`
   excludes write-tier sets.
 - **publish (`docs-publisher`)** — `github-admin/token/docs-publisher`: one
