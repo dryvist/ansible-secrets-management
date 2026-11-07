@@ -38,6 +38,14 @@ path "{{ openbao_github_everyday_mount }}/token" {
   # Denying installation_id waits for the legacy helper removal step.
 }
 
+{% if openbao_github_personal_installation_id | length > 0 %}
+path "{{ openbao_github_personal_mount }}/token" {
+  capabilities = ["create", "update"]
+  required_parameters = ["installation_id"]
+  allowed_parameters = { "installation_id" = ["{{ openbao_github_personal_installation_id }}"] }
+}
+{% endif %}
+
 # Named write-tier permission sets are already pinned to their App installation
 # and fixed permission map, so the existing write identity can mint them only
 # at their explicit mount/set paths.
