@@ -20,7 +20,7 @@
   ansible.builtin.command:
     argv: >-
       {{ ['bao', 'write', '-format=json', 'sys/capabilities-self']
-         + (openbao_selected_paths | map(attribute='path') | unique
+         + (openbao_selected_paths | map(attribute='path') | unique(case_sensitive=true)
             | map('regex_replace', '^', 'paths=') | list) }}
   environment:
     BAO_ADDR: "{{ openbao_cli_addr }}"

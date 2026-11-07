@@ -86,3 +86,10 @@ def test_broad_glob_fails_the_resolved_object_cap():
     _, targets = resolve({"policies": ["*"]})
     check = task("Cap the resolved OpenBao selection")["ansible.builtin.assert"]
     assert not condition(check["that"][0], {"_selected_count": len(targets), "openbao_select_max": 2})
+
+
+def test_globs_preserve_case_and_resolve_each_object_once():
+    assert resolve({"policies": ["*"]}, names=("Apps", "apps", "apps"))[1] == [
+        {"name": "Apps"}, {"name": "apps"},
+    ]
+    assert resolve({"policies": ["Apps"]}, names=("Apps", "apps"))[1] == [{"name": "Apps"}]

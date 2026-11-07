@@ -91,10 +91,6 @@ openbao_cli_host: "{{ 'localhost' if openbao_reconcile_addr | length > 0 else in
 openbao_cli_addr: "{{ openbao_reconcile_addr | default(openbao_write_addr, true) }}"
 openbao_cli_become: "{{ openbao_reconcile_addr | length == 0 }}"
 
-# --- Optional single-object RBAC / AppRole config runs -----------------------
-openbao_rbac_policy_name: ""
-openbao_approle_config_name: ""
-
 # --- Optional per-kind object selection ------------------------------------
 openbao_select: {}
 openbao_select_max: 25

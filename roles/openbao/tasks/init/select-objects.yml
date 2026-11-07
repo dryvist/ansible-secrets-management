@@ -26,7 +26,8 @@
       {%- for selector in (openbao_select | default({})).get(openbao_select_kind, []) -%}
       {%- set _ = matches.append({'selector': selector, 'names':
           (openbao_select_declared_candidates | default(openbao_select_candidates) | map(attribute='name')
-           | select('dryvist.secrets_management.openbao_glob', selector) | unique | sort | list)}) -%}
+           | select('dryvist.secrets_management.openbao_glob', selector)
+           | unique(case_sensitive=true) | sort | list)}) -%}
       {%- endfor -%}
       {{ matches }}
 
@@ -44,7 +45,9 @@
   ansible.builtin.set_fact:
     openbao_object_targets: >-
       {{ (openbao_select_declared_candidates | default(openbao_select_candidates))
-         | selectattr('name', 'in', openbao_selector_matches | map(attribute='names') | flatten | unique | list)
+         | selectattr('name', 'in', openbao_selector_matches | map(attribute='names') | flatten
+                      | unique(case_sensitive=true) | list)
+         | unique(attribute='name', case_sensitive=true)
          | list if openbao_select | default({}) | length > 0 else openbao_select_candidates }}
 
 - name: Require selected OpenBao objects to be manageable by this identity

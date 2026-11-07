@@ -136,19 +136,6 @@
   ansible.builtin.set_fact:
     openbao_approle_config_targets: "{{ openbao_object_targets }}"
 
-- name: Select one AppRole config when an AppRole name was requested
-  ansible.builtin.import_tasks: select-single-object.yml
-  vars:
-    openbao_single_object_selector: "{{ openbao_approle_config_name | default('', true) }}"
-    openbao_single_object_candidates: "{{ openbao_manageable_approles | default(openbao_approles) }}"
-    openbao_single_object_label: AppRole config
-  when: openbao_approle_config_name | default('', true) | length > 0
-
-- name: Keep the selected AppRole config targets for the read and write loops
-  ansible.builtin.set_fact:
-    openbao_approle_config_targets: "{{ openbao_single_object_targets }}"
-  when: openbao_approle_config_name | default('', true) | length > 0
-
 # The complementary half of the two asserts above: those catch a role this
 # converge CREATES with no source-address class. This one catches a role that
 # exists live and this converge never even LOOPS, because it is declared

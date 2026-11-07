@@ -13,7 +13,6 @@ ROOT = Path(__file__).resolve().parent.parent
 INIT = ROOT / "roles" / "openbao" / "tasks" / "init.yml"
 APPROLE_TASKS = ROOT / "roles" / "openbao" / "tasks" / "init" / "10-approles.yml"
 APPROLE_BOUNDS_TASKS = ROOT / "roles" / "openbao" / "tasks" / "init" / "10c-approle-ttl-bounds.yml"
-SELECTOR_TASKS = ROOT / "roles" / "openbao" / "tasks" / "init" / "select-single-object.yml"
 DEFAULTS = ROOT / "roles" / "openbao" / "defaults" / "main" / "00-install-and-node.yml"
 SITE_PLAY = ROOT / "playbooks" / "site" / "04a-openbao.yml"
 
@@ -117,27 +116,14 @@ def test_role_config_tag_does_not_select_secret_id_issuance():
     assert "openbao_approle_config" in include_role["tags"]
 
 
-def test_approle_selector_is_single_exact_and_reconcile_rejected():
+def test_approle_config_uses_the_shared_per_kind_selector():
     defaults = yaml.safe_load(DEFAULTS.read_text(encoding="utf-8"))
-    assert defaults["openbao_approle_config_name"] == ""
+    assert defaults["openbao_select"] == {}
 
-    selection = _task(APPROLE_TASKS, "Select one AppRole config when an AppRole name was requested")
-    assert selection["ansible.builtin.import_tasks"] == "select-single-object.yml"
-    assert "openbao_manageable_approles" in selection["vars"]["openbao_single_object_candidates"]
-    assert "openbao_approle_config_name" in selection["vars"]["openbao_single_object_selector"]
-
-    helper = yaml.safe_load(SELECTOR_TASKS.read_text(encoding="utf-8"))
-    expression = helper[1]["ansible.builtin.set_fact"]["openbao_single_object_targets"]
-    candidates = [{"name": "apps"}, {"name": "ssh-ca"}]
-    assert _render(expression, {
-        "openbao_single_object_candidates": candidates,
-        "openbao_single_object_selector": "ssh-ca",
-    }) == [candidates[1]]
-
-    reconcile_guard = helper[0]["ansible.builtin.assert"]["that"][0]
-    templar = Templar(loader=DataLoader())
-    templar.available_variables = _trust({"openbao_reconcile_mode": True})
-    assert not templar.template(trust_as_template("{{ " + reconcile_guard + " }}"))
+    selection = _task(APPROLE_TASKS, "Select AppRole config objects")
+    assert selection["ansible.builtin.import_tasks"] == "select-objects.yml"
+    assert "openbao_manageable_approles" in selection["vars"]["openbao_select_candidates"]
+    assert selection["vars"]["openbao_select_kind"] == "approles"
 
 
 def test_only_selected_approle_is_read_and_reconciled_with_complete_parameters():
@@ -183,7 +169,7 @@ def test_only_selected_approle_is_read_and_reconciled_with_complete_parameters()
     )
     selection_index = next(
         i for i, task in enumerate(all_tasks)
-        if task.get("name") == "Select one AppRole config when an AppRole name was requested"
+        if task.get("name") == "Select AppRole config objects"
     )
     assert selection_index < undeclared_index
 

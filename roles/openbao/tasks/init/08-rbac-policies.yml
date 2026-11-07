@@ -268,21 +268,6 @@
   ansible.builtin.set_fact:
     openbao_rbac_policy_targets: "{{ openbao_object_targets }}"
 
-- name: Select one RBAC policy when a policy name was requested
-  ansible.builtin.import_tasks: select-single-object.yml
-  vars:
-    openbao_single_object_selector: "{{ openbao_rbac_policy_name | default('', true) }}"
-    openbao_single_object_candidates: >-
-      {{ openbao_reachable_policies
-         | default(openbao_manageable_policies | default(openbao_policies)) }}
-    openbao_single_object_label: RBAC policy
-  when: openbao_rbac_policy_name | default('', true) | length > 0
-
-- name: Keep the selected RBAC policy targets for the read and write loops
-  ansible.builtin.set_fact:
-    openbao_rbac_policy_targets: "{{ openbao_single_object_targets }}"
-  when: openbao_rbac_policy_name | default('', true) | length > 0
-
 - name: Refuse live objects that collide with roster agent names
   ansible.builtin.import_tasks: 08a-roster-live-collisions.yml
   when: openbao_ai_agents | length > 0
@@ -306,13 +291,10 @@
       {{ openbao_ungranted_policy_names | join(', ') }}. Every other declared policy was written above.
       Reconcile CANNOT widen its own grants --
       openbao-reconcile is in openbao_reconcile_excluded_policies by design.
-      Run one non-reconcile single-object command per listed policy, then
-      re-run the converge. If a listed name is still reported, stop and escalate:
-      {% for name in openbao_ungranted_policy_names %}
+      These names need the human-gated path. Select them together, then re-run the converge:
       semaphore-run-ansible.sh --rail-sec=600 ./scripts/run-ansible.sh \
         playbooks/site.yml --tags openbao_rbac --limit openbao_group,localhost \
-        --diff -e '{"openbao_rbac_policy_name":"{{ name }}"}'
-      {% endfor %}
+        --diff -e '{{ {"openbao_select": {"policies": openbao_ungranted_policy_names}} | to_json }}'
   when:
     - openbao_select | default({}) | length == 0
     - openbao_bootstrap_token is defined
