@@ -1,7 +1,10 @@
 """Keep protected role reconciliation separate from secret_id issuance."""
 
+import os
+import subprocess
 from pathlib import Path
 
+import pytest
 import yaml
 from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar, trust_as_template
@@ -13,6 +16,43 @@ APPROLE_BOUNDS_TASKS = ROOT / "roles" / "openbao" / "tasks" / "init" / "10c-appr
 SELECTOR_TASKS = ROOT / "roles" / "openbao" / "tasks" / "init" / "select-single-object.yml"
 DEFAULTS = ROOT / "roles" / "openbao" / "defaults" / "main" / "00-install-and-node.yml"
 SITE_PLAY = ROOT / "playbooks" / "site" / "04a-openbao.yml"
+
+
+@pytest.mark.parametrize("tag", [
+    "openbao_rbac", "openbao_approle_config", "openbao_install", "openbao_bootstrap", "all",
+])
+def test_scoped_role_task_list_keeps_install_and_service_changes_in_their_phases(tmp_path, tag):
+    playbook = tmp_path / "list_openbao.yml"
+    playbook.write_text(yaml.safe_dump([{
+        "name": "List OpenBao phase tasks",
+        "hosts": "localhost",
+        "gather_facts": False,
+        "roles": [str(ROOT / "roles/openbao")],
+    }]), encoding="utf-8")
+    result = subprocess.run(
+        ["ansible-playbook", "-i", "localhost,", "--list-tasks", "--tags", tag, str(playbook)],
+        cwd=ROOT, env=os.environ.copy(), capture_output=True, text=True, check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    install_tasks = list(_flatten(yaml.safe_load(
+        (ROOT / "roles/openbao/tasks/main/install.yml").read_text(encoding="utf-8")
+    )))
+    selected = result.stdout
+    if tag in {"openbao_rbac", "openbao_approle_config"}:
+        assert not any(task["name"] in selected for task in install_tasks)
+        assert "Install OpenBao systemd unit" not in selected
+        assert "Enable and start OpenBao" not in selected
+        assert "Apply any pending OpenBao restart before bootstrap" not in selected
+        expected_name = (
+            "Write the RBAC policies that are missing or changed" if tag == "openbao_rbac"
+            else "Check whether each AppRole already exists"
+        )
+        assert expected_name in selected
+    else:
+        assert all(task["name"] in selected for task in install_tasks)
+        if tag != "openbao_install":
+            assert "Install OpenBao systemd unit" in selected
+            assert "Enable and start OpenBao" in selected
 
 
 def _named_task(tasks, name):

@@ -62,6 +62,13 @@ path "sys/policies/acl" {
 # Roles carrying manage_secret_id: false are the inert, human-gated tiers and
 # are omitted above by that marker rather than by a second hand-kept list —
 # one declaration, so a new inert tier cannot be forgotten here.
+# Roster collision checks read only policy attachments. The write stanza below
+# keeps its parameter bounds, which also apply to the read request.
+{% for agent in openbao_roster_agent_valid_names %}
+path "auth/approle/role/{{ agent }}/policies" {
+  capabilities = ["read"]
+}
+{% endfor %}
 {% for approle_name in managed_approles %}
 {% set approle_cli_parameters = openbao_approle_cli_parameters[approle_name] %}
 {% set approle_cidrs = approle_cli_parameters.secret_id_bound_cidrs.split(',')

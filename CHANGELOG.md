@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.75.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.74.0...v0.75.0) (2026-11-07)
+
+
+### Features
+
+* **openbao:** scope window service credentials ([#523](https://github.com/dryvist/ansible-secrets-management/issues/523)) ([5ccb7bc](https://github.com/dryvist/ansible-secrets-management/commit/5ccb7bca39d277d5464eb7389343a97bad69c0c8))
+
 ## [0.74.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.73.0...v0.74.0) (2026-11-06)
 
 

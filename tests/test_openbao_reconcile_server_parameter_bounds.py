@@ -5,6 +5,7 @@ from openbao_reconcile_bounds_helpers import (
 )
 from _ports import loopback_port
 import json
+import os
 import pytest
 import shutil
 import subprocess
@@ -30,6 +31,9 @@ def _request(base, token, method, path, body=None):
     except urllib.error.HTTPError as error:
         return error.code, error.read()
 
+@pytest.mark.parametrize(
+    "rendered_defaults", [{"agents": {"docs-updater": {}}}], indirect=True,
+)
 def test_dev_server_enforces_config_and_metadata_parameter_bounds(
     rendered_defaults,
 ):
@@ -91,6 +95,37 @@ def test_dev_server_enforces_config_and_metadata_parameter_bounds(
         )
         assert status == 200, body
         token = json.loads(body)["auth"]["client_token"]
+
+        status, body = _request(
+            base, "root", "POST", "sys/auth/approle", {"type": "approle"},
+        )
+        assert status == 204, body
+        role_path = "auth/approle/role/docs-updater"
+        status, body = _request(
+            base, "root", "POST", role_path,
+            {"token_policies": ["docs-updater", "other"]},
+        )
+        assert status == 204, body
+        # Both the root and field write rules retain their required parameters.
+        assert _request(base, token, "GET", role_path)[0] == 403
+        assert _request(base, token, "GET", f"{role_path}/policies")[0] == 403
+        read = subprocess.run(
+            [binary, "read", "-format=json", f"{role_path}/policies",
+             "token_policies=docs-updater"],
+            env={**os.environ, "BAO_ADDR": base, "BAO_TOKEN": token},
+            capture_output=True, text=True, check=False,
+        )
+        assert read.returncode == 0, read.stderr
+        assert json.loads(read.stdout)["data"]["token_policies"] == ["docs-updater", "other"]
+        for forbidden in ("other", "docs-updater,other"):
+            assert _request(
+                base, token, "POST", f"{role_path}/policies",
+                {"token_policies": forbidden},
+            )[0] == 403
+        assert _request(
+            base, token, "POST", f"{role_path}/policies",
+            {"token_policies": "docs-updater"},
+        )[0] == 204
 
         path = f"{mount}/config"
         assert _request(base, token, "POST", path, {"max_versions": "1"})[0] == 403

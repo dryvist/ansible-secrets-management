@@ -1,0 +1,10 @@
+{{ ansible_managed | comment }}
+# {{ item.service.name }} window: native credential lifetime {{ item.service.lifetime }}.
+{% for credential_path in item.service.credential_paths %}
+path "{{ credential_path }}" {
+  capabilities = {{ item.service.scope | tojson }}
+  denied_parameters = {
+    "*" = []
+  }
+}
+{% endfor %}

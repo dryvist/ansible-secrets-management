@@ -145,6 +145,7 @@ class HatchetKillTestReaderContract(unittest.TestCase):
             "openbao_roster_key_reader_cidr_classes": {},
             "openbao_ai_apply_cidr_classes": {},
             "openbao_app_agent_tier_cidr_classes": {},
+            "openbao_window_service_cidr_classes": {},
         })["hatchet-killtest"]
         self.assertEqual(rendered_class, "machine")
         self.assertNotEqual(rendered_class, "unbound")

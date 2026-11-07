@@ -145,7 +145,10 @@
 
     - name: Read live AppRoles with a marked roster policy
       ansible.builtin.command:
-        cmd: "bao read -format=json auth/approle/role/{{ item }}"
+        # The shared write ACL requires this parameter on reads too.
+        cmd: >-
+          bao read -format=json auth/approle/role/{{ item }}/policies
+          token_policies={{ openbao_approle_cli_parameters[item].token_policies }}
       environment:
         BAO_ADDR: "{{ openbao_cli_addr }}"
         BAO_TOKEN: "{{ openbao_bootstrap_token }}"
