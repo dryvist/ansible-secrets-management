@@ -52,6 +52,8 @@ including rolling expansion and seal-key rotation, are in
 
 `openbao_select` maps object kinds to lists of exact names or shell globs
 (`*`, `?`, and bracket ranges). Its default `{}` keeps full-set behavior.
+The retired `openbao_rbac_policy_name` and `openbao_approle_config_name` inputs still
+select one object. Passing either beside `openbao_select` fails the run.
 Supported kinds are `policies`, `approles`, `ssh_roles`, and `rotation_exempt`.
 Rotation-exempt names use the declared `mount:path` form. Every selector must
 match a declared, manageable object. Names are printed before phase writes.

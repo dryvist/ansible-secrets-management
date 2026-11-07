@@ -71,6 +71,30 @@ def _run_policy_render(tmp_path, selection, candidates, expected_names):
     ({}, 1, {"policies": [{"name": "apps"}, {"name": "read-apps"}], "approles": [{"name": "backup"}]}, ""),
 ])
 def test_native_collection_selection(tmp_path, selection, cap, expected, failure):
+    output, returncode = _run_selection(tmp_path, {"openbao_select": selection}, cap, expected)
+    if failure:
+        assert returncode != 0 and failure in output, output
+        assert "TASK [Assert the selected targets]" not in output
+    else:
+        assert returncode == 0, output
+
+
+@pytest.mark.parametrize(("inputs", "expected"), [
+    ({"openbao_rbac_policy_name": "apps"}, {"policies": [{"name": "apps"}], "approles": []}),
+    ({"openbao_approle_config_name": "backup"}, {"policies": [], "approles": [{"name": "backup"}]}),
+])
+def test_retired_inputs_still_select_one_object(tmp_path, inputs, expected):
+    output, returncode = _run_selection(tmp_path, inputs, 25, expected)
+    assert returncode == 0, output
+
+
+def test_retired_input_beside_the_selection_is_refused(tmp_path):
+    inputs = {"openbao_rbac_policy_name": "apps", "openbao_select": {"approles": ["backup"]}}
+    output, returncode = _run_selection(tmp_path, inputs, 25, {})
+    assert returncode != 0 and "Use openbao_select alone" in output, output
+
+
+def _run_selection(tmp_path, inputs, cap, expected):
     collection_root = tmp_path / "collections"
     namespace = collection_root / "ansible_collections/dryvist"
     namespace.mkdir(parents=True)
@@ -90,7 +114,7 @@ def test_native_collection_selection(tmp_path, selection, cap, expected, failure
         ],
     }]))
     variables = {
-        "openbao_select": selection, "openbao_select_max": cap, "expected": expected,
+        **inputs, "openbao_select_max": cap, "expected": expected,
         "openbao_cli_host": "localhost",
         "openbao_select_profiles": {
             "policies": {"candidates": [{"name": "apps"}, {"name": "read-apps"}]},
@@ -103,12 +127,7 @@ def test_native_collection_selection(tmp_path, selection, cap, expected, failure
         cwd=ROOT, env={**os.environ, "ANSIBLE_COLLECTIONS_PATH": str(collection_root)},
         text=True, capture_output=True, timeout=60, check=False,
     )
-    output = result.stdout + result.stderr
-    if failure:
-        assert result.returncode != 0 and failure in output, output
-        assert "TASK [Assert the selected targets]" not in output
-    else:
-        assert result.returncode == 0, output
+    return result.stdout + result.stderr, result.returncode
 
 
 def test_policy_render_is_scoped_before_templates_are_evaluated(tmp_path):
