@@ -3,6 +3,7 @@
 
 import os
 from pathlib import Path
+import re
 import subprocess
 import tempfile
 import textwrap
@@ -11,7 +12,6 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "run-ansible.sh"
-RUNNER_REF = "github:dryvist/homelab-contracts/v5.34.0#run-ansible"
 PLAYBOOK = "playbooks/openbao-rotate-approles.yml"
 DEFAULT_ENV_NAMES = (
     "RUN_ANSIBLE_NO_SSH",
@@ -80,12 +80,19 @@ class RunAnsibleShim(unittest.TestCase):
         )
 
     def test_runner_pin_and_exact_defaults(self):
+        pin = re.search(
+            r"^HOMELAB_CONTRACTS_REF=(v\d+\.\d+\.\d+)$",
+            SCRIPT.read_text(encoding="utf-8"),
+            re.MULTILINE,
+        )
+        self.assertIsNotNone(pin)
+        runner_ref = f"github:dryvist/homelab-contracts/{pin.group(1)}#run-ansible"
         result = self._run()
 
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual(
             self.argv_log.read_text(encoding="utf-8").splitlines(),
-            ["run", RUNNER_REF, "--", PLAYBOOK, "--check"],
+            ["run", runner_ref, "--", PLAYBOOK, "--check"],
         )
         self.assertEqual(
             self.env_log.read_text(encoding="utf-8").splitlines(),
