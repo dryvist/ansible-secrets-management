@@ -260,6 +260,7 @@
   ansible.builtin.import_tasks: select-objects.yml
   vars:
     openbao_select_kind: policies
+    openbao_select_declared_candidates: "{{ openbao_policies }}"
     openbao_select_candidates: >-
       {{ openbao_reachable_policies | default(openbao_manageable_policies | default(openbao_policies)) }}
 

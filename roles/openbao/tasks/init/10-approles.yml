@@ -129,6 +129,7 @@
   ansible.builtin.import_tasks: select-objects.yml
   vars:
     openbao_select_kind: approles
+    openbao_select_declared_candidates: "{{ openbao_approles }}"
     openbao_select_candidates: "{{ openbao_manageable_approles | default(openbao_approles) }}"
 
 - name: Keep the selected AppRole config objects

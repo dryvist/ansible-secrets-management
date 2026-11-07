@@ -85,4 +85,4 @@ def test_unmatched_selector_fails_and_names_the_entry():
 def test_broad_glob_fails_the_resolved_object_cap():
     _, targets = resolve({"policies": ["*"]})
     check = task("Cap the resolved OpenBao selection")["ansible.builtin.assert"]
-    assert not condition(check["that"][0], {"openbao_object_targets": targets, "openbao_select_max": 2})
+    assert not condition(check["that"][0], {"_selected_count": len(targets), "openbao_select_max": 2})

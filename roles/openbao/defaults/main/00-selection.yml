@@ -3,11 +3,13 @@
 openbao_select_profiles:
   policies:
     candidates: "{{ openbao_manageable_policies | default(openbao_policies) }}"
+    declared: "{{ openbao_policies }}"
     prefix: sys/policies/acl/
     suffixes: [""]
     capability: update
   approles:
     candidates: "{{ openbao_manageable_approles | default(openbao_approles) }}"
+    declared: "{{ openbao_approles }}"
     prefix: auth/approle/role/
     suffixes: ["", /policies]
     capability: update

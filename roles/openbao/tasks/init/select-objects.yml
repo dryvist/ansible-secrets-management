@@ -25,7 +25,7 @@
       {%- set matches = [] -%}
       {%- for selector in (openbao_select | default({})).get(openbao_select_kind, []) -%}
       {%- set _ = matches.append({'selector': selector, 'names':
-          (openbao_select_candidates | map(attribute='name')
+          (openbao_select_declared_candidates | default(openbao_select_candidates) | map(attribute='name')
            | select('dryvist.secrets_management.openbao_glob', selector) | unique | sort | list)}) -%}
       {%- endfor -%}
       {{ matches }}
@@ -43,26 +43,42 @@
 - name: Resolve the selected OpenBao objects for this kind
   ansible.builtin.set_fact:
     openbao_object_targets: >-
-      {{ openbao_select_candidates
+      {{ (openbao_select_declared_candidates | default(openbao_select_candidates))
          | selectattr('name', 'in', openbao_selector_matches | map(attribute='names') | flatten | unique | list)
          | list if openbao_select | default({}) | length > 0 else openbao_select_candidates }}
 
-- name: Cap the resolved OpenBao selection
+- name: Require selected OpenBao objects to be manageable by this identity
   ansible.builtin.assert:
     that:
-      - openbao_object_targets | length <= openbao_select_max | default(25)
+      - _outside_grant | length == 0
     fail_msg: >-
-      openbao_select.{{ openbao_select_kind }} resolved {{ openbao_object_targets | length }} objects,
-      exceeding openbao_select_max={{ openbao_select_max | default(25) }}.
+      Selected {{ openbao_select_kind }} objects need the human-gated path:
+      {{ _outside_grant | sort | join(', ') }}.
     quiet: true
-  when: openbao_select | default({}) | length > 0
-
-- name: Report the resolved OpenBao object names
-  ansible.builtin.debug:
-    msg: "{{ openbao_object_targets | map(attribute='name') | sort | list }}"
+  vars:
+    _outside_grant: >-
+      {{ openbao_object_targets | map(attribute='name')
+         | difference(openbao_select_candidates | map(attribute='name') | list) }}
   when: openbao_select | default({}) | length > 0
 
 - name: Keep the resolved OpenBao selection by kind
   ansible.builtin.set_fact:
     openbao_selected_objects: >-
       {{ openbao_selected_objects | default({}) | combine({openbao_select_kind: openbao_object_targets}) }}
+
+- name: Cap the resolved OpenBao selection
+  ansible.builtin.assert:
+    that:
+      - _selected_count | int <= openbao_select_max | default(25)
+    fail_msg: >-
+      openbao_select resolved {{ _selected_count }} objects across kinds,
+      exceeding openbao_select_max={{ openbao_select_max | default(25) }}.
+    quiet: true
+  vars:
+    _selected_count: "{{ openbao_selected_objects.values() | map('length') | sum }}"
+  when: openbao_select | default({}) | length > 0
+
+- name: Report the resolved OpenBao object names
+  ansible.builtin.debug:
+    msg: "{{ openbao_object_targets | map(attribute='name') | sort | list }}"
+  when: openbao_select | default({}) | length > 0

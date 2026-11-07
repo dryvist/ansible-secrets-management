@@ -74,7 +74,7 @@ def test_policy_and_ssh_loops_use_only_their_resolved_kind():
 
 
 def test_total_cap_counts_objects_across_kinds():
-    check = task("Cap the complete OpenBao selection across kinds", ROLE / "tasks/init/selection-preflight.yml")
+    check = task("Cap the resolved OpenBao selection")
     count = render(check["vars"]["_selected_count"], {
         "openbao_selected_objects": {"policies": [{"name": "apps"}], "approles": [{"name": "apps"}]},
     })
