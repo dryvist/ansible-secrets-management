@@ -33,8 +33,8 @@ def test_pepper_has_one_registered_read_only_policy(pepper_defaults):
     pepper = [policy for policy in policies if policy["name"] == "pepper"]
     assert len(pepper) == 1
     stanzas = dict(_stanzas(_render(TEMPLATES / pepper[0]["template"], pepper_defaults)))
-    assert list(stanzas) == ["secret/data/ai/pepper/*"]
-    assert _capabilities(stanzas["secret/data/ai/pepper/*"]) == ["read"]
+    assert list(stanzas) == ["secret/data/ai/pepper", "secret/data/ai/pepper/*"]
+    assert all(_capabilities(body) == ["read"] for body in stanzas.values())
 
 
 def test_pepper_approle_uses_only_its_guest_and_scheduled_rotation(pepper_defaults):
