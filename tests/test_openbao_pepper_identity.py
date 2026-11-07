@@ -42,15 +42,37 @@ def test_pepper_policy_mints_its_set_and_reads_only_its_secret_paths(pepper_defa
     token_path = "github-pepper/token/pepper-vault-read"
     assert list(stanzas) == [
         token_path,
-        "secret/data/ai/pepper",
-        "secret/data/ai/pepper/*",
+        "secret/data/youtrack/pepper/rw",
+        "secrets-external/data/slack/pepper/rw",
+        "secrets-external/metadata/slack/pepper/rw",
+        "secret/data/apps/pepper",
     ]
+    assert "secret/data/ai/pepper" not in stanzas
+    assert "secret/data/ai/pepper/*" not in stanzas
     assert _capabilities(stanzas[token_path]) == ["create", "update"]
     assert all(
         _capabilities(body) == ["read"]
         for path, body in stanzas.items()
         if path != token_path
     )
+
+
+def test_ai_donna_policy_keeps_its_grants_and_reads_its_slack_leaf(pepper_defaults):
+    policies = _render_value(pepper_defaults, "{{ openbao_policies }}")
+    donna = [policy for policy in policies if policy["name"] == "ai-donna"]
+    assert len(donna) == 1
+    stanzas = dict(_stanzas(_render(TEMPLATES / donna[0]["template"], pepper_defaults)))
+
+    assert list(stanzas) == [
+        "secret/data/ai/donna",
+        "secret/metadata/ai/donna",
+        "secrets-external/data/slack/donna/rw",
+        "secrets-external/metadata/slack/donna/rw",
+    ]
+    assert _capabilities(stanzas["secret/data/ai/donna"]) == ["read"]
+    assert _capabilities(stanzas["secret/metadata/ai/donna"]) == ["read", "list"]
+    assert _capabilities(stanzas["secrets-external/data/slack/donna/rw"]) == ["read"]
+    assert _capabilities(stanzas["secrets-external/metadata/slack/donna/rw"]) == ["read"]
 
 
 def test_pepper_approle_uses_only_its_guest_and_scheduled_rotation(pepper_defaults):

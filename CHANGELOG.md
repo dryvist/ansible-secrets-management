@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.80.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.79.0...v0.80.0) (2026-11-07)
+
+
+### Features
+
+* **openbao:** grant Pepper and Donna their exact vendor paths ([20b9f85](https://github.com/dryvist/ansible-secrets-management/commit/20b9f855b733cf86772f517a541a5c1f8db13a62))
+* **openbao:** update the Pepper and Donna policies ([#551](https://github.com/dryvist/ansible-secrets-management/issues/551)) ([20b9f85](https://github.com/dryvist/ansible-secrets-management/commit/20b9f855b733cf86772f517a541a5c1f8db13a62))
+
 ## [0.79.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.78.1...v0.79.0) (2026-11-07)
 
 

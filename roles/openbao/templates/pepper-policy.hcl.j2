@@ -3,9 +3,15 @@ path "{{ openbao_github_pepper_mount }}/token/{{ openbao_github_pepper_read_set_
   capabilities = ["create", "update"]
 }
 
-path "{{ openbao_kv_mount }}/data/ai/pepper" {
+path "{{ openbao_kv_mount }}/data/youtrack/pepper/rw" {
   capabilities = ["read"]
 }
-path "{{ openbao_kv_mount }}/data/ai/pepper/*" {
+path "secrets-external/data/slack/pepper/rw" {
+  capabilities = ["read"]
+}
+path "secrets-external/metadata/slack/pepper/rw" {
+  capabilities = ["read"]
+}
+path "{{ openbao_kv_mount }}/data/apps/pepper" {
   capabilities = ["read"]
 }
