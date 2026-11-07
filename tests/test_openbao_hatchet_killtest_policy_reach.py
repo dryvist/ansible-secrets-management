@@ -21,6 +21,7 @@ import urllib.request
 from ansible.parsing.dataloader import DataLoader
 from ansible.plugins.loader import init_plugin_loader
 from ansible.template import Templar, trust_as_template
+from ansible.utils.collection_loader import AnsibleCollectionConfig
 import yaml
 from _ports import loopback_port
 from test_openbao_global_read_all_policy import _environment as policy_environment
@@ -95,7 +96,8 @@ def _templar(variables):
 
 def role_defaults():
     """Every role default plus the placeholder inventory a full render needs."""
-    init_plugin_loader()
+    if not AnsibleCollectionConfig.collection_finder:
+        init_plugin_loader()
     variables = {"ansible_managed": "Ansible managed"}
     for path in sorted((ROLE / "defaults/main").glob("*.yml")):
         variables.update(yaml.safe_load(path.read_text(encoding="utf-8")) or {})

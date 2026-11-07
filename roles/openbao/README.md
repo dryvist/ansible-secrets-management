@@ -56,6 +56,8 @@ empty by default, which keeps the full-set behavior. A selected run rejects an
 unknown or ambiguous name and cannot run with `openbao_reconcile_mode: true`.
 Policy templates and global collision/undeclared-role/CIDR checks still cover
 the full declared set. AppRole config runs do not issue secret IDs.
+Roster collision checks compare AppRole policy attachments through per-field
+reads with the declared policy parameter; reconcile retains the write bounds.
 Runs limited to `openbao_rbac` or `openbao_approle_config` use the existing
 installation and running service. Package installation and upgrades use
 `openbao_install`; server configuration and startup use `openbao_config`.

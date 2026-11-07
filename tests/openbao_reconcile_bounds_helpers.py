@@ -9,7 +9,6 @@ import pytest
 import yaml
 from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar, trust_as_template
-from jinja2 import FileSystemLoader
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -48,7 +47,7 @@ def _templar(values):
     return templar
 
 @pytest.fixture
-def rendered_defaults(monkeypatch):
+def rendered_defaults(monkeypatch, request):
     for key, value in {
         "OPENBAO_TERRAKUBE_NETWORK_WORKSPACE": "fixture-network",
         "OPENBAO_TERRAKUBE_AWS_WORKSPACE": "fixture-aws",
@@ -62,7 +61,7 @@ def rendered_defaults(monkeypatch):
     for path in sorted(DEFAULTS.glob("*.yml")):
         values.update(yaml.safe_load(path.read_text(encoding="utf-8")) or {})
     values.update(
-        tofu_data={"agents": {}},
+        tofu_data=getattr(request, "param", {"agents": {}}),
         ansible_managed="Ansible managed",
         llm_router_key_catalog_facts={"openbao_router_key_catalog": {}},
         openbao_management_cidrs="192.0.2.0/24",
@@ -123,11 +122,12 @@ def _render(template, values, *, policy_exclusions=None):
     context = dict(values)
     if policy_exclusions is not None:
         context["openbao_reconcile_policy_excluded_names"] = policy_exclusions
-    templar = _templar(_trust(context))
-    templar._loader.set_basedir(str(ROOT / "roles" / "openbao"))
+    loader = DataLoader()
+    loader.set_basedir(str(ROOT / "roles" / "openbao"))
     # Mirrors Ansible's search path so a bare include in a converge template resolves.
-    templar.environment.loader = FileSystemLoader([
-        str(ROOT / "roles" / "openbao" / "templates"), str(ROOT / "roles" / "openbao")])
+    templar = Templar(loader=loader, variables=_trust(context)).copy_with_new_env(
+        searchpath=[str(TEMPLATES), str(ROOT / "roles" / "openbao")],
+    )
     return templar.template(
         trust_as_template(template.read_text(encoding="utf-8"))
     )
