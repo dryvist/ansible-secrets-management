@@ -45,9 +45,7 @@
   vars:
     ansible_become: "{{ openbao_cli_become }}"
   loop: >-
-    {{ openbao_rbac_policy_targets
-       if openbao_select | default({}) | length > 0
-       else openbao_reachable_policies }}
+    {{ openbao_rbac_policy_targets }}
   loop_control:
     label: "{{ item.name }}"
   register: openbao_existing_policy_reads
@@ -121,9 +119,7 @@
   ansible.builtin.set_fact:
     openbao_changed_policy_names: >-
       {%- set _names = [] -%}
-      {%- for policy in (openbao_rbac_policy_targets
-                         if openbao_select | default({}) | length > 0
-                         else openbao_reachable_policies) -%}
+      {%- for policy in openbao_rbac_policy_targets -%}
       {%- if policy.name not in openbao_existing_policy_names
          or (openbao_existing_policy_map | default({})).get(policy.name, '')
             != (openbao_rendered_policy_map | default({})).get(policy.name, '') -%}
@@ -209,9 +205,7 @@
   vars:
     ansible_become: "{{ openbao_cli_become }}"
   loop: >-
-    {{ openbao_rbac_policy_targets
-       if openbao_select | default({}) | length > 0
-       else openbao_reachable_policies }}
+    {{ openbao_rbac_policy_targets }}
   loop_control:
     label: "{{ item.name }}"
   no_log: true

@@ -64,7 +64,11 @@ def test_policy_and_ssh_loops_use_only_their_resolved_kind():
             "openbao_reachable_policies": [{"name": "apps"}],
         }
         assert render(expression, values) == []
-        assert render(expression, {**values, "openbao_select": {}}) == [{"name": "apps"}]
+        assert render(expression, {
+            **values,
+            "openbao_select": {},
+            "openbao_rbac_policy_targets": [{"name": "apps"}],
+        }) == [{"name": "apps"}]
 
     ssh = ROLE / "tasks/init/07-ssh-ca-engine.yml"
     read = task("Check which SSH signing roles already exist", ssh)

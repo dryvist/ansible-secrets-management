@@ -125,7 +125,7 @@ def test_policy_check_report_uses_the_existing_write_comparison():
     )
     expression = task["ansible.builtin.set_fact"]["openbao_changed_policy_names"]
     variables = {
-        "openbao_reachable_policies": [
+        "openbao_rbac_policy_targets": [
             {"name": "unchanged"},
             {"name": "changed"},
             {"name": "missing"},

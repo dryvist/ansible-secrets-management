@@ -166,9 +166,10 @@ class SelectedPolicyLoops(unittest.TestCase):
 
     def _policy_loop(self, task_name, selector="", selected=None):
         expression = _task(task_name)["loop"]
+        targets = selected if selected is not None else self.CANDIDATES
         return _render(expression, {
             "openbao_select": {"policies": [selector]} if selector else {},
-            "openbao_rbac_policy_targets": selected or [],
+            "openbao_rbac_policy_targets": targets,
             "openbao_reachable_policies": self.CANDIDATES,
         })
 
@@ -196,20 +197,44 @@ class SelectedPolicyLoops(unittest.TestCase):
 
         task_names = [task.get("name") for task in yaml.safe_load(POLICY_TASKS.read_text(encoding="utf-8"))]
         self.assertLess(
-            task_names.index("Assert no scheduled RBAC policy rendered empty"),
             task_names.index("Select RBAC policy objects"),
+            task_names.index("Render the RBAC policies on the controller"),
+        )
+        self.assertLess(
+            task_names.index("Render the RBAC policies on the controller"),
+            task_names.index("Assert no scheduled RBAC policy rendered empty"),
         )
         self.assertLess(
             task_names.index("Select RBAC policy objects"),
             task_names.index("Refuse live objects that collide with roster agent names"),
         )
+        self.assertLess(
+            task_names.index("Assert no scheduled RBAC policy rendered empty"),
+            task_names.index("Read the stored RBAC policies and write what differs"),
+        )
 
-    def test_policy_full_render_and_empty_guard_remain_global(self):
+    def test_policy_render_and_empty_guard_use_the_resolved_targets(self):
         render = _task("Render the RBAC policies on the controller", POLICY_TASKS)
         pairs = render["vars"]["_openbao_rendered_policy_pairs"]
-        self.assertIn("for item in openbao_reachable_policies", pairs)
+        self.assertIn("for item in openbao_rbac_policy_targets", pairs)
         empty_guard = _task("Assert no scheduled RBAC policy rendered empty", POLICY_TASKS)
-        self.assertIn("openbao_reachable_policies", empty_guard["vars"]["_openbao_empty_rendered_policies"])
+        self.assertIn("openbao_rbac_policy_targets", empty_guard["vars"]["_openbao_empty_rendered_policies"])
+
+    def test_full_reconcile_gap_guard_runs_only_for_full_set_runs(self):
+        task = _task("FAIL -- the reconcile identity cannot manage every declared policy", POLICY_TASKS)
+        variables = {
+            "openbao_select": {"policies": ["apps"]},
+            "openbao_bootstrap_token": "s.test",
+            "openbao_reconcile_mode": True,
+            "openbao_ungranted_policy_names": ["human-gated"],
+        }
+        self.assertFalse(all(
+            _render(condition, variables, wrap=True) for condition in task["when"]
+        ))
+        variables["openbao_select"] = {}
+        self.assertTrue(all(
+            _render(condition, variables, wrap=True) for condition in task["when"]
+        ))
 
     def test_declaration_assertions_are_imported_before_policy_work(self):
         imported = _task("Assert RBAC policy declaration invariants", POLICY_TASKS)

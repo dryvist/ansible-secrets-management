@@ -10,6 +10,57 @@ import yaml
 
 from test_openbao_select import ROOT
 
+POLICY_TASKS = ROOT / "roles/openbao/tasks/init/08-rbac-policies.yml"
+
+
+def _task(name):
+    return next(
+        task for task in yaml.safe_load(POLICY_TASKS.read_text(encoding="utf-8"))
+        if task.get("name") == name
+    )
+
+
+def _run_policy_render(tmp_path, selection, candidates, expected_names):
+    collection_root = tmp_path / "collections"
+    namespace = collection_root / "ansible_collections/dryvist"
+    namespace.mkdir(parents=True)
+    (namespace / "secrets_management").symlink_to(ROOT, target_is_directory=True)
+
+    select = _task("Select RBAC policy objects")
+    select["ansible.builtin.import_tasks"] = str(
+        ROOT / "roles/openbao/tasks/init/select-objects.yml"
+    )
+    tasks = [
+        select,
+        _task("Keep the selected RBAC policy objects"),
+        _task("Render the RBAC policies on the controller"),
+        _task("Assert no scheduled RBAC policy rendered empty"),
+        {"name": "Assert only expected policy templates rendered", "ansible.builtin.assert": {
+            "that": ["openbao_rendered_policy_map.keys() | list | sort == expected_names"]}},
+        {"name": "Write marker after the empty-render guard", "ansible.builtin.debug": {
+            "msg": "WRITE_PHASE_REACHED"}},
+    ]
+    playbook = tmp_path / "render.yml"
+    playbook.write_text(yaml.safe_dump([{
+        "name": "Verify selected RBAC policy rendering",
+        "hosts": "localhost", "connection": "local", "gather_facts": False,
+        "tasks": tasks,
+    }]))
+    variables = {
+        "openbao_select": {"policies": [selection]} if selection else {},
+        "openbao_select_max": 25,
+        "openbao_bootstrap_token": "s.test",
+        "openbao_policies": candidates,
+        "openbao_reachable_policies": candidates,
+        "expected_names": expected_names,
+    }
+    return subprocess.run(
+        [shutil.which("ansible-playbook"), "-i", "localhost,", str(playbook),
+         "-e", json.dumps(variables)],
+        cwd=ROOT, env={**os.environ, "ANSIBLE_COLLECTIONS_PATH": str(collection_root)},
+        text=True, capture_output=True, timeout=60, check=False,
+    )
+
 
 @pytest.mark.parametrize(("selection", "cap", "expected", "failure"), [
     ({"policies": ["apps"]}, 25, {"policies": [{"name": "apps"}], "approles": []}, ""),
@@ -58,3 +109,36 @@ def test_native_collection_selection(tmp_path, selection, cap, expected, failure
         assert "TASK [Assert the selected targets]" not in output
     else:
         assert result.returncode == 0, output
+
+
+def test_policy_render_is_scoped_before_templates_are_evaluated(tmp_path):
+    selected_template = tmp_path / "selected.hcl.j2"
+    selected_template.write_text('path "test/selected" { capabilities = ["read"] }\n')
+    broken_template = tmp_path / "broken.hcl.j2"
+    broken_template.write_text("{% if %}\n")
+    empty_template = tmp_path / "empty.hcl.j2"
+    empty_template.write_text("# no path stanza\n")
+    second_template = tmp_path / "second.hcl.j2"
+    second_template.write_text('path "test/second" { capabilities = ["read"] }\n')
+
+    selective = _run_policy_render(tmp_path / "selective", "selected", [
+        {"name": "selected", "template": str(selected_template)},
+        {"name": "unselected", "template": str(broken_template)},
+    ], ["selected"])
+    assert selective.returncode == 0, selective.stdout + selective.stderr
+    assert "WRITE_PHASE_REACHED" in selective.stdout
+
+    empty = _run_policy_render(tmp_path / "empty", "empty", [
+        {"name": "empty", "template": str(empty_template)},
+        {"name": "other", "template": str(second_template)},
+    ], ["empty"])
+    empty_output = empty.stdout + empty.stderr
+    assert empty.returncode != 0 and "rendered with no" in empty_output, empty_output
+    assert "WRITE_PHASE_REACHED" not in empty_output
+
+    full = _run_policy_render(tmp_path / "full", "", [
+        {"name": "selected", "template": str(selected_template)},
+        {"name": "second", "template": str(second_template)},
+    ], ["second", "selected"])
+    assert full.returncode == 0, full.stdout + full.stderr
+    assert "WRITE_PHASE_REACHED" in full.stdout

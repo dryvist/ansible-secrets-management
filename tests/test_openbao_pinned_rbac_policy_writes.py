@@ -199,7 +199,7 @@ class PinnedWriteOutcomes(unittest.TestCase):
             selected,
         )
         self.assertEqual(
-            _render(write["loop"], {"openbao_reachable_policies": all_policies}),
+            _render(write["loop"], {"openbao_rbac_policy_targets": all_policies}),
             all_policies,
         )
         self.assertEqual(write["ansible.builtin.command"]["cmd"], "bao policy write {{ item.name }} -")
