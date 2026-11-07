@@ -62,9 +62,9 @@ that domain's own `<DOMAIN>-rotate` AppRole rather than the read-only identity
 a converge uses. It never invents a field — the target field must already
 exist — and it refuses a path whose `custom_metadata.rotation` is `exempt`.
 
-Every `<DOMAIN>-rotate` AppRole except `media-rotate` is **inert**
-(`manage_secret_id=false`, `secret_id_ttl=15m`, `num_uses=1`): there is no
-standing secret_id to read from the environment. A human issues a wrapped,
+The human-gated `<DOMAIN>-rotate` AppRoles, including `media-rotate`, are **inert**
+(`manage_secret_id=false`, `secret_id_ttl=15m`, `num_uses=1`): new standing
+secret IDs are not managed. A human issues a wrapped,
 single-use one and hands it to the playbook — that wrap IS the approval, the
 same pattern as the `ai-apply-<svc>` tier:
 
@@ -76,13 +76,12 @@ ROTATE_WRAPPING_TOKEN=<wrapping_token> doppler run -- ansible-playbook playbooks
   -e rotate_field=SPLUNK_MCP_TOKEN -e rotate_domain=ai
 ```
 
-`media-rotate` keeps its legacy standing Doppler pair
-(`MEDIA_ROTATE_VAULT_ROLE_ID`/`_SECRET_ID`) — no wrap needed there:
-
-```bash
-doppler run -- ansible-playbook playbooks/rotate-key.yml \
-  -e rotate_domain=media -e rotate_entry=prowlarr -e rotate_field=PROWLARR_API_KEY
-```
+Existing `media-rotate` standing secret IDs must be revoked by the operator after
+cutover; changing the declaration does not revoke them. For media, issue a
+wrapped secret ID in the same way and pass the new exact internal path. Remove
+the legacy secret ID from the playbook environment: it takes precedence over
+the wrapping token while present.
+Vendor-issued credentials on `secrets-external` are rotated by the operator.
 
 Rotating a field this repo cannot mint itself (a third-party API issues the
 value) — `rotate_mint` names an `openbao-rotate-<value>.service` unit already

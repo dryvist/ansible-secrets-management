@@ -125,7 +125,7 @@ plans):
 | `observability` | `secret/platform/{splunk,cribl}`, `secret/ai/mcp/splunk` | — | Ingest pipeline and read-only Splunk MCP queries |
 | `local-cloud` | `secret/platform/{object-storage,compute}` | — | RustFS + compute creds |
 | `monitoring` | `secret/apps/monitoring` | — | netmon/unifi_metrics/prometheus_stack |
-| `media` | `secret/apps/media` | — | *arr/qBittorrent/Plex stack |
+| `media` | `secret/apps/media/*` (cutover), then the per-service paths in `media-policy.hcl.j2` | — | Media stack |
 | `local-llm` | `secret/ai/*` | — | The LLM serving stack itself |
 | `clickhouse` | `secret/ai/clickhouse` data + metadata | — | Dedicated reader for the application and integration passwords |
 | `clickhouse-ingest` | `secret/ai/clickhouse-ingest` data + metadata | — | Dedicated reader for the ClickHouse ingest writer password |

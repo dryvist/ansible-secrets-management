@@ -31,7 +31,7 @@ OWNER_CONSUMER_TEMPLATES = (
 # These live-only policies have no local templates. OpenBao's built-in
 # `default` policy is also attached unless token_no_default_policy is true.
 # Treat these policies as granting nothing on ai/mcp in this local audit.
-RENDERLESS_POLICY_NAMES = {"vikunja", "terraform", "media-rotate"}
+RENDERLESS_POLICY_NAMES = {"vikunja", "terraform"}
 POLICY_STANZA = re.compile(
     r'path\s+"([^"]+)"\s*\{\s*capabilities\s*=\s*\[([^]]*)\]', re.DOTALL
 )

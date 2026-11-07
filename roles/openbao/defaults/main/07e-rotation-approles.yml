@@ -24,7 +24,7 @@ openbao_rotation_approles:
     policy: "{{ openbao_secret_age_audit_policy_name }}"
   # ai-rotate / apps-rotate: HUMAN-GATED subtree writers scoped to
   # secret/ai/* and secret/apps/* respectively — same shape as the
-  # ai-apply-<svc> tier (06-ai-access-model.yml), not media-rotate. A
+  # ai-apply-<svc> tier (06-ai-access-model.yml). A
   # whole-subtree read+write grant is the ai-apply blast radius, so unlike
   # the timer-driven rotators above it carries NO standing secret_id:
   # manage_secret_id: false excludes it from approle-issuer's unattended
@@ -40,6 +40,12 @@ openbao_rotation_approles:
     secret_id_num_uses: 1
   - name: "{{ openbao_apps_rotate_approle_name }}"
     policy: "{{ openbao_apps_rotate_policy_name }}"
+    manage_secret_id: false
+    secret_id_ttl: "{{ openbao_ai_elevated_secret_id_ttl }}"
+    secret_id_num_uses: 1
+  # Media rotation is human-gated and restricted to exact internal paths.
+  - name: "{{ openbao_media_rotate_approle_name }}"
+    policy: "{{ openbao_media_rotate_policy_name }}"
     manage_secret_id: false
     secret_id_ttl: "{{ openbao_ai_elevated_secret_id_ttl }}"
     secret_id_num_uses: 1
