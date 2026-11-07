@@ -46,7 +46,7 @@
     ansible_become: "{{ openbao_cli_become }}"
   loop: >-
     {{ openbao_rbac_policy_targets
-       if openbao_rbac_policy_name | default('', true) | length > 0
+       if openbao_select | default({}) | length > 0
        else openbao_reachable_policies }}
   loop_control:
     label: "{{ item.name }}"
@@ -122,7 +122,7 @@
     openbao_changed_policy_names: >-
       {%- set _names = [] -%}
       {%- for policy in (openbao_rbac_policy_targets
-                         if openbao_rbac_policy_name | default('', true) | length > 0
+                         if openbao_select | default({}) | length > 0
                          else openbao_reachable_policies) -%}
       {%- if policy.name not in openbao_existing_policy_names
          or (openbao_existing_policy_map | default({})).get(policy.name, '')
@@ -160,6 +160,7 @@
             else (openbao_existing_policy_names
                   | select('match', '^' ~ (openbao_retired_terrakube_prefix | regex_escape)) | list)) }}
   when:
+    - openbao_select | default({}) | length == 0
     - ansible_check_mode
     - openbao_bootstrap_token is defined
 
@@ -213,7 +214,7 @@
     ansible_become: "{{ openbao_cli_become }}"
   loop: >-
     {{ openbao_rbac_policy_targets
-       if openbao_rbac_policy_name | default('', true) | length > 0
+       if openbao_select | default({}) | length > 0
        else openbao_reachable_policies }}
   loop_control:
     label: "{{ item.name }}"
@@ -300,4 +301,6 @@
                 | select('match', '^' ~ (openbao_retired_terrakube_prefix | regex_escape)) | list)) }}
   no_log: true
   changed_when: true
-  when: openbao_bootstrap_token is defined
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_select | default({}) | length == 0

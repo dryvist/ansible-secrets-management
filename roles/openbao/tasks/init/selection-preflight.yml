@@ -1,0 +1,36 @@
+---
+- name: Validate the requested OpenBao kinds
+  ansible.builtin.assert:
+    that:
+      - openbao_select | default({}) is mapping
+      - openbao_select | default({}) | difference(openbao_select_profiles) | length == 0
+    fail_msg: >-
+      openbao_select must map supported kinds to selector lists.
+      Supported kinds: {{ openbao_select_profiles.keys() | sort | join(', ') }}.
+    quiet: true
+
+- name: Start a fresh OpenBao selection
+  ansible.builtin.set_fact:
+    openbao_selected_objects: {}
+
+- name: Resolve every OpenBao kind before phase writes
+  ansible.builtin.include_tasks: select-objects.yml
+  vars:
+    openbao_select_kind: "{{ openbao_kind.key }}"
+    openbao_select_candidates: "{{ openbao_kind.value.candidates }}"
+  loop: "{{ openbao_select_profiles | dict2items }}"
+  loop_control:
+    loop_var: openbao_kind
+    label: "{{ openbao_kind.key }}"
+
+- name: Cap the complete OpenBao selection across kinds
+  ansible.builtin.assert:
+    that:
+      - _selected_count | int <= openbao_select_max | default(25)
+    fail_msg: >-
+      openbao_select resolved {{ _selected_count }} objects across kinds,
+      exceeding openbao_select_max={{ openbao_select_max | default(25) }}.
+    quiet: true
+  vars:
+    _selected_count: "{{ openbao_selected_objects.values() | map('length') | sum }}"
+  when: openbao_select | default({}) | length > 0

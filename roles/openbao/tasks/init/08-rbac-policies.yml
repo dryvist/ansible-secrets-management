@@ -256,6 +256,17 @@
          | reject('in', _openbao_non_empty_names) | list | sort }}
   when: openbao_bootstrap_token is defined
 
+- name: Select RBAC policy objects
+  ansible.builtin.import_tasks: select-objects.yml
+  vars:
+    openbao_select_kind: policies
+    openbao_select_candidates: >-
+      {{ openbao_reachable_policies | default(openbao_manageable_policies | default(openbao_policies)) }}
+
+- name: Keep the selected RBAC policy objects
+  ansible.builtin.set_fact:
+    openbao_rbac_policy_targets: "{{ openbao_object_targets }}"
+
 - name: Select one RBAC policy when a policy name was requested
   ansible.builtin.import_tasks: select-single-object.yml
   vars:
@@ -302,6 +313,7 @@
         --diff -e '{"openbao_rbac_policy_name":"{{ name }}"}'
       {% endfor %}
   when:
+    - openbao_select | default({}) | length == 0
     - openbao_bootstrap_token is defined
     - openbao_reconcile_mode | default(false)
     - openbao_ungranted_policy_names | default([]) | length > 0

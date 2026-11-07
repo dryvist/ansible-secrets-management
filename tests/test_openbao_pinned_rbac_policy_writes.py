@@ -192,7 +192,7 @@ class PinnedWriteOutcomes(unittest.TestCase):
         all_policies = [*selected, {"name": "ssh-ca"}]
         self.assertEqual(
             _render(write["loop"], {
-                "openbao_rbac_policy_name": "apps",
+                "openbao_select": {"policies": ["apps"]},
                 "openbao_rbac_policy_targets": selected,
                 "openbao_reachable_policies": all_policies,
             }),

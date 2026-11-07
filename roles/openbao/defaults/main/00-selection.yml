@@ -1,0 +1,25 @@
+---
+# Each kind declares its objects and the API paths its writes address.
+openbao_select_profiles:
+  policies:
+    candidates: "{{ openbao_manageable_policies | default(openbao_policies) }}"
+    prefix: sys/policies/acl/
+    suffixes: [""]
+    capability: update
+  approles:
+    candidates: "{{ openbao_manageable_approles | default(openbao_approles) }}"
+    prefix: auth/approle/role/
+    suffixes: ["", /policies]
+    capability: update
+  ssh_roles:
+    candidates: "{{ openbao_ssh_roles }}"
+    prefix: "{{ openbao_ssh_mount }}/roles/"
+    suffixes: [""]
+    capability: update
+  rotation_exempt:
+    candidates: "{{ openbao_rotation_exempt | map('community.general.dict_kv', 'name') | list }}"
+    prefix: ""
+    name_pattern: ':'
+    name_replacement: /metadata/
+    suffixes: [""]
+    capability: patch

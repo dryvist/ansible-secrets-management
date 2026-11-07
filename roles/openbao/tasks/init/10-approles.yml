@@ -125,6 +125,16 @@
     quiet: true
   when: openbao_bootstrap_token is defined
 
+- name: Select AppRole config objects
+  ansible.builtin.import_tasks: select-objects.yml
+  vars:
+    openbao_select_kind: approles
+    openbao_select_candidates: "{{ openbao_manageable_approles | default(openbao_approles) }}"
+
+- name: Keep the selected AppRole config objects
+  ansible.builtin.set_fact:
+    openbao_approle_config_targets: "{{ openbao_object_targets }}"
+
 - name: Select one AppRole config when an AppRole name was requested
   ansible.builtin.import_tasks: select-single-object.yml
   vars:

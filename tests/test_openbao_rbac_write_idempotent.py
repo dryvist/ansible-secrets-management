@@ -176,7 +176,7 @@ class SinglePolicySelection(unittest.TestCase):
     def _policy_loop(self, task_name, selector="", selected=None):
         expression = _task(task_name)["loop"]
         return _render(expression, {
-            "openbao_rbac_policy_name": selector,
+            "openbao_select": {"policies": [selector]} if selector else {},
             "openbao_rbac_policy_targets": selected or [],
             "openbao_reachable_policies": self.CANDIDATES,
         })

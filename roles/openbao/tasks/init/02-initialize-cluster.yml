@@ -279,6 +279,10 @@
                | list) }}
   when: openbao_bootstrap_token is defined
 
+- name: Resolve all object selections before phase writes
+  ansible.builtin.import_tasks: selection-preflight.yml
+  when: openbao_bootstrap_token is defined
+
 - name: Report that this run reconciles as the least-privilege identity
   ansible.builtin.debug:
     msg: >-
