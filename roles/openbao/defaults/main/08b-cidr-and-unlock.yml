@@ -231,7 +231,8 @@ openbao_approle_cidr_class_map: >-
      | combine(openbao_roster_agent_cidr_classes)
      | combine(openbao_roster_key_reader_cidr_classes)
      | combine(openbao_ai_apply_cidr_classes)
-     | combine(openbao_app_agent_tier_cidr_classes) }}
+     | combine(openbao_app_agent_tier_cidr_classes)
+     | combine(openbao_window_service_cidr_classes) }}
 # Exact strings passed by `bao write ... key=value`; keep these shared by the
 # reconcile writer and its ACL so neither side can change independently.
 openbao_approle_cli_parameters: >-

@@ -297,10 +297,14 @@
             _guard_policy_text is search('(?ms)^path "sys/audit/\\*" \\{\\s*capabilities = \\["deny"\\]\\s*\\}')
           - >-
             _guard_policy_text is search('(?ms)^path "identity/mfa/\\*" \\{\\s*capabilities = \\["deny"\\]\\s*\\}')
-          - _guard_policy_text is not search('(?m)^path "auth/token/create"')
+          - >-
+            _guard_policy_text is search('(?ms)^path "auth/token/create" \{\s*capabilities = '
+            ~ '\["create", "update", "sudo"\]')
+          - "'\"no_parent\" = [false]' in _guard_policy_text"
+          - "'\"type\" = [\"batch\"]' in _guard_policy_text"
         fail_msg: >-
           ai-admin-guard must deny the requested self-extension and control-plane
-          paths while preserving plain child-token creation.
+          paths while limiting child tokens to the declared batch service grants.
         quiet: true
 
     - name: Assert only the admin window attaches the guard overlay
@@ -317,7 +321,8 @@
           - _ai_admin_role.token_policies is not defined
           - >-
             (_ai_admin_session_role.token_policies | sort)
-            == ([openbao_ai_admin_policy_name, openbao_ai_admin_guard_policy_name] | sort)
+            == ([openbao_ai_admin_policy_name, openbao_ai_admin_guard_policy_name,
+                 openbao_tofu_state_admin_policy_name] | sort)
           - _operator_admin_role.policy == openbao_ai_admin_policy_name
           - _operator_admin_role.token_policies is not defined
         quiet: true

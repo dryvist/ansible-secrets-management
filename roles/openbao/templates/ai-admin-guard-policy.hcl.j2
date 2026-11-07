@@ -1,6 +1,6 @@
 {{ ansible_managed | comment }}
 # ai-admin-guard — explicit denies that constrain the ai-admin-session window.
-# Plain child-token creation remains allowed; orphan and role-based tokens do not.
+# Window children are fixed-lifetime batch tokens carrying one service policy.
 # Listing auth methods and audit devices (sys/auth, sys/audit) stays allowed;
 # enabling, disabling or tuning them (sys/auth/*, sys/audit/*) does not.
 
@@ -9,9 +9,77 @@
      | rejectattr('manage_secret_id')
      | map(attribute='name') | list %}
 {% set guarded_approles = (human_gated_approles + ['admin']) | unique | sort | list %}
+{% set session_approle = openbao_approles
+     | selectattr('name', 'equalto', openbao_ai_admin_session_approle_name) | first %}
+{% set session_policies = session_approle.token_policies + ['default'] %}
+{% set window_policies = openbao_window_service_policies | map(attribute='name') | list %}
+{% set window_policy_sets = [] %}
+{% for policy_name in window_policies %}
+{% set _ = window_policy_sets.append([policy_name]) %}
+{% endfor %}
+
+# OpenBao 2.7.2 API documentation, accessed 2026-11-06:
+# https://github.com/openbao/openbao/tree/v2.7.2/website/content/docs/api/system
+# seal, unseal, rekey, rekey-recovery-key, generate-root, generate-root-token,
+# generate-recovery-token, and rotate/{root,recovery,keyring}.
+{% for path in [
+     'sys/seal',
+     'sys/seal/*',
+     'sys/unseal',
+     'sys/unseal/*',
+     'sys/unseal*',
+     'sys/rekey',
+     'sys/rekey/*',
+     'sys/rekey*',
+     'sys/generate-root',
+     'sys/generate-root/*',
+     'sys/generate-root*',
+     'sys/generate-recovery-token*',
+     'sys/rotate',
+     'sys/rotate/*',
+     'sys/rotate*',
+     'sys/raw*'] %}
+path "{{ path }}" {
+  capabilities = ["deny"]
+}
+{% endfor %}
+
+# Window issuance uses child tokens; auth configuration and AppRole minting stay denied.
+{% for path in ['auth/*', 'auth/approle/role/*', 'auth/token/*'] %}
+path "{{ path }}" {
+  capabilities = ["deny"]
+}
+{% endfor %}
+
+# Native batch children stop working with their parent; their leases belong to it.
+# https://openbao.org/docs/concepts/tokens/#service-vs-batch-token-lease-handling
+# Accessed 2026-11-06, version 2.7.x.
+path "auth/token/create" {
+{% if window_policies | length > 0 %}
+  capabilities = ["create", "update", "sudo"]
+  required_parameters = ["policies", "type", "ttl", "no_parent", "no_default_policy", "renewable"]
+  allowed_parameters = {
+    "policies" = {{ window_policy_sets | tojson }}
+    "type" = [{{ openbao_window_service_defaults.token_type | tojson }}]
+    "ttl" = [{{ openbao_window_service_defaults.token_ttl | tojson }}]
+    "no_parent" = [false]
+    "no_default_policy" = [true]
+    "renewable" = [false]
+  }
+{% else %}
+  capabilities = ["deny"]
+{% endif %}
+}
+
+{% for operation in ['lookup-self', 'renew-self', 'revoke-self'] %}
+path "auth/token/{{ operation }}" {
+  capabilities = ["read", "update"]
+}
+{% endfor %}
 
 {% for path in [
      'auth/token/create-orphan',
+     'auth/token/revoke-orphan',
      'auth/token/create/*',
      'auth/token/roles/*',
      'auth/token/roles'] %}
@@ -29,14 +97,30 @@ path "auth/approle/role/{{ approle_name }}/*" {
 }
 {% endfor %}
 
-{% for policy_name in [
+{% for policy_name in ([
      openbao_ai_admin_policy_name,
      openbao_ai_admin_guard_policy_name,
      openbao_human_unlock_policy_name,
-     openbao_human_unlock_untrusted_policy_name] %}
-path "sys/policies/acl/{{ policy_name }}" {
+     openbao_human_unlock_untrusted_policy_name] + session_policies + window_policies)
+     | unique | sort %}
+{% for suffix in ['', '/*'] %}
+path "sys/policies/acl/{{ policy_name }}{{ suffix }}" {
   capabilities = ["deny"]
 }
+{% endfor %}
+{% endfor %}
+
+# OpenBao 2.7.x identity API documentation, accessed 2026-11-06:
+# https://openbao.org/docs/api/secret/identity/entity/
+# https://openbao.org/docs/api/secret/identity/entity-alias/
+# https://openbao.org/docs/api/secret/identity/group/
+# https://openbao.org/docs/api/secret/identity/group-alias/
+{% for family in ['entity', 'entity-alias', 'group', 'group-alias'] %}
+{% for suffix in ['', '/*', '*'] %}
+path "identity/{{ family }}{{ suffix }}" {
+  capabilities = ["deny"]
+}
+{% endfor %}
 {% endfor %}
 
 {% for path in [

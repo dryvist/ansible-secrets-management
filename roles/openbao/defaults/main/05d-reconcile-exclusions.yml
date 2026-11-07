@@ -81,4 +81,5 @@ openbao_reconcile_policy_excluded_names: >-
   {%- set _ = _protected.extend(_attached) -%}
   {%- endif -%}
   {%- endfor -%}
-  {{ (_base + _protected) | unique | list }}
+  {{ (_base + _protected
+      + (openbao_window_service_policies | map(attribute='name') | list)) | unique | list }}
