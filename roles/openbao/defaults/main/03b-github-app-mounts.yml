@@ -10,6 +10,7 @@
 #   github-agents  untrusted-tier public read/write, scoped by its installation
 #   github-hermes  review split by visibility; allowlisted public authoring
 #   github-work    read and App-grant write over one installation, no sets
+#   github-pepper  one repository-scoped read set
 #   github-enterprise-read  human-gated raw-token read tier
 #   github-enterprise       human-gated raw-token admin tier
 #   github-enterprise-owner human-gated stored owner token, readable by the admin tiers only
@@ -176,6 +177,17 @@ openbao_github_personal_app_id: >-
 openbao_github_personal_app_private_key: >-
   {{ lookup('env', 'OPENBAO_GITHUB_PERSONAL_APP_PRIVATE_KEY') | default('', true) }}
 
+# This mount and set are declared only when every input is present.
+openbao_github_pepper_mount: github-pepper
+openbao_github_pepper_installation_id: >-
+  {{ openbao_platform_env['OPENBAO_GITHUB_PEPPER_INSTALLATION_ID'] | default('', true) }}
+openbao_github_pepper_app_id: >-
+  {{ lookup('env', 'OPENBAO_GITHUB_PEPPER_APP_ID') | default('', true) }}
+openbao_github_pepper_app_private_key: >-
+  {{ lookup('env', 'OPENBAO_GITHUB_PEPPER_APP_PRIVATE_KEY') | default('', true) }}
+openbao_github_pepper_repository: >-
+  {{ lookup('env', 'OPENBAO_GITHUB_PEPPER_REPOSITORY') | default('', true) }}
+
 # Enterprise Apps use their own installation as the token ceiling. They have
 # no permission sets; their policies pin the raw token endpoint to one
 # installation ID. Each mount, like github-work, is declared only once its
@@ -247,6 +259,11 @@ openbao_github_app_mounts: >-
           'private_key': openbao_github_personal_app_private_key,
           'permission_sets': openbao_github_personal_permission_sets}]
         if openbao_github_personal_installation_id | length > 0 else [])
+     + ([{'mount': openbao_github_pepper_mount,
+          'app_id': openbao_github_pepper_app_id,
+          'private_key': openbao_github_pepper_app_private_key,
+          'permission_sets': openbao_github_pepper_permission_sets}]
+        if openbao_github_pepper_permission_sets | length > 0 else [])
      + openbao_github_enterprise_app_mounts
      + openbao_github_runner_app_mounts }}
 

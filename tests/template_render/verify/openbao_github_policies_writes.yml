@@ -64,6 +64,13 @@
   ansible.builtin.set_fact:
     openbao_github_personal_installation_id: fixture-installation
 
+- name: Pin Pepper inputs to the configured fixture case
+  ansible.builtin.set_fact:
+    openbao_github_pepper_app_id: fixture-app-id
+    openbao_github_pepper_app_private_key: fixture-private-key
+    openbao_github_pepper_installation_id: fixture-installation
+    openbao_github_pepper_repository: fixture-repo
+
 - name: Render the tier policies with a publisher repository configured
   ansible.builtin.template:
     src: "{{ _template_dir }}/{{ item }}.j2"
@@ -108,6 +115,76 @@
     _paths: >-
       {{ _tier_raw.results | map(attribute='content') | map('b64decode')
          | map('regex_findall', '(?m)^path "([^"]+)"') | list }}
+
+- name: Render the Pepper policy
+  ansible.builtin.template:
+    src: "{{ _template_dir }}/pepper-policy.hcl.j2"
+    dest: "{{ _fixture_dir }}/set-pepper-policy.hcl"
+    mode: "0644"
+
+- name: Read the rendered Pepper policy
+  ansible.builtin.slurp:
+    src: "{{ _fixture_dir }}/set-pepper-policy.hcl"
+  register: _pepper_policy_raw
+
+- name: Assert the Pepper set is exact and its token path is exclusive
+  vars:
+    _pepper_sets: "{{ openbao_github_pepper_permission_sets }}"
+    _pepper_mounts: >-
+      {{ openbao_github_app_mounts
+         | selectattr('mount', 'equalto', openbao_github_pepper_mount) | list }}
+    _pepper_global_sets: >-
+      {{ openbao_github_permission_sets
+         | selectattr('name', 'equalto', openbao_github_pepper_read_set_name) | list }}
+    _pepper_path: >-
+      {{ openbao_github_pepper_mount }}/token/{{ openbao_github_pepper_read_set_name }}
+    _pepper_policy_text: "{{ _pepper_policy_raw.content | b64decode }}"
+    _pepper_policy_paths: >-
+      {{ _pepper_policy_text | regex_findall('(?m)^path "([^"]+)"') }}
+    _pepper_github_paths: >-
+      {{ _pepper_policy_paths | select('match', '^github(-[^/]+)?/') | list }}
+    _pepper_token_stanza: >-
+      {{ _pepper_policy_text
+         | regex_search('(?ms)^path "' ~ _pepper_path ~ '" [{].*?^[}]') }}
+  ansible.builtin.assert:
+    that:
+      - _pepper_sets | length == 1
+      - _pepper_sets[0].name == openbao_github_pepper_read_set_name
+      - _pepper_sets[0].tier == openbao_github_pepper_read_tier
+      - _pepper_sets[0].installation_id == 'fixture-installation'
+      - _pepper_sets[0].repositories == ['fixture-repo']
+      - >-
+        _pepper_sets[0].permissions
+        == {'contents': 'read', 'metadata': 'read'}
+      - _pepper_mounts | length == 1
+      - _pepper_mounts[0].app_id == 'fixture-app-id'
+      - _pepper_mounts[0].private_key == 'fixture-private-key'
+      - _pepper_mounts[0].permission_sets == _pepper_sets
+      - _pepper_global_sets | length == 1
+      - _pepper_global_sets[0].mount == openbao_github_pepper_mount
+      - _pepper_global_sets[0].tier == openbao_github_pepper_read_tier
+      - _pepper_global_sets[0].repositories == ['fixture-repo']
+      - _pepper_github_paths == [_pepper_path]
+      - openbao_github_pepper_mount ~ '/token' not in _pepper_policy_paths
+      - >-
+        'capabilities = ["create", "update"]' in _pepper_token_stanza
+      - _pepper_path not in _mint_paths
+      - _pepper_path not in _read_paths
+      - _pepper_path not in _publisher_paths
+      - _pepper_path not in _repo_create_paths
+      - _pepper_path not in _org_admin_paths
+      - _pepper_path not in _write_paths
+      - _pepper_path not in _open_llm_paths
+      - _pepper_path not in _ci_resolver_paths
+      - _pepper_path not in _ai_public_paths
+      - _pepper_path not in _ai_orchestrator_paths
+      - >-
+        openbao_github_agents_permission_sets
+        | selectattr('name', 'equalto', openbao_github_pepper_read_set_name)
+        | list == []
+    fail_msg: >-
+      Pepper must have only its one read set, and no other GitHub identity
+      policy may mint that set.
 
 - name: Assert the personal write set and its write-tier grant are exact
   vars:
