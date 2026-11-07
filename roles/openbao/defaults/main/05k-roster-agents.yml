@@ -232,6 +232,7 @@ openbao_roster_agent_ai_leaf_names: >-
   {{ [openbao_hermes_approle_name,
       openbao_clickhouse_approle_name,
       openbao_hermes_private_agent_policy_name | regex_replace('-agent$', ''),
+      openbao_pepper_approle_name,
       openbao_llm_router_write_approle_name | regex_replace('-write$', ''),
       openbao_ai_donna_approle_name | regex_replace('^ai-', ''),
       openbao_ai_public_approle_name | regex_replace('^ai-', ''),

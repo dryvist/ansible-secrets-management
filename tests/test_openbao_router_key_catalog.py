@@ -136,6 +136,29 @@ def test_glance_tile_key_is_generated_and_readable_by_the_apps_reader():
     assert 'path "secret/data/apps/glance"' in _render_apps_policy({})
 
 
+def test_pepper_router_key_is_in_the_reconcile_seed_set():
+    seeded = _render(
+        ROSTER_DATA["openbao_seeded_generated_app_secrets"],
+        {
+            "openbao_generated_app_secrets": DEFAULTS_DATA["openbao_generated_app_secrets"],
+            "openbao_router_key_catalog": {},
+        },
+    )
+    generated = _render(_generation_loop(), {"openbao_seeded_generated_app_secrets": seeded})
+    assert [entry for entry in generated if entry["key"] == "pepper"] == [
+        {"key": "pepper", "value": ["pepper_llm_router_key"]}
+    ]
+    assert "pepper" in _read_apps({})
+    assert 'path "secret/data/apps/pepper"' in _render_apps_policy({})
+    assert _render(
+        PATH_DEFAULTS_DATA["openbao_seed_app_path"],
+        {
+            "openbao_generated_app_secret_paths": PATH_DEFAULTS_DATA["openbao_generated_app_secret_paths"],
+            "openbao_seed_app": "pepper",
+        },
+    ) == "apps/pepper"
+
+
 def test_langflow_router_key_is_generated_and_readable_by_the_apps_reader():
     generated = DEFAULTS_DATA["openbao_generated_app_secrets"]
     assert generated["langflow"] == ["langflow_llm_router_key"]

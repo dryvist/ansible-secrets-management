@@ -121,6 +121,7 @@ openbao_approle_secret_id_ttl_overrides_base:
   bao-elevate-client: "{{ openbao_rotated_domain_secret_id_ttl }}"
   hermes: "{{ openbao_rotated_domain_secret_id_ttl }}"
   hermes-private-agent: "{{ openbao_rotated_domain_secret_id_ttl }}"
+  pepper: "{{ openbao_rotated_domain_secret_id_ttl }}"
   ai-donna: "{{ openbao_rotated_domain_secret_id_ttl }}"
   open-llm: "{{ openbao_rotated_domain_secret_id_ttl }}"
   ci-resolver: "{{ openbao_rotated_domain_secret_id_ttl }}"
