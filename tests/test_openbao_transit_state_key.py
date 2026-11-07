@@ -6,6 +6,8 @@ import unittest
 
 import yaml
 
+from test_openbao_select import condition
+
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULTS = ROOT / "roles/openbao/defaults/main/01a-kv-hierarchy.yml"
@@ -133,7 +135,14 @@ class TransitStateKeyIsDeclared(unittest.TestCase):
             "Configure the Transit secrets engine for OpenTofu state encryption",
         )
         self.assertEqual(task["ansible.builtin.import_tasks"], "init/04c-transit-engine.yml")
-        self.assertNotIn("when", task)
+        for reconcile_mode in (False, True):
+            self.assertTrue(condition(task["when"], {
+                "openbao_select": {}, "openbao_reconcile_mode": reconcile_mode,
+            }))
+            self.assertFalse(condition(task["when"], {
+                "openbao_select": {"policies": ["apps"]},
+                "openbao_reconcile_mode": reconcile_mode,
+            }))
 
         # Reconcile mode replaces this shared token variable before init/03
         # probes mounts. Transit reuses it, so the bootstrap path stays intact.

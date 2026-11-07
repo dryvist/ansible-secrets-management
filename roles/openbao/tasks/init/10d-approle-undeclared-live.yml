@@ -96,21 +96,29 @@
   loop: "{{ openbao_retired_approles | select('in', openbao_approle_live_names | default([])) | list }}"
   no_log: true
   changed_when: true
-  when: openbao_bootstrap_token is defined
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_select | default({}) | length == 0
 
 - name: Drop the deleted AppRoles from the live set
   ansible.builtin.set_fact:
     openbao_approle_live_names: >-
       {{ openbao_approle_live_names | difference(openbao_retired_approles) }}
-  when: openbao_bootstrap_token is defined
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_select | default({}) | length == 0
 
 - name: Assert every live AppRole is either declared or a named exception
   vars:
     _declared: "{{ openbao_approles | map(attribute='name') | list }}"
     _excepted: >-
       {{ openbao_approle_undeclared_exceptions | map(attribute='name') | list }}
+    _retired: >-
+      {{ openbao_retired_approles | default([])
+         if openbao_select | default({}) | length > 0 else [] }}
     _undeclared: >-
-      {{ openbao_approle_live_names | reject('in', _declared + _excepted) | list }}
+      {{ openbao_approle_live_names
+         | reject('in', _declared + _excepted + _retired) | list }}
   ansible.builtin.assert:
     that:
       - _undeclared | length == 0

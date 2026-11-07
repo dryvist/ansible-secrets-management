@@ -33,7 +33,6 @@ ROOT = Path(__file__).resolve().parents[1]
 TASKS = ROOT / "roles" / "openbao" / "tasks" / "init" / "08b-rbac-policy-writes.yml"
 POLICY_TASKS = ROOT / "roles" / "openbao" / "tasks" / "init" / "08-rbac-policies.yml"
 POLICY_DECLARATION_TASKS = ROOT / "roles" / "openbao" / "tasks" / "init" / "08-policy-declaration-assertions.yml"
-SELECTOR_TASKS = ROOT / "roles" / "openbao" / "tasks" / "init" / "select-single-object.yml"
 EXISTING_TASK = "Build the existing RBAC policy content map"
 WRITE_TASK = "Write the RBAC policies that are missing or changed"
 DENIED_READ_TASK = "FAIL -- an existing RBAC policy read was DENIED, so absence cannot be concluded"
@@ -162,43 +161,17 @@ class CombineLoopCollapseIsEquivalent(unittest.TestCase):
         self.assertEqual(self._old_combine_result(), self._new_pairs_result())
 
 
-class SinglePolicySelection(unittest.TestCase):
+class SelectedPolicyLoops(unittest.TestCase):
     CANDIDATES = [{"name": "apps"}, {"name": "ssh-ca"}]
-
-    def _targets(self, selector):
-        expression = _task("Resolve the selected OpenBao object", SELECTOR_TASKS)[
-            "ansible.builtin.set_fact"]["openbao_single_object_targets"]
-        return _render(expression, {
-            "openbao_single_object_candidates": self.CANDIDATES,
-            "openbao_single_object_selector": selector,
-        })
 
     def _policy_loop(self, task_name, selector="", selected=None):
         expression = _task(task_name)["loop"]
+        targets = selected if selected is not None else self.CANDIDATES
         return _render(expression, {
-            "openbao_rbac_policy_name": selector,
-            "openbao_rbac_policy_targets": selected or [],
+            "openbao_select": {"policies": [selector]} if selector else {},
+            "openbao_rbac_policy_targets": targets,
             "openbao_reachable_policies": self.CANDIDATES,
         })
-
-    def test_selected_target_is_an_exact_single_match(self):
-        self.assertEqual(self._targets("ssh-ca"), [{"name": "ssh-ca"}])
-
-    def test_unknown_and_ambiguous_targets_do_not_match_exactly_once(self):
-        self.assertEqual(self._targets("unknown"), [])
-        duplicate = [{"name": "apps"}, {"name": "apps"}]
-        expression = _task("Resolve the selected OpenBao object", SELECTOR_TASKS)[
-            "ansible.builtin.set_fact"]["openbao_single_object_targets"]
-        duplicate_targets = _render(expression, {
-            "openbao_single_object_candidates": duplicate,
-            "openbao_single_object_selector": "apps",
-        })
-        self.assertEqual(duplicate_targets, duplicate)
-        exactly_one = _task("Require the OpenBao selector to match exactly one managed object", SELECTOR_TASKS)
-        condition = exactly_one["ansible.builtin.assert"]["that"][0]
-        self.assertFalse(_render(condition, {"openbao_single_object_targets": []}, wrap=True))
-        self.assertFalse(_render(condition, {"openbao_single_object_targets": duplicate}, wrap=True))
-        self.assertTrue(_render(condition, {"openbao_single_object_targets": [duplicate[0]]}, wrap=True))
 
     def test_empty_selector_keeps_the_full_policy_target_list(self):
         for task_name in (
@@ -215,35 +188,53 @@ class SinglePolicySelection(unittest.TestCase):
         )
         self.assertEqual(self._policy_loop(WRITE_TASK, "ssh-ca", selected), selected)
 
-    def test_reconcile_guard_rejects_single_object_selection(self):
-        guard = _task("Reject an OpenBao single-object selector during reconcile", SELECTOR_TASKS)
-        expression = guard["ansible.builtin.assert"]["that"][0]
-        self.assertFalse(_render(expression, {"openbao_reconcile_mode": True}, wrap=True))
-        self.assertTrue(_render(expression, {"openbao_reconcile_mode": False}, wrap=True))
-
     def test_policy_selection_candidate_is_the_reachable_declared_set(self):
-        task = _task("Select one RBAC policy when a policy name was requested", POLICY_TASKS)
-        candidates = task["vars"]["openbao_single_object_candidates"]
+        task = _task("Select RBAC policy objects", POLICY_TASKS)
+        candidates = task["vars"]["openbao_select_candidates"]
         self.assertIn("openbao_reachable_policies", candidates)
         self.assertIn("openbao_policies", candidates)
-        self.assertIn("openbao_rbac_policy_name", task["vars"]["openbao_single_object_selector"])
+        self.assertEqual(task["vars"]["openbao_select_kind"], "policies")
 
         task_names = [task.get("name") for task in yaml.safe_load(POLICY_TASKS.read_text(encoding="utf-8"))]
         self.assertLess(
-            task_names.index("Assert no scheduled RBAC policy rendered empty"),
-            task_names.index("Select one RBAC policy when a policy name was requested"),
+            task_names.index("Select RBAC policy objects"),
+            task_names.index("Render the RBAC policies on the controller"),
         )
         self.assertLess(
-            task_names.index("Select one RBAC policy when a policy name was requested"),
+            task_names.index("Render the RBAC policies on the controller"),
+            task_names.index("Assert no scheduled RBAC policy rendered empty"),
+        )
+        self.assertLess(
+            task_names.index("Select RBAC policy objects"),
             task_names.index("Refuse live objects that collide with roster agent names"),
         )
+        self.assertLess(
+            task_names.index("Assert no scheduled RBAC policy rendered empty"),
+            task_names.index("Read the stored RBAC policies and write what differs"),
+        )
 
-    def test_policy_full_render_and_empty_guard_remain_global(self):
+    def test_policy_render_and_empty_guard_use_the_resolved_targets(self):
         render = _task("Render the RBAC policies on the controller", POLICY_TASKS)
         pairs = render["vars"]["_openbao_rendered_policy_pairs"]
-        self.assertIn("for item in openbao_reachable_policies", pairs)
+        self.assertIn("for item in openbao_rbac_policy_targets", pairs)
         empty_guard = _task("Assert no scheduled RBAC policy rendered empty", POLICY_TASKS)
-        self.assertIn("openbao_reachable_policies", empty_guard["vars"]["_openbao_empty_rendered_policies"])
+        self.assertIn("openbao_rbac_policy_targets", empty_guard["vars"]["_openbao_empty_rendered_policies"])
+
+    def test_full_reconcile_gap_guard_runs_only_for_full_set_runs(self):
+        task = _task("FAIL -- the reconcile identity cannot manage every declared policy", POLICY_TASKS)
+        variables = {
+            "openbao_select": {"policies": ["apps"]},
+            "openbao_bootstrap_token": "s.test",
+            "openbao_reconcile_mode": True,
+            "openbao_ungranted_policy_names": ["human-gated"],
+        }
+        self.assertFalse(all(
+            _render(condition, variables, wrap=True) for condition in task["when"]
+        ))
+        variables["openbao_select"] = {}
+        self.assertTrue(all(
+            _render(condition, variables, wrap=True) for condition in task["when"]
+        ))
 
     def test_declaration_assertions_are_imported_before_policy_work(self):
         imported = _task("Assert RBAC policy declaration invariants", POLICY_TASKS)

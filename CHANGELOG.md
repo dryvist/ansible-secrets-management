@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.78.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.77.0...v0.78.0) (2026-11-07)
+
+
+### Features
+
+* **openbao:** add one selector for individual lanes ([#542](https://github.com/dryvist/ansible-secrets-management/issues/542)) ([559ecec](https://github.com/dryvist/ansible-secrets-management/commit/559ecec3b6b2bfc61afa046c91f77c25a09ef797))
+
 ## [0.77.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.76.0...v0.77.0) (2026-11-07)
 
 

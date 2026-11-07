@@ -66,7 +66,7 @@ def live_names(rc, keys=None, roster_names=None):
     return _render(expr, variables)
 
 
-def undeclared(live, declared, exceptions=()):
+def undeclared(live, declared, exceptions=(), retired=(), selective=False):
     """Render the assert task's own _undeclared expression."""
     task_vars = _task(UNDECLARED_TASK)["vars"]
     variables = {
@@ -75,9 +75,12 @@ def undeclared(live, declared, exceptions=()):
         "openbao_approle_undeclared_exceptions": [
             {"name": n, "reason": "test"} for n in exceptions
         ],
+        "openbao_retired_approles": retired,
+        "openbao_select": {"approles": ["apps"]} if selective else {},
     }
     variables["_declared"] = _render(task_vars["_declared"], variables)
     variables["_excepted"] = _render(task_vars["_excepted"], variables)
+    variables["_retired"] = _render(task_vars["_retired"], variables)
     return _render(task_vars["_undeclared"], variables)
 
 
@@ -133,6 +136,24 @@ class TestUndeclaredLive(unittest.TestCase):
         self.assertEqual(
             undeclared(["apps", "legacy-role"], ["apps"], exceptions=["legacy-role"]),
             [],
+        )
+
+    def test_retired_role_is_known_during_selective_run(self):
+        self.assertEqual(
+            undeclared(
+                ["apps", "retired-role"], ["apps"],
+                retired=["retired-role"], selective=True,
+            ),
+            [],
+        )
+
+    def test_truly_undeclared_live_role_still_fails_during_selective_run(self):
+        self.assertEqual(
+            undeclared(
+                ["apps", "orphan-role"], ["apps"],
+                retired=["retired-role"], selective=True,
+            ),
+            ["orphan-role"],
         )
 
     def test_fully_declared_live_set_passes(self):

@@ -51,11 +51,11 @@ authelia_oidc_langfuse_client_secret_plain: >-
 authelia_oidc_langfuse_client_secret_hash_file: "{{ authelia_secrets_dir }}/oidc_langfuse_client_secret_hash"
 
 # Arize Phoenix (ansible-proxmox-ai roles/phoenix_docker) — confidential
-# client, same shape as Langfuse. Phoenix's generic-OIDC callback path is
-# /oauth2/<idp>/callback where <idp> is the lower-cased name of its
+# client, same shape as Langfuse. Phoenix's OAuth2 callback path is
+# /oauth2/<idp>/tokens where <idp> is the lower-cased name of its
 # PHOENIX_OAUTH2_<IDP>_* variable set (`authelia` there).
 authelia_oidc_phoenix_client_id: phoenix
-authelia_oidc_phoenix_redirect_uri: "https://phoenix.{{ authelia_cookie_domain }}/oauth2/authelia/callback"
+authelia_oidc_phoenix_redirect_uri: "https://phoenix.{{ authelia_cookie_domain }}/oauth2/authelia/tokens"
 authelia_oidc_phoenix_client_secret_plain: >-
   {{ (bao_apps_secrets.authelia_oidc_phoenix_client_secret | default('', true))
      or undef(hint='authelia_oidc_phoenix_client_secret missing from OpenBao secret/apps/authelia') }}
