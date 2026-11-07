@@ -19,6 +19,14 @@ def test_github_policy_pin_stanza_is_independent_of_app_environment(
     rendered_defaults, monkeypatch
 ):
     values, _approles, _policies = rendered_defaults
+    values["openbao_platform_env"] = {
+        "OPENBAO_GITHUB_PEPPER_INSTALLATION_ID": "fixture-installation"
+    }
+    monkeypatch.setenv("OPENBAO_GITHUB_PEPPER_APP_ID", "fixture-app-id")
+    monkeypatch.setenv(
+        "OPENBAO_GITHUB_PEPPER_APP_PRIVATE_KEY", "fixture-private-key"
+    )
+    monkeypatch.setenv("OPENBAO_GITHUB_PEPPER_REPOSITORY", "fixture-repo")
     mounts = _templar(_trust(values)).template(
         _trust(values["openbao_github_app_mounts"])
     )
@@ -42,6 +50,10 @@ def test_github_policy_pin_stanza_is_independent_of_app_environment(
         "github-personal": (
             "OPENBAO_GITHUB_PERSONAL_APP_ID",
             "OPENBAO_GITHUB_PERSONAL_APP_PRIVATE_KEY",
+        ),
+        "github-pepper": (
+            "OPENBAO_GITHUB_PEPPER_APP_ID",
+            "OPENBAO_GITHUB_PEPPER_APP_PRIVATE_KEY",
         ),
         "github-enterprise-read": (
             "OPENBAO_GITHUB_ENTERPRISE_READ_APP_ID",

@@ -31,6 +31,30 @@
     fail_msg: >-
       An unset personal installation ID must omit its mount and write set.
 
+- name: Pin Pepper mount inputs to the unconfigured case
+  ansible.builtin.set_fact:
+    openbao_github_pepper_app_id: ""
+    openbao_github_pepper_app_private_key: ""
+    openbao_github_pepper_installation_id: ""
+    openbao_github_pepper_repository: ""
+
+- name: Assert an unconfigured Pepper App declares no set or mount
+  vars:
+    _pepper_mounts: >-
+      {{ openbao_github_app_mounts
+         | selectattr('mount', 'equalto', openbao_github_pepper_mount) | list }}
+    _pepper_global_sets: >-
+      {{ openbao_github_permission_sets
+         | selectattr('name', 'equalto', openbao_github_pepper_read_set_name) | list }}
+  ansible.builtin.assert:
+    that:
+      - openbao_github_pepper_permission_sets == []
+      - _pepper_mounts == []
+      - _pepper_global_sets == []
+    fail_msg: >-
+      Without every Pepper input, its permission set and mount must be omitted
+      so the mount converge skips it.
+
 - name: Pin runner App credentials to the unconfigured case
   ansible.builtin.set_fact:
     openbao_github_runner_app_id: ""

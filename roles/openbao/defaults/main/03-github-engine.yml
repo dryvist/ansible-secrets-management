@@ -88,6 +88,23 @@ openbao_github_personal_permission_sets: >-
        'installation_id': openbao_github_personal_installation_id,
        'permissions': openbao_github_personal_write_permissions}]
      if openbao_github_personal_installation_id | length > 0 else [] }}
+# Pepper's set uses its own tier so github-mint cannot inherit this grant.
+openbao_github_pepper_read_set_name: pepper-vault-read
+openbao_github_pepper_read_tier: pepper-read
+openbao_github_pepper_read_permissions:
+  contents: read
+  metadata: read
+openbao_github_pepper_permission_sets: >-
+  {{ [{'name': openbao_github_pepper_read_set_name,
+       'tier': openbao_github_pepper_read_tier,
+       'installation_id': openbao_github_pepper_installation_id,
+       'repositories': [openbao_github_pepper_repository],
+       'permissions': openbao_github_pepper_read_permissions}]
+     if (openbao_github_pepper_installation_id | length > 0
+         and openbao_github_pepper_app_id | length > 0
+         and openbao_github_pepper_app_private_key | length > 0
+         and openbao_github_pepper_repository is match('^[A-Za-z0-9_.-]+$'))
+     else [] }}
 # org-admin tier: exactly one permission, organization-level. Org rulesets and
 # other organization settings; asserted verbatim like the repo-create map.
 openbao_github_org_admin_permissions:
@@ -275,4 +292,6 @@ openbao_github_permission_sets: >-
      + (openbao_github_read_permission_sets
         | map('combine', {'mount': openbao_github_everyday_mount}) | list)
      + (openbao_github_personal_permission_sets
-        | map('combine', {'mount': openbao_github_personal_mount}) | list) }}
+        | map('combine', {'mount': openbao_github_personal_mount}) | list)
+     + (openbao_github_pepper_permission_sets
+        | map('combine', {'mount': openbao_github_pepper_mount}) | list) }}
