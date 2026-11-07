@@ -73,7 +73,7 @@ openbao_terrakube_workspaces:
   - name: tofu-proxmox-aws-infra
     api_update: [aws/sts/tf-proxmox]
   - name: tofu-proxmox-servarr-config
-    kv_read: [apps/media]
+    kv_read: [apps/media, sonarr/main/rw, radarr/main/rw]
   - name: iac-platform-semaphore
     # Declares Semaphore's own project, repositories, inventories, templates
     # and schedules. Reads exactly one path, for exactly one field: the
@@ -130,6 +130,18 @@ openbao_monitoring_policy_name: monitoring
 openbao_monitoring_approle_name: monitoring
 openbao_media_policy_name: media
 openbao_media_approle_name: media
+# The media stack's secrets-external paths other than Plex: the VPN provider's
+# and the private indexer's, as <service>/<instance>/<role>. Their vendor names
+# stay out of this public repo: the converge receives them as a comma-separated
+# list from config/platform/ansible/env. Only entries of that exact shape are
+# granted, so a wildcard or extra segment can never reach secrets-external.
+openbao_media_external_path_pattern: '^[a-z0-9-]+/[a-z0-9-]+/(ro|rw|admin)$'
+openbao_media_external_paths_raw: >-
+  {{ (lookup('env', 'OPENBAO_MEDIA_EXTERNAL_PATHS') | default('', true)).split(',')
+     | map('trim') | reject('equalto', '') | list }}
+openbao_media_external_paths: >-
+  {{ openbao_media_external_paths_raw
+     | select('match', openbao_media_external_path_pattern) | list }}
 # ntfy — read-side AppRole for the ntfy alert hub's Slack fan-out
 # (openbao_secrets domain "ntfy"). Read-only on the single secrets-external
 # entry holding the Slack incoming-webhook URLs keyed by topic; that path is

@@ -285,6 +285,8 @@ openbao_base_policies_static:
     template: ai-rotate-policy.hcl.j2
   - name: "{{ openbao_apps_rotate_policy_name }}"
     template: apps-rotate-policy.hcl.j2
+  - name: "{{ openbao_media_rotate_policy_name }}"
+    template: media-rotate-policy.hcl.j2
   - name: "{{ openbao_rustfs_rotate_policy_name }}"
     template: rustfs-rotate-policy.hcl.j2
   - name: "{{ openbao_approle_secret_id_rotate_policy_name }}"

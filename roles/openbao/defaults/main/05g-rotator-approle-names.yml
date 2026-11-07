@@ -21,6 +21,8 @@ openbao_secret_age_audit_policy_name: secret-age-audit
 openbao_secret_age_audit_approle_name: secret-age-audit
 openbao_ai_rotate_policy_name: ai-rotate
 openbao_ai_rotate_approle_name: ai-rotate
+openbao_media_rotate_policy_name: media-rotate
+openbao_media_rotate_approle_name: media-rotate
 openbao_apps_rotate_policy_name: apps-rotate
 openbao_apps_rotate_approle_name: apps-rotate
 openbao_rustfs_rotate_policy_name: rustfs-rotate

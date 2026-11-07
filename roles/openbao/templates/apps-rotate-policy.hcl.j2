@@ -3,8 +3,8 @@
 # see the AppRole row in defaults/main/07b-base-approles.yml), same
 # human-gated shape as the ai-apply-<svc> tier: a human wraps a single-use
 # secret_id, `rotate-key.yml` (W1c) unwraps it, and the resulting token lives
-# exactly one rotation run. Scoped to secret/apps/*, same subtree as
-# media-rotate. read/update: a rotator reads the current entry before its
+# exactly one rotation run. Scoped to secret/apps/*, its own subtree.
+# read/update: a rotator reads the current entry before its
 # CAS write and reads it back afterward, so read is load-bearing, not
 # incidental. No `create` — rotation never creates a path, it only replaces
 # a field on one that already exists (the consumer refuses to create). No

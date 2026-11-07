@@ -109,12 +109,13 @@ def _policy_grants(policy: str) -> set[tuple[str, tuple[str, ...]]]:
     }
 
 
-def _render_media_policy() -> str:
+def _render_media_policy(external_paths: tuple[str, ...] = ()) -> str:
     environment = jinja2.Environment()
     environment.filters["comment"] = str
     return environment.from_string(MEDIA_POLICY_TEMPLATE.read_text(encoding="utf-8")).render(
         ansible_managed="",
         openbao_kv_mount="secret",
+        openbao_media_external_paths=list(external_paths),
     )
 
 
@@ -283,6 +284,55 @@ def test_every_media_domain_path_has_a_media_reader_grant():
     assert media_paths
     assert all(path.startswith("apps/media/") for path in media_paths)
     assert read_grant in policy
+
+
+
+def test_media_policies_have_only_the_requested_exact_new_grants():
+    internal = {
+        "sonarr/main/rw", "radarr/main/rw", "prowlarr/main/rw", "seerr/main/rw",
+        "qbittorrent/main/admin", "sortarr/main/admin", "autobrr/main/admin",
+        "autobrr/priority/ro",
+    }
+    external = {
+        "plex/main/rw",
+    }
+    expected = {
+        (f"{mount}/{kind}/{path}", ("read",))
+        for mount, paths in (("secret", internal), ("secrets-external", external))
+        for path in paths for kind in ("data", "metadata")
+    }
+    cutover = {
+        ("secret/data/apps/media/*", ("read",)),
+        ("secret/metadata/apps/media/*", ("read", "list")),
+    }
+    assert _policy_grants(_render_media_policy()) == expected | cutover
+    listed = ("example-vpn/primary/rw", "example-vpn/backup/rw", "example-indexer/main/rw")
+    assert _policy_grants(_render_media_policy(listed)) == expected | cutover | {
+        (f"secrets-external/{kind}/{path}", ("read",))
+        for path in listed for kind in ("data", "metadata")
+    }
+
+    environment = jinja2.Environment()
+    environment.filters["comment"] = str
+    rotate = environment.from_string(
+        (MEDIA_POLICY_TEMPLATE.parent / "media-rotate-policy.hcl.j2").read_text(encoding="utf-8")
+    ).render(ansible_managed="", openbao_kv_mount="secret")
+    rotated = internal - {"autobrr/priority/ro"}
+    assert _policy_grants(rotate) == {
+        (f"secret/{kind}/{path}", capabilities)
+        for path in rotated
+        for kind, capabilities in (("data", ("read", "update")), ("metadata", ("read", "patch")))
+    }
+    assert rotate.count('allowed_parameters = { "custom_metadata" = [] }') == len(rotated)
+
+
+def test_media_external_paths_accept_only_exact_four_segment_entries():
+    pattern = re.compile(_yaml(NAMES_FILE)["openbao_media_external_path_pattern"])
+    for good in ("example-vpn/primary/rw", "example-indexer/main/ro", "x/main/admin"):
+        assert pattern.match(good)
+    for bad in ("*", "example/*", "example/main", "example/main/rw/extra", "Example/main/rw",
+                "example/main/write", "../main/rw"):
+        assert not pattern.match(bad)
 
 
 def test_openproject_secret_is_promoted_and_prefetched():
