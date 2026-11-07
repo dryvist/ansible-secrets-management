@@ -61,8 +61,9 @@ match a declared, manageable object. Names are printed before phase writes.
 default; set a larger positive integer for a larger reviewed batch.
 
 With a nonempty selection, omitted kinds are skipped, and retired-object
-deletes and credential issuance are skipped. Policy templates and global
-collision, undeclared-role, and CIDR checks retain the full declared set.
+deletes and credential issuance are skipped. Policy templates render only for
+selected policies. Global collision, undeclared-role, and CIDR checks retain the
+full declared set.
 AppRole selection changes only config, policy attachments, and bounds.
 Reconcile mode requires both a manageable declaration and a live capability
 grant for every selected write endpoint before phase writes. A protected or
