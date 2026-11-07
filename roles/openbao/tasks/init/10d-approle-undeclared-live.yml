@@ -113,8 +113,12 @@
     _declared: "{{ openbao_approles | map(attribute='name') | list }}"
     _excepted: >-
       {{ openbao_approle_undeclared_exceptions | map(attribute='name') | list }}
+    _retired: >-
+      {{ openbao_retired_approles | default([])
+         if openbao_select | default({}) | length > 0 else [] }}
     _undeclared: >-
-      {{ openbao_approle_live_names | reject('in', _declared + _excepted) | list }}
+      {{ openbao_approle_live_names
+         | reject('in', _declared + _excepted + _retired) | list }}
   ansible.builtin.assert:
     that:
       - _undeclared | length == 0
