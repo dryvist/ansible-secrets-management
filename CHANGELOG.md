@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.79.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.78.1...v0.79.0) (2026-11-07)
+
+
+### Features
+
+* **openbao:** add a dedicated GitHub mount for Pepper ([#548](https://github.com/dryvist/ansible-secrets-management/issues/548)) ([4d35b2b](https://github.com/dryvist/ansible-secrets-management/commit/4d35b2be5544dbcbdb30687f008ccdf8e56d1d3f))
+
 ## [0.78.1](https://github.com/dryvist/ansible-secrets-management/compare/v0.78.0...v0.78.1) (2026-11-07)
 
 
