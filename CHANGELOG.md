@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.81.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.80.0...v0.81.0) (2026-11-07)
+
+
+### Features
+
+* **openbao:** let the write identity mint repo-scoped personal tokens ([#554](https://github.com/dryvist/ansible-secrets-management/issues/554)) ([5c8bbea](https://github.com/dryvist/ansible-secrets-management/commit/5c8bbeaff78bdf03b208d835edd2c42a2ad3c150))
+
 ## [0.80.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.79.0...v0.80.0) (2026-11-07)
 
 
