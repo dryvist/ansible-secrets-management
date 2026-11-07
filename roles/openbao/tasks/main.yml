@@ -13,16 +13,16 @@
 # while `import_tasks` merges the tag onto every task inside the file at
 # parse time -- which is also what lets
 # `ansible-playbook --list-tasks --tags <phase>` show the real task names a
-# phase runs, instead of just the name of the include. Phases 1-4 are
-# tagged `always`: nothing below them works without the binary installed,
-# so every phase-scoped run still needs them.
+# phase runs, instead of just the name of the include. Install and server
+# configuration have their own phase tags; policy and AppRole runs use the
+# existing installation without changing the binary or service.
 #
 # The role's OWN inclusion, from playbooks/site/04a-openbao.yml, stays a
 # DYNAMIC `include_role` on purpose -- NOT the `import_role` this same
 # static-vs-dynamic logic might suggest. Importing statically would parse
 # and flatten every task below into that play before any host is matched:
-# the `always`-tagged ones (install, config render, service start, cluster
-# probe/init) would then fire on ANY unrelated `--tags` run that happens to
+# the `always`-tagged cluster probe/init tasks would then fire on ANY
+# unrelated `--tags` run that happens to
 # target an openbao_group host, and a parse error anywhere in this role
 # would abort the whole playbook before that play's own rescue: block ever
 # gets a chance to isolate it (its whole point). `include_role` keeps both
@@ -33,7 +33,8 @@
 - name: Phases 1-4 -- prerequisites, system user/group, and the OpenBao package install
   ansible.builtin.import_tasks: main/install.yml
   tags:
-    - always
+    - openbao_install
+    - openbao_bootstrap
 
 # Tagged openbao_plugins AND openbao_engines: staging the AWS/Azure/GitHub/
 # OAuthapp plugin binaries is a prerequisite specifically for registering

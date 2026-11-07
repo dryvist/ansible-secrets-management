@@ -1,14 +1,10 @@
 ---
-# Phases 6-8 below (render config, seal key, install unit, enable+start,
-# wait-for-API) are wrapped in one block tagged `always`: every later phase
-# -- bootstrap, audit, snapshot, voter-health, rotate, secret-age -- needs a
-# running, unsealed-or-unsealable OpenBao to operate against, so a
-# phase-scoped run (e.g. `--tags openbao_rbac`) must still render config and
-# start the service even though none of those lines carry openbao_rbac
-# themselves.
+# Server configuration and startup run during bootstrap or an explicit
+# openbao_config run. Scoped policy and AppRole runs use the running service.
 - name: Phases 6-8 -- render config, seal key, install the unit, start, and wait for the API
   tags:
-    - always
+    - openbao_config
+    - openbao_bootstrap
   block:
     # The listener trusts an ingress X-Forwarded-For header only while
     # openbao_xff_authorized_addrs holds usable addresses: templates/openbao.hcl.j2
