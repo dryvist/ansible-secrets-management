@@ -19,7 +19,7 @@ configuration, so each App's own grant caps every token its mount mints:
 | `github-hermes` | hermes | `hermes-review-{public,private}`, `hermes-read-public`, `hermes-author-public`, split by repository visibility |
 | `github-work` | work | a derived `read` set and the raw token endpoint for write; the App's grant is the only write ceiling |
 | `github-personal` | user-owned App | `personal-write` and a raw token path, pinned to its configured installation |
-| `github-pepper` | Pepper | `pepper-vault-read` (one repository; contents and metadata read) |
+| `github-pepper` | Pepper | `pepper-vault-read` (configured repository list; contents and metadata read) |
 | `github-enterprise-read` | read-only Enterprise App | none: raw token endpoint, pinned to its installation |
 | `github-enterprise` | admin Enterprise App | none: raw token endpoint, pinned to its installation |
 | `github-runner` | runner App | none: raw token endpoint accepts only `org_name` |
