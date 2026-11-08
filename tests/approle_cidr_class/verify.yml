@@ -159,7 +159,7 @@
           next to it; unbound is the documented opt-out, not the fallback.
 
     # include_vars outranks task vars, so the fixture bind is a fact.
-    - name: Supply a documentation-range dispatcher bind for open-llm and ci-resolver
+    - name: Supply a documentation-range dispatcher bind for open-llm, ci-resolver, and openhands
       ansible.builtin.set_fact:
         openbao_open_llm_secret_id_cidr: "192.0.2.10/32"
 
@@ -205,6 +205,27 @@
           - role_writes is not search('no_default_policy')
         fail_msg: >-
           ci-resolver must be machine-class, use the open-llm dispatcher bind,
+          renew from 15m to 60m, and carry only its own policy.
+
+    - name: The openhands role is machine class, dispatcher-bound, with a renewable 15m/60m token
+      vars:
+        role: >-
+          {{ openbao_approles
+             | selectattr('name', 'equalto', openbao_openhands_approle_name) | first }}
+        role_writes: >-
+          {{ lookup('file', playbook_dir ~ '/../../roles/openbao/tasks/init/10-approles.yml')
+             ~ lookup('file', playbook_dir ~ '/../../roles/openbao/tasks/init/10c-approle-ttl-bounds.yml') }}
+      ansible.builtin.assert:
+        that:
+          - openbao_approle_cidr_class_map[openbao_openhands_approle_name] == 'machine'
+          - role.secret_id_bound_cidrs == openbao_open_llm_secret_id_cidr
+          - role.token_ttl == '15m'
+          - role.token_max_ttl == '60m'
+          - (role.token_policies | default([role.policy])) == [openbao_openhands_policy_name]
+          - role.token_no_default_policy is not defined
+          - role_writes is not search('no_default_policy')
+        fail_msg: >-
+          openhands must be machine-class, use the open-llm dispatcher bind,
           renew from 15m to 60m, and carry only its own policy.
 
     - name: Retired identities are declared nowhere and slated for deletion

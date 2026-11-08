@@ -15,6 +15,7 @@
       - docs-router-snapshot-policy.hcl
       - github-docs-publisher-policy.hcl
       - github-ci-resolver-policy.hcl
+      - openhands-policy.hcl
       - github-mint-policy.hcl
       - github-read-policy.hcl
       - github-repo-create-policy.hcl
@@ -55,6 +56,7 @@
         openbao_github_oidc_docs_repository: fixture-owner/fixture-source
         openbao_github_docs_publisher_repos: [fixture-repo]
         openbao_github_ci_resolver_repos: [fixture-repo]
+        openbao_github_openhands_repos: [fixture-repo]
         openbao_terrakube_network_workspace: fixture-network
         openbao_terrakube_aws_workspace: fixture-aws
 

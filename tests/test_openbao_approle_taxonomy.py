@@ -124,6 +124,24 @@ class TestAppRoleTaxonomy(unittest.TestCase):
         self.assertEqual(class_map["agent-workstation"], "trusted-agent-read")
         self.assertEqual(class_map["hatchet-eval-status"], "service-runtime")
         self.assertEqual(cidr_class_map["hatchet-eval-status"], "machine")
+        for prefix in ("openbao_github_ci_resolver", "openbao_openhands"):
+            name = variables[f"{prefix}_approle_name"]
+            role = next(role for role in roles if role["name"] == name)
+            self.assertEqual(class_map[name], "service-runtime")
+            self.assertEqual(role["policy"], variables[f"{prefix}_policy_name"])
+            self.assertEqual(role["token_ttl"], "15m")
+            self.assertEqual(role["token_max_ttl"], "60m")
+            self.assertNotIn("secret_id_ttl", role)
+            self.assertEqual(
+                secret_id_ttls[name],
+                variables["openbao_rotated_domain_secret_id_ttl"],
+            )
+            self.assertEqual(
+                variables["openbao_approle_secret_id_num_uses_overrides"][name], 0
+            )
+            self.assertIn(
+                name, _render("{{ openbao_secrets_domain_approle_names }}", variables)
+            )
         router_key_name = variables["openbao_claude_code_router_key_approle_name"]
         router_key_role = next(role for role in roles if role["name"] == router_key_name)
         self.assertEqual(class_map[router_key_name], "service-runtime")

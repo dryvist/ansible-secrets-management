@@ -127,6 +127,7 @@
         - ai-public-policy.hcl
         - ai-orchestrator-policy.hcl
         - hermes-policy.hcl
+        - openhands-policy.hcl
 
     - name: Read the rendered policies
       ansible.builtin.slurp:
