@@ -37,6 +37,7 @@
     openbao_github_pepper_app_private_key: ""
     openbao_github_pepper_installation_id: ""
     openbao_github_pepper_repository: ""
+    _openbao_github_pepper_repositories_csv: ""
 
 - name: Assert an unconfigured Pepper App declares no set or mount
   vars:

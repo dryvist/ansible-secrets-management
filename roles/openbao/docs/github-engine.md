@@ -218,15 +218,19 @@ env document, and the installation owner must be present in
 omitted while that installation ID is empty.
 
 The `github-pepper` mount gives the local Pepper agent a short-lived token
-for one configured repository. Its `pepper-vault-read` set grants only `contents: read` and
-`metadata: read`; the policy does not grant the raw token endpoint. The mount
-and set are omitted unless all four inputs are present, and the repository
-input must be one repository name without a slash:
+for its configured repository list. Its `pepper-vault-read` set grants only
+`contents: read` and `metadata: read`; the policy does not grant the raw token
+endpoint. The mount and set are omitted unless the installation ID, App ID,
+private key, and a non-empty list of valid repository names are present:
 
 - `OPENBAO_GITHUB_PEPPER_APP_ID`
 - `OPENBAO_GITHUB_PEPPER_APP_PRIVATE_KEY`
 - `OPENBAO_GITHUB_PEPPER_INSTALLATION_ID`
+- `OPENBAO_GITHUB_PEPPER_REPOSITORIES` (comma-separated repository names)
 - `OPENBAO_GITHUB_PEPPER_REPOSITORY`
 
-The App ID, private key, and repository are environment inputs. The
-installation ID comes from the environment document.
+The App ID, private key, and repository list are environment inputs. Empty
+list entries are dropped and duplicate names are removed while preserving
+order. When the list is empty, `OPENBAO_GITHUB_PEPPER_REPOSITORY` supplies the
+single repository for compatibility. Every name must match
+`^[A-Za-z0-9_.-]+$`. The installation ID comes from the environment document.

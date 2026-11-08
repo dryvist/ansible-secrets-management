@@ -69,11 +69,15 @@
       - >-
         _pepper_set.installation_id | default('') | string
         == openbao_github_pepper_installation_id | string
-      - _pepper_set.repositories | default([]) == [openbao_github_pepper_repository]
+      - _pepper_set.repositories | default([]) == openbao_github_pepper_repositories
+      - openbao_github_pepper_repositories | length > 0
+      - >-
+        _pepper_set.repositories | default([])
+        | select('match', '^[A-Za-z0-9_.-]+$') | list | length
+        == _pepper_set.repositories | default([]) | length
       - _pepper_set.permissions | default({}) == openbao_github_pepper_read_permissions
-      - openbao_github_pepper_repository is match('^[A-Za-z0-9_.-]+$')
     fail_msg: >-
-      {{ gm.mount }} must declare only its one repository-scoped read set.
+      {{ gm.mount }} must declare only its configured repository-scoped read set.
     quiet: true
   vars:
     _pepper_set: "{{ gm.permission_sets | first | default({}) }}"
