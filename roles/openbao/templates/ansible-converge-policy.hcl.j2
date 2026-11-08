@@ -158,6 +158,16 @@ path "{{ openbao_kv_mount }}/metadata/ai/dify" {
   capabilities = ["read"]
 }
 
+# Dify's agent app key seed writes one leaf per imported catalog app.
+path "{{ openbao_kv_mount }}/data/ai/dify/agent-apps/*" {
+  capabilities = ["create", "update", "read"]
+}
+
+# Read KV v2 metadata for the same Dify agent app leaves only.
+path "{{ openbao_kv_mount }}/metadata/ai/dify/agent-apps/*" {
+  capabilities = ["read"]
+}
+
 # Evaluation-only specialist-platform instances: one exact leaf per candidate.
 path "{{ openbao_kv_mount }}/data/ai/eval/specialist-platform/sim" {
   capabilities = ["create", "update", "read"]
