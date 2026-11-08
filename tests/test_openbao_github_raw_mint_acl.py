@@ -52,13 +52,15 @@ LEGACY_SETS = [
 ]
 
 
-def _render_policies():
+def _render_policies(personal_installation_id=""):
     environment = Environment(loader=FileSystemLoader(TEMPLATES))
     environment.filters["comment"] = lambda value: "# " + str(value)
     values = {
         "ansible_managed": "managed",
         "openbao_github_mount": "github-admin",
         "openbao_github_everyday_mount": "github",
+        "openbao_github_personal_mount": "github-personal",
+        "openbao_github_personal_installation_id": personal_installation_id,
         "openbao_kv_mount": "secret",
         "openbao_github_permission_sets": LEGACY_SETS,
         "openbao_github_read_permissions": READ,
@@ -257,6 +259,25 @@ def test_rendered_raw_grants_are_owner_neutral_and_parameter_pinned():
         r'"repositories"\s*=\s*\[\s*\]\s*\}',
         exporter,
     )
+
+
+def test_personal_write_raw_grant_is_pinned_only_when_installation_is_configured():
+    unset_paths = _stanzas(_render_policies()["github-write"])
+    assert "github-personal/token" not in unset_paths
+
+    configured_policy = _render_policies("4242")["github-write"]
+    configured_paths = _stanzas(configured_policy)
+    personal = _raw(configured_policy, "github-personal/token")
+    assert re.search(r'capabilities\s*=\s*\["create",\s*"update"\]', personal)
+    assert 'required_parameters = ["installation_id", "repositories"]' in personal
+    assert re.search(r'"installation_id"\s*=\s*\["4242"\]', personal)
+    # A repo-scoped claim sends repositories and permissions; both must be allowed.
+    assert re.search(r'"repositories"\s*=\s*\[\]', personal)
+    assert re.search(r'"permissions"\s*=\s*\[\]', personal)
+    assert "org_name" not in personal
+    assert [path for path in configured_paths if path.startswith("github-personal/")] == [
+        "github-personal/token"
+    ]
 
 
 @pytest.mark.parametrize("policy", ["github-read", "github-mint"])
