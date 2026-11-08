@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.82.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.81.0...v0.82.0) (2026-11-08)
+
+
+### Features
+
+* **openbao:** give Pepper's GitHub read set a repository list ([#558](https://github.com/dryvist/ansible-secrets-management/issues/558)) ([b10a943](https://github.com/dryvist/ansible-secrets-management/commit/b10a943e9a685e1621e446b8a9123cd6228e8ee7))
+
 ## [0.81.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.80.0...v0.81.0) (2026-11-07)
 
 
