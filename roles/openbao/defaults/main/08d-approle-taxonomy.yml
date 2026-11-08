@@ -79,6 +79,7 @@ openbao_approle_class_map: >-
     'observability': 'service-runtime',
     'observability-workstation': 'service-runtime',
     'open-llm': 'untrusted-sandbox',
+    'openhands': 'service-runtime',
     'openbao-node-converge': 'converge-automation',
     'openbao-policy-sync': 'operator-admin',
     'openbao-reconcile': 'converge-automation',

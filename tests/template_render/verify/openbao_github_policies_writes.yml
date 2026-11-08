@@ -55,10 +55,47 @@
         | regex_findall('(?m)^path "([^"]+)"') | length == 0
     fail_msg: An empty CI resolver repository list must omit its set and every policy grant.
 
-- name: Pin the publisher and CI resolver repository lists to the configured case
+- name: Pin the OpenHands repository list to the unconfigured case
+  ansible.builtin.set_fact:
+    openbao_github_openhands_repos: []
+
+- name: Render the OpenHands policy with no repository configured
+  ansible.builtin.template:
+    src: "{{ _template_dir }}/openhands-policy.hcl.j2"
+    dest: "{{ _fixture_dir }}/unset-openhands-policy.hcl"
+    mode: "0644"
+
+- name: Read the policy rendered without an OpenHands repository
+  ansible.builtin.slurp:
+    src: "{{ _fixture_dir }}/unset-openhands-policy.hcl"
+  register: _openhands_unset_raw
+
+# Unlike the ci-resolver policy, the OpenHands policy keeps its two bucket
+# reads with no repository list, so it is never an empty render and never
+# joins the unscheduled policies.
+- name: Assert an unconfigured OpenHands has no set and only its bucket reads
+  ansible.builtin.assert:
+    that:
+      - openbao_github_openhands_permission_sets == []
+      - >-
+        openbao_github_admin_permission_sets
+        | selectattr('name', 'equalto', openbao_github_openhands_set_name) | list == []
+      - >-
+        openbao_unscheduled_empty_policy_names
+        == [openbao_github_ci_resolver_policy_name]
+      - >-
+        (_openhands_unset_raw.content | b64decode)
+        | regex_findall('(?m)^path "([^"]+)"') == _openhands_kv_paths
+      - _openhands_path not in (_openhands_unset_raw.content | b64decode)
+    fail_msg: >-
+      An empty OpenHands repository list must omit its set and token grant
+      while keeping the two bucket reads, and must not unschedule the policy.
+
+- name: Pin the publisher, CI resolver, and OpenHands repository lists to the configured case
   ansible.builtin.set_fact:
     openbao_github_docs_publisher_repos: [fixture-repo]
     openbao_github_ci_resolver_repos: [fixture-repo]
+    openbao_github_openhands_repos: [fixture-repo]
 
 - name: Pin the personal App installation to the configured case
   ansible.builtin.set_fact:
@@ -89,6 +126,7 @@
     - ai-public-policy.hcl
     - github-ci-resolver-policy.hcl
     - ai-orchestrator-policy.hcl
+    - openhands-policy.hcl
 
 - name: Read the policies rendered with a publisher repository
   ansible.builtin.slurp:
@@ -113,6 +151,10 @@
       {{ _tier_raw.results[8].content | b64decode
          | regex_findall('(?m)^  capabilities = (.*)$') }}
     _ai_orchestrator_paths: "{{ _paths[9] }}"
+    _openhands_paths: "{{ _paths[10] }}"
+    _openhands_capabilities: >-
+      {{ _tier_raw.results[10].content | b64decode
+         | regex_findall('(?m)^  capabilities = (.*)$') }}
   vars:
     _paths: >-
       {{ _tier_raw.results | map(attribute='content') | map('b64decode')
@@ -324,6 +366,39 @@
       - _ci_resolver_path not in _ai_orchestrator_paths
       - _ci_resolver_path not in _read_paths
     fail_msg: The CI resolver's stored write set must remain exclusive to its own policy.
+
+- name: Assert the OpenHands set is exact, repository-scoped, and the only token path
+  vars:
+    _openhands_set: "{{ openbao_github_openhands_permission_sets | first }}"
+  ansible.builtin.assert:
+    that:
+      - openbao_github_openhands_permission_sets | length == 1
+      - _openhands_set.name == openbao_github_openhands_set_name
+      - _openhands_set.tier == 'openhands'
+      - _openhands_set.installation_id == openbao_github_dryvist_installation_id
+      - _openhands_set.repositories == ['fixture-repo']
+      - >-
+        _openhands_set.permissions
+        == {'checks': 'read', 'contents': 'write', 'metadata': 'read', 'pull_requests': 'write'}
+      - openbao_github_openhands_permissions == _openhands_set.permissions
+      - _openhands_paths == [_openhands_path] + _openhands_kv_paths
+      - >-
+        _openhands_capabilities
+        == ['["create", "read", "update"]', '["read"]', '["read"]', '["read"]', '["read"]']
+    fail_msg: >-
+      OpenHands may mint only its stored set with contents and pull request
+      write, checks and metadata read, and read only its two buckets.
+
+- name: Assert no broad identity or the CI resolver inherits the OpenHands write set
+  ansible.builtin.assert:
+    that:
+      - _openhands_path not in _mint_paths
+      - _openhands_path not in _ai_orchestrator_paths
+      - _openhands_path not in _read_paths
+      - _openhands_path not in _write_paths
+      - _openhands_path not in _ci_resolver_paths
+      - _ci_resolver_path not in _openhands_paths
+    fail_msg: The OpenHands stored write set must remain exclusive to its own policy.
 
 - name: Assert the repo-create policy grants exactly its own set
   ansible.builtin.assert:

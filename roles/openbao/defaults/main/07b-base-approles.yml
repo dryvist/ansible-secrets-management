@@ -248,6 +248,16 @@ openbao_base_approles_core:
     secret_id_bound_cidrs: "{{ openbao_open_llm_secret_id_cidr }}"
     token_ttl: 15m
     token_max_ttl: 60m
+  # openhands: the OpenHands agent-sandbox host, the same service-runtime shape
+  # as ci-resolver — the open-llm source-address bind, a 15m token renewable
+  # to 60m, and the rotated-domain secret_id from the 08a overrides with
+  # unlimited uses. The host redeems the pair from the platform env document;
+  # scheduled rotation re-mints it, so no inline ttl is declared here.
+  - name: "{{ openbao_openhands_approle_name }}"
+    policy: "{{ openbao_openhands_policy_name }}"
+    secret_id_bound_cidrs: "{{ openbao_open_llm_secret_id_cidr }}"
+    token_ttl: 15m
+    token_max_ttl: 60m
   # ai-readonly / ai-elevated ACTOR roles: standing (ambient) READ tiers. Both
   # attach the shared global KV and non-secret metadata policy plus read-all;
   # ai-elevated also keeps its read-only extras (secret/platform/*).
