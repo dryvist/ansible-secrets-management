@@ -19,7 +19,7 @@ configuration, so each App's own grant caps every token its mount mints:
 | `github-hermes` | hermes | `hermes-review-{public,private}`, `hermes-read-public`, `hermes-author-public`, split by repository visibility |
 | `github-work` | work | a derived `read` set and the raw token endpoint for write; the App's grant is the only write ceiling |
 | `github-personal` | user-owned App | `personal-write` and a raw token path, pinned to its configured installation |
-| `github-pepper` | Pepper | `pepper-vault-read` (one repository; contents and metadata read) |
+| `github-pepper` | Pepper | `pepper-vault-read` (configured repository list; contents and metadata read) |
 | `github-enterprise-read` | read-only Enterprise App | none: raw token endpoint, pinned to its installation |
 | `github-enterprise` | admin Enterprise App | none: raw token endpoint, pinned to its installation |
 | `github-runner` | runner App | none: raw token endpoint accepts only `org_name` |
@@ -218,15 +218,19 @@ env document, and the installation owner must be present in
 omitted while that installation ID is empty.
 
 The `github-pepper` mount gives the local Pepper agent a short-lived token
-for one configured repository. Its `pepper-vault-read` set grants only `contents: read` and
-`metadata: read`; the policy does not grant the raw token endpoint. The mount
-and set are omitted unless all four inputs are present, and the repository
-input must be one repository name without a slash:
+for its configured repository list. Its `pepper-vault-read` set grants only
+`contents: read` and `metadata: read`; the policy does not grant the raw token
+endpoint. The mount and set are omitted unless the installation ID, App ID,
+private key, and a non-empty list of valid repository names are present:
 
 - `OPENBAO_GITHUB_PEPPER_APP_ID`
 - `OPENBAO_GITHUB_PEPPER_APP_PRIVATE_KEY`
 - `OPENBAO_GITHUB_PEPPER_INSTALLATION_ID`
+- `OPENBAO_GITHUB_PEPPER_REPOSITORIES` (comma-separated repository names)
 - `OPENBAO_GITHUB_PEPPER_REPOSITORY`
 
-The App ID, private key, and repository are environment inputs. The
-installation ID comes from the environment document.
+The App ID, private key, and repository list are environment inputs. Empty
+list entries are dropped and duplicate names are removed while preserving
+order. When the list is empty, `OPENBAO_GITHUB_PEPPER_REPOSITORY` supplies the
+single repository for compatibility. Every name must match
+`^[A-Za-z0-9_.-]+$`. The installation ID comes from the environment document.

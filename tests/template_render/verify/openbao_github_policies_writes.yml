@@ -69,7 +69,9 @@
     openbao_github_pepper_app_id: fixture-app-id
     openbao_github_pepper_app_private_key: fixture-private-key
     openbao_github_pepper_installation_id: fixture-installation
-    openbao_github_pepper_repository: fixture-repo
+    _openbao_github_pepper_repositories_csv: >-
+      fixture-repo, fixture-repo-two, ,fixture-repo-three, fixture-repo
+    openbao_github_pepper_repository: fixture-legacy-repo
 
 - name: Render the tier policies with a publisher repository configured
   ansible.builtin.template:
@@ -152,7 +154,10 @@
       - _pepper_sets[0].name == openbao_github_pepper_read_set_name
       - _pepper_sets[0].tier == openbao_github_pepper_read_tier
       - _pepper_sets[0].installation_id == 'fixture-installation'
-      - _pepper_sets[0].repositories == ['fixture-repo']
+      - _pepper_sets[0].repositories ==
+        ['fixture-repo', 'fixture-repo-two', 'fixture-repo-three']
+      - openbao_github_pepper_repositories ==
+        ['fixture-repo', 'fixture-repo-two', 'fixture-repo-three']
       - >-
         _pepper_sets[0].permissions
         == {'contents': 'read', 'metadata': 'read'}
@@ -163,7 +168,8 @@
       - _pepper_global_sets | length == 1
       - _pepper_global_sets[0].mount == openbao_github_pepper_mount
       - _pepper_global_sets[0].tier == openbao_github_pepper_read_tier
-      - _pepper_global_sets[0].repositories == ['fixture-repo']
+      - _pepper_global_sets[0].repositories ==
+        ['fixture-repo', 'fixture-repo-two', 'fixture-repo-three']
       - >-
         _pepper_policy_paths == [
           _pepper_path,
@@ -195,6 +201,40 @@
     fail_msg: >-
       Pepper must have only its one read set, and no other GitHub identity
       policy may mint that set.
+
+- name: Assert the Pepper converge check accepts its configured repository list
+  ansible.builtin.include_tasks: ../../../roles/openbao/tasks/init/05b-github-app-set-checks.yml
+  vars:
+    gm:
+      mount: "{{ openbao_github_pepper_mount }}"
+      permission_sets: "{{ openbao_github_pepper_permission_sets }}"
+
+- name: Pin Pepper to an empty list and the legacy single-name input
+  ansible.builtin.set_fact:
+    _openbao_github_pepper_repositories_csv: ''
+    openbao_github_pepper_repository: fixture-legacy-repo
+
+- name: Assert the legacy Pepper repository input becomes a one-item list
+  ansible.builtin.assert:
+    that:
+      - openbao_github_pepper_repositories == ['fixture-legacy-repo']
+      - >-
+        openbao_github_pepper_permission_sets[0].repositories
+        == ['fixture-legacy-repo']
+    fail_msg: The legacy Pepper repository input must remain supported.
+
+- name: Pin Pepper to a repository list containing an invalid entry
+  ansible.builtin.set_fact:
+    _openbao_github_pepper_repositories_csv: fixture-valid,fixture-invalid/name
+
+- name: Assert one invalid Pepper repository leaves the set undeclared
+  ansible.builtin.assert:
+    that:
+      - >-
+        openbao_github_pepper_repositories
+        == ['fixture-valid', 'fixture-invalid/name']
+      - openbao_github_pepper_permission_sets == []
+    fail_msg: A Pepper repository list with an invalid name must not declare its set.
 
 - name: Assert the personal write set and its write-tier grant are exact
   vars:
