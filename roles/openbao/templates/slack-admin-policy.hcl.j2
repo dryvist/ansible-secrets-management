@@ -1,6 +1,6 @@
 {{ ansible_managed | comment }}
 # OpenBao policy for the slack-admin AppRole — read + update + create on
-# exactly one secrets-external KV-v2 entry (platform/slack-admin), the Slack
+# exactly one secrets-external KV-v2 entry (slack/workspace/config), the Slack
 # app configuration token pair (app_config_token, app_config_refresh_token,
 # rotated_at). Read-only would not suffice: the access token expires after
 # 12 hours, and rotating it consumes the refresh token (single-use) and
@@ -13,7 +13,7 @@
 # and no wildcard: this identity can create/rotate the one secret it owns
 # and cannot see or touch any other path on either mount.
 
-path "secrets-external/data/platform/slack-admin" {
+path "secrets-external/data/slack/workspace/config" {
   capabilities = ["read", "update", "create"]
 }
 
@@ -29,18 +29,18 @@ path "secrets-external/data/platform/slack-admin" {
 # `update` on data/ above means an unconstrained `patch` here would let it
 # set max_versions=1 and then destroy every prior version with one CAS
 # write — no `delete` capability required.
-path "secrets-external/metadata/platform/slack-admin" {
+path "secrets-external/metadata/slack/workspace/config" {
   capabilities       = ["read", "patch"]
   allowed_parameters = { "custom_metadata" = [] }
 }
 
-# create + read on platform/slack-app-* only — the per-app credential set
+# create + read on slack/+/config only — the per-app credential set
 # (client_id, client_secret, verification_token, signing_secret) issued once
 # by apps.manifest.create for a given app_id, one entry per app. Create only,
 # no update: these values are never rotated, so a second write to the same
 # app_id would only ever mean an accidental overwrite of a credential set
 # that cannot be recovered any other way. No delete, no list, and scoped to
 # this one path prefix — not the whole mount.
-path "secrets-external/data/platform/slack-app-*" {
+path "secrets-external/data/slack/+/config" {
   capabilities = ["create", "read"]
 }

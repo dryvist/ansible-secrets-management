@@ -12,7 +12,7 @@
   'name': 'slack-admin',
   'mint': 'slack',
   'approle': 'slack-admin',
-  'target': {'mount': 'secrets-external', 'path': 'platform/slack-admin'},
+  'target': {'mount': 'secrets-external', 'path': 'slack/workspace/config'},
   'safety_margin': openbao_slack_rotate_safety_margin,
   'ntfy_url': openbao_slack_rotate_ntfy_url,
   'healthcheck_url': openbao_slack_rotate_healthcheck_url,

@@ -4,10 +4,10 @@
 # secrets-external entry holding Slack incoming-webhook URLs keyed by topic;
 # no access to secret/apps or any other domain's credentials.
 
-path "secrets-external/data/platform/slack-webhooks" {
+path "secrets-external/data/slack/webhooks/rw" {
   capabilities = ["read"]
 }
 
-path "secrets-external/metadata/platform/slack-webhooks" {
+path "secrets-external/metadata/slack/webhooks/rw" {
   capabilities = ["read", "list"]
 }

@@ -75,10 +75,10 @@ path "secrets-external/data/ai/saas/opencode" {
 
 # Exact-path read of the Slack ops leaf (grafana-alerts domain reads it).
 # One leaf, no wildcard.
-path "secrets-external/data/platform/slack-ops" {
+path "secrets-external/data/slack/homelab-ops/rw" {
   capabilities = ["read"]
 }
 
-path "secrets-external/metadata/platform/slack-ops" {
+path "secrets-external/metadata/slack/homelab-ops/rw" {
   capabilities = ["read"]
 }
