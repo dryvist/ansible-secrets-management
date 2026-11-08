@@ -19,6 +19,7 @@ configuration, so each App's own grant caps every token its mount mints:
 | `github-hermes` | hermes | `hermes-review-{public,private}`, `hermes-read-public`, `hermes-author-public`, split by repository visibility |
 | `github-work` | work | a derived `read` set and the raw token endpoint for write; the App's grant is the only write ceiling |
 | `github-personal` | user-owned App | `personal-write` and a raw token path, pinned to its configured installation |
+| `github-openhands` | OpenHands | `openhands-pilot` (contents and pull requests write; checks and metadata read) |
 | `github-pepper` | Pepper | `pepper-vault-read` (configured repository list; contents and metadata read) |
 | `github-enterprise-read` | read-only Enterprise App | none: raw token endpoint, pinned to its installation |
 | `github-enterprise` | admin Enterprise App | none: raw token endpoint, pinned to its installation |
@@ -234,3 +235,13 @@ list entries are dropped and duplicate names are removed while preserving
 order. When the list is empty, `OPENBAO_GITHUB_PEPPER_REPOSITORY` supplies the
 single repository for compatibility. Every name must match
 `^[A-Za-z0-9_.-]+$`. The installation ID comes from the environment document.
+
+The `github-openhands` mount gives OpenHands an installation-scoped
+`openhands-pilot` set with `contents: write`, `pull_requests: write`,
+`metadata: read`, and `checks: read`. Its `openhands` policy can mint only that
+set on this mount and retains its existing OpenHands KV reads. The App ID and
+private key come from `OPENBAO_GITHUB_OPENHANDS_APP_ID` and
+`OPENBAO_GITHUB_OPENHANDS_APP_PRIVATE_KEY`; the installation ID comes from
+`OPENBAO_GITHUB_OPENHANDS_DRYVIST_INSTALLATION_ID` in the env document. The
+mount and set are omitted unless all three inputs are present. The `openhands`
+AppRole token TTL and maximum TTL are both 1h.

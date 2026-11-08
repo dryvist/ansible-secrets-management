@@ -1,8 +1,7 @@
 {{ ansible_managed | comment }}
 # openhands reads the apps/openhands and apps/openhands-vikunja buckets and
-# mints only its own repository-scoped stored GitHub set; no raw token endpoint
-# or other set is reachable. The KV reads do not depend on a repository list,
-# so this policy always renders at least one path stanza.
+# mints only its installation-scoped set on github-openhands; no raw token
+# endpoint or other set is reachable.
 {% for permission_set in openbao_github_permission_sets | selectattr('tier', 'equalto', 'openhands') %}
 path "{{ permission_set.mount }}/token/{{ permission_set.name }}" {
   capabilities = ["create", "read", "update"]

@@ -83,6 +83,28 @@
     _pepper_set: "{{ gm.permission_sets | first | default({}) }}"
   when: gm.mount == openbao_github_pepper_mount
 
+- name: "Assert the dedicated OpenHands set on mount {{ gm.mount }}"
+  ansible.builtin.assert:
+    that:
+      - gm.permission_sets | length == 1
+      - _openhands_set.name | default('') == openbao_github_openhands_set_name
+      - _openhands_set.tier | default('') == 'openhands'
+      - >-
+        _openhands_set.installation_id | default('') | string
+        == openbao_github_openhands_installation_id | string
+      - _openhands_set.repositories is not defined
+      - >-
+        _openhands_set.permissions | default({})
+        == {'checks': 'read', 'contents': 'write',
+            'metadata': 'read', 'pull_requests': 'write'}
+    fail_msg: >-
+      {{ gm.mount }} must declare only openhands-pilot with its exact
+      installation-scoped permission map.
+    quiet: true
+  vars:
+    _openhands_set: "{{ gm.permission_sets | first | default({}) }}"
+  when: gm.mount == openbao_github_openhands_mount
+
 # ponytail: one page of 100; add pagination when a list passes 100 repos.
 - name: "Resolve the set repository lists on mount {{ gm.mount }}"
   ansible.builtin.set_fact:
