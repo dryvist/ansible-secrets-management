@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.82.1](https://github.com/dryvist/ansible-secrets-management/compare/v0.82.0...v0.82.1) (2026-11-08)
+
+
+### Bug Fixes
+
+* **openbao:** let the converge seed write Dify agent app key leaves ([#562](https://github.com/dryvist/ansible-secrets-management/issues/562)) ([1dfc544](https://github.com/dryvist/ansible-secrets-management/commit/1dfc544e728a53a5ea0c1f9f660c30fd9fabf11b))
+
 ## [0.82.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.81.0...v0.82.0) (2026-11-08)
 
 
