@@ -5,8 +5,8 @@ path "{{ openbao_kv_mount }}/data/{{ openbao_proxman_secret_path }}" {
 
 # OpenBao policy for the ansible-converge AppRole. Reads are enumerated; only
 # exact publisher and seed paths are writable, plus the per-app Dify agent key
-# leaves under ai/dify/agent-apps/. No platform/*, apps/*, or secret/infra/*
-# access is granted.
+# leaves under ai/dify/agent-apps/ and MCP URL leaves under ai/dify/agent-mcp/.
+# No platform/*, apps/*, or secret/infra/* access is granted.
 #
 # Consumer inventory: each listed read has a current consumer. Resource-domain
 # reads (observability, local-cloud, monitoring, media, apps, local-llm) use the
@@ -166,6 +166,16 @@ path "{{ openbao_kv_mount }}/data/ai/dify/agent-apps/*" {
 
 # Read KV v2 metadata for the same Dify agent app leaves only.
 path "{{ openbao_kv_mount }}/metadata/ai/dify/agent-apps/*" {
+  capabilities = ["read"]
+}
+
+# Dify's MCP publish writes one server URL leaf per catalog app.
+path "{{ openbao_kv_mount }}/data/ai/dify/agent-mcp/*" {
+  capabilities = ["create", "update", "read"]
+}
+
+# Read KV v2 metadata for the same Dify MCP URL leaves only.
+path "{{ openbao_kv_mount }}/metadata/ai/dify/agent-mcp/*" {
   capabilities = ["read"]
 }
 
