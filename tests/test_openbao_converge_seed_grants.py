@@ -74,7 +74,8 @@ def test_dify_agent_mcp_url_leaves_are_granted_below_the_dify_record_only() -> N
     leaves = "{{ openbao_kv_mount }}/data/ai/dify/agent-mcp/*"
     metadata = "{{ openbao_kv_mount }}/metadata/ai/dify/agent-mcp/*"
     assert grants.count((leaves, ("create", "update", "read"))) == 1
-    assert grants.count((metadata, ("read",))) == 1
+    assert grants.count((metadata, ("read", "list"))) == 1
+    assert _wildcard_covers(metadata, "{{ openbao_kv_mount }}/metadata/ai/dify/agent-mcp/")
     assert _wildcard_covers(leaves, "{{ openbao_kv_mount }}/data/ai/dify/agent-mcp/ai-news")
     assert not _wildcard_covers(leaves, "{{ openbao_kv_mount }}/data/ai/dify/agent-apps/ai-news")
 
