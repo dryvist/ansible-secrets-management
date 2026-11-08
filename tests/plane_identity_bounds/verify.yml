@@ -163,22 +163,33 @@
         - name: "{{ openbao_github_ci_resolver_approle_name }}"
           uses: 0
           ttl: "{{ openbao_rotated_domain_secret_id_ttl }}"
+        - name: "{{ openbao_openhands_approle_name }}"
+          uses: 0
+          ttl: "{{ openbao_rotated_domain_secret_id_ttl }}"
         - { name: proxman, uses: 30, ttl: 24h }
 
-    - name: Dispatcher pairs rotate through the platform env document, not Doppler
+    - name: Dispatcher and OpenHands pairs rotate through the platform env document, not Doppler
       ansible.builtin.assert:
         that:
           - openbao_open_llm_approle_name in openbao_secrets_domain_approle_names
           - openbao_github_ci_resolver_approle_name in openbao_secrets_domain_approle_names
+          - openbao_openhands_approle_name in openbao_secrets_domain_approle_names
           - >-
             (openbao_approle_secret_id_ttl_overrides[openbao_open_llm_approle_name]
              | community.general.to_seconds | int)
             == (openbao_rotated_domain_secret_id_ttl | community.general.to_seconds | int)
+          - >-
+            (openbao_approle_secret_id_ttl_overrides[openbao_openhands_approle_name]
+             | community.general.to_seconds | int)
+            == (openbao_rotated_domain_secret_id_ttl | community.general.to_seconds | int)
           - openbao_open_llm_approle_name not in openbao_rotate_doppler_sync_domains
           - openbao_github_ci_resolver_approle_name not in openbao_rotate_doppler_sync_domains
+          - openbao_openhands_approle_name not in openbao_rotate_doppler_sync_domains
+          - openbao_openhands_approle_name not in openbao_approle_env_prefix_overrides
         fail_msg: >-
-          Both dispatcher identities need scheduled rotation through the
-          platform env document and must stay out of Doppler republishing.
+          Both dispatcher identities and OpenHands need scheduled rotation
+          through the platform env document, under their own role names, and
+          must stay out of Doppler republishing.
 
     # A scheduled domain whose secret_id outlives fewer than three rotation
     # intervals expires after a single missed run. 0s (never expires) is exempt.

@@ -183,6 +183,28 @@ openbao_github_ci_resolver_permission_sets: >-
 openbao_unscheduled_empty_policy_names: >-
   {{ [] if openbao_github_ci_resolver_repos | length > 0
      else [openbao_github_ci_resolver_policy_name] }}
+# OpenHands tier: one explicitly repository-scoped stored set, prepared but
+# off. With no repository list the set is omitted; an omitted repositories key
+# would mean the whole installation.
+openbao_github_openhands_set_name: openhands
+openbao_github_openhands_permissions:
+  checks: read
+  contents: write
+  metadata: read
+  pull_requests: write
+# Explicit repository names only, supplied by the secret store; no globs.
+openbao_github_openhands_repos: >-
+  {{ (lookup('env', 'OPENBAO_GITHUB_OPENHANDS_REPOS') | default('', true)).split(',')
+     | map('trim') | reject('equalto', '') | list }}
+# The ci-resolver set's installation id for now; OpenHands moves to its own
+# App mount once that App exists.
+openbao_github_openhands_permission_sets: >-
+  {{ [{'name': openbao_github_openhands_set_name,
+       'tier': 'openhands',
+       'installation_id': openbao_github_dryvist_installation_id,
+       'repositories': openbao_github_openhands_repos,
+       'permissions': openbao_github_openhands_permissions}]
+     if openbao_github_openhands_repos | length > 0 else [] }}
 # The docs site's router snapshot workflow opens its pull request in the docs
 # SOURCE repository, so its set names that repository and nothing else. Same
 # rule as the publisher set: an unset repository yields no set. Tier `agents`
@@ -285,6 +307,7 @@ openbao_github_admin_permission_sets: >-
   {{ openbao_github_base_permission_sets + openbao_github_org_secrets_permission_sets
      + openbao_github_docs_publisher_permission_sets
      + openbao_github_ci_resolver_permission_sets
+     + openbao_github_openhands_permission_sets
      + openbao_github_router_snapshot_permission_sets
      + openbao_github_role_eval_status_permission_sets }}
 # Every set on every GitHub mount, each tagged with its mount, for the policy

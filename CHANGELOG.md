@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.84.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.83.0...v0.84.0) (2026-11-08)
+
+
+### Features
+
+* **openbao:** add the openhands AppRole and policy ([#567](https://github.com/dryvist/ansible-secrets-management/issues/567)) ([04d9557](https://github.com/dryvist/ansible-secrets-management/commit/04d9557447c977a33fc4d19d8b6c9fa1a2776e2d))
+* **openbao:** grant list on the Dify MCP URL metadata path ([#570](https://github.com/dryvist/ansible-secrets-management/issues/570)) ([ee13fd1](https://github.com/dryvist/ansible-secrets-management/commit/ee13fd1a811f92fda2141b9d5be8a29cf92c0635))
+* **openbao:** let the converge identity seed Dify MCP URL leaves ([#568](https://github.com/dryvist/ansible-secrets-management/issues/568)) ([b615f5e](https://github.com/dryvist/ansible-secrets-management/commit/b615f5e73d396e69078b06e25b5917fd12e7881f))
+
 ## [0.83.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.82.1...v0.83.0) (2026-11-08)
 
 

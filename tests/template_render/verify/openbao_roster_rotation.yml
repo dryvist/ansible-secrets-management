@@ -47,6 +47,7 @@
           - ai-donna
           - open-llm
           - ci-resolver
+          - openhands
         _develop_cidr_class_map: >-
           {{ dict(openbao_approles | map(attribute='name') | list
                   | zip(openbao_approles | map(attribute='name')
