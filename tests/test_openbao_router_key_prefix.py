@@ -44,6 +44,7 @@ class RouterKeyPrefixRegeneration(unittest.TestCase):
             "open_webui_llm_router_key",
             "langflow_llm_router_key",
             "grafana_llm_router_key",
+            "openhands_llm_router_key",
         ):
             with self.subTest(field=name):
                 field = _field_declaration(name)
