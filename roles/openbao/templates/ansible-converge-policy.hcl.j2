@@ -174,7 +174,7 @@ path "{{ openbao_kv_mount }}/data/ai/dify/agent-mcp/*" {
   capabilities = ["create", "update", "read"]
 }
 
-# Read and list KV v2 metadata for the same Dify MCP URL leaves only; agentgateway lists them to route each app.
+# Read and list KV v2 metadata for the same Dify MCP URL leaves only.
 path "{{ openbao_kv_mount }}/metadata/ai/dify/agent-mcp/*" {
   capabilities = ["read", "list"]
 }
