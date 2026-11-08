@@ -230,6 +230,17 @@ def test_vikunja_generated_password_coexists_with_promoted_fields():
     assert "vikunja" in _read_apps(_yaml(NAMES_FILE))
 
 
+def test_vikunja_generated_login_fields_cover_the_openhands_bot_user():
+    generated = _yaml(GENERATED_FILE)["openbao_generated_app_secrets"]["vikunja"]
+    assert generated == [
+        "donna_login_password",
+        "hermes_login_password",
+        "ai_jobs_login_password",
+        "openhands_login_password",
+    ]
+    assert "vikunja" in _read_apps(_yaml(NAMES_FILE))
+
+
 def test_zammad_agent_write_token_is_generated_with_the_app_credentials():
     generated = _yaml(GENERATED_FILE)["openbao_generated_app_secrets"]
     promoted = _yaml(PROMOTED_FILE)["openbao_promoted_app_secrets"]
@@ -340,6 +351,23 @@ def test_openproject_secret_is_promoted_and_prefetched():
     assert _yaml(PROMOTED_FILE)["openbao_promoted_app_secrets"]["openproject"] == {
         "openproject_secret_key_base": "OPENPROJECT_SECRET_KEY_BASE"
     }
+
+
+def test_openhands_fields_are_prefetched_by_the_apps_domain():
+    generated = _yaml(GENERATED_FILE)["openbao_generated_app_secrets"]["openhands"]
+    assert generated == [
+        "openhands_llm_router_key",
+        "openhands_backend_api_key",
+        "openhands_secret_key",
+        "openhands_webhook_secret",
+    ]
+    assert "apps/openhands" in _apps_domain_paths()
+    assert "openhands" in _read_apps(_yaml(NAMES_FILE))
+
+    policy = _render_apps_policy(_read_apps(_yaml(NAMES_FILE)))
+    for kind in ("data", "metadata"):
+        assert f'path "secret/{kind}/apps/openhands"' in policy
+    assert 'path "secret/data/apps/*"' not in policy
 
 
 def test_benchmark_and_promoted_sandbox_agent_paths_render_in_apps_policy():

@@ -175,6 +175,19 @@ def test_sandbox_agent_router_key_is_generated_and_readable_by_the_apps_reader()
     assert "sandbox-agent-router" in _read_apps({})
 
 
+def test_openhands_fields_are_generated_and_readable_by_the_apps_reader():
+    generated = DEFAULTS_DATA["openbao_generated_app_secrets"]
+    assert generated["openhands"] == [
+        "openhands_llm_router_key",
+        "openhands_backend_api_key",
+        "openhands_secret_key",
+        "openhands_webhook_secret",
+    ]
+    assert "openhands" in _read_apps({})
+    assert 'path "secret/data/apps/openhands"' in _render_apps_policy({})
+    assert 'path "secret/metadata/apps/openhands"' in _render_apps_policy({})
+
+
 def test_lane_walk_probe_key_is_generated_and_readable_by_the_apps_reader():
     generated = DEFAULTS_DATA["openbao_generated_app_secrets"]
     assert generated["lane-walk-probe"] == ["lane_walk_probe_llm_router_key"]
