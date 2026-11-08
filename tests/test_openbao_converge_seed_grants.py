@@ -59,6 +59,16 @@ def test_ai_seed_grants_use_exact_data_and_metadata_paths() -> None:
         assert not any(_wildcard_covers(path, metadata_path) for path, _ in grants)
 
 
+def test_dify_agent_app_key_leaves_are_granted_below_the_dify_record_only() -> None:
+    grants = _grants()
+    leaves = "{{ openbao_kv_mount }}/data/ai/dify/agent-apps/*"
+    metadata = "{{ openbao_kv_mount }}/metadata/ai/dify/agent-apps/*"
+    assert grants.count((leaves, ("create", "update", "read"))) == 1
+    assert grants.count((metadata, ("read",))) == 1
+    assert _wildcard_covers(leaves, "{{ openbao_kv_mount }}/data/ai/dify/agent-apps/action-extractor")
+    assert not _wildcard_covers(leaves, "{{ openbao_kv_mount }}/data/ai/dify-other/x")
+
+
 def test_new_app_publisher_buckets_are_listed_once_with_exact_template_paths() -> None:
     apps = yaml.safe_load(DEFAULTS.read_text(encoding="utf-8"))[
         "openbao_credential_publish_apps"
