@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.83.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.82.1...v0.83.0) (2026-11-08)
+
+
+### Features
+
+* **openbao:** generate OpenHands secrets and its Vikunja bot login ([#561](https://github.com/dryvist/ansible-secrets-management/issues/561)) ([d37e8b4](https://github.com/dryvist/ansible-secrets-management/commit/d37e8b422cf497d5fcc0af3ce2d9c392c64ff4d4))
+
 ## [0.82.1](https://github.com/dryvist/ansible-secrets-management/compare/v0.82.0...v0.82.1) (2026-11-08)
 
 
