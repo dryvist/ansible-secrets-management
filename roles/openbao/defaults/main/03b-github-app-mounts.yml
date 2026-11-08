@@ -185,8 +185,15 @@ openbao_github_pepper_app_id: >-
   {{ lookup('env', 'OPENBAO_GITHUB_PEPPER_APP_ID') | default('', true) }}
 openbao_github_pepper_app_private_key: >-
   {{ lookup('env', 'OPENBAO_GITHUB_PEPPER_APP_PRIVATE_KEY') | default('', true) }}
+_openbao_github_pepper_repositories_csv: >-
+  {{ lookup('env', 'OPENBAO_GITHUB_PEPPER_REPOSITORIES') | default('', true) }}
 openbao_github_pepper_repository: >-
   {{ lookup('env', 'OPENBAO_GITHUB_PEPPER_REPOSITORY') | default('', true) }}
+openbao_github_pepper_repositories: >-
+  {{ (_openbao_github_pepper_repositories_csv
+       | split(',') | map('trim') | reject('equalto', '') | unique | list)
+     or ([openbao_github_pepper_repository]
+         if openbao_github_pepper_repository | length > 0 else []) }}
 
 # Enterprise Apps use their own installation as the token ceiling. They have
 # no permission sets; their policies pin the raw token endpoint to one

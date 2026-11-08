@@ -21,6 +21,7 @@ def pepper_defaults(monkeypatch):
         "OPENBAO_GITHUB_PEPPER_APP_ID",
         "OPENBAO_GITHUB_PEPPER_APP_PRIVATE_KEY",
         "OPENBAO_GITHUB_PEPPER_REPOSITORY",
+        "OPENBAO_GITHUB_PEPPER_REPOSITORIES",
     ):
         monkeypatch.delenv(name, raising=False)
     values = {}

@@ -98,12 +98,15 @@ openbao_github_pepper_permission_sets: >-
   {{ [{'name': openbao_github_pepper_read_set_name,
        'tier': openbao_github_pepper_read_tier,
        'installation_id': openbao_github_pepper_installation_id,
-       'repositories': [openbao_github_pepper_repository],
+       'repositories': openbao_github_pepper_repositories,
        'permissions': openbao_github_pepper_read_permissions}]
      if (openbao_github_pepper_installation_id | length > 0
          and openbao_github_pepper_app_id | length > 0
          and openbao_github_pepper_app_private_key | length > 0
-         and openbao_github_pepper_repository is match('^[A-Za-z0-9_.-]+$'))
+         and openbao_github_pepper_repositories | length > 0
+         and (openbao_github_pepper_repositories
+              | select('match', '^[A-Za-z0-9_.-]+$') | list | length)
+             == openbao_github_pepper_repositories | length)
      else [] }}
 # org-admin tier: exactly one permission, organization-level. Org rulesets and
 # other organization settings; asserted verbatim like the repo-create map.

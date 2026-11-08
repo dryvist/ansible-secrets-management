@@ -27,6 +27,7 @@ def test_github_policy_pin_stanza_is_independent_of_app_environment(
         "OPENBAO_GITHUB_PEPPER_APP_PRIVATE_KEY", "fixture-private-key"
     )
     monkeypatch.setenv("OPENBAO_GITHUB_PEPPER_REPOSITORY", "fixture-repo")
+    monkeypatch.delenv("OPENBAO_GITHUB_PEPPER_REPOSITORIES", raising=False)
     mounts = _templar(_trust(values)).template(
         _trust(values["openbao_github_app_mounts"])
     )
