@@ -1,10 +1,8 @@
 {{ ansible_managed | comment }}
-# openhands reads its generated application bucket and the openhands-vikunja
-# bucket, where the Vikunja role publishes the OpenHands bot's API token. It
-# mints only its explicitly repository-scoped stored GitHub set; no raw token
-# endpoint or other set is reachable. Unlike the ci-resolver policy, the KV
-# reads do not depend on a repository list, so this policy always renders at
-# least one path stanza.
+# openhands reads the apps/openhands and apps/openhands-vikunja buckets and
+# mints only its own repository-scoped stored GitHub set; no raw token endpoint
+# or other set is reachable. The KV reads do not depend on a repository list,
+# so this policy always renders at least one path stanza.
 {% for permission_set in openbao_github_permission_sets | selectattr('tier', 'equalto', 'openhands') %}
 path "{{ permission_set.mount }}/token/{{ permission_set.name }}" {
   capabilities = ["create", "read", "update"]
