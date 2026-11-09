@@ -33,7 +33,11 @@
                             'auth/approle/role/' ~ openbao_sandbox_opencode_read_approle_name ~ '/role-id',
                             'auth/approle/role/' ~ openbao_sandbox_opencode_read_approle_name ~ '/secret-id',
                             'auth/approle/role/' ~ openbao_sandbox_opencode_write_approle_name ~ '/role-id',
-                            'auth/approle/role/' ~ openbao_sandbox_opencode_write_approle_name ~ '/secret-id']
+                            'auth/approle/role/' ~ openbao_sandbox_opencode_write_approle_name ~ '/secret-id',
+                            'auth/approle/role/' ~ openbao_sandbox_cursor_read_approle_name ~ '/role-id',
+                            'auth/approle/role/' ~ openbao_sandbox_cursor_read_approle_name ~ '/secret-id',
+                            'auth/approle/role/' ~ openbao_sandbox_cursor_write_approle_name ~ '/role-id',
+                            'auth/approle/role/' ~ openbao_sandbox_cursor_write_approle_name ~ '/secret-id']
     fail_msg: With no installation ID the open-llm policy must render no GitHub mint grant.
 
 - name: Pin the agents installation back to the configured case

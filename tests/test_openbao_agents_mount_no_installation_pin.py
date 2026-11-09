@@ -45,6 +45,8 @@ def _render_policy(path):
         openbao_sandbox_zcode_write_approle_name="sandbox-zcode-write",
         openbao_sandbox_opencode_read_approle_name="sandbox-opencode-read",
         openbao_sandbox_opencode_write_approle_name="sandbox-opencode-write",
+        openbao_sandbox_cursor_read_approle_name="sandbox-cursor-read",
+        openbao_sandbox_cursor_write_approle_name="sandbox-cursor-write",
         **IDENTITIES,
     )
 

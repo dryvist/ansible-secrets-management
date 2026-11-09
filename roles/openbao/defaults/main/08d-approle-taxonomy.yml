@@ -93,6 +93,8 @@ openbao_approle_class_map: >-
     'sandbox-zcode-write': 'untrusted-sandbox',
     'sandbox-opencode-read': 'untrusted-sandbox',
     'sandbox-opencode-write': 'untrusted-sandbox',
+    'sandbox-cursor-read': 'untrusted-sandbox',
+    'sandbox-cursor-write': 'untrusted-sandbox',
     'agent-code-simplifier': 'service-runtime',
     'agent-ci-fixer': 'service-runtime',
     'agent-vikunja-clerk': 'service-runtime',
