@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.85.1](https://github.com/dryvist/ansible-secrets-management/compare/v0.85.0...v0.85.1) (2026-11-09)
+
+
+### Bug Fixes
+
+* **openbao:** grant the new Slack secret paths beside the old ones ([#576](https://github.com/dryvist/ansible-secrets-management/issues/576)) ([dcd079f](https://github.com/dryvist/ansible-secrets-management/commit/dcd079fb3335a8c710674ed38fd179b3f9a609c8))
+
 ## [0.85.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.84.0...v0.85.0) (2026-11-09)
 
 
