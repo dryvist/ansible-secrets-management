@@ -56,7 +56,9 @@
         openbao_github_oidc_docs_repository: fixture-owner/fixture-source
         openbao_github_docs_publisher_repos: [fixture-repo]
         openbao_github_ci_resolver_repos: [fixture-repo]
-        openbao_github_openhands_repos: [fixture-repo]
+        openbao_github_openhands_app_id: fixture-app-id
+        openbao_github_openhands_app_private_key: fixture-private-key
+        openbao_github_openhands_installation_id: '303'
         openbao_terrakube_network_workspace: fixture-network
         openbao_terrakube_aws_workspace: fixture-aws
 

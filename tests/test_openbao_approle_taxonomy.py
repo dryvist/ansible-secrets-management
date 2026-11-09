@@ -124,13 +124,16 @@ class TestAppRoleTaxonomy(unittest.TestCase):
         self.assertEqual(class_map["agent-workstation"], "trusted-agent-read")
         self.assertEqual(class_map["hatchet-eval-status"], "service-runtime")
         self.assertEqual(cidr_class_map["hatchet-eval-status"], "machine")
-        for prefix in ("openbao_github_ci_resolver", "openbao_openhands"):
+        for prefix, token_ttl, token_max_ttl in (
+            ("openbao_github_ci_resolver", "15m", "60m"),
+            ("openbao_openhands", "1h", "1h"),
+        ):
             name = variables[f"{prefix}_approle_name"]
             role = next(role for role in roles if role["name"] == name)
             self.assertEqual(class_map[name], "service-runtime")
             self.assertEqual(role["policy"], variables[f"{prefix}_policy_name"])
-            self.assertEqual(role["token_ttl"], "15m")
-            self.assertEqual(role["token_max_ttl"], "60m")
+            self.assertEqual(role["token_ttl"], token_ttl)
+            self.assertEqual(role["token_max_ttl"], token_max_ttl)
             self.assertNotIn("secret_id_ttl", role)
             self.assertEqual(
                 secret_id_ttls[name],
