@@ -30,13 +30,16 @@
         _capabilities: "{{ _body | regex_findall('(?m)^  capabilities = \\[\"([^\"]+)\"\\]$') }}"
       ansible.builtin.assert:
         that:
-          - _paths == ['secrets-external/data/platform/slack-approvals']
-          - _capabilities == ['read']
+          - _paths == ['secrets-external/data/platform/slack-approvals',
+                       'secrets-external/data/slack/openbao-approvals/rw']
+          - _capabilities == ['read', 'read']
           - _body is not search('[*]')
           - _body is not search('(?i)create|update|delete|list|patch')
           - _body is not search('platform/slack-ops|platform/slack-admin|slack-app-')
+          - _body is not search('slack/homelab-ops|slack/workspace|slack/webhooks|\+/config')
         fail_msg: >-
           The slack-approvals policy must grant only read on the one
-          platform/slack-approvals entry, with no wildcard and no other
-          Slack identity's path.
+          approvals entry — the legacy platform/slack-approvals path beside
+          the new slack/openbao-approvals/rw path while the transition runs —
+          with no wildcard and no other Slack identity's path.
         quiet: true

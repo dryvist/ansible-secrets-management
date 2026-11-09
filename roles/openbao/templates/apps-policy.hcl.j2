@@ -75,10 +75,20 @@ path "secrets-external/data/ai/saas/opencode" {
 
 # Exact-path read of the Slack ops leaf (grafana-alerts domain reads it).
 # One leaf, no wildcard.
+# Transitional: the platform/ path is removed once every consumer reads the slack/ path.
 path "secrets-external/data/platform/slack-ops" {
   capabilities = ["read"]
 }
 
+path "secrets-external/data/slack/homelab-ops/rw" {
+  capabilities = ["read"]
+}
+
+# Transitional: the platform/ path is removed once every consumer reads the slack/ path.
 path "secrets-external/metadata/platform/slack-ops" {
+  capabilities = ["read"]
+}
+
+path "secrets-external/metadata/slack/homelab-ops/rw" {
   capabilities = ["read"]
 }
