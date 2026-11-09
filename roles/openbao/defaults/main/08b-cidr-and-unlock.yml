@@ -146,6 +146,11 @@ openbao_approle_cidr_class_overrides:
   # Azure IaC admin credentials are only ever read from the operator's machine.
   azure-iac-admin: workstation
   backblaze-admin: workstation
+  # ai-apply-unifi is unlocked from the operator's workstation like every apply
+  # tier; workstation-only rather than the generated apply roles'
+  # machine_or_workstation union, because nothing on the execution plane seeds
+  # the UniFi credential leaves — that is the window service's job.
+  ai-apply-unifi: workstation
   # The Nautobot token publisher is unlocked and run from the operator's machine.
   nautobot-token-publisher: workstation
   # The Hatchet worker-token publisher is unlocked and run from the operator's machine.

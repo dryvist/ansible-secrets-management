@@ -37,6 +37,21 @@ openbao_base_approles_elevated:
     manage_secret_id: false
     secret_id_ttl: "{{ openbao_ai_elevated_secret_id_ttl }}"
     secret_id_num_uses: 1
+  # ai-apply-unifi: the human-unlocked writer for the UniFi controller's
+  # write-tier credential, plus the read tier so the holder can verify the
+  # document it wrote. Declared explicitly rather than generated from
+  # openbao_ai_domains: `unifi` is exact leaves, not a capability subtree (see
+  # 05b), so there are no generated read-/write-unifi leaves for the rollups to
+  # compose and no github-mint/ssh-sign attribution leaves either.
+  - name: ai-apply-unifi
+    token_policies:
+      - "{{ openbao_unifi_write_policy_name }}"
+      - "{{ openbao_unifi_read_policy_name }}"
+    token_ttl: "{{ openbao_ai_apply_token_ttl }}"
+    token_max_ttl: "{{ openbao_ai_apply_token_max_ttl }}"
+    manage_secret_id: false
+    secret_id_ttl: "{{ openbao_ai_elevated_secret_id_ttl }}"
+    secret_id_num_uses: 1
   # ai-admin: break-glass full administrator over everything this role
   # provisions — enumerated paths, with sudo only where OpenBao requires it, no
   # longer a bare `path "*"`. NO standing secret_id; a token exists only after a

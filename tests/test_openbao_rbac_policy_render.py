@@ -133,3 +133,23 @@ def test_ai_elevated_carries_only_the_unifi_read_tier(rendered_defaults):
     elevated = next(role for role in approles
                     if role["name"] == values["openbao_ai_elevated_approle_name"])
     assert values["openbao_unifi_read_policy_name"] in elevated["token_policies"]
+
+
+def test_ai_apply_unifi_carries_exactly_the_write_and_read_tiers(rendered_defaults):
+    # Mirrors the generated ai-apply-<svc> unlock window (6h/12h, inert) but is
+    # declared explicitly, so pin the whole shape here.
+    values, approles, _ = rendered_defaults
+    role = next(role for role in approles if role["name"] == "ai-apply-unifi")
+    assert role["token_policies"] == [
+        values["openbao_unifi_write_policy_name"],
+        values["openbao_unifi_read_policy_name"],
+    ]
+    assert role["token_ttl"] == "6h"
+    assert role["token_max_ttl"] == "12h"
+    assert role["manage_secret_id"] is False
+    assert role["secret_id_ttl"] == "15m"
+    assert role["secret_id_num_uses"] == 1
+    # Both classifications every declared role must carry.
+    assert values["openbao_approle_cidr_class_map"]["ai-apply-unifi"] == "workstation"
+    class_map = _render_value(values, values["openbao_approle_class_map"])
+    assert class_map["ai-apply-unifi"] == "operator-admin"
