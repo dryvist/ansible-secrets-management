@@ -212,10 +212,12 @@ class TestCombinedTagNameListReuse(unittest.TestCase):
         policy_names_expr = policy_names_task["ansible.builtin.set_fact"][
             "openbao_existing_policy_names"]
         self.assertEqual(_render(policy_names_expr, {
+            "openbao_roster_live_check_enabled": True,
             "openbao_roster_live_policy_names": ["apps", "ssh-ca"],
             "openbao_policies_raw": {"stdout": '["ignored"]'},
         }), ["apps", "ssh-ca"])
         self.assertEqual(_render(policy_names_expr, {
+            "openbao_roster_live_check_enabled": False,
             "openbao_policies_raw": {"stdout": '["fallback-policy"]'},
         }), ["fallback-policy"])
 
@@ -229,7 +231,10 @@ class TestCombinedTagNameListReuse(unittest.TestCase):
 
         policy_list = _task("List existing policies", POLICY_TASKS)
         approle_list = _task(LIST_TASK)
-        self.assertIn("openbao_roster_live_policy_names is not defined", policy_list["when"])
+        # The roster fact's role default always defines the name, so the policy
+        # list can only be gated on when the roster audit cannot have run:
+        # check mode. The approle list keeps its own fallback gate.
+        self.assertIn("ansible_check_mode", policy_list["when"])
         self.assertIn("openbao_roster_live_approle_names is not defined", approle_list["when"])
 
     def test_reused_roster_list_keeps_full_undeclared_role_audit(self):

@@ -257,17 +257,27 @@ class LiveNameReuseAndDeniedReads(unittest.TestCase):
         expression = _task(POLICY_NAMES_TASK)["ansible.builtin.set_fact"][
             "openbao_existing_policy_names"]
         self.assertEqual(_render(expression, {
+            "openbao_roster_live_check_enabled": True,
             "openbao_roster_live_policy_names": ["apps", "ssh-ca"],
             "openbao_policies_raw": {"stdout": '["fallback"]'},
         }), ["apps", "ssh-ca"])
         self.assertEqual(_render(expression, {
+            "openbao_roster_live_check_enabled": False,
             "openbao_policies_raw": {"stdout": '["fallback"]'},
         }), ["fallback"])
 
-    def test_policy_list_fallback_runs_only_without_roster_fact(self):
+    def test_policy_list_fallback_runs_in_check_mode(self):
+        """The roster live check runs only on a real converge, so its
+        role-default empty list is not the live list in check mode -- the
+        fallback must run there, or every declared policy looks missing and
+        the check-mode report lists unchanged policies as pending writes."""
         task = _task("List existing policies")
-        self.assertIn("openbao_roster_live_policy_names is not defined", task["when"])
+        self.assertIn("ansible_check_mode", task["when"])
+        # The role default defines the roster fact on every play, so an
+        # `is not defined` gate here can never fire.
         self.assertNotIn("failed_when", task)
+        for condition in task["when"]:
+            self.assertNotIn("openbao_roster_live_policy_names is not defined", str(condition))
 
     def test_a_denied_existing_policy_read_fails_instead_of_becoming_absent(self):
         task = _task(DENIED_READ_TASK)

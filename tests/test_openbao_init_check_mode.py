@@ -144,6 +144,66 @@ def test_policy_check_report_uses_the_existing_write_comparison():
     assert templar.template(trust_as_template(expression)) == ["changed", "missing"]
 
 
+def test_check_mode_report_skips_unchanged_policies_the_roster_audit_misses():
+    """Check mode never runs the roster live check (08a runs only on a real
+    converge), so the roster fact stays at its empty role default and the
+    fallback `bao policy list` must supply the name list. Live evidence: a
+    selected policy that existed with identical text was reported as a pending
+    write, because the empty roster list stood in for the live list, every
+    per-policy read was skipped, and the report treated the policy as absent."""
+    path = INIT / "08b-rbac-policy-writes.yml"
+    tasks = list(from_yaml(path))
+    resolve = next(
+        task
+        for task in tasks
+        if task.get("name") == "Resolve existing RBAC policy names from the roster audit or list result"
+    )
+    report = next(
+        task
+        for task in tasks
+        if task.get("name") == "Resolve RBAC policies that are missing or changed"
+    )
+    live_text = 'path "sys/policies/acl/apps" {\n  capabilities = ["read"]\n}'
+    templar = Templar(loader=DataLoader())
+
+    # Check-mode state: the roster audit is disabled and its fact holds the
+    # empty role default; the fallback list saw the existing policy.
+    templar.available_variables = {
+        "openbao_roster_live_check_enabled": False,
+        "openbao_roster_live_policy_names": [],
+        "openbao_policies_raw": {"stdout": '["ntfy", "slack-ops", "slack-approvals"]'},
+    }
+    names = templar.template(
+        trust_as_template(resolve["ansible.builtin.set_fact"]["openbao_existing_policy_names"])
+    )
+    assert names == ["ntfy", "slack-ops", "slack-approvals"]
+
+    # A selected policy whose live text equals the rendered text is not listed.
+    templar.available_variables = {
+        "openbao_rbac_policy_targets": [{"name": "ntfy"}],
+        "openbao_existing_policy_names": names,
+        "openbao_existing_policy_map": {"ntfy": live_text},
+        "openbao_rendered_policy_map": {"ntfy": live_text},
+    }
+    assert templar.template(
+        trust_as_template(report["ansible.builtin.set_fact"]["openbao_changed_policy_names"])
+    ) == []
+
+    # A missing or genuinely changed policy still lands in the report.
+    templar.available_variables = {
+        "openbao_rbac_policy_targets": [{"name": "ntfy"}, {"name": "slack-ops"}],
+        "openbao_existing_policy_names": names,
+        "openbao_existing_policy_map": {"ntfy": live_text},
+        "openbao_rendered_policy_map": {
+            "ntfy": live_text,
+            "slack-ops": 'path "other" {}',
+        },
+    }
+    assert templar.template(
+        trust_as_template(report["ansible.builtin.set_fact"]["openbao_changed_policy_names"])
+    ) == ["slack-ops"]
+
+
 def test_capability_probes_run_during_check_mode():
     probes = [
         task
