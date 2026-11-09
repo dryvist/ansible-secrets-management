@@ -1,6 +1,6 @@
 ---
 # =============================================================================
-# openbao — listener X-Forwarded-For trust
+# openbao — listener X-Forwarded-For trust and snapshot loopback isolation
 # =============================================================================
 # The XFF block is what makes an AppRole's bound CIDRs mean the CLIENT's address
 # rather than the ingress proxy's on every proxied request. Both failure modes
@@ -49,11 +49,17 @@
         mode: "0600"
       vars:
         openbao_xff_authorized_addrs: "{{ item.addrs }}"
+        openbao_snapshot_loopback_listener_enabled: "{{ item.loopback_listener_enabled }}"
       loop:
         - name: xff_on
           addrs: "{{ _xff_addrs }}"
+          loopback_listener_enabled: true
         - name: xff_off
           addrs: []
+          loopback_listener_enabled: true
+        - name: loopback_off
+          addrs: []
+          loopback_listener_enabled: false
       loop_control:
         label: "{{ item.name }}"
 
@@ -64,6 +70,7 @@
       loop:
         - xff_on
         - xff_off
+        - loopback_off
 
     # Directive lines only: the template explains the XFF block at length and
     # the prose names the very parameters asserted below, so a whole-file search
@@ -76,6 +83,25 @@
         _off: >-
           {{ (_hcl_raw.results[1].content | b64decode).splitlines()
              | reject('match', '\s*#') | list }}
+        _loopback_off: >-
+          {{ (_hcl_raw.results[2].content | b64decode).splitlines()
+             | reject('match', '\s*#') | list }}
+
+    - name: Assert the enabled snapshot listener is loopback-only and has no XFF
+      ansible.builtin.assert:
+        that:
+          - _on | select('match', '^listener "tcp" \\{$') | length == 2
+          - _off | select('match', '^listener "tcp" \\{$') | length == 2
+          - _on | select('search', 'address\\s*=\\s*"127\\.0\\.0\\.1:8200"') | length == 1
+          - _on | select('search', 'tls_disable\\s*=\\s*1') | length == 2
+          - >-
+            (_hcl_raw.results[0].content | b64decode)
+            is search('listener "tcp" \\{\\s+address\\s*=\\s*"127\\.0\\.0\\.1:8200"\\s+tls_disable\\s*=\\s*1\\s*\\}')
+          - _loopback_off | select('match', '^listener "tcp" \\{$') | length == 1
+          - _loopback_off | select('search', 'address\\s*=\\s*"127\\.0\\.0\\.1:8200"') | length == 0
+        fail_msg: >-
+          The snapshot listener must bind only IPv4 loopback, disable TLS for
+          the local client, and omit X-Forwarded-For settings.
 
     - name: Assert a populated list turns XFF on, with both addresses trusted
       ansible.builtin.assert:

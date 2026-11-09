@@ -37,6 +37,9 @@ openbao_install_dir: /usr/bin
 # --- Listener / cluster ports -----------------------------------------------
 openbao_api_port: 8200
 openbao_cluster_port: 8201
+# The snapshot timer uses this local listener for plain-HTTP AppRole login.
+# Enabled by default; disable only when the snapshot client no longer uses it.
+openbao_snapshot_loopback_listener_enabled: true
 
 # --- Node identity & addresses ----------------------------------------------
 # Raft node_id: stable per-node identifier. Defaults to the inventory hostname.

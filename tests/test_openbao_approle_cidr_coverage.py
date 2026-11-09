@@ -212,6 +212,27 @@ class TestShippedDeclarationIsClean(unittest.TestCase):
             self.assertEqual(roles_by_name[name]["secret_id_bound_cidrs"],
                              cidr_classes[reader["cidr_class"]])
 
+    def test_snapshot_role_adds_loopback_to_both_bounds_only(self):
+        loaded = {}
+        for path in sorted((ROOT / "roles/openbao/defaults/main").glob("*.yml")):
+            loaded.update(yaml.safe_load(path.read_text(encoding="utf-8")) or {})
+        machine_cidrs = "192.0.2.0/24"
+        loaded["openbao_management_cidrs"] = machine_cidrs
+        roles = _render("{{ openbao_approles }}", loaded)
+        loaded["openbao_approles"] = roles
+        class_map = _render("{{ openbao_approle_cidr_class_map }}", loaded)
+        parameters = _render("{{ openbao_approle_cli_parameters }}", loaded)
+
+        expected = f"{machine_cidrs},127.0.0.1/32"
+        self.assertEqual(class_map["snapshot"], "machine")
+        self.assertEqual(parameters["snapshot"]["secret_id_bound_cidrs"], expected)
+        self.assertEqual(parameters["snapshot"]["token_bound_cidrs"], expected)
+        for name, role in parameters.items():
+            if name == "snapshot":
+                continue
+            self.assertNotIn("127.0.0.1/32", role["secret_id_bound_cidrs"], name)
+            self.assertNotIn("127.0.0.1/32", role["token_bound_cidrs"], name)
+
 
 if __name__ == "__main__":
     unittest.main()

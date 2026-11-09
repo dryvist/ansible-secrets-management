@@ -39,9 +39,8 @@ and exactly one snapshot is taken per cycle regardless of who holds leadership.
 It:
 
 - authenticates with the least-privilege **`snapshot` AppRole** (scoped to
-  `sys/storage/raft/snapshot`), over the node's **own VLAN IP** (`api_addr`),
-  never the Traefik ingress VIP — OpenBao has no loopback listener, and a backup
-  must come from a known specific node;
+  `sys/storage/raft/snapshot`), through the node-local loopback listener,
+  never the Traefik ingress VIP — the snapshot credential stays on the node;
 - integrity-checks each snapshot (`gzip -t` — raft snapshots are gzipped tar) and
   keeps the newest `openbao_snapshot_retain` (default 14) under the data volume,
   which sits on the ZFS/PBS-backed dataset that already replicates **off-box**;
@@ -125,8 +124,8 @@ bootstrap-safe shape as the Slack rotator.
 An on-box `openbao-voter-health.timer` (every `openbao_voter_health_interval`,
 default `5min`), deployed on every `openbao_group` member, samples every
 voter's own plain-HTTP `api_addr` — never the Traefik ingress VIP, since a
-backend has no loopback listener and an `https://` probe to it lies with a
-`000` (see the IP-addressing rule).
+backend's loopback listener is local to that peer and an `https://` probe to
+its TLS-disabled `api_addr` lies with a `000` (see the IP-addressing rule).
 Like the snapshot timer it leader-gates at runtime via `/v1/sys/leader`
 `is_self`, so exactly one voter performs the full cross-cluster sweep per
 cycle regardless of who holds leadership.

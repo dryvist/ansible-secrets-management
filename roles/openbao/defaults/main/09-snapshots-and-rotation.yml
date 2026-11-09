@@ -2,10 +2,10 @@
 # --- Raft snapshots (automated, on-box timer) -------------------------------
 # An on-box systemd timer takes a raft snapshot on the ACTIVE node (leader-gated
 # at runtime via /v1/sys/leader is_self; standby nodes no-op), authenticating
-# with the least-privilege `snapshot` AppRole over the node's OWN api_addr (its
-# VLAN IP — there is no loopback listener; see openbao.hcl.j2), NOT the Traefik
-# ingress VIP. Each snapshot is integrity-checked (gzip -t, since raft snapshots
-# are gzipped tar) and written under the data volume, which sits on a ZFS/PBS-
+# with the least-privilege `snapshot` AppRole through the node-local loopback
+# listener (see openbao.hcl.j2), never the Traefik ingress VIP. Each snapshot is
+# integrity-checked (gzip -t, since raft snapshots are gzipped tar) and written
+# under the data volume, which sits on a ZFS/PBS-
 # backed dataset that replicates OFF-BOX; the newest N are kept. Success/failure
 # pings the healthchecks deadman + ntfy, reusing the service_deadman alert stack.
 #
