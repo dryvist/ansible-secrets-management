@@ -98,7 +98,7 @@ the per-field rotation clock a sibling auditor (`secret-age-audit`) reads.
 ### `slack-admin` — Slack app-config token rotation
 
 Keeps the Slack **app-configuration** token pair
-(`secrets-external/platform/slack-admin` — distinct from the OAuthapp
+(`secrets-external/slack/workspace/config` — distinct from the OAuthapp
 workspace bot token above; this one authorizes `apps.manifest.create`/`.validate`)
 rotated ahead of its ~12-hour expiry. It:
 
