@@ -86,10 +86,12 @@ class AgentPolicies(unittest.TestCase):
         self.assertNotIn('path "github-agents/token/public-read"', rendered)
 
     def test_per_tool_policies_have_only_their_exact_grants(self):
-        for tool, credential in (
-            ("zcode", "secrets-external/data/ai/saas/zai"),
-            ("opencode", "secret/data/apps/sandbox-agent-router"),
-        ):
+        credentials = {
+            "zcode": "secrets-external/data/ai/saas/zai",
+            "opencode": "secret/data/apps/sandbox-agent-router",
+            "cursor": "secrets-external/data/ai/saas/cursor",
+        }
+        for tool, credential in credentials.items():
             for tier in ("read", "write"):
                 with self.subTest(tool=tool, tier=tier):
                     rendered = _render(f"sandbox-{tool}-{tier}-policy.hcl.j2")
@@ -102,14 +104,18 @@ class AgentPolicies(unittest.TestCase):
                         (credential, '"read"'),
                         (f"github-agents/token/public-{tier}", '"create", "update"'),
                     ])
-                    other = ("secret/data/apps/sandbox-agent-router" if tool == "zcode"
-                             else "secrets-external/data/ai/saas/zai")
-                    self.assertNotIn(other, paths)
+                    for other in credentials.values():
+                        if other != credential:
+                            self.assertNotIn(other, paths)
                     self.assertEqual([p for p in paths if p.startswith("secret/data/apps/")],
                                      [credential] if tool == "opencode" else [])
                     self.assertFalse(any("llm-router" in p or p.startswith("sys/")
                                          or "/metadata/" in p or "*" in p for p in paths))
                     self.assertNotIn('"list"', rendered)
+                    # The only external ai/saas leaf a tool policy may read is
+                    # its own credential; no sibling provider leaf is reachable.
+                    self.assertEqual([p for p in paths if "/ai/saas/" in p],
+                                     [credential] if "/ai/saas/" in credential else [])
 
     def test_fleet_agent_policies_mint_only_their_named_set(self):
         for name in DIFY_AGENT_POLICY_NAMES:
