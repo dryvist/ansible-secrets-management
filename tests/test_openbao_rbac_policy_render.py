@@ -153,3 +153,29 @@ def test_ai_apply_unifi_carries_exactly_the_write_and_read_tiers(rendered_defaul
     assert values["openbao_approle_cidr_class_map"]["ai-apply-unifi"] == "workstation"
     class_map = _render_value(values, values["openbao_approle_class_map"])
     assert class_map["ai-apply-unifi"] == "operator-admin"
+
+
+def test_unifi_window_service_reaches_exactly_the_four_tier_leaves(rendered_defaults):
+    values, approles, policies = rendered_defaults
+    policy = _policy_named(policies, "window-unifi")
+    stanzas = _capability_map(render([policy])[0]["value"])
+    assert stanzas == {
+        f"secret/data/unifi/main/{tier}": ["create", "update", "read"]
+        for tier in WINDOW_TIERS
+    }
+    role = next(role for role in approles if role["name"] == "window-unifi")
+    assert role["manage_secret_id"] is False
+    assert values["openbao_approle_cidr_class_map"]["window-unifi"] == "workstation"
+
+
+def test_github_window_service_keeps_the_parameter_deny(rendered_defaults):
+    # The deny_all_parameters opt-out exists for KV-v2 writes; the github mint
+    # keeps the parameter-free pinning that denies every parameter.
+    _, _, policies = rendered_defaults
+    policy = _policy_named(policies, "window-github")
+    for _path, body in _stanzas(render([policy])[0]["value"]):
+        assert "denied_parameters" in body
+
+
+if __name__ == "__main__":
+    unittest.main()

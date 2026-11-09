@@ -23,6 +23,24 @@ openbao_window_services:
       {{ _paths }}
     scope: [create, update]
     lifetime: 1h
+  # unifi: seeds and manages the UniFi controller credential tiers. All four
+  # are exact KV-v2 data leaves, so this window writes the credential documents
+  # themselves; the exact leaf list is the boundary.
+  - name: unifi
+    credential_paths:
+      - "{{ openbao_kv_mount }}/data/unifi/main/read"
+      - "{{ openbao_kv_mount }}/data/unifi/main/write"
+      - "{{ openbao_kv_mount }}/data/unifi/main/admin"
+      - "{{ openbao_kv_mount }}/data/unifi/main/terrakube"
+    scope: [create, update, read]
+    lifetime: 1h
+    # A KV-v2 write carries its document as request parameters, so the default
+    # parameter-deny overlay would reject every write this window exists to
+    # perform (verified against a dev server: denied_parameters "*" refuses a
+    # KV-v2 write even with allowed_parameters set). Drop the overlay here and
+    # keep it for the github mint, where a parameter-free request is what pins
+    # the permission set.
+    deny_all_parameters: false
 
 openbao_window_service_approles: >-
   {%- set _roles = [] -%}
