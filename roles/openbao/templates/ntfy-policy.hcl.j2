@@ -4,10 +4,20 @@
 # secrets-external entry holding Slack incoming-webhook URLs keyed by topic;
 # no access to secret/apps or any other domain's credentials.
 
+# Transitional: the platform/ path is removed once every consumer reads the slack/ path.
 path "secrets-external/data/platform/slack-webhooks" {
   capabilities = ["read"]
 }
 
+path "secrets-external/data/slack/webhooks/rw" {
+  capabilities = ["read"]
+}
+
+# Transitional: the platform/ path is removed once every consumer reads the slack/ path.
 path "secrets-external/metadata/platform/slack-webhooks" {
+  capabilities = ["read", "list"]
+}
+
+path "secrets-external/metadata/slack/webhooks/rw" {
   capabilities = ["read", "list"]
 }
