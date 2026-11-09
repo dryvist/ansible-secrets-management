@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.89.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.88.0...v0.89.0) (2026-11-09)
+
+
+### Features
+
+* **agent:** opencode-local run j-818c1878e5c36855 ([62ca033](https://github.com/dryvist/ansible-secrets-management/commit/62ca033cc6c278546bb00fb009becc07ce327569))
+* **agent:** zcode run j-fbeff26faf068c6f ([35dd70a](https://github.com/dryvist/ansible-secrets-management/commit/35dd70a908f4a2cd8005693c17f046e319743a8d))
+* **openbao:** generate the evals router key and an OIDC read role for the scheduled eval workflow ([#597](https://github.com/dryvist/ansible-secrets-management/issues/597)) ([35dd70a](https://github.com/dryvist/ansible-secrets-management/commit/35dd70a908f4a2cd8005693c17f046e319743a8d))
+
+
+### Bug Fixes
+
+* **openbao:** remove the snapshot login stderr temp file on exit ([#598](https://github.com/dryvist/ansible-secrets-management/issues/598)) ([62ca033](https://github.com/dryvist/ansible-secrets-management/commit/62ca033cc6c278546bb00fb009becc07ce327569))
+
 ## [0.88.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.87.1...v0.88.0) (2026-11-09)
 
 
