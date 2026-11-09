@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.86.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.85.1...v0.86.0) (2026-11-09)
+
+
+### Features
+
+* **openbao:** add sandbox-cursor read and write AppRoles ([#580](https://github.com/dryvist/ansible-secrets-management/issues/580)) ([22e00b5](https://github.com/dryvist/ansible-secrets-management/commit/22e00b555066ffbc62f68a381ac410f50928c001))
+
+
+### Bug Fixes
+
+* **openbao:** route snapshot login through loopback ([#579](https://github.com/dryvist/ansible-secrets-management/issues/579)) ([25c00c9](https://github.com/dryvist/ansible-secrets-management/commit/25c00c92f4a6914834e494edf91669ddb093b107))
+
 ## [0.85.1](https://github.com/dryvist/ansible-secrets-management/compare/v0.85.0...v0.85.1) (2026-11-09)
 
 
