@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.85.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.84.0...v0.85.0) (2026-11-09)
+
+
+### Features
+
+* **openbao:** add the github-openhands App mount and its AppRole ([#573](https://github.com/dryvist/ansible-secrets-management/issues/573)) ([a3ec8f0](https://github.com/dryvist/ansible-secrets-management/commit/a3ec8f00d07d27b773d9b2e23fe1e39b80182b7a))
+
 ## [0.84.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.83.0...v0.84.0) (2026-11-08)
 
 
