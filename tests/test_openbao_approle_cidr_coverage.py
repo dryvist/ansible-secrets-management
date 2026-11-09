@@ -131,7 +131,7 @@ class TestShippedDeclarationIsClean(unittest.TestCase):
     def test_per_tool_roles_use_sandbox_agent_cidrs(self):
         defaults = yaml.safe_load(DEFAULTS.read_text(encoding="utf-8"))
         overrides = defaults["openbao_approle_cidr_class_overrides"]
-        for tool in ("zcode", "opencode"):
+        for tool in ("zcode", "opencode", "cursor"):
             for tier in ("read", "write"):
                 self.assertEqual(overrides[f"sandbox-{tool}-{tier}"], "sandbox_agent")
         identities = yaml.safe_load(IDENTITIES.read_text(encoding="utf-8"))

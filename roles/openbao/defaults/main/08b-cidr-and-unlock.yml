@@ -116,6 +116,8 @@ openbao_approle_cidr_class_overrides:
   sandbox-zcode-write: sandbox_agent
   sandbox-opencode-read: sandbox_agent
   sandbox-opencode-write: sandbox_agent
+  sandbox-cursor-read: sandbox_agent
+  sandbox-cursor-write: sandbox_agent
   # Backs the interactive `aikey <harness>` function, which runs on the
   # workstation.
   ai-readonly: machine_or_workstation
