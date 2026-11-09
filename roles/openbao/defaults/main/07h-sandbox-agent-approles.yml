@@ -1,6 +1,9 @@
 ---
 # Per-job identities: no stored SecretID is issued during a converge. The
 # dispatcher mints one wrapped SecretID for the selected read or write role.
+# token_max_ttl must cover the consumer's 3600-second job guard plus a margin:
+# each job logs in once with a single-use SecretID and the in-job agent can
+# only renew within the max TTL.
 openbao_sandbox_agent_approles:
   - name: "{{ openbao_sandbox_agent_read_approle_name }}"
     policy: "{{ openbao_sandbox_agent_read_policy_name }}"
@@ -8,7 +11,7 @@ openbao_sandbox_agent_approles:
     secret_id_ttl: 15m
     secret_id_num_uses: 1
     token_ttl: 15m
-    token_max_ttl: 60m
+    token_max_ttl: 75m
     manage_secret_id: false
   - name: "{{ openbao_sandbox_agent_write_approle_name }}"
     policy: "{{ openbao_sandbox_agent_write_policy_name }}"
@@ -16,7 +19,7 @@ openbao_sandbox_agent_approles:
     secret_id_ttl: 15m
     secret_id_num_uses: 1
     token_ttl: 15m
-    token_max_ttl: 60m
+    token_max_ttl: 75m
     manage_secret_id: false
   - name: "{{ openbao_sandbox_zcode_read_approle_name }}"
     policy: "{{ openbao_sandbox_zcode_read_policy_name }}"
@@ -24,7 +27,7 @@ openbao_sandbox_agent_approles:
     secret_id_ttl: 15m
     secret_id_num_uses: 1
     token_ttl: 15m
-    token_max_ttl: 60m
+    token_max_ttl: 75m
     manage_secret_id: false
   - name: "{{ openbao_sandbox_zcode_write_approle_name }}"
     policy: "{{ openbao_sandbox_zcode_write_policy_name }}"
@@ -32,7 +35,7 @@ openbao_sandbox_agent_approles:
     secret_id_ttl: 15m
     secret_id_num_uses: 1
     token_ttl: 15m
-    token_max_ttl: 60m
+    token_max_ttl: 75m
     manage_secret_id: false
   - name: "{{ openbao_sandbox_opencode_read_approle_name }}"
     policy: "{{ openbao_sandbox_opencode_read_policy_name }}"
@@ -40,7 +43,7 @@ openbao_sandbox_agent_approles:
     secret_id_ttl: 15m
     secret_id_num_uses: 1
     token_ttl: 15m
-    token_max_ttl: 60m
+    token_max_ttl: 75m
     manage_secret_id: false
   - name: "{{ openbao_sandbox_opencode_write_approle_name }}"
     policy: "{{ openbao_sandbox_opencode_write_policy_name }}"
@@ -48,7 +51,7 @@ openbao_sandbox_agent_approles:
     secret_id_ttl: 15m
     secret_id_num_uses: 1
     token_ttl: 15m
-    token_max_ttl: 60m
+    token_max_ttl: 75m
     manage_secret_id: false
   - name: "{{ openbao_sandbox_cursor_read_approle_name }}"
     policy: "{{ openbao_sandbox_cursor_read_policy_name }}"
@@ -56,7 +59,7 @@ openbao_sandbox_agent_approles:
     secret_id_ttl: 15m
     secret_id_num_uses: 1
     token_ttl: 15m
-    token_max_ttl: 60m
+    token_max_ttl: 75m
     manage_secret_id: false
   - name: "{{ openbao_sandbox_cursor_write_approle_name }}"
     policy: "{{ openbao_sandbox_cursor_write_policy_name }}"
@@ -64,7 +67,7 @@ openbao_sandbox_agent_approles:
     secret_id_ttl: 15m
     secret_id_num_uses: 1
     token_ttl: 15m
-    token_max_ttl: 60m
+    token_max_ttl: 75m
     manage_secret_id: false
 
 # The router holds one reader credential for each exact agent-tier leaf.
