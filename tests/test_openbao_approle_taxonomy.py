@@ -1,6 +1,7 @@
 """Every declared OpenBao AppRole has one explicit trust class."""
 
 from pathlib import Path
+import re
 import unittest
 
 import yaml
@@ -33,6 +34,14 @@ def _render(expression, variables):
     templar = Templar(loader=DataLoader())
     templar.available_variables = _trust(variables)
     return templar.template(trust_as_template(expression))
+
+
+def _seconds(value):
+    match = re.fullmatch(r"(\d+)(s|m|h|d)", str(value))
+    if not match:
+        raise AssertionError(f"not a finite duration: {value}")
+    amount, unit = match.groups()
+    return int(amount) * {"s": 1, "m": 60, "h": 3600, "d": 86400}[unit]
 
 
 def _dify_agent_names(defaults, suffix):
@@ -91,7 +100,7 @@ class TestAppRoleTaxonomy(unittest.TestCase):
                 self.assertEqual(role["secret_id_ttl"], "15m")
                 self.assertEqual(role["secret_id_num_uses"], 1)
                 self.assertEqual(role["token_ttl"], "15m")
-                self.assertEqual(role["token_max_ttl"], "60m")
+                self.assertEqual(role["token_max_ttl"], "75m")
                 self.assertFalse(role["manage_secret_id"])
         approle_names = _dify_agent_names(variables, "_approle_name")
         self.assertEqual(approle_names, _dify_agent_names(variables, "_policy_name"))
@@ -162,6 +171,17 @@ class TestAppRoleTaxonomy(unittest.TestCase):
             self.assertEqual(
                 cidr_class_map[f"app-agent-{reader['tier']}"], reader["cidr_class"]
             )
+
+    def test_sandbox_approles_outlive_the_job_guard(self):
+        variables = self.variables
+        roles = _render("{{ openbao_sandbox_agent_approles }}", variables)
+        minimum = _seconds("75m")
+
+        self.assertGreater(len(roles), 0)
+        for role in roles:
+            self.assertGreaterEqual(_seconds(role["token_max_ttl"]), minimum)
+            self.assertEqual(role["secret_id_num_uses"], 1)
+            self.assertFalse(role["manage_secret_id"])
 
 
 if __name__ == "__main__":
