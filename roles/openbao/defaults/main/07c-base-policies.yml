@@ -77,6 +77,16 @@ openbao_base_policies_static:
     template: azure-iac-admin-policy.hcl.j2
   - name: "{{ openbao_backblaze_admin_policy_name }}"
     template: backblaze-admin-policy.hcl.j2
+  # UniFi controller credential tiers: one exact-leaf read policy per tier
+  # (read / write / admin credentials each live on their own KV leaf), plus the
+  # terrakube workspace leaf read through that workspace's own policy. Exact
+  # leaves, not an openbao_ai_domains entry — see 05b.
+  - name: "{{ openbao_unifi_read_policy_name }}"
+    template: unifi-read-policy.hcl.j2
+  - name: "{{ openbao_unifi_write_policy_name }}"
+    template: unifi-write-policy.hcl.j2
+  - name: "{{ openbao_unifi_admin_policy_name }}"
+    template: unifi-admin-policy.hcl.j2
   - name: "{{ openbao_ansible_converge_policy_name }}"
     template: ansible-converge-policy.hcl.j2
   # Attached to the seed-writer AppRole only (07i), never to semaphore: the

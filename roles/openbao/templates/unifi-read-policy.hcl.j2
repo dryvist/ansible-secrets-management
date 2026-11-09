@@ -1,0 +1,8 @@
+{{ ansible_managed | comment }}
+# OpenBao policy for the UniFi read-tier credential leaf. The tier's own
+# credential document lives at this exact KV-v2 path; the policy grants that
+# one read and nothing else.
+
+path "{{ openbao_kv_mount }}/data/unifi/main/read" {
+  capabilities = ["read"]
+}

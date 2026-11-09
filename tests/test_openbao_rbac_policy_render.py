@@ -20,13 +20,25 @@ files, never a reimplementation.
 from pathlib import Path
 import unittest
 
+import pytest
+import yaml
+
 from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar, trust_as_template
-import yaml
+
+from openbao_reconcile_bounds_helpers import (
+    _capabilities,
+    _render_value,
+    _stanzas,
+    rendered_defaults,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 TASKS = ROOT / "roles" / "openbao" / "tasks" / "init" / "08-rbac-policies.yml"
 RENDER_TASK = "Render the RBAC policies on the controller"
+
+UNIFI_TIERS = ("read", "write", "admin")
+WINDOW_TIERS = UNIFI_TIERS + ("terrakube",)
 
 WORKSPACE_POLICY = {
     "name": "terrakube-iac-platform",
@@ -82,5 +94,42 @@ class RenderDoesNotFailOnAnItemReferencingTemplate(unittest.TestCase):
         self.assertIn('path "secret/data/apps/*"', pairs[0]["value"])
 
 
-if __name__ == "__main__":
-    unittest.main()
+def _policy_named(policies, name):
+    return next(policy for policy in policies if policy["name"] == name)
+
+
+def _capability_map(text):
+    return {
+        path: _capabilities(body)
+        for path, body in _stanzas(text)
+    }
+
+
+# The UniFi controller credential tiers: one exact KV leaf per tier, one
+# read-only policy per leaf, rendered here exactly as 08-rbac-policies.yml
+# renders them.
+@pytest.mark.parametrize("tier", UNIFI_TIERS)
+def test_unifi_tier_policy_grants_exactly_its_own_leaf(tier, rendered_defaults):
+    values, _, policies = rendered_defaults
+    policy = _policy_named(policies, values[f"openbao_unifi_{tier}_policy_name"])
+    assert _capability_map(render([policy])[0]["value"]) == {
+        f"secret/data/unifi/main/{tier}": ["read"],
+    }
+
+
+def test_unifi_is_not_a_capability_domain(rendered_defaults):
+    # The tiering exists only while `unifi` stays out of openbao_ai_domains: a
+    # domain entry would mint read-unifi/write-unifi over the whole subtree,
+    # covering the admin and terrakube leaves too.
+    values, _, policies = rendered_defaults
+    assert "unifi" not in values["openbao_ai_domains"]
+    names = {policy["name"] for policy in policies}
+    assert "read-unifi" not in names
+    assert "write-unifi" not in names
+
+
+def test_ai_elevated_carries_only_the_unifi_read_tier(rendered_defaults):
+    values, approles, _ = rendered_defaults
+    elevated = next(role for role in approles
+                    if role["name"] == values["openbao_ai_elevated_approle_name"])
+    assert values["openbao_unifi_read_policy_name"] in elevated["token_policies"]
