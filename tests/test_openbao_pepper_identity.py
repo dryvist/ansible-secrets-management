@@ -22,6 +22,8 @@ def pepper_defaults(monkeypatch):
         "OPENBAO_GITHUB_PEPPER_APP_PRIVATE_KEY",
         "OPENBAO_GITHUB_PEPPER_REPOSITORY",
         "OPENBAO_GITHUB_PEPPER_REPOSITORIES",
+        "OPENBAO_GITHUB_OPENHANDS_APP_ID",
+        "OPENBAO_GITHUB_OPENHANDS_APP_PRIVATE_KEY",
     ):
         monkeypatch.delenv(name, raising=False)
     values = {}
@@ -246,3 +248,112 @@ def test_other_identity_policies_do_not_grant_the_pepper_token_path(
         pepper_defaults, "{{ openbao_github_agents_permission_sets }}"
     )
     assert all(item["name"] != "pepper-vault-read" for item in agent_sets)
+
+
+def _configure_openhands_mount(monkeypatch, values, *, installation_id="303"):
+    monkeypatch.setenv("OPENBAO_GITHUB_OPENHANDS_APP_ID", "fixture-app-id")
+    monkeypatch.setenv(
+        "OPENBAO_GITHUB_OPENHANDS_APP_PRIVATE_KEY", "fixture-private-key"
+    )
+    values["openbao_platform_env"][
+        "OPENBAO_GITHUB_OPENHANDS_DRYVIST_INSTALLATION_ID"
+    ] = installation_id
+
+
+def _openhands_sets_and_mounts(values):
+    sets = _render_value(values, "{{ openbao_github_openhands_permission_sets }}")
+    mounts = _render_value(values, "{{ openbao_github_app_mounts }}")
+    openhands_mounts = [
+        mount for mount in mounts if mount["mount"] == "github-openhands"
+    ]
+    return sets, openhands_mounts
+
+
+def test_openhands_mount_and_set_are_absent_without_inputs(pepper_defaults):
+    sets, mounts = _openhands_sets_and_mounts(pepper_defaults)
+    assert sets == []
+    assert mounts == []
+
+
+def test_openhands_mount_is_absent_when_private_key_is_blank(
+    pepper_defaults, monkeypatch
+):
+    monkeypatch.setenv("OPENBAO_GITHUB_OPENHANDS_APP_ID", "fixture-app-id")
+    monkeypatch.setenv("OPENBAO_GITHUB_OPENHANDS_APP_PRIVATE_KEY", "")
+    pepper_defaults["openbao_platform_env"][
+        "OPENBAO_GITHUB_OPENHANDS_DRYVIST_INSTALLATION_ID"
+    ] = "303"
+
+    sets, mounts = _openhands_sets_and_mounts(pepper_defaults)
+    assert sets == []
+    assert mounts == []
+
+
+def test_openhands_mount_has_one_installation_scoped_set_with_exact_permissions(
+    pepper_defaults, monkeypatch
+):
+    _configure_openhands_mount(monkeypatch, pepper_defaults)
+    sets, mounts = _openhands_sets_and_mounts(pepper_defaults)
+
+    assert sets == [
+        {
+            "name": "openhands-pilot",
+            "tier": "openhands",
+            "installation_id": "303",
+            "permissions": {
+                "checks": "read",
+                "contents": "write",
+                "metadata": "read",
+                "pull_requests": "write",
+            },
+        }
+    ]
+    assert len(mounts) == 1
+    assert mounts[0]["app_id"] == "fixture-app-id"
+    assert mounts[0]["private_key"] == "fixture-private-key"
+    assert mounts[0]["permission_sets"] == sets
+
+    registered_sets = _render_value(
+        pepper_defaults, "{{ openbao_github_permission_sets }}"
+    )
+    openhands_registered = [
+        permission_set
+        for permission_set in registered_sets
+        if permission_set["name"] == "openhands-pilot"
+    ]
+    assert openhands_registered == [dict(sets[0], mount="github-openhands")]
+
+
+def test_openhands_policy_mints_only_its_dedicated_set(pepper_defaults, monkeypatch):
+    _configure_openhands_mount(monkeypatch, pepper_defaults)
+    policies = _render_value(pepper_defaults, "{{ openbao_policies }}")
+    openhands = [policy for policy in policies if policy["name"] == "openhands"]
+    assert len(openhands) == 1
+
+    stanzas = dict(
+        _stanzas(_render(TEMPLATES / openhands[0]["template"], pepper_defaults))
+    )
+    token_path = "github-openhands/token/openhands-pilot"
+    github_paths = [
+        path
+        for path in stanzas
+        if path == "github" or path.startswith("github-")
+    ]
+
+    assert github_paths == [token_path]
+    assert _capabilities(stanzas[token_path]) == ["create", "read", "update"]
+    assert "github-openhands/token" not in stanzas
+
+
+def test_openhands_approle_has_only_its_policy_and_one_hour_tokens(pepper_defaults):
+    roles = _render_value(pepper_defaults, "{{ openbao_approles }}")
+    openhands = [role for role in roles if role["name"] == "openhands"]
+    assert len(openhands) == 1
+    assert openhands[0]["policy"] == "openhands"
+    assert openhands[0]["token_ttl"] == "1h"
+    assert openhands[0]["token_max_ttl"] == "1h"
+
+    parameters = _render_value(
+        pepper_defaults, "{{ openbao_approle_cli_parameters }}"
+    )
+    assert parameters["openhands"]["token_policies"] == "openhands"

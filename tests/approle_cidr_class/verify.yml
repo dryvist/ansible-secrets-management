@@ -207,7 +207,7 @@
           ci-resolver must be machine-class, use the open-llm dispatcher bind,
           renew from 15m to 60m, and carry only its own policy.
 
-    - name: The openhands role is machine class, dispatcher-bound, with a renewable 15m/60m token
+    - name: The openhands role is machine class, dispatcher-bound, with a 1h token
       vars:
         role: >-
           {{ openbao_approles
@@ -219,14 +219,14 @@
         that:
           - openbao_approle_cidr_class_map[openbao_openhands_approle_name] == 'machine'
           - role.secret_id_bound_cidrs == openbao_open_llm_secret_id_cidr
-          - role.token_ttl == '15m'
-          - role.token_max_ttl == '60m'
+          - role.token_ttl == '1h'
+          - role.token_max_ttl == '1h'
           - (role.token_policies | default([role.policy])) == [openbao_openhands_policy_name]
           - role.token_no_default_policy is not defined
           - role_writes is not search('no_default_policy')
         fail_msg: >-
           openhands must be machine-class, use the open-llm dispatcher bind,
-          renew from 15m to 60m, and carry only its own policy.
+          use a 1h token cap, and carry only its own policy.
 
     - name: Retired identities are declared nowhere and slated for deletion
       ansible.builtin.assert:
