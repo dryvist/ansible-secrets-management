@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.87.1](https://github.com/dryvist/ansible-secrets-management/compare/v0.87.0...v0.87.1) (2026-11-09)
+
+
+### Bug Fixes
+
+* **openbao:** let sandbox job tokens outlive the job guard ([#588](https://github.com/dryvist/ansible-secrets-management/issues/588)) ([c35ed69](https://github.com/dryvist/ansible-secrets-management/commit/c35ed6993e213db5bf57ed30b1a45bc92d81b237))
+
 ## [0.87.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.86.0...v0.87.0) (2026-11-09)
 
 
