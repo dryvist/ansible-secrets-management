@@ -8,6 +8,14 @@
 # init/02). Measured on the target: 559s for the per-policy reads alone, one
 # module execution per policy on proxmox_pct_remote. Same `bao` CLI, same
 # rc/stdout/stderr, so the map build and the write gate below are unchanged.
+# The roster live check (08a) runs only on a real converge, not under --check
+# (openbao_roster_live_check_enabled), so in check mode its fact stays at the
+# empty role default. That default also defines the name on every play, which is
+# exactly why the old `is not defined` gate here never fired: the empty roster
+# list then stood in for the live list, every per-policy read was skipped, and
+# the check-mode report below listed unchanged policies as pending writes. Take
+# the full list in check mode, where the roster list is never authoritative; an
+# apply run keeps the roster audit's list as its source.
 - name: List existing policies
   ansible.builtin.command:
     cmd: bao policy list -format=json
@@ -24,13 +32,13 @@
   check_mode: false
   when:
     - openbao_bootstrap_token is defined
-    - openbao_roster_live_policy_names is not defined
+    - ansible_check_mode
 
 - name: Resolve existing RBAC policy names from the roster audit or list result
   ansible.builtin.set_fact:
     openbao_existing_policy_names: >-
       {{ openbao_roster_live_policy_names
-         if openbao_roster_live_policy_names is defined
+         if (openbao_roster_live_check_enabled | bool)
          else (openbao_policies_raw.stdout | default('[]', true) | from_json) }}
   when: openbao_bootstrap_token is defined
 

@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.87.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.86.0...v0.87.0) (2026-11-09)
+
+
+### Features
+
+* **agent:** autonomous zcode run j-a4ef550529d9c48c ([#585](https://github.com/dryvist/ansible-secrets-management/issues/585)) ([a76b29b](https://github.com/dryvist/ansible-secrets-management/commit/a76b29b12358a75be173dba69f86b6db98eca6da))
+* **agent:** zcode run j-a4ef550529d9c48c ([a76b29b](https://github.com/dryvist/ansible-secrets-management/commit/a76b29b12358a75be173dba69f86b6db98eca6da))
+
 ## [0.86.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.85.1...v0.86.0) (2026-11-09)
 
 
