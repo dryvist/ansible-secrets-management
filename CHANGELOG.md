@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.88.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.87.1...v0.88.0) (2026-11-09)
+
+
+### Features
+
+* **openbao:** generate a local-only sandbox router key field ([#591](https://github.com/dryvist/ansible-secrets-management/issues/591)) ([92ced7f](https://github.com/dryvist/ansible-secrets-management/commit/92ced7f08642ca02f92e7132ba02d937e2bf5d60))
+
 ## [0.87.1](https://github.com/dryvist/ansible-secrets-management/compare/v0.87.0...v0.87.1) (2026-11-09)
 
 
