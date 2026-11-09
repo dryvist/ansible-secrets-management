@@ -102,8 +102,15 @@ code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 8 \
 [ "${code}" = "200" ] || fail "health check returned HTTP ${code} (expected 200)"
 
 # 3. Authenticate with the least-privilege snapshot AppRole through the shared
-#    bao-approle CLI, which prints only the client token.
+#    bao-approle CLI, which prints only the client token. The diagnostic file
+#    is removed by the EXIT trap set right after its mktemp — a kill between
+#    that mktemp and the explicit removals below cannot orphan it — and INT
+#    and TERM exit through the same trap (rm -f tolerates the explicit
+#    removals having run first).
 login_stderr_file="$(mktemp)" || fail "could not create AppRole login diagnostic file"
+trap 'rm -f "${login_stderr_file}"' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 if ! token="$(
   BAO_APPROLE_ROLE_ID="${OPENBAO_SNAPSHOT_ROLE_ID}" \
     BAO_APPROLE_SECRET_ID="${OPENBAO_SNAPSHOT_SECRET_ID}" \

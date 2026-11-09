@@ -103,7 +103,9 @@ class RotationRosterGuard(unittest.TestCase):
                 )
 
     def test_rotate_policy_render_omits_object_storage_access(self):
-        with tempfile.TemporaryDirectory(dir=ROOT) as render_tmp:
+        # Render into the system temp directory, not the repository root, so
+        # an interrupted run cannot leave a tmp* artifact in the working tree.
+        with tempfile.TemporaryDirectory() as render_tmp:
             result = subprocess.run(
                 [
                     "ansible-playbook",

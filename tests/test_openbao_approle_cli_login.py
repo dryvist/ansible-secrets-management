@@ -10,7 +10,9 @@ from __future__ import annotations
 
 import os
 import re
+import signal
 import subprocess
+import time
 from pathlib import Path
 
 import yaml
@@ -163,3 +165,56 @@ mktemp() {
     assert "client-token-value" not in result.stdout + result.stderr
     assert "role-id-value" not in result.stdout + result.stderr
     assert "secret-id-value" not in result.stdout + result.stderr
+
+
+def test_snapshot_login_stderr_temp_file_is_removed_when_the_script_is_killed(
+    tmp_path: Path,
+) -> None:
+    login = _text("openbao-snapshot.sh.j2").split("login_stderr_file=", 1)[1]
+    login = "login_stderr_file=" + login.split("# 4. Take", 1)[0]
+
+    # The stubbed AppRole login blocks after the redirect has created the
+    # diagnostic file, so the SIGTERM lands inside the window between the
+    # mktemp and the explicit removals, where only the EXIT trap still owns
+    # the file. Without the trap the default SIGTERM kills the script right
+    # away and leaves the file behind.
+    diagnostic = tmp_path / "login.stderr"
+    marker = tmp_path / "login.started"
+    harness = f"""\
+set -uo pipefail
+OPENBAO_SNAPSHOT_ROLE_ID='role-id-value'
+OPENBAO_SNAPSHOT_SECRET_ID='secret-id-value'
+bao-approle() {{
+  : > '{marker}'
+  sleep 3
+  return 1
+}}
+fail() {{
+  printf 'failure: %s\\n' "$*" >&2
+  exit 9
+}}
+mktemp() {{
+  printf '%s\\n' '{diagnostic}'
+}}
+""" + login
+    proc = subprocess.Popen(
+        ["bash"],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    assert proc.stdin is not None
+    proc.stdin.write(harness.encode("utf-8"))
+    proc.stdin.close()
+
+    deadline = time.monotonic() + 5
+    while not marker.exists() and time.monotonic() < deadline:
+        time.sleep(0.05)
+    assert marker.exists(), "the stubbed AppRole login never started"
+    assert diagnostic.exists(), "the kill window was never reached"
+
+    proc.send_signal(signal.SIGTERM)
+    returncode = proc.wait(timeout=10)
+
+    assert returncode == 143, f"expected exit 143, got {returncode}"
+    assert not diagnostic.exists(), "the SIGTERM kill orphaned the login diagnostic file"
