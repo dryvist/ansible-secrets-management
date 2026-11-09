@@ -56,6 +56,30 @@
       Without every Pepper input, its permission set and mount must be omitted
       so the mount converge skips it.
 
+- name: Pin the github-human-obsidian mount inputs to the unconfigured case
+  ansible.builtin.set_fact:
+    openbao_github_human_obsidian_app_id: ""
+    openbao_github_human_obsidian_app_private_key: ""
+    openbao_github_human_obsidian_installation_id: ""
+    _openbao_github_human_obsidian_repositories_csv: ""
+
+- name: Assert an unconfigured github-human-obsidian App declares no set or mount
+  vars:
+    _obsidian_mounts: >-
+      {{ openbao_github_app_mounts
+         | selectattr('mount', 'equalto', openbao_github_human_obsidian_mount) | list }}
+    _obsidian_global_sets: >-
+      {{ openbao_github_permission_sets
+         | selectattr('name', 'equalto', openbao_github_human_obsidian_write_set_name) | list }}
+  ansible.builtin.assert:
+    that:
+      - openbao_github_human_obsidian_permission_sets == []
+      - _obsidian_mounts == []
+      - _obsidian_global_sets == []
+    fail_msg: >-
+      Without every github-human-obsidian input, its permission set and mount
+      must be omitted so the mount converge skips it.
+
 - name: Pin runner App credentials to the unconfigured case
   ansible.builtin.set_fact:
     openbao_github_runner_app_id: ""

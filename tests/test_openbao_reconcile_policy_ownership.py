@@ -56,6 +56,10 @@ def test_github_policy_pin_stanza_is_independent_of_app_environment(
             "OPENBAO_GITHUB_PEPPER_APP_ID",
             "OPENBAO_GITHUB_PEPPER_APP_PRIVATE_KEY",
         ),
+        "github-human-obsidian": (
+            "OPENBAO_GITHUB_HUMAN_OBSIDIAN_APP_ID",
+            "OPENBAO_GITHUB_HUMAN_OBSIDIAN_APP_PRIVATE_KEY",
+        ),
         "github-enterprise-read": (
             "OPENBAO_GITHUB_ENTERPRISE_READ_APP_ID",
             "OPENBAO_GITHUB_ENTERPRISE_READ_PRIVATE_KEY",

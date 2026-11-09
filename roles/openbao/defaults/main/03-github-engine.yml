@@ -108,6 +108,27 @@ openbao_github_pepper_permission_sets: >-
               | select('match', '^[A-Za-z0-9_.-]+$') | list | length)
              == openbao_github_pepper_repositories | length)
      else [] }}
+# The vault clerk's set uses its own tier so github-mint cannot inherit this
+# grant.
+openbao_github_human_obsidian_write_set_name: vault-clerk-write
+openbao_github_human_obsidian_write_tier: vault-clerk
+openbao_github_human_obsidian_write_permissions:
+  contents: write
+  metadata: read
+openbao_github_human_obsidian_permission_sets: >-
+  {{ [{'name': openbao_github_human_obsidian_write_set_name,
+       'tier': openbao_github_human_obsidian_write_tier,
+       'installation_id': openbao_github_human_obsidian_installation_id,
+       'repositories': openbao_github_human_obsidian_repositories,
+       'permissions': openbao_github_human_obsidian_write_permissions}]
+     if (openbao_github_human_obsidian_installation_id | length > 0
+         and openbao_github_human_obsidian_app_id | length > 0
+         and openbao_github_human_obsidian_app_private_key | length > 0
+         and openbao_github_human_obsidian_repositories | length > 0
+         and (openbao_github_human_obsidian_repositories
+              | select('match', '^[A-Za-z0-9_.-]+$') | list | length)
+             == openbao_github_human_obsidian_repositories | length)
+     else [] }}
 # org-admin tier: exactly one permission, organization-level. Org rulesets and
 # other organization settings; asserted verbatim like the repo-create map.
 openbao_github_org_admin_permissions:
@@ -315,4 +336,6 @@ openbao_github_permission_sets: >-
      + (openbao_github_openhands_permission_sets
         | map('combine', {'mount': openbao_github_openhands_mount}) | list)
      + (openbao_github_pepper_permission_sets
-        | map('combine', {'mount': openbao_github_pepper_mount}) | list) }}
+        | map('combine', {'mount': openbao_github_pepper_mount}) | list)
+     + (openbao_github_human_obsidian_permission_sets
+        | map('combine', {'mount': openbao_github_human_obsidian_mount}) | list) }}

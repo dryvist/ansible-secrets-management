@@ -12,6 +12,7 @@
 #   github-work    read and App-grant write over one installation, no sets
 #   github-pepper  one repository-scoped read set
 #   github-openhands one installation-scoped write set for OpenHands
+#   github-human-obsidian one repository-scoped write set for the vault clerk
 #   github-enterprise-read  human-gated raw-token read tier
 #   github-enterprise       human-gated raw-token admin tier
 #   github-enterprise-owner human-gated stored owner token, readable by the admin tiers only
@@ -205,6 +206,20 @@ openbao_github_pepper_repositories: >-
      or ([openbao_github_pepper_repository]
          if openbao_github_pepper_repository | length > 0 else []) }}
 
+# This mount and set are declared only when every input is present.
+openbao_github_human_obsidian_mount: github-human-obsidian
+openbao_github_human_obsidian_installation_id: >-
+  {{ openbao_platform_env['OPENBAO_GITHUB_HUMAN_OBSIDIAN_INSTALLATION_ID'] | default('', true) }}
+openbao_github_human_obsidian_app_id: >-
+  {{ lookup('env', 'OPENBAO_GITHUB_HUMAN_OBSIDIAN_APP_ID') | default('', true) }}
+openbao_github_human_obsidian_app_private_key: >-
+  {{ lookup('env', 'OPENBAO_GITHUB_HUMAN_OBSIDIAN_APP_PRIVATE_KEY') | default('', true) }}
+_openbao_github_human_obsidian_repositories_csv: >-
+  {{ lookup('env', 'OPENBAO_GITHUB_HUMAN_OBSIDIAN_REPOSITORIES') | default('', true) }}
+openbao_github_human_obsidian_repositories: >-
+  {{ _openbao_github_human_obsidian_repositories_csv
+       | split(',') | map('trim') | reject('equalto', '') | unique | list }}
+
 # Enterprise Apps use their own installation as the token ceiling. They have
 # no permission sets; their policies pin the raw token endpoint to one
 # installation ID. Each mount, like github-work, is declared only once its
@@ -286,6 +301,11 @@ openbao_github_app_mounts: >-
           'private_key': openbao_github_pepper_app_private_key,
           'permission_sets': openbao_github_pepper_permission_sets}]
         if openbao_github_pepper_permission_sets | length > 0 else [])
+     + ([{'mount': openbao_github_human_obsidian_mount,
+          'app_id': openbao_github_human_obsidian_app_id,
+          'private_key': openbao_github_human_obsidian_app_private_key,
+          'permission_sets': openbao_github_human_obsidian_permission_sets}]
+        if openbao_github_human_obsidian_permission_sets | length > 0 else [])
      + openbao_github_enterprise_app_mounts
      + openbao_github_runner_app_mounts }}
 

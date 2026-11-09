@@ -142,6 +142,9 @@ openbao_github_ci_resolver_approle_name: ci-resolver
 # openhands: the OpenHands service-runtime identity.
 openbao_openhands_policy_name: openhands
 openbao_openhands_approle_name: openhands
+# vault-clerk: the github-human-obsidian mount's token-minting grant. Declared
+# ahead of its identity: nothing binds this policy yet.
+openbao_vault_clerk_policy_name: vault-clerk
 # GitHub Actions OIDC workload identity. The publish workflow presents the
 # token GitHub mints for its own job, so the runner stores no credential at
 # all; the role name is the policy name, as everywhere else here.

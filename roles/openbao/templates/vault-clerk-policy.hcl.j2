@@ -1,0 +1,7 @@
+{{ ansible_managed | comment }}
+# vault-clerk grants only the token endpoint of the vault-clerk-write set on
+# the github-human-obsidian mount: one repository-scoped contents write. No
+# identity carries this policy yet.
+path "{{ openbao_github_human_obsidian_mount }}/token/{{ openbao_github_human_obsidian_write_set_name }}" {
+  capabilities = ["create", "update"]
+}

@@ -145,6 +145,10 @@ openbao_base_policies_static:
     template: hermes-private-agent-policy.hcl.j2
   - name: "{{ openbao_pepper_policy_name }}"
     template: pepper-policy.hcl.j2
+  # Reserved for the vault clerk identity, which arrives later; no approle
+  # binds it yet.
+  - name: "{{ openbao_vault_clerk_policy_name }}"
+    template: vault-clerk-policy.hcl.j2
   - name: "{{ openbao_llm_router_write_policy_name }}"
     template: llm-router-write-policy.hcl.j2
   - name: "{{ openbao_ai_donna_policy_name }}"

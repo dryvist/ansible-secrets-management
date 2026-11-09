@@ -116,6 +116,14 @@
       fixture-repo, fixture-repo-two, ,fixture-repo-three, fixture-repo
     openbao_github_pepper_repository: fixture-legacy-repo
 
+- name: Pin the github-human-obsidian inputs to the configured fixture case
+  ansible.builtin.set_fact:
+    openbao_github_human_obsidian_app_id: fixture-app-id
+    openbao_github_human_obsidian_app_private_key: fixture-private-key
+    openbao_github_human_obsidian_installation_id: fixture-installation
+    _openbao_github_human_obsidian_repositories_csv: >-
+      fixture-repo, fixture-repo-two, ,fixture-repo
+
 - name: Render the tier policies with a publisher repository configured
   ansible.builtin.template:
     src: "{{ _template_dir }}/{{ item }}.j2"
@@ -176,6 +184,17 @@
   ansible.builtin.slurp:
     src: "{{ _fixture_dir }}/set-pepper-policy.hcl"
   register: _pepper_policy_raw
+
+- name: Render the vault-clerk policy
+  ansible.builtin.template:
+    src: "{{ _template_dir }}/vault-clerk-policy.hcl.j2"
+    dest: "{{ _fixture_dir }}/set-vault-clerk-policy.hcl"
+    mode: "0644"
+
+- name: Read the rendered vault-clerk policy
+  ansible.builtin.slurp:
+    src: "{{ _fixture_dir }}/set-vault-clerk-policy.hcl"
+  register: _vault_clerk_policy_raw
 
 - name: Assert Pepper has exact reads and its token path is exclusive
   vars:
@@ -263,6 +282,74 @@
     gm:
       mount: "{{ openbao_github_openhands_mount }}"
       permission_sets: "{{ openbao_github_openhands_permission_sets }}"
+
+- name: Assert the vault-clerk mount has one repository-scoped write set and its exclusive policy
+  vars:
+    _obsidian_sets: "{{ openbao_github_human_obsidian_permission_sets }}"
+    _obsidian_mounts: >-
+      {{ openbao_github_app_mounts
+         | selectattr('mount', 'equalto', openbao_github_human_obsidian_mount) | list }}
+    _obsidian_global_sets: >-
+      {{ openbao_github_permission_sets
+         | selectattr('name', 'equalto', openbao_github_human_obsidian_write_set_name) | list }}
+    _obsidian_path: >-
+      {{ openbao_github_human_obsidian_mount }}/token/{{ openbao_github_human_obsidian_write_set_name }}
+    _vault_clerk_text: "{{ _vault_clerk_policy_raw.content | b64decode }}"
+    _vault_clerk_paths: >-
+      {{ _vault_clerk_text | regex_findall('(?m)^path "([^"]+)"') }}
+    _vault_clerk_github_paths: >-
+      {{ _vault_clerk_paths | select('match', '^github(-[^/]+)?/') | list }}
+    _vault_clerk_token_stanza: >-
+      {{ _vault_clerk_text
+         | regex_search('(?ms)^path "' ~ _obsidian_path ~ '" [{].*?^[}]') }}
+  ansible.builtin.assert:
+    that:
+      - _obsidian_sets | length == 1
+      - _obsidian_sets[0].name == openbao_github_human_obsidian_write_set_name
+      - _obsidian_sets[0].tier == openbao_github_human_obsidian_write_tier
+      - _obsidian_sets[0].installation_id == 'fixture-installation'
+      - _obsidian_sets[0].repositories == ['fixture-repo', 'fixture-repo-two']
+      - openbao_github_human_obsidian_repositories == ['fixture-repo', 'fixture-repo-two']
+      - >-
+        _obsidian_sets[0].permissions
+        == {'contents': 'write', 'metadata': 'read'}
+      - _obsidian_mounts | length == 1
+      - _obsidian_mounts[0].app_id == 'fixture-app-id'
+      - _obsidian_mounts[0].private_key == 'fixture-private-key'
+      - _obsidian_mounts[0].permission_sets == _obsidian_sets
+      - _obsidian_global_sets | length == 1
+      - _obsidian_global_sets[0].mount == openbao_github_human_obsidian_mount
+      - _obsidian_global_sets[0].tier == openbao_github_human_obsidian_write_tier
+      - _obsidian_global_sets[0].repositories == ['fixture-repo', 'fixture-repo-two']
+      - _vault_clerk_paths == [_obsidian_path]
+      - _vault_clerk_github_paths == [_obsidian_path]
+      - openbao_github_human_obsidian_mount ~ '/token' not in _vault_clerk_paths
+      - >-
+        'capabilities = ["create", "update"]' in _vault_clerk_token_stanza
+      - _obsidian_path not in _mint_paths
+      - _obsidian_path not in _read_paths
+      - _obsidian_path not in _publisher_paths
+      - _obsidian_path not in _repo_create_paths
+      - _obsidian_path not in _org_admin_paths
+      - _obsidian_path not in _write_paths
+      - _obsidian_path not in _open_llm_paths
+      - _obsidian_path not in _ci_resolver_paths
+      - _obsidian_path not in _ai_public_paths
+      - _obsidian_path not in _ai_orchestrator_paths
+      - >-
+        openbao_github_agents_permission_sets
+        | selectattr('name', 'equalto', openbao_github_human_obsidian_write_set_name)
+        | list == []
+    fail_msg: >-
+      The vault clerk must have only its one repository-scoped write set, and
+      no other GitHub identity policy may mint that set.
+
+- name: Assert the github-human-obsidian converge check accepts its configured set
+  ansible.builtin.include_tasks: ../../../roles/openbao/tasks/init/05b-github-app-set-checks.yml
+  vars:
+    gm:
+      mount: "{{ openbao_github_human_obsidian_mount }}"
+      permission_sets: "{{ openbao_github_human_obsidian_permission_sets }}"
 
 - name: Pin Pepper to an empty list and the legacy single-name input
   ansible.builtin.set_fact:

@@ -105,6 +105,30 @@
     _openhands_set: "{{ gm.permission_sets | first | default({}) }}"
   when: gm.mount == openbao_github_openhands_mount
 
+- name: "Assert the dedicated vault-clerk-write set on mount {{ gm.mount }}"
+  ansible.builtin.assert:
+    that:
+      - gm.permission_sets | length == 1
+      - _obsidian_set.name | default('') == openbao_github_human_obsidian_write_set_name
+      - _obsidian_set.tier | default('') == openbao_github_human_obsidian_write_tier
+      - >-
+        _obsidian_set.installation_id | default('') | string
+        == openbao_github_human_obsidian_installation_id | string
+      - _obsidian_set.repositories | default([]) == openbao_github_human_obsidian_repositories
+      - openbao_github_human_obsidian_repositories | length > 0
+      - >-
+        _obsidian_set.repositories | default([])
+        | select('match', '^[A-Za-z0-9_.-]+$') | list | length
+        == _obsidian_set.repositories | default([]) | length
+      - _obsidian_set.permissions | default({}) == openbao_github_human_obsidian_write_permissions
+    fail_msg: >-
+      {{ gm.mount }} must declare only its configured repository-scoped
+      vault-clerk-write set.
+    quiet: true
+  vars:
+    _obsidian_set: "{{ gm.permission_sets | first | default({}) }}"
+  when: gm.mount == openbao_github_human_obsidian_mount
+
 # ponytail: one page of 100; add pagination when a list passes 100 repos.
 - name: "Resolve the set repository lists on mount {{ gm.mount }}"
   ansible.builtin.set_fact:
