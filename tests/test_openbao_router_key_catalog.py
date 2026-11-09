@@ -171,7 +171,10 @@ def test_langflow_router_key_is_generated_and_readable_by_the_apps_reader():
 def test_sandbox_agent_router_key_is_generated_and_readable_by_the_apps_reader():
     generated = DEFAULTS_DATA["openbao_generated_app_secrets"]
     excluded = EXCLUDED_DATA["openbao_apps_read_excluded_generated_apps"]
-    assert generated["sandbox-agent-router"] == ["sandbox_agent_router_llm_router_key"]
+    assert generated["sandbox-agent-router"] == [
+        "sandbox_agent_router_llm_router_key",
+        "sandbox_agent_local_router_llm_router_key",
+    ]
     assert "sandbox-agent" not in generated
     assert "sandbox-agent-router" not in excluded
     assert "sandbox-agent-router" in _read_apps({})
@@ -255,6 +258,10 @@ def test_open_llm_fields_mirror_the_generated_router_fields():
         "openbao_opencode_router_key_source": (
             "{{ openbao_seeded_app_secret_values['opencode']['opencode_llm_router_key'] }}"
         ),
+        "openbao_opencode_local_router_key_source": (
+            "{{ openbao_seeded_app_secret_values['sandbox-agent-router']"
+            "['sandbox_agent_local_router_llm_router_key'] }}"
+        ),
         "openbao_qwen_code_router_key_source": (
             "{{ openbao_seeded_app_secret_values['qwen-code']['qwen_code_llm_router_key'] }}"
         ),
@@ -263,6 +270,7 @@ def test_open_llm_fields_mirror_the_generated_router_fields():
     assert merge["vars"]["openbao_promote_fields"] == {
         "ZCODE_ROUTER_KEY": "openbao_zcode_router_key_source",
         "OPENCODE_ROUTER_KEY": "openbao_opencode_router_key_source",
+        "OPENCODE_LOCAL_ROUTER_KEY": "openbao_opencode_local_router_key_source",
         "QWEN_CODE_ROUTER_KEY": "openbao_qwen_code_router_key_source",
     }
 
