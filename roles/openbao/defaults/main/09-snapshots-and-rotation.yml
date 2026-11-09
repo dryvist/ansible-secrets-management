@@ -2,10 +2,10 @@
 # --- Raft snapshots (automated, on-box timer) -------------------------------
 # An on-box systemd timer takes a raft snapshot on the ACTIVE node (leader-gated
 # at runtime via /v1/sys/leader is_self; standby nodes no-op), authenticating
-# with the least-privilege `snapshot` AppRole over the node's OWN api_addr (its
-# VLAN IP — there is no loopback listener; see openbao.hcl.j2), NOT the Traefik
-# ingress VIP. Each snapshot is integrity-checked (gzip -t, since raft snapshots
-# are gzipped tar) and written under the data volume, which sits on a ZFS/PBS-
+# with the least-privilege `snapshot` AppRole through the node-local loopback
+# listener (see openbao.hcl.j2), never the Traefik ingress VIP. Each snapshot is
+# integrity-checked (gzip -t, since raft snapshots are gzipped tar) and written
+# under the data volume, which sits on a ZFS/PBS-
 # backed dataset that replicates OFF-BOX; the newest N are kept. Success/failure
 # pings the healthchecks deadman + ntfy, reusing the service_deadman alert stack.
 #
@@ -79,7 +79,7 @@ openbao_rotation_max_days: 47
 openbao_rotators:
   slack-admin:
     # Primary scheduled rotator for the Slack app-configuration token pair
-    # (secrets-external/platform/slack-admin). A macOS wrapper (nix-darwin
+    # (secrets-external/slack/workspace/config). A macOS wrapper (nix-darwin
     # openbao-slack-creds) also rotates on-demand if a consumer sees a stale
     # pair between fires; OpenBao's CAS write-back is the only coordination
     # needed between the two (the Slack refresh token is single-use).
@@ -89,7 +89,7 @@ openbao_rotators:
     role_id: "{{ openbao_slack_rotate_role_id }}"
     secret_id: "{{ openbao_slack_rotate_secret_id }}"
     mint: slack
-    target: { mount: secrets-external, path: platform/slack-admin }
+    target: { mount: secrets-external, path: slack/workspace/config }
     safety_margin: "{{ openbao_slack_rotate_safety_margin }}"
     healthcheck_url: "{{ openbao_slack_rotate_healthcheck_url }}"
     ntfy_url: "{{ openbao_slack_rotate_ntfy_url }}"

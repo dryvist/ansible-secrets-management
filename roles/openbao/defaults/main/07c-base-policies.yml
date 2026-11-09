@@ -242,6 +242,10 @@ openbao_base_policies_static:
     template: sandbox-opencode-read-policy.hcl.j2
   - name: "{{ openbao_sandbox_opencode_write_policy_name }}"
     template: sandbox-opencode-write-policy.hcl.j2
+  - name: "{{ openbao_sandbox_cursor_read_policy_name }}"
+    template: sandbox-cursor-read-policy.hcl.j2
+  - name: "{{ openbao_sandbox_cursor_write_policy_name }}"
+    template: sandbox-cursor-write-policy.hcl.j2
   # ai-readonly / ai-elevated / ai-apply-<svc> no longer own standalone policies —
   # they are ACTOR roles that attach the base read-/write- capability leaves
   # (generated below into openbao_ai_capability_policies). ai-admin remains a

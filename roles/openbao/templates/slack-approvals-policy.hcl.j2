@@ -1,11 +1,16 @@
 {{ ansible_managed | comment }}
 # OpenBao policy for the slack-approvals AppRole — read-only on exactly one
-# secrets-external KV-v2 entry (platform/slack-approvals), the OpenBao
+# secrets-external KV-v2 entry (slack/openbao-approvals/rw), the OpenBao
 # Approvals bot token used to post unlock approval links (chat:write only).
 # The stored value changes only when the operator reinstalls the app, and this
 # identity only ever consumes it — no update, no create, no delete, no list,
 # and no wildcard.
 
+# Transitional: the platform/ path is removed once every consumer reads the slack/ path.
 path "secrets-external/data/platform/slack-approvals" {
+  capabilities = ["read"]
+}
+
+path "secrets-external/data/slack/openbao-approvals/rw" {
   capabilities = ["read"]
 }

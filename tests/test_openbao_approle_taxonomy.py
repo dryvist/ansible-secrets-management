@@ -82,7 +82,7 @@ class TestAppRoleTaxonomy(unittest.TestCase):
 
         self.assertEqual(unclassified, [])
         self.assertEqual(invalid_classes, {})
-        for tool in ("agent", "zcode", "opencode"):
+        for tool in ("agent", "zcode", "opencode", "cursor"):
             for tier in ("read", "write"):
                 name = f"sandbox-{tool}-{tier}"
                 self.assertEqual(class_map[name], "untrusted-sandbox")

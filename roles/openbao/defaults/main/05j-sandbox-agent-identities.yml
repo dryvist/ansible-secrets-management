@@ -11,6 +11,10 @@ openbao_sandbox_opencode_read_policy_name: sandbox-opencode-read
 openbao_sandbox_opencode_read_approle_name: sandbox-opencode-read
 openbao_sandbox_opencode_write_policy_name: sandbox-opencode-write
 openbao_sandbox_opencode_write_approle_name: sandbox-opencode-write
+openbao_sandbox_cursor_read_policy_name: sandbox-cursor-read
+openbao_sandbox_cursor_read_approle_name: sandbox-cursor-read
+openbao_sandbox_cursor_write_policy_name: sandbox-cursor-write
+openbao_sandbox_cursor_write_approle_name: sandbox-cursor-write
 # The sandbox subnet is supplied by the private environment, never committed.
 openbao_sandbox_agent_cidrs: >-
   {{ lookup('env', 'OPENBAO_SANDBOX_AGENT_CIDRS') | default('', true) }}

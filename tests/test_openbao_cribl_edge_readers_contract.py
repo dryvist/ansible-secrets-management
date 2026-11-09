@@ -115,6 +115,8 @@ def _matches_apps_reader_contract(policy: str, apps: set[str]) -> bool:
         ("secrets-external/data/ai/saas/opencode", ("read",)),
         ("secrets-external/data/platform/slack-ops", ("read",)),
         ("secrets-external/metadata/platform/slack-ops", ("read",)),
+        ("secrets-external/data/slack/homelab-ops/rw", ("read",)),
+        ("secrets-external/metadata/slack/homelab-ops/rw", ("read",)),
     }
     return sorted(_grants(policy)) == sorted(expected)
 

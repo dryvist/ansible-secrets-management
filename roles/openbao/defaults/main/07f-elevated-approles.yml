@@ -96,6 +96,9 @@ openbao_base_approles_elevated:
     secret_id_num_uses: 1
   - name: "{{ openbao_snapshot_approle_name }}"
     policy: "{{ openbao_snapshot_policy_name }}"
+    # Keep the machine class and add only the local snapshot client's source.
+    secret_id_bound_cidrs: >-
+      {{ openbao_approle_cidr_classes.machine }},127.0.0.1/32
   # apps-seed: Doppler-published writer for secret/apps/* (Terraform vault-secrets).
   - name: "{{ openbao_apps_seed_approle_name }}"
     policy: "{{ openbao_apps_seed_policy_name }}"

@@ -36,7 +36,11 @@
                             'auth/approle/role/' ~ openbao_sandbox_opencode_read_approle_name ~ '/role-id',
                             'auth/approle/role/' ~ openbao_sandbox_opencode_read_approle_name ~ '/secret-id',
                             'auth/approle/role/' ~ openbao_sandbox_opencode_write_approle_name ~ '/role-id',
-                            'auth/approle/role/' ~ openbao_sandbox_opencode_write_approle_name ~ '/secret-id']
+                            'auth/approle/role/' ~ openbao_sandbox_opencode_write_approle_name ~ '/secret-id',
+                            'auth/approle/role/' ~ openbao_sandbox_cursor_read_approle_name ~ '/role-id',
+                            'auth/approle/role/' ~ openbao_sandbox_cursor_read_approle_name ~ '/secret-id',
+                            'auth/approle/role/' ~ openbao_sandbox_cursor_write_approle_name ~ '/role-id',
+                            'auth/approle/role/' ~ openbao_sandbox_cursor_write_approle_name ~ '/secret-id']
       - _read_role_id_stanza | regex_findall('capabilities = (.*)') == ['["read"]']
       - _write_role_id_stanza | regex_findall('capabilities = (.*)') == ['["read"]']
       - >-
@@ -65,7 +69,7 @@
         'capabilities = ["create", "update"]' in _token_stanza
       - >-
         'max_wrapping_ttl = "15m"' in _open_llm_text
-      - _open_llm_text | regex_findall('min_wrapping_ttl = "1s"') | length == 6
+      - _open_llm_text | regex_findall('min_wrapping_ttl = "1s"') | length == 8
       - >-
         _open_llm_paths | select('match', '^(github|github-admin|' ~ openbao_github_hermes_mount ~ ')/')
         | list == []
@@ -83,12 +87,24 @@
     src: "{{ _template_dir }}/{{ item }}-policy.hcl.j2"
     dest: "{{ _fixture_dir }}/{{ item }}-policy.hcl"
     mode: "0644"
-  loop: [sandbox-zcode-read, sandbox-zcode-write, sandbox-opencode-read, sandbox-opencode-write]
+  loop:
+    - sandbox-zcode-read
+    - sandbox-zcode-write
+    - sandbox-opencode-read
+    - sandbox-opencode-write
+    - sandbox-cursor-read
+    - sandbox-cursor-write
 
 - name: Read per-tool sandbox policies
   ansible.builtin.slurp:
     src: "{{ _fixture_dir }}/{{ item }}-policy.hcl"
-  loop: [sandbox-zcode-read, sandbox-zcode-write, sandbox-opencode-read, sandbox-opencode-write]
+  loop:
+    - sandbox-zcode-read
+    - sandbox-zcode-write
+    - sandbox-opencode-read
+    - sandbox-opencode-write
+    - sandbox-cursor-read
+    - sandbox-cursor-write
   register: _sandbox_tool_policies
 
 - name: Assert each per-tool policy has exactly its credential and token grants
@@ -96,7 +112,8 @@
     _policy: "{{ item.content | b64decode }}"
     _credential: >-
       {{ 'secrets-external/data/ai/saas/zai' if 'zcode' in item.item
-         else openbao_kv_mount ~ '/data/apps/sandbox-agent-router' }}
+         else ('secrets-external/data/ai/saas/cursor' if 'cursor' in item.item
+               else openbao_kv_mount ~ '/data/apps/sandbox-agent-router') }}
     _token: >-
       {{ openbao_github_agents_mount ~ '/token/public-'
          ~ ('read' if item.item.endswith('-read') else 'write') }}
@@ -172,6 +189,8 @@
     - "{{ openbao_sandbox_zcode_write_approle_name }}"
     - "{{ openbao_sandbox_opencode_read_approle_name }}"
     - "{{ openbao_sandbox_opencode_write_approle_name }}"
+    - "{{ openbao_sandbox_cursor_read_approle_name }}"
+    - "{{ openbao_sandbox_cursor_write_approle_name }}"
 
 - name: Assert no other tier reaches the agents mount
   ansible.builtin.assert:
