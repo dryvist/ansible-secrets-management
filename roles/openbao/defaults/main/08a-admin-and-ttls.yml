@@ -125,6 +125,7 @@ openbao_approle_secret_id_ttl_overrides_base:
   ai-donna: "{{ openbao_rotated_domain_secret_id_ttl }}"
   open-llm: "{{ openbao_rotated_domain_secret_id_ttl }}"
   ci-resolver: "{{ openbao_rotated_domain_secret_id_ttl }}"
+  git-mirror: "{{ openbao_rotated_domain_secret_id_ttl }}"
   openhands: "{{ openbao_rotated_domain_secret_id_ttl }}"
   llm-router-agent-keys: "{{ openbao_rotated_domain_secret_id_ttl }}"
   agentgateway-agent-keys: "{{ openbao_rotated_domain_secret_id_ttl }}"
@@ -167,6 +168,9 @@ openbao_approle_secret_id_num_uses_overrides:
   # ci-resolver redeems its secret_id for dispatcher jobs; its scheduled
   # rotation and shared single-host CIDR bound the unlimited-use pair.
   ci-resolver: 0
+  # git-mirror redeems its secret_id on every token mint, so a use cap would
+  # strand it between rotations. Bounded by its 36h ttl and scheduled rotation.
+  git-mirror: 0
   # openhands: unlimited uses, bounded by scheduled rotation and its secret_id
   # CIDR bind, as for ci-resolver.
   openhands: 0

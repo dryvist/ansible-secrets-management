@@ -40,6 +40,7 @@ openbao_approle_class_map: >-
     'cribl-edge-mac-a': 'service-runtime',
     'cribl-edge-mac-b': 'service-runtime',
     'flow-lock': 'converge-automation',
+    'git-mirror': 'service-runtime',
     'github-admin': 'operator-admin',
     'github-admin-unattended': 'operator-admin',
     'github-enterprise-admin': 'operator-admin',

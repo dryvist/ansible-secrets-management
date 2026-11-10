@@ -1,0 +1,188 @@
+---
+# The git-mirror identity mints only its three read-only installation sets. The
+# sets live on the admin mount with no repository list, the policy names them
+# explicitly, and no ambient or orchestrator policy inherits them.
+- name: Render and verify the git-mirror identity
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    ansible_become: false
+    _fixture_dir: "{{ render_tmp }}"
+    _template_dir: "../../../roles/openbao/templates"
+    ansible_managed: "test fixture"
+    _mirror_paths:
+      - "{{ openbao_github_mount }}/token/git-mirror-dryvist"
+      - "{{ openbao_github_mount }}/token/git-mirror-JacobPEvans"
+      - "{{ openbao_github_mount }}/token/git-mirror-JacobPEvans-personal"
+    _other_policies:
+      - github-docs-publisher-policy.hcl
+      - github-ci-resolver-policy.hcl
+      - openhands-policy.hcl
+      - hatchet-eval-status-policy.hcl
+      - github-mint-policy.hcl
+      - github-read-policy.hcl
+      - github-repo-create-policy.hcl
+      - github-org-admin-policy.hcl
+      - github-write-policy.hcl
+      - open-llm-policy.hcl
+      - ai-public-policy.hcl
+      - ai-orchestrator-policy.hcl
+      - docs-router-snapshot-policy.hcl
+
+  tasks:
+    - name: Load the openbao role defaults
+      ansible.builtin.include_vars:
+        dir: ../../../roles/openbao/defaults/main
+
+    # set_fact, not task vars: include_vars outranks task vars.
+    - name: Pin the installation IDs for the three owners
+      ansible.builtin.set_fact:
+        openbao_github_dryvist_installation_id: "1001"
+        openbao_github_jacobpevans_installation_id: "1002"
+        openbao_github_admin_personal_installation_id: "1003"
+
+    - name: Read the three git-mirror permission sets
+      ansible.builtin.set_fact:
+        _mirror_sets: >-
+          {{ openbao_github_permission_sets
+             | selectattr('name', 'in', openbao_github_git_mirror_set_names) | list }}
+
+    - name: Assert each set is read-only, installation-wide and on the admin mount
+      ansible.builtin.assert:
+        that:
+          - _mirror_sets | length == 3
+          - >-
+            (_mirror_sets | map(attribute='name') | sort)
+            == (openbao_github_git_mirror_set_names | sort)
+          - _mirror_sets | map(attribute='mount') | unique | list == [openbao_github_mount]
+          - _mirror_sets | map(attribute='tier') | unique | list == ['agents']
+          - >-
+            (_mirror_sets | selectattr('permissions', 'equalto',
+             {'contents': 'read', 'metadata': 'read'}) | list | length) == 3
+          - _mirror_sets | selectattr('repositories', 'defined') | list == []
+          - >-
+            (_mirror_sets | selectattr('name', 'equalto', 'git-mirror-dryvist')
+             | map(attribute='installation_id') | first) == '1001'
+          - >-
+            (_mirror_sets | selectattr('name', 'equalto', 'git-mirror-JacobPEvans')
+             | map(attribute='installation_id') | first) == '1002'
+          - >-
+            (_mirror_sets | selectattr('name', 'equalto', 'git-mirror-JacobPEvans-personal')
+             | map(attribute='installation_id') | first) == '1003'
+        fail_msg: >-
+          The git-mirror sets must be three installation-wide sets on the admin
+          mount, each granting contents and metadata read only, each pinned to
+          its owner's installation.
+
+    - name: Render the git-mirror policy
+      ansible.builtin.template:
+        src: "{{ _template_dir }}/git-mirror-policy.hcl.j2"
+        dest: "{{ _fixture_dir }}/git-mirror-policy.hcl"
+        mode: "0644"
+
+    - name: Render the other tier policies
+      ansible.builtin.template:
+        src: "{{ _template_dir }}/{{ item }}.j2"
+        dest: "{{ _fixture_dir }}/other-{{ item }}"
+        mode: "0644"
+      loop: "{{ _other_policies }}"
+
+    - name: Read the rendered policies
+      ansible.builtin.slurp:
+        src: "{{ _fixture_dir }}/{{ item }}"
+      register: _policy_raw
+      loop: "{{ ['git-mirror-policy.hcl'] + (_other_policies | map('regex_replace', '^', 'other-') | list) }}"
+
+    - name: Reduce the git-mirror policy to its path lines
+      ansible.builtin.set_fact:
+        _mirror_policy_paths: >-
+          {{ _policy_raw.results[0].content | b64decode
+             | regex_findall('(?m)^path "([^"]+)"') }}
+
+    - name: Assert the git-mirror policy grants exactly the three token paths
+      ansible.builtin.assert:
+        that:
+          - _mirror_policy_paths == _mirror_paths
+        fail_msg: >-
+          The git-mirror policy grants {{ _mirror_policy_paths }}. It must grant
+          only the token endpoints of its three sets.
+
+    - name: Assert the git-mirror policy grants create, read and update on each set
+      ansible.builtin.assert:
+        that:
+          - >-
+            (_policy_raw.results[0].content | b64decode
+             | regex_findall('(?s)path "[^"]+" \{\s*capabilities = \[([^\]]+)\]'))
+            | map('regex_replace', '\s', '') | unique | list
+            == ['"create","read","update"']
+        fail_msg: The git-mirror policy must grant create, read and update on its sets.
+
+    - name: Assert no other policy grants a git-mirror path
+      ansible.builtin.assert:
+        that:
+          - >-
+            (_policy_raw.results[1:] | map(attribute='content') | map('b64decode')
+             | map('regex_findall', '(?m)^path "([^"]+)"') | flatten
+             | select('search', 'git-mirror') | list) == []
+        fail_msg: A policy other than git-mirror grants a git-mirror token path.
+
+    - name: Assert the AppRole uses the git-mirror policy on the machine class
+      ansible.builtin.assert:
+        that:
+          - >-
+            (openbao_approles | selectattr('name', 'equalto', openbao_github_git_mirror_approle_name)
+             | map(attribute='policy') | first) == openbao_github_git_mirror_policy_name
+          - openbao_github_git_mirror_policy_name == 'git-mirror'
+          - openbao_github_git_mirror_approle_name == 'git-mirror'
+          - openbao_approle_cidr_class_map['git-mirror'] == 'machine'
+          - >-
+            (openbao_approles | selectattr('name', 'equalto', 'git-mirror')
+             | map(attribute='token_ttl') | first) == '15m'
+          - >-
+            (openbao_approles | selectattr('name', 'equalto', 'git-mirror')
+             | map(attribute='token_max_ttl') | first) == '60m'
+        fail_msg: >-
+          The git-mirror AppRole must attach the git-mirror policy and bind to
+          the machine class.
+
+    - name: Assert the AppRole's secret_id is rotated with the domain identities
+      ansible.builtin.assert:
+        that:
+          - "'git-mirror' in openbao_secrets_domain_approle_names"
+          - openbao_approle_secret_id_ttl_overrides['git-mirror'] == openbao_rotated_domain_secret_id_ttl
+          - openbao_approle_secret_id_num_uses_overrides['git-mirror'] == 0
+          - >-
+            (openbao_approle_env_prefix_overrides.get('git-mirror', 'git-mirror')
+             | upper | regex_replace('[^A-Z0-9]', '_')) == 'GIT_MIRROR'
+        fail_msg: >-
+          The git-mirror AppRole must be in the rotated domain list, carry the
+          rotated secret_id ttl and unlimited uses, and publish as
+          OPENBAO_APPROLE_GIT_MIRROR_*.
+
+    - name: Assert the Apps leaf is a generated all_password field
+      ansible.builtin.assert:
+        that:
+          - openbao_generated_app_secrets['git-mirror'] == ['all_password']
+        fail_msg: secret/apps/git-mirror must generate exactly the all_password field.
+
+    - name: Assert an unset admin personal installation omits only its own set
+      ansible.builtin.set_fact:
+        openbao_github_admin_personal_installation_id: ""
+
+    - name: Read the sets with the personal installation unset
+      ansible.builtin.set_fact:
+        _unset_sets: >-
+          {{ openbao_github_permission_sets
+             | selectattr('name', 'in', openbao_github_git_mirror_set_names) | list }}
+
+    - name: Assert the personal set is omitted and the other two remain
+      ansible.builtin.assert:
+        that:
+          - >-
+            (_unset_sets | map(attribute='name') | sort)
+            == ['git-mirror-dryvist', 'git-mirror-JacobPEvans']
+        fail_msg: >-
+          With the personal installation unset only the personal set must be
+          omitted. An installation-wide set with no installation is unbounded.
