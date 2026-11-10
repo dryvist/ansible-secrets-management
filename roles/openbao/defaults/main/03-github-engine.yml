@@ -34,6 +34,11 @@ openbao_github_personal_installation_id: >-
   {{ openbao_platform_env['OPENBAO_GITHUB_ADMIN_PERSONAL_INSTALLATION_ID'] | default('', true) }}
 openbao_github_jacobpevans_installation_id: >-
   {{ openbao_platform_env['OPENBAO_GITHUB_ADMIN_JACOBPEVANS_INSTALLATION_ID'] | default('', true) }}
+# The admin App's personal-account installation, under its own name.
+# openbao_github_personal_installation_id is also set in 03b-github-app-mounts.yml
+# for the user-owned App, and that later definition wins at load time.
+openbao_github_admin_personal_installation_id: >-
+  {{ openbao_platform_env['OPENBAO_GITHUB_ADMIN_PERSONAL_INSTALLATION_ID'] | default('', true) }}
 openbao_github_jpe_ansible_installation_id: >-
   {{ openbao_platform_env['OPENBAO_GITHUB_ADMIN_JPE_ANSIBLE_INSTALLATION_ID'] | default('', true) }}
 openbao_github_jpe_cribl_installation_id: >-
@@ -212,6 +217,32 @@ openbao_github_router_snapshot_permission_sets: >-
        'repositories': [openbao_github_oidc_docs_repository.split('/') | last],
        'permissions': openbao_github_docs_publisher_permissions}]
      if openbao_github_oidc_docs_repository | length > 0 else [] }}
+# The git mirror guest reads every repository of three owners, one installation
+# each, through read-only sets with no repository list (so each covers the whole
+# installation). Tier `agents` keeps them out of the ambient mint and orchestrator
+# policies; only the git-mirror policy names them. A set is declared only while
+# its owner's installation ID is configured.
+openbao_github_git_mirror_permissions:
+  contents: read
+  metadata: read
+openbao_github_git_mirror_set_names:
+  - git-mirror-dryvist
+  - git-mirror-JacobPEvans
+  - git-mirror-JacobPEvans-personal
+openbao_github_git_mirror_permission_sets: >-
+  {{ [{'name': 'git-mirror-dryvist',
+       'tier': 'agents',
+       'installation_id': openbao_github_dryvist_installation_id,
+       'permissions': openbao_github_git_mirror_permissions},
+      {'name': 'git-mirror-JacobPEvans',
+       'tier': 'agents',
+       'installation_id': openbao_github_jacobpevans_installation_id,
+       'permissions': openbao_github_git_mirror_permissions},
+      {'name': 'git-mirror-JacobPEvans-personal',
+       'tier': 'agents',
+       'installation_id': openbao_github_admin_personal_installation_id,
+       'permissions': openbao_github_git_mirror_permissions}]
+     | selectattr('installation_id') | list }}
 # The Hatchet eval worker can post commit statuses to one repository only.
 openbao_github_role_eval_status_set_name: role-eval-status
 openbao_github_role_eval_status_permissions:
@@ -302,6 +333,7 @@ openbao_github_admin_permission_sets: >-
      + openbao_github_docs_publisher_permission_sets
      + openbao_github_ci_resolver_permission_sets
      + openbao_github_router_snapshot_permission_sets
+     + openbao_github_git_mirror_permission_sets
      + openbao_github_role_eval_status_permission_sets }}
 # Every set on every GitHub mount, each tagged with its mount, for the policy
 # templates.

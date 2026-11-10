@@ -139,6 +139,10 @@ openbao_github_docs_publisher_policy_name: docs-publisher
 # ci-resolver: the dispatcher's repository-scoped GitHub token identity.
 openbao_github_ci_resolver_policy_name: github-ci-resolver
 openbao_github_ci_resolver_approle_name: ci-resolver
+# git-mirror: the read-only Git mirror guest's token identity. It mints only the
+# three read-only installation sets named in 03-github-engine.yml.
+openbao_github_git_mirror_policy_name: git-mirror
+openbao_github_git_mirror_approle_name: git-mirror
 # openhands: the OpenHands service-runtime identity.
 openbao_openhands_policy_name: openhands
 openbao_openhands_approle_name: openhands
