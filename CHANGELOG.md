@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.91.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.90.0...v0.91.0) (2026-11-10)
+
+
+### Features
+
+* **openbao:** add the git-mirror read-only token sets, AppRole and Apps secret ([#605](https://github.com/dryvist/ansible-secrets-management/issues/605)) ([daa69dc](https://github.com/dryvist/ansible-secrets-management/commit/daa69dc8852a37c9b7cc211ad5d2464c2c20f69c))
+
 ## [0.90.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.89.0...v0.90.0) (2026-11-10)
 
 
