@@ -24,6 +24,7 @@ ROLE_NAME_VARIABLE = "{{ openbao_agent_workstation_approle_name }}"
 READS = (
     "secret/data/apps/nautobot",
     "secret/data/ai/mcp",
+    "secret/data/ai/mcp/zammad",
     "secret/data/ai/youtrack",
     "secret/data/ai/dify/agent-apps/test-app",
 )
@@ -90,7 +91,7 @@ def test_agent_workstation_approle_attaches_only_its_dedicated_policy():
     assert "token_policies" not in rows[0]
 
 
-def test_rendered_agent_workstation_policy_contains_only_the_four_exact_reads():
+def test_rendered_agent_workstation_policy_contains_only_its_exact_reads():
     _, policy = _render_policy()
     stanzas = re.findall(
         r'(?ms)^path "([^"]+)" \{\s*capabilities = (\[[^\]]+\])\s*\}',
@@ -99,6 +100,7 @@ def test_rendered_agent_workstation_policy_contains_only_the_four_exact_reads():
     assert stanzas == [
         ("secret/data/apps/nautobot", '["read"]'),
         ("secret/data/ai/mcp", '["read"]'),
+        ("secret/data/ai/mcp/zammad", '["read"]'),
         ("secret/data/ai/youtrack", '["read"]'),
         ("secret/data/ai/dify/agent-apps/*", '["read"]'),
     ]
