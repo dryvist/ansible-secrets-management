@@ -281,6 +281,21 @@ openbao_github_role_eval_status_permission_sets:
     installation_id: "{{ openbao_github_dryvist_installation_id }}"
     repositories: [ansible-proxmox-ai]
     permissions: "{{ openbao_github_role_eval_status_permissions }}"
+# PR-automation workflow files in the JacobPEvans owner: contents, pull requests
+# and workflows write, nothing else. Tier `write` keeps it out of the orchestrator
+# and ambient mint policies; only the admin identity mints it, one repository per
+# token. Declared only while the JacobPEvans installation ID is configured.
+openbao_github_workflows_write_set_name: jacobpevans-workflows-write
+openbao_github_workflows_write_permissions:
+  contents: write
+  pull_requests: write
+  workflows: write
+openbao_github_workflows_write_permission_sets: >-
+  {{ [{'name': openbao_github_workflows_write_set_name,
+       'tier': 'write',
+       'installation_id': openbao_github_jacobpevans_installation_id,
+       'permissions': openbao_github_workflows_write_permissions}]
+     if openbao_github_jacobpevans_installation_id | string | length > 0 else [] }}
 openbao_github_docs_publisher_permission_sets: >-
   {{ [{'name': openbao_github_docs_publisher_set_name,
        'tier': 'publish',
@@ -364,7 +379,8 @@ openbao_github_admin_permission_sets: >-
      + openbao_github_router_snapshot_permission_sets
      + openbao_github_git_mirror_permission_sets
      + openbao_github_pr_reconcile_permission_sets
-     + openbao_github_role_eval_status_permission_sets }}
+     + openbao_github_role_eval_status_permission_sets
+     + openbao_github_workflows_write_permission_sets }}
 # Every set on every GitHub mount, each tagged with its mount, for the policy
 # templates.
 openbao_github_permission_sets: >-
