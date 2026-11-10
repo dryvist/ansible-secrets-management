@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.90.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.89.0...v0.90.0) (2026-11-10)
+
+
+### Features
+
+* **openbao:** let agent-workstation read the Zammad MCP secret ([#603](https://github.com/dryvist/ansible-secrets-management/issues/603)) ([8cffe1c](https://github.com/dryvist/ansible-secrets-management/commit/8cffe1c70cdd042fe68d83055e94eaa05747a1db))
+
 ## [0.89.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.88.0...v0.89.0) (2026-11-09)
 
 
