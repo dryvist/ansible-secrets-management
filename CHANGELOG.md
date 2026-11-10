@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.92.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.91.0...v0.92.0) (2026-11-10)
+
+
+### Features
+
+* **openbao:** add the JacobPEvans-ai org-secrets permission set and webhook read path ([#610](https://github.com/dryvist/ansible-secrets-management/issues/610)) ([7db1edf](https://github.com/dryvist/ansible-secrets-management/commit/7db1edf5e6dfe2f11abbde12c577c67137577801))
+
 ## [0.91.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.90.0...v0.91.0) (2026-11-10)
 
 
