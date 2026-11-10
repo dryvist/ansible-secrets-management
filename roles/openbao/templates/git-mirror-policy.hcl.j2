@@ -1,0 +1,10 @@
+{{ ansible_managed | comment }}
+# git-mirror — the read-only Git mirror guest's token identity. Mints only the
+# three read-only installation sets for its owners, each named explicitly. No
+# other tier, no raw token path and no KV path is granted.
+{% for set_name in openbao_github_git_mirror_set_names %}
+
+path "{{ openbao_github_mount }}/token/{{ set_name }}" {
+  capabilities = ["create", "read", "update"]
+}
+{% endfor %}
