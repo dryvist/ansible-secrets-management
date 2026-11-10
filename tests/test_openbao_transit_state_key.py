@@ -14,6 +14,7 @@ DEFAULTS = ROOT / "roles/openbao/defaults/main/01a-kv-hierarchy.yml"
 INIT = ROOT / "roles/openbao/tasks/init.yml"
 RECONCILE_INIT = ROOT / "roles/openbao/tasks/init/02-initialize-cluster.yml"
 MOUNT_TASKS = ROOT / "roles/openbao/tasks/init/03-kv-mounts-and-seed-secrets.yml"
+LISTING_TASKS = ROOT / "roles/openbao/tasks/init/03a-list-secrets-engines.yml"
 TRANSIT_TASKS = ROOT / "roles/openbao/tasks/init/04c-transit-engine.yml"
 TERRAFORM_APPLY_POLICY = ROOT / "roles/openbao/templates/terraform-apply-policy.hcl.j2"
 AI_ADMIN_POLICY = ROOT / "roles/openbao/templates/ai-admin-policy.hcl.j2"
@@ -35,6 +36,7 @@ class TransitStateKeyIsDeclared(unittest.TestCase):
         cls.init_tasks = yaml.safe_load(INIT.read_text(encoding="utf-8"))
         cls.reconcile_init_tasks = yaml.safe_load(RECONCILE_INIT.read_text(encoding="utf-8"))
         cls.mount_tasks = yaml.safe_load(MOUNT_TASKS.read_text(encoding="utf-8"))
+        cls.listing_tasks = yaml.safe_load(LISTING_TASKS.read_text(encoding="utf-8"))
         cls.transit_tasks = yaml.safe_load(TRANSIT_TASKS.read_text(encoding="utf-8"))
 
     def test_mount_and_key_names_are_defaults(self):
@@ -154,7 +156,7 @@ class TransitStateKeyIsDeclared(unittest.TestCase):
             token_selection["ansible.builtin.set_fact"]["openbao_bootstrap_token"],
             "{{ openbao_reconcile_login.login.auth.client_token }}",
         )
-        mounts = _task(self.mount_tasks, "List enabled secrets engines")
+        mounts = _task(self.listing_tasks, "List enabled secrets engines")
         self.assertEqual(mounts["register"], "openbao_mounts_raw")
         self.assertEqual(mounts["when"], "openbao_bootstrap_token is defined")
 
