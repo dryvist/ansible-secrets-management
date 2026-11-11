@@ -60,10 +60,18 @@ class OpenhandsBindIsOneHost(unittest.TestCase):
 DEFAULTS = ROOT / "roles" / "openbao" / "defaults" / "main" / "05c-terrakube-and-remaining-domain-names.yml"
 
 
+BIND_DEFAULTS = ROOT / "roles" / "openbao" / "defaults" / "main" / "08b-cidr-and-unlock.yml"
+
+
 def openhands_bind(platform_env):
     raw = yaml.safe_load(DEFAULTS.read_text(encoding="utf-8"))["openbao_openhands_secret_id_cidr"]
+    binds = yaml.safe_load(BIND_DEFAULTS.read_text(encoding="utf-8"))
     templar = Templar(loader=DataLoader())
-    templar.available_variables = {"openbao_platform_env": platform_env}
+    templar.available_variables = {
+        "openbao_platform_env": platform_env,
+        "openbao_platform_bind_keys": binds["openbao_platform_bind_keys"],
+        "openbao_platform_bind_cidrs": trust_as_template(binds["openbao_platform_bind_cidrs"]),
+    }
     return templar.template(trust_as_template(raw)).strip()
 
 
