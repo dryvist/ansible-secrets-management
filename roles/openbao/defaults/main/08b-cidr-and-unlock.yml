@@ -248,7 +248,7 @@ openbao_approle_cidr_class_map: >-
 # on its first use from loopback.
 openbao_loopback_client_approles: >-
   {%- set _ns = namespace(names=[]) -%}
-  {%- for _rotator in openbao_rotators | dict2items -%}
+  {%- for _rotator in openbao_rotators | default({}, true) | dict2items -%}
   {%- if _rotator.value.enabled is defined and (_rotator.value.enabled | bool) -%}
   {%- set _ns.names = _ns.names + [_rotator.value.approle] -%}
   {%- endif -%}
