@@ -1,0 +1,187 @@
+---
+# The pr-reconcile identity mints only its two installation-wide write sets. The
+# sets live on the admin mount with no repository list, the policy names them
+# explicitly, and no ambient or orchestrator policy inherits them.
+- name: Render and verify the pr-reconcile identity
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    ansible_become: false
+    _fixture_dir: "{{ render_tmp }}"
+    _template_dir: "../../../roles/openbao/templates"
+    ansible_managed: "test fixture"
+    _pr_paths:
+      - "{{ openbao_github_mount }}/token/pr-reconcile-JacobPEvans-ai"
+      - "{{ openbao_github_mount }}/token/pr-reconcile-JacobPEvans"
+    _other_policies:
+      - github-docs-publisher-policy.hcl
+      - github-ci-resolver-policy.hcl
+      - openhands-policy.hcl
+      - hatchet-eval-status-policy.hcl
+      - github-mint-policy.hcl
+      - github-read-policy.hcl
+      - github-repo-create-policy.hcl
+      - github-org-admin-policy.hcl
+      - github-write-policy.hcl
+      - open-llm-policy.hcl
+      - ai-public-policy.hcl
+      - ai-orchestrator-policy.hcl
+      - docs-router-snapshot-policy.hcl
+
+  tasks:
+    - name: Load the openbao role defaults
+      ansible.builtin.include_vars:
+        dir: ../../../roles/openbao/defaults/main
+
+    # set_fact, not task vars: include_vars outranks task vars.
+    - name: Pin the installation IDs for the two owners
+      ansible.builtin.set_fact:
+        openbao_github_jacobpevans_ai_installation_id: "2001"
+        openbao_github_jacobpevans_installation_id: "2002"
+
+    - name: Read the two pr-reconcile permission sets
+      ansible.builtin.set_fact:
+        _pr_sets: >-
+          {{ openbao_github_permission_sets
+             | selectattr('name', 'in', openbao_github_pr_reconcile_set_names) | list }}
+
+    - name: Assert each set carries the exact map, installation-wide, on the admin mount
+      ansible.builtin.assert:
+        that:
+          - _pr_sets | length == 2
+          # Same expression as the converge-time assertion in tasks/init/05-github-engine.yml.
+          - >-
+            openbao_github_pr_reconcile_permissions.keys() | list
+            == ['contents', 'issues', 'metadata', 'pull_requests', 'statuses']
+          - >-
+            (_pr_sets | map(attribute='name') | sort)
+            == (openbao_github_pr_reconcile_set_names | sort)
+          - _pr_sets | map(attribute='mount') | unique | list == [openbao_github_mount]
+          - _pr_sets | map(attribute='tier') | unique | list == ['agents']
+          - >-
+            (_pr_sets | selectattr('permissions', 'equalto',
+             {'contents': 'write', 'issues': 'write', 'metadata': 'read',
+              'pull_requests': 'write', 'statuses': 'write'}) | list | length) == 2
+          - _pr_sets | selectattr('repositories', 'defined') | list == []
+          - >-
+            (_pr_sets | selectattr('name', 'equalto', 'pr-reconcile-JacobPEvans-ai')
+             | map(attribute='installation_id') | first) == '2001'
+          - >-
+            (_pr_sets | selectattr('name', 'equalto', 'pr-reconcile-JacobPEvans')
+             | map(attribute='installation_id') | first) == '2002'
+          - >-
+            (_pr_sets | map(attribute='permissions')
+             | selectattr('workflows', 'defined') | list) == []
+          - >-
+            (_pr_sets | map(attribute='permissions')
+             | selectattr('administration', 'defined') | list) == []
+        fail_msg: >-
+          The pr-reconcile sets must be two installation-wide sets on the admin
+          mount, each granting exactly its declared write map, each pinned to
+          its owner's installation, and none holding workflows or
+          administration.
+
+    - name: Render the pr-reconcile policy
+      ansible.builtin.template:
+        src: "{{ _template_dir }}/pr-reconcile-policy.hcl.j2"
+        dest: "{{ _fixture_dir }}/pr-reconcile-policy.hcl"
+        mode: "0644"
+
+    - name: Render the other tier policies
+      ansible.builtin.template:
+        src: "{{ _template_dir }}/{{ item }}.j2"
+        dest: "{{ _fixture_dir }}/other-{{ item }}"
+        mode: "0644"
+      loop: "{{ _other_policies }}"
+
+    - name: Read the rendered policies
+      ansible.builtin.slurp:
+        src: "{{ _fixture_dir }}/{{ item }}"
+      register: _policy_raw
+      loop: "{{ ['pr-reconcile-policy.hcl'] + (_other_policies | map('regex_replace', '^', 'other-') | list) }}"
+
+    - name: Reduce the pr-reconcile policy to its path lines
+      ansible.builtin.set_fact:
+        _pr_policy_paths: >-
+          {{ _policy_raw.results[0].content | b64decode
+             | regex_findall('(?m)^path "([^"]+)"') }}
+
+    - name: Assert the pr-reconcile policy grants exactly the two token paths
+      ansible.builtin.assert:
+        that:
+          - _pr_policy_paths == _pr_paths
+        fail_msg: >-
+          The pr-reconcile policy grants {{ _pr_policy_paths }}. It must grant
+          only the token endpoints of its two sets.
+
+    - name: Assert the pr-reconcile policy grants create, read and update on each set
+      ansible.builtin.assert:
+        that:
+          - >-
+            (_policy_raw.results[0].content | b64decode
+             | regex_findall('(?s)path "[^"]+" \{\s*capabilities = \[([^\]]+)\]'))
+            | map('regex_replace', '\s', '') | unique | list
+            == ['"create","read","update"']
+        fail_msg: The pr-reconcile policy must grant create, read and update on its sets.
+
+    - name: Assert no other policy grants a pr-reconcile path
+      ansible.builtin.assert:
+        that:
+          - >-
+            (_policy_raw.results[1:] | map(attribute='content') | map('b64decode')
+             | map('regex_findall', '(?m)^path "([^"]+)"') | flatten
+             | select('search', 'pr-reconcile') | list) == []
+        fail_msg: A policy other than pr-reconcile grants a pr-reconcile token path.
+
+    - name: Assert the AppRole uses the pr-reconcile policy on the machine class
+      ansible.builtin.assert:
+        that:
+          - >-
+            (openbao_approles | selectattr('name', 'equalto', openbao_github_pr_reconcile_approle_name)
+             | map(attribute='policy') | first) == openbao_github_pr_reconcile_policy_name
+          - openbao_github_pr_reconcile_policy_name == 'pr-reconcile'
+          - openbao_github_pr_reconcile_approle_name == 'pr-reconcile'
+          - openbao_approle_cidr_class_map['pr-reconcile'] == 'machine'
+          - >-
+            (openbao_approles | selectattr('name', 'equalto', 'pr-reconcile')
+             | map(attribute='token_ttl') | first) == '15m'
+          - >-
+            (openbao_approles | selectattr('name', 'equalto', 'pr-reconcile')
+             | map(attribute='token_max_ttl') | first) == '60m'
+        fail_msg: >-
+          The pr-reconcile AppRole must attach the pr-reconcile policy and bind
+          to the machine class.
+
+    - name: Assert the AppRole's secret_id is rotated with the domain identities
+      ansible.builtin.assert:
+        that:
+          - "'pr-reconcile' in openbao_secrets_domain_approle_names"
+          - openbao_approle_secret_id_ttl_overrides['pr-reconcile'] == openbao_rotated_domain_secret_id_ttl
+          - openbao_approle_secret_id_num_uses_overrides['pr-reconcile'] == 0
+          - >-
+            (openbao_approle_env_prefix_overrides.get('pr-reconcile', 'pr-reconcile')
+             | upper | regex_replace('[^A-Z0-9]', '_')) == 'PR_RECONCILE'
+        fail_msg: >-
+          The pr-reconcile AppRole must be in the rotated domain list, carry the
+          rotated secret_id ttl and unlimited uses, and publish as
+          OPENBAO_APPROLE_PR_RECONCILE_*.
+
+    - name: Assert an unset JacobPEvans-ai installation omits only its own set
+      ansible.builtin.set_fact:
+        openbao_github_jacobpevans_ai_installation_id: ""
+
+    - name: Read the sets with the JacobPEvans-ai installation unset
+      ansible.builtin.set_fact:
+        _unset_sets: >-
+          {{ openbao_github_permission_sets
+             | selectattr('name', 'in', openbao_github_pr_reconcile_set_names) | list }}
+
+    - name: Assert the JacobPEvans-ai set is omitted and the other remains
+      ansible.builtin.assert:
+        that:
+          - (_unset_sets | map(attribute='name') | list) == ['pr-reconcile-JacobPEvans']
+        fail_msg: >-
+          With the JacobPEvans-ai installation unset only that set must be
+          omitted. An installation-wide set with no installation is unbounded.

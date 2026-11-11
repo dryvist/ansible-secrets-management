@@ -143,6 +143,10 @@ openbao_github_ci_resolver_approle_name: ci-resolver
 # three read-only installation sets named in 03-github-engine.yml.
 openbao_github_git_mirror_policy_name: git-mirror
 openbao_github_git_mirror_approle_name: git-mirror
+# pr-reconcile: the PR reconcile agent's token identity. It mints only the two
+# installation sets named in 03-github-engine.yml.
+openbao_github_pr_reconcile_policy_name: pr-reconcile
+openbao_github_pr_reconcile_approle_name: pr-reconcile
 # openhands: the OpenHands service-runtime identity.
 openbao_openhands_policy_name: openhands
 openbao_openhands_approle_name: openhands
