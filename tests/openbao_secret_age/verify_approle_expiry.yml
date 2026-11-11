@@ -25,6 +25,7 @@
     _template_dir: "../../roles/openbao/templates"
     # Mirror defaults/main/09b-secret-age.yml so the fixture matches production.
     openbao_api_addr: "http://openbao-test:8200"
+    openbao_api_port: 8200
     openbao_secret_age_target_days: 30
     openbao_secret_age_max_days: 47
     openbao_secret_age_interval: "24h"

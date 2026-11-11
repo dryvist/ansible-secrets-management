@@ -10,6 +10,9 @@ openbao_rotation_approles:
   # does not re-mint its own credential.
   - name: "{{ openbao_splunk_mcp_rotate_approle_name }}"
     policy: "{{ openbao_splunk_mcp_rotate_policy_name }}"
+    # Keep the machine class and add only the local rotate client's source.
+    secret_id_bound_cidrs: >-
+      {{ openbao_approle_cidr_classes.machine }},127.0.0.1/32
   # approle-secret-id-rotate-scheduled: unattended timer identity for
   # playbooks/openbao-rotate-approles.yml, same shape as splunk-mcp-rotate
   # above (standing secret_id, machine defaults, nothing special) -- it
@@ -22,6 +25,9 @@ openbao_rotation_approles:
   # secret-id accessors. No standing write anywhere; safe to leave ambient.
   - name: "{{ openbao_secret_age_audit_approle_name }}"
     policy: "{{ openbao_secret_age_audit_policy_name }}"
+    # Keep the machine class and add only the local secret-age client's source.
+    secret_id_bound_cidrs: >-
+      {{ openbao_approle_cidr_classes.machine }},127.0.0.1/32
   # ai-rotate / apps-rotate: HUMAN-GATED subtree writers scoped to
   # secret/ai/* and secret/apps/* respectively — same shape as the
   # ai-apply-<svc> tier (06-ai-access-model.yml). A

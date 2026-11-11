@@ -33,6 +33,7 @@
     _template_dir: "../../roles/openbao/templates"
     # Mirror roles/openbao/defaults/main.yml so the fixture matches production.
     openbao_api_addr: "http://openbao-test:8200"
+    openbao_api_port: 8200
     openbao_slack_rotate_interval: "6h"
     openbao_slack_rotate_safety_margin: 14400 # 4h
     openbao_slack_rotate_ntfy_url: ""

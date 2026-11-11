@@ -28,6 +28,13 @@ IDENTITIES = ROOT / "roles" / "openbao" / "defaults" / "main" / "05l-dify-agent-
 
 UNCLASSED_TASK = "Assert every AppRole this run creates has a source-address class"
 
+# The on-box timers whose AppRoles log in through the node-local loopback
+# listener: the snapshot daemon (07f) and the rotate timer's two rotator
+# identities plus the secret-age auditor (07e/07f).
+LOOPBACK_CLIENT_ROLES = frozenset(
+    {"snapshot", "slack-admin", "splunk-mcp-rotate", "secret-age-audit"}
+)
+
 
 def _task(name):
     for t in yaml.safe_load(TASKS.read_text(encoding="utf-8")):
@@ -228,7 +235,38 @@ class TestShippedDeclarationIsClean(unittest.TestCase):
         self.assertEqual(parameters["snapshot"]["secret_id_bound_cidrs"], expected)
         self.assertEqual(parameters["snapshot"]["token_bound_cidrs"], expected)
         for name, role in parameters.items():
-            if name == "snapshot":
+            if name in LOOPBACK_CLIENT_ROLES:
+                continue
+            self.assertNotIn("127.0.0.1/32", role["secret_id_bound_cidrs"], name)
+            self.assertNotIn("127.0.0.1/32", role["token_bound_cidrs"], name)
+
+    def test_rotation_timer_roles_add_loopback_to_their_declared_class(self):
+        loaded = {}
+        for path in sorted((ROOT / "roles/openbao/defaults/main").glob("*.yml")):
+            loaded.update(yaml.safe_load(path.read_text(encoding="utf-8")) or {})
+        machine_cidrs = "192.0.2.0/24"
+        workstation_cidrs = "198.51.100.0/24"
+        loaded["openbao_management_cidrs"] = machine_cidrs
+        loaded["openbao_workstation_cidrs"] = workstation_cidrs
+        roles = _render("{{ openbao_approles }}", loaded)
+        loaded["openbao_approles"] = roles
+        class_map = _render("{{ openbao_approle_cidr_class_map }}", loaded)
+        parameters = _render("{{ openbao_approle_cli_parameters }}", loaded)
+
+        expected = {
+            "splunk-mcp-rotate": f"{machine_cidrs},127.0.0.1/32",
+            "secret-age-audit": f"{machine_cidrs},127.0.0.1/32",
+            # slack-admin keeps its declared machine_or_workstation class.
+            "slack-admin": f"{machine_cidrs},{workstation_cidrs},127.0.0.1/32",
+        }
+        self.assertEqual(class_map["splunk-mcp-rotate"], "machine")
+        self.assertEqual(class_map["secret-age-audit"], "machine")
+        self.assertEqual(class_map["slack-admin"], "machine_or_workstation")
+        for name, bound in expected.items():
+            self.assertEqual(parameters[name]["secret_id_bound_cidrs"], bound, name)
+            self.assertEqual(parameters[name]["token_bound_cidrs"], bound, name)
+        for name, role in parameters.items():
+            if name in LOOPBACK_CLIENT_ROLES:
                 continue
             self.assertNotIn("127.0.0.1/32", role["secret_id_bound_cidrs"], name)
             self.assertNotIn("127.0.0.1/32", role["token_bound_cidrs"], name)

@@ -17,6 +17,14 @@
 # table's own key folded in as `.name` — the table itself never repeats the
 # name as both key and field.
 
+- name: Require the loopback listener for the rotate clients
+  ansible.builtin.assert:
+    that:
+      - openbao_snapshot_loopback_listener_enabled | bool
+    fail_msg: >-
+      The rotate clients require the node-local loopback listener for their
+      plain-HTTP AppRole login.
+
 - name: Install the shared OpenBao AppRole CLI
   ansible.builtin.include_role:
     name: dryvist.homelab.bao_approle_cli
