@@ -268,6 +268,14 @@
     - openbao_approle
   when: openbao_select | default({}) | length == 0
 
+# After 10b: an empty pr-reconcile bind destroys any secret_id stored before it
+# was emptied. 10b never issues one for that role in the same state.
+- name: Revoke stored pr-reconcile secret_ids while its bind is empty
+  ansible.builtin.import_tasks: init/10e-pr-reconcile-secret-id-revoke.yml
+  tags:
+    - openbao_approle
+  when: openbao_select | default({}) | length == 0
+
 # --- Rotation-exempt tagging (idempotent, write-if-changed) ------------------
 # Stamp custom_metadata.rotation=exempt on every operator-declared
 # encryption/signing path (openbao_rotation_exempt) so the secret-age auditor
