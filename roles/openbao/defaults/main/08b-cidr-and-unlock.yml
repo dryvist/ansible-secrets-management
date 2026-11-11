@@ -245,8 +245,10 @@ openbao_approle_cli_parameters: >-
   {%- set _parameters = {} -%}
   {%- for _approle in openbao_approles -%}
   {%- set _cidr_class = openbao_approle_cidr_class_map[_approle.name] -%}
+  {#- no_class_fallback: an empty explicit bind stays empty instead of taking the class (pr-reconcile, fail closed) -#}
   {%- set _cidr_csv = _approle.secret_id_bound_cidrs | default('', true)
-      or openbao_approle_cidr_classes[_cidr_class] -%}
+      or ('' if (_approle.no_class_fallback | default(false))
+          else openbao_approle_cidr_classes[_cidr_class]) -%}
   {%- set _ = _parameters.update({_approle.name: {
       'token_policies': ((_approle.token_policies | default([_approle.policy])) | join(',')),
       'bind_secret_id': ((_approle.bind_secret_id | default(openbao_approle_bind_secret_id)) | bool | string | lower),

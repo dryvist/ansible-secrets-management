@@ -244,7 +244,8 @@ openbao_host_secret_zero_approle_names:
   - "{{ openbao_hatchet_eval_status_approle_name }}"
   - iac-platform-deploy
 # Every scheduled-rotation AppRole, by name; approle-secret-id-rotate-policy.hcl.j2
-# scopes its secret-id mint/destroy grants to this one list.
+# scopes its secret-id mint/destroy grants to this one list. pr-reconcile joins
+# the list only when its /32 is supplied (07b), so an empty bind is never rotated.
 openbao_secrets_domain_approle_names: >-
   {{ [openbao_observability_approle_name,
       openbao_local_cloud_approle_name,
@@ -271,9 +272,10 @@ openbao_secrets_domain_approle_names: >-
       openbao_open_llm_approle_name,
       openbao_github_ci_resolver_approle_name,
       openbao_github_git_mirror_approle_name,
-      openbao_github_pr_reconcile_approle_name,
       openbao_openhands_approle_name,
-      openbao_ansible_converge_writer_approle_name] }}
+      openbao_ansible_converge_writer_approle_name]
+     + ([openbao_github_pr_reconcile_approle_name]
+        if openbao_pr_reconcile_secret_id_cidr | length > 0 else []) }}
 # Roles using lookup proof despite the runner's source class allowing login.
 openbao_approle_rotation_lookup_proof_names: []
 # Provider-level API credentials live on exact leaves under a separately
@@ -356,6 +358,11 @@ openbao_open_llm_secret_id_cidr: >-
 # the machine class.
 openbao_openhands_secret_id_cidr: >-
   {{ openbao_platform_env['OPENBAO_OPENHANDS_SECRET_ID_CIDR'] | default('', true) }}
+# The pr-reconcile AppRole's single address as a /32 (init/10-approles.yml asserts
+# the shape), read from the platform environment document. Empty leaves the role
+# unbound and out of the rotated and published sets (07b, 08b). Fails closed.
+openbao_pr_reconcile_secret_id_cidr: >-
+  {{ openbao_platform_env['OPENBAO_PR_RECONCILE_SECRET_ID_CIDR'] | default('', true) }}
 # ai-readonly / ai-elevated are now ACTOR ROLES that ATTACH base capability
 # policies (below) — they no longer own a standalone `ai-*` policy object. Only
 # the AppRole names survive as vars; their token_policies are composed rollups.

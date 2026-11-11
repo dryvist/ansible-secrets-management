@@ -255,13 +255,6 @@ openbao_base_approles_core:
     policy: "{{ openbao_github_git_mirror_policy_name }}"
     token_ttl: 15m
     token_max_ttl: 60m
-  # pr-reconcile: the PR reconcile agent's token identity. It stays on the
-  # default machine class (08b) and is rotated with the openbao_secrets domain
-  # identities (05c), so its env-document pair is republished on each rotation.
-  - name: "{{ openbao_github_pr_reconcile_approle_name }}"
-    policy: "{{ openbao_github_pr_reconcile_policy_name }}"
-    token_ttl: 15m
-    token_max_ttl: 60m
   # openhands: service-runtime identity for the dedicated GitHub App mount,
   # bound to the OpenHands guest's /32, with a 1h token and the rotated-domain secret_id from the 08a overrides.
   - name: "{{ openbao_openhands_approle_name }}"
@@ -322,10 +315,24 @@ openbao_base_approles_core:
 # openbao_base_approles_elevated (iac-platform-deploy through slack-ops) lives
 # in 07f-elevated-approles.yml — split for the CI token-limits gate.
 # openbao_seed_writer_approles lives in 07i-seed-writer-approles.yml.
+# pr-reconcile: the PR reconcile agent's token identity. Its secret_id and token
+# bind to the single /32 in 05c, and it joins the openbao_secrets rotated set
+# (05c) and the env-document publish only when that /32 is supplied. Empty, the
+# role keeps its policy but gets no bind (08b no_class_fallback) and no standing
+# secret_id (manage_secret_id: false), so no secret_id exists to redeem.
+openbao_github_pr_reconcile_approles: >-
+  {{ [{'name': openbao_github_pr_reconcile_approle_name,
+       'policy': openbao_github_pr_reconcile_policy_name,
+       'secret_id_bound_cidrs': openbao_pr_reconcile_secret_id_cidr,
+       'no_class_fallback': true,
+       'token_ttl': '15m',
+       'token_max_ttl': '60m'}
+      | combine({} if openbao_pr_reconcile_secret_id_cidr | length > 0
+                else {'manage_secret_id': false})] }}
 openbao_base_approles: >-
   {{ openbao_base_approles_core + openbao_base_approles_elevated
      + openbao_hermes_private_agent_approles + openbao_sandbox_agent_approles
-     + openbao_pepper_approles
+     + openbao_pepper_approles + openbao_github_pr_reconcile_approles
      + openbao_app_agent_tier_reader_approles
      + openbao_dify_agent_approles + openbao_seed_writer_approles
      + openbao_window_service_approles }}

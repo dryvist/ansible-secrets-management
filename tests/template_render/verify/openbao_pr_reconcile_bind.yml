@@ -1,0 +1,71 @@
+---
+# The pr-reconcile AppRole fails closed while its /32 is empty: it keeps its
+# policy, gets no bind, has no standing secret_id, and is out of the rotated
+# set. A documentation-range /32 binds both fields and joins the rotated set.
+- name: Verify the pr-reconcile bind and its fail-closed empty state
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    ansible_become: false
+
+  tasks:
+    - name: Load the openbao role defaults
+      ansible.builtin.include_vars:
+        dir: ../../../roles/openbao/defaults/main
+
+    # set_fact, not task vars: include_vars outranks task vars.
+    - name: Leave the pr-reconcile bind empty
+      ansible.builtin.set_fact:
+        openbao_pr_reconcile_secret_id_cidr: ""
+
+    - name: Read the pr-reconcile AppRole and its CLI parameters when empty
+      ansible.builtin.set_fact:
+        _pr_role: >-
+          {{ openbao_approles
+             | selectattr('name', 'equalto', openbao_github_pr_reconcile_approle_name)
+             | first }}
+        _pr_params: >-
+          {{ openbao_approle_cli_parameters[openbao_github_pr_reconcile_approle_name] }}
+
+    - name: Assert the empty state has no bind, no secret_id, and no rotated membership
+      ansible.builtin.assert:
+        that:
+          - _pr_role.policy == openbao_github_pr_reconcile_policy_name
+          - _pr_params.secret_id_bound_cidrs == ''
+          - _pr_params.token_bound_cidrs == ''
+          - _pr_role.manage_secret_id is defined
+          - not (_pr_role.manage_secret_id | bool)
+          - openbao_github_pr_reconcile_approle_name not in openbao_secrets_domain_approle_names
+        fail_msg: >-
+          With OPENBAO_PR_RECONCILE_SECRET_ID_CIDR empty, pr-reconcile must keep
+          its policy and take no bind, no standing secret_id, and no rotated
+          membership. A machine-class fallback bind is the failure this guards.
+        quiet: true
+
+    # Same override as the existing verify: include_vars outranks task vars.
+    - name: Supply the pr-reconcile documentation-range bind
+      ansible.builtin.set_fact:
+        openbao_pr_reconcile_secret_id_cidr: "192.0.2.30/32"
+
+    - name: Read the pr-reconcile AppRole and its CLI parameters when supplied
+      ansible.builtin.set_fact:
+        _pr_role: >-
+          {{ openbao_approles
+             | selectattr('name', 'equalto', openbao_github_pr_reconcile_approle_name)
+             | first }}
+        _pr_params: >-
+          {{ openbao_approle_cli_parameters[openbao_github_pr_reconcile_approle_name] }}
+
+    - name: Assert the supplied bind lands on both fields and the role is rotated
+      ansible.builtin.assert:
+        that:
+          - _pr_params.secret_id_bound_cidrs == '192.0.2.30/32'
+          - _pr_params.token_bound_cidrs == '192.0.2.30/32'
+          - _pr_role.manage_secret_id is not defined
+          - openbao_github_pr_reconcile_approle_name in openbao_secrets_domain_approle_names
+        fail_msg: >-
+          With the /32 supplied, pr-reconcile must bind its secret_id and token to
+          that address and join the rotated set.
+        quiet: true

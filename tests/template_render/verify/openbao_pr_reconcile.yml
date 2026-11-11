@@ -154,6 +154,11 @@
           The pr-reconcile AppRole must attach the pr-reconcile policy and bind
           to the machine class.
 
+    # Rotation and publish require the pr-reconcile /32 (fail closed when empty).
+    - name: Supply a documentation-range bind for pr-reconcile
+      ansible.builtin.set_fact:
+        openbao_pr_reconcile_secret_id_cidr: "192.0.2.30/32"
+
     - name: Assert the AppRole's secret_id is rotated with the domain identities
       ansible.builtin.assert:
         that:
