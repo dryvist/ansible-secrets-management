@@ -30,6 +30,7 @@ CALLERS = {
     "admin": {
         "file": INIT / "05-github-engine.yml",
         "tasks": [
+            "Assert the GitHub engine configuration read succeeded",
             "Determine whether the GitHub App is actually configured",
             "Require the GitHub App credentials for first configuration",
             "Refuse an unexpected GitHub App ID drift",
@@ -47,6 +48,7 @@ CALLERS = {
     "per-app": {
         "file": INIT / "05b-github-app-mount.yml",
         "tasks": [
+            "Assert the configuration read succeeded",
             "Determine whether the App is configured",
             "Refuse an unexpected App ID drift",
             "Require the private key for a declared key rotation",
@@ -102,7 +104,7 @@ def config_endpoint():
     server.server_close()
 
 
-def _run(tmp_path, endpoint, caller, stored_app_id, app_id, key, rotate=None):
+def _run(tmp_path, endpoint, caller, stored_app_id, app_id, key, rotate=None, config_rc=0):
     """Run one caller's tasks; `rotate` None leaves the role default in place."""
     address, writes = endpoint
     playbook = tmp_path / "configure.yml"
@@ -112,7 +114,7 @@ def _run(tmp_path, endpoint, caller, stored_app_id, app_id, key, rotate=None):
         "vars_files": [str(DEFAULTS)],
         "tasks": _caller_tasks(caller),
     }]))
-    stored = {"rc": 0, "stdout": json.dumps({"data": {"app_id": stored_app_id}})}
+    stored = {"rc": config_rc, "stdout": json.dumps({"data": {"app_id": stored_app_id}})}
     variables = {
         **CALLERS[caller]["variables"](stored, app_id, key),
         "openbao_bootstrap_token": TOKEN,
@@ -206,6 +208,26 @@ def test_unconfigured_mount_is_first_configured_through_the_shared_file(
     assert returncode == 0, output
     assert f"{SHARED} for localhost" in output, output
     _assert_one_write(writes, 42, "FIRST-KEY")
+
+
+@pytest.mark.parametrize("caller", CALLERS)
+def test_failed_config_read_stops_before_writing(tmp_path, config_endpoint, caller):
+    returncode, output, writes = _run(
+        tmp_path, config_endpoint, caller, stored_app_id=0, app_id="42", key="FIRST-KEY",
+        config_rc=2,
+    )
+    assert returncode != 0, output
+    assert "config read failed" in output and "nothing was written" in output, output
+    assert writes == []
+
+
+@pytest.mark.parametrize("caller", CALLERS)
+def test_private_key_asserts_are_hidden(caller):
+    tasks = _tasks(CALLERS[caller]["file"])
+    for task in tasks:
+        assertion = task.get("ansible.builtin.assert", {})
+        if "private_key" in str(assertion):
+            assert task.get("no_log") is True, task["name"]
 
 
 def test_shared_file_holds_the_only_config_write():

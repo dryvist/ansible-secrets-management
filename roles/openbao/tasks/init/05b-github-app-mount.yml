@@ -38,6 +38,13 @@
   check_mode: false
   failed_when: false
 
+- name: "Assert the configuration read succeeded on mount {{ gm.mount }}"
+  ansible.builtin.assert:
+    that:
+      - openbao_github_app_mount_config.rc == 0
+    fail_msg: >-
+      The GitHub App config read failed on {{ gm.mount }}; nothing was written.
+
 - name: "Determine whether the App is configured on mount {{ gm.mount }}"
   ansible.builtin.set_fact:
     openbao_github_app_mount_configured: >-
@@ -68,6 +75,7 @@
       {{ gm.mount }} is listed in openbao_github_app_key_rotate_mounts but no
       private key is supplied. Supply the new key, or remove the mount from
       the list.
+  no_log: true
   when:
     - openbao_github_app_mount_configured | bool
     - gm.mount in openbao_github_app_key_rotate_mounts

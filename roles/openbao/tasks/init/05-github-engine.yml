@@ -145,6 +145,15 @@
     - openbao_bootstrap_token is defined
     - openbao_github_engine_enabled | bool
 
+- name: Assert the GitHub engine configuration read succeeded
+  ansible.builtin.assert:
+    that:
+      - openbao_github_config_check.rc == 0
+    fail_msg: The GitHub secrets engine config read failed; nothing was written.
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_github_engine_enabled | bool
+
 # A virgin mount answers the config read with rc=0 and app_id=0 — "endpoint
 # readable" is NOT "App configured" (issue #1079: gating first configuration
 # on rc alone made the first-config path unreachable and tripped the drift
@@ -167,6 +176,7 @@
     fail_msg: >-
       The GitHub secrets engine is unconfigured. Supply OPENBAO_GITHUB_APP_ID
       and OPENBAO_GITHUB_APP_PRIVATE_KEY for this one-time sealed write.
+  no_log: true
   when:
     - openbao_bootstrap_token is defined
     - openbao_github_engine_enabled | bool
@@ -197,6 +207,7 @@
       {{ openbao_github_mount }} is listed in openbao_github_app_key_rotate_mounts
       but no private key is supplied. Supply the new key, or remove the mount
       from the list.
+  no_log: true
   when:
     - openbao_bootstrap_token is defined
     - openbao_github_engine_enabled | bool
