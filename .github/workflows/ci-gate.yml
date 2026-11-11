@@ -170,6 +170,12 @@ jobs:
       - name: Verify every non-expiring secret_id has a compensating control
         run: ansible-playbook tests/nonexpiring_secret_ids/verify.yml
 
+      - name: Verify the rotate and secret-age script fixtures
+        run: |
+          for play in tests/openbao_rotate/verify_*.yml tests/openbao_secret_age/verify_*.yml; do
+            ansible-playbook -i localhost, -c local "$play"
+          done
+
   # The full pytest suite runs in its own job so each job stays inside the
   # pull-request timeout policy.
   pytest:
