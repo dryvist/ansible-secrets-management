@@ -39,6 +39,7 @@ openbao_approle_class_map: >-
     'config-read': 'service-runtime',
     'cribl-edge-mac-a': 'service-runtime',
     'cribl-edge-mac-b': 'service-runtime',
+    'dify-agent-secret-id-issuer': 'converge-automation',
     'flow-lock': 'converge-automation',
     'git-mirror': 'service-runtime',
     'github-admin': 'operator-admin',

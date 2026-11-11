@@ -57,10 +57,17 @@ openbao_roster_agent_policies: >-
   {%- endfor -%}
   {{ _entries }}
 
+openbao_dify_secret_id_issuer_policies: >-
+  {{ ([{'name': openbao_seed_writer_dify_secret_id_issuer_policy_name,
+        'template': 'seed-writer-dify-secret-id-issuer-policy.hcl.j2',
+        'targets': openbao_dify_secret_id_issuer_targets}]
+      if openbao_dify_secret_id_issuer_targets | length > 0 else []) }}
+
 openbao_base_policies: >-
   {{ openbao_terrakube_base_policies + openbao_base_policies_static
      + openbao_roster_owned_mcp_deny_policies
      + openbao_app_agent_tier_reader_policies
+     + openbao_dify_secret_id_issuer_policies
      + openbao_dify_agent_policies + openbao_window_service_policies }}
 
 # Static policy catalog, loaded with the other defaults.
@@ -83,9 +90,6 @@ openbao_base_policies_static:
   # shared converge policy above is carried by semaphore too.
   - name: "{{ openbao_authelia_signing_writer_policy_name }}"
     template: authelia-signing-writer-policy.hcl.j2
-  # Attached to the seed-writer AppRole only (07i).
-  - name: "{{ openbao_seed_writer_dify_secret_id_issuer_policy_name }}"
-    template: seed-writer-dify-secret-id-issuer-policy.hcl.j2
   # Attached to iac-platform-deploy only (07f). Denies the signing leaf that its
   # read-apps grant would otherwise reach.
   - name: "{{ openbao_iac_platform_deploy_signing_deny_policy_name }}"

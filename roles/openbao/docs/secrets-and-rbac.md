@@ -39,6 +39,10 @@ created only when `OPENBAO_DIFY_AGENT_CIDR` is set. Their SecretIDs last 720
 hours, use the configured CIDR binding, and produce OpenBao tokens capped at
 15 minutes.
 
+The `dify-agent-secret-id-issuer` AppRole is created with the Dify agent
+AppRoles. Its SecretID redemption and token use are both bound to the required
+`OPENBAO_DIFY_SECRET_ID_ISSUER_SECRET_ID_CIDR` value.
+
 `roles/openbao/defaults/main/08d-approle-taxonomy.yml` maps declared AppRoles
 to the six identity classes. The AppRole initialization fails if any declared
 role lacks a class. `ai-orchestrator` remains a `trusted-agent-write` migration

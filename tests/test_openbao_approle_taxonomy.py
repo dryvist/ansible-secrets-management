@@ -77,6 +77,7 @@ class TestAppRoleTaxonomy(unittest.TestCase):
         variables["openbao_platform_env"] = {
             "OPENBAO_DIFY_AGENT_CIDR": "192.0.2.10/32",
         }
+        variables["openbao_dify_secret_id_issuer_secret_id_cidr"] = "192.0.2.11/32"
 
         roles = _render("{{ openbao_approles }}", variables)
         class_map = _render("{{ openbao_approle_class_map }}", variables)
