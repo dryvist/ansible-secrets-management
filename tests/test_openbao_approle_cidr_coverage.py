@@ -226,19 +226,12 @@ class TestShippedDeclarationIsClean(unittest.TestCase):
         cidr_classes = _render("{{ openbao_approle_cidr_classes }}", loaded)
         parameters = _render("{{ openbao_approle_cli_parameters }}", loaded)
         roles_by_name = {role["name"]: role for role in roles}
+        loopback_roles = _render("{{ openbao_loopback_client_approles }}", loaded)
 
-        # Snapshot timer, rotation timers, and the secret-age auditor all log in
-        # through the node-local loopback listener. Each keeps its existing
-        # class (slack-admin is machine-or-workstation) and adds loopback only.
-        loopback_roles = [
-            loaded[key]
-            for key in (
-                "openbao_snapshot_approle_name",
-                "openbao_splunk_mcp_rotate_approle_name",
-                "openbao_secret_age_audit_approle_name",
-                "openbao_slack_admin_approle_name",
-            )
-        ]
+        # The declared loopback clients (rotation timers, snapshot timer,
+        # secret-age auditor, scheduled secret-id rotation) all log in through
+        # the node-local loopback listener. Each keeps its existing class
+        # (slack-admin is machine-or-workstation) and adds loopback only.
         for name in loopback_roles:
             base = cidr_classes[class_map[name]]
             self.assertIn(machine_cidrs, base.split(","), name)
