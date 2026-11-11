@@ -10,6 +10,8 @@ openbao_seed_writer_approles:
     token_policies:
       - "{{ openbao_ansible_converge_policy_name }}"
       - "{{ openbao_authelia_signing_writer_policy_name }}"
+      # Issues the Dify agent SecretIDs (07j, seed-writer-dify-secret-id-issuer).
+      - "{{ openbao_seed_writer_dify_secret_id_issuer_policy_name }}"
     token_type: batch
     token_ttl: "{{ openbao_approle_token_max_ttl }}"
     token_max_ttl: "{{ openbao_approle_token_max_ttl }}"
