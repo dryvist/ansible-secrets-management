@@ -147,6 +147,27 @@
   ansible.builtin.set_fact:
     openbao_approle_config_targets: "{{ openbao_object_targets }}"
 
+- name: Refuse AppRoles with an empty declared source-address bind
+  vars:
+    _empty_declared_source_address_binds: >-
+      {%- set _ns = namespace(names=[]) -%}
+      {%- for _approle in (openbao_approle_config_targets | default(openbao_manageable_approles))
+          if 'secret_id_bound_cidrs' in _approle -%}
+      {%- if (_approle.secret_id_bound_cidrs | default('', true) | string | trim | length) == 0 -%}
+      {%- set _ns.names = _ns.names + [_approle.name] -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {{ _ns.names }}
+  ansible.builtin.assert:
+    that:
+      - _empty_declared_source_address_binds | length == 0
+    fail_msg: >-
+      AppRoles {{ _empty_declared_source_address_binds | join(', ') }} have a
+      declared source-address bind that is empty. Set each role's
+      secret_id_bound_cidrs before converging.
+    quiet: true
+  when: openbao_bootstrap_token is defined
+
 # The complementary half of the two asserts above: those catch a role this
 # converge CREATES with no source-address class. This one catches a role that
 # exists live and this converge never even LOOPS, because it is declared

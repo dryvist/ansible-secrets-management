@@ -263,8 +263,11 @@ openbao_approle_cli_parameters: >-
   {%- set _parameters = {} -%}
   {%- for _approle in openbao_approles -%}
   {%- set _cidr_class = openbao_approle_cidr_class_map[_approle.name] -%}
-  {%- set _cidr_csv = _approle.secret_id_bound_cidrs | default('', true)
-      or openbao_approle_cidr_classes[_cidr_class] -%}
+  {%- if 'secret_id_bound_cidrs' in _approle -%}
+  {%- set _cidr_csv = _approle.secret_id_bound_cidrs | default('', true) | trim -%}
+  {%- else -%}
+  {%- set _cidr_csv = openbao_approle_cidr_classes[_cidr_class] | trim -%}
+  {%- endif -%}
   {%- if _approle.name in openbao_loopback_client_approles
         and '127.0.0.1/32' not in (_cidr_csv | split(',') | map('trim') | list) -%}
   {%- set _cidr_csv = ((_cidr_csv | trim ~ ',') if (_cidr_csv | trim | length > 0) else '')
