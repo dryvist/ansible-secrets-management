@@ -351,9 +351,10 @@ openbao_open_llm_approle_name: open-llm
 openbao_open_llm_secret_id_cidr: >-
   {{ lookup('env', 'OPENBAO_AI_SANDBOX_SECRET_ID_CIDR') | default('', true) }}
 # The OpenHands guest's single address as a /32 (init/10-approles.yml asserts
-# the shape). Empty falls back to the machine class.
+# the shape), read from the platform environment document. Empty falls back to
+# the machine class.
 openbao_openhands_secret_id_cidr: >-
-  {{ lookup('env', 'OPENBAO_OPENHANDS_SECRET_ID_CIDR') | default('', true) }}
+  {{ openbao_platform_env['OPENBAO_OPENHANDS_SECRET_ID_CIDR'] | default('', true) }}
 # ai-readonly / ai-elevated are now ACTOR ROLES that ATTACH base capability
 # policies (below) — they no longer own a standalone `ai-*` policy object. Only
 # the AppRole names survive as vars; their token_policies are composed rollups.

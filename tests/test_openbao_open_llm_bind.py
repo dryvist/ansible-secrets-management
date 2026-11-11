@@ -57,5 +57,25 @@ class OpenhandsBindIsOneHost(unittest.TestCase):
                 self.assertFalse(self.check(bad))
 
 
+DEFAULTS = ROOT / "roles" / "openbao" / "defaults" / "main" / "05c-terrakube-and-remaining-domain-names.yml"
+
+
+def openhands_bind(platform_env):
+    raw = yaml.safe_load(DEFAULTS.read_text(encoding="utf-8"))["openbao_openhands_secret_id_cidr"]
+    templar = Templar(loader=DataLoader())
+    templar.available_variables = {"openbao_platform_env": platform_env}
+    return templar.template(trust_as_template(raw)).strip()
+
+
+class OpenhandsBindComesFromPlatformEnv(unittest.TestCase):
+    def test_bind_reads_the_platform_environment_document(self):
+        self.assertEqual(
+            openhands_bind({"OPENBAO_OPENHANDS_SECRET_ID_CIDR": "192.0.2.20/32"}), "192.0.2.20/32"
+        )
+
+    def test_missing_key_falls_back_to_empty(self):
+        self.assertEqual(openhands_bind({}), "")
+
+
 if __name__ == "__main__":
     unittest.main()
