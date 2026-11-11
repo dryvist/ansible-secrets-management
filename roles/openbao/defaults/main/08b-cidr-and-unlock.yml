@@ -51,7 +51,8 @@ openbao_approle_allow_unbound_cidrs: >-
      in ['1', 'true', 'yes', 'on'] }}
 # Roles whose secret_id and token CIDRs must render non-empty even when the
 # escape hatch is set. The same check also rejects any selected role's declared
-# empty source-address bind, using the normalized CLI parameter map.
+# empty source-address bind, using the normalized declared value in the CLI
+# parameter map before any loopback source is appended.
 openbao_approle_bound_required:
   - "{{ openbao_hatchet_killtest_approle_name }}"
 openbao_approle_bound_required_unbound: >-
@@ -66,7 +67,7 @@ openbao_approle_bound_required_unbound: >-
   {%- for _approle in (openbao_approle_config_targets | default(openbao_manageable_approles))
       if 'secret_id_bound_cidrs' in _approle -%}
   {%- set _params = openbao_approle_cli_parameters[_approle.name] -%}
-  {%- if (_params.secret_id_bound_cidrs | default('', true) | length == 0)
+  {%- if (_params.declared_secret_id_bound_cidrs | default('', true) | trim | length == 0)
         and _approle.name not in _ns.names -%}
   {%- set _ns.names = _ns.names + [_approle.name] -%}
   {%- endif -%}
@@ -299,6 +300,7 @@ openbao_approle_cli_parameters: >-
   {%- else -%}
   {%- set _cidr_csv = openbao_approle_cidr_classes[_cidr_class] | trim -%}
   {%- endif -%}
+  {%- set _declared_secret_id_bound_cidrs = _cidr_csv -%}
   {%- if _approle.name in openbao_loopback_client_approles
         and '127.0.0.1/32' not in (_cidr_csv | split(',') | map('trim') | list) -%}
   {%- set _cidr_csv = ((_cidr_csv | trim ~ ',') if (_cidr_csv | trim | length > 0) else '')
@@ -318,6 +320,7 @@ openbao_approle_cli_parameters: >-
           | default(openbao_approle_secret_id_num_uses_overrides[_approle.name]
                    if _approle.name in openbao_approle_secret_id_num_uses_overrides
                    else openbao_approle_secret_id_num_uses) | string),
+      'declared_secret_id_bound_cidrs': _declared_secret_id_bound_cidrs,
       'secret_id_bound_cidrs': _cidr_csv,
       'token_bound_cidrs': _cidr_csv
   }}) -%}
