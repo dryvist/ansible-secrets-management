@@ -42,16 +42,6 @@
     - openbao_bootstrap_token is defined
     - openbao_approle_allow_unbound_cidrs | bool
 
-# Not downgraded by the escape hatch: these roles are never created unbound.
-- name: Refuse an unbound secret_id or token CIDR on a bound-required AppRole
-  ansible.builtin.assert:
-    that: openbao_approle_bound_required_unbound | length == 0
-    fail_msg: >-
-      AppRoles {{ openbao_approle_bound_required_unbound | join(', ') }} must bind both
-      secret_id_bound_cidrs and token_bound_cidrs; their CIDR class is empty.
-    quiet: true
-  when: openbao_bootstrap_token is defined
-
 - name: Assert every AppRole this run creates has a source-address class
   vars:
     _unclassed: >-
@@ -147,24 +137,16 @@
   ansible.builtin.set_fact:
     openbao_approle_config_targets: "{{ openbao_object_targets }}"
 
-- name: Refuse AppRoles with an empty declared source-address bind
-  vars:
-    _empty_declared_source_address_binds: >-
-      {%- set _ns = namespace(names=[]) -%}
-      {%- for _approle in (openbao_approle_config_targets | default(openbao_manageable_approles))
-          if 'secret_id_bound_cidrs' in _approle -%}
-      {%- if (_approle.secret_id_bound_cidrs | default('', true) | string | trim | length) == 0 -%}
-      {%- set _ns.names = _ns.names + [_approle.name] -%}
-      {%- endif -%}
-      {%- endfor -%}
-      {{ _ns.names }}
+# Not downgraded by the escape hatch: these roles are never created unbound.
+# The same normalized check rejects any selected role's declared empty bind.
+- name: Refuse an unbound secret_id or token CIDR on a bound-required AppRole
   ansible.builtin.assert:
-    that:
-      - _empty_declared_source_address_binds | length == 0
+    that: openbao_approle_bound_required_unbound | length == 0
     fail_msg: >-
-      AppRoles {{ _empty_declared_source_address_binds | join(', ') }} have a
-      declared source-address bind that is empty. Set each role's
-      secret_id_bound_cidrs before converging.
+      AppRoles {{ openbao_approle_bound_required_unbound | join(', ') }} have an
+      empty declared source-address bind or a required CIDR bind. Supply the
+      declared secret_id_bound_cidrs; bound-required roles must bind both
+      secret_id_bound_cidrs and token_bound_cidrs.
     quiet: true
   when: openbao_bootstrap_token is defined
 

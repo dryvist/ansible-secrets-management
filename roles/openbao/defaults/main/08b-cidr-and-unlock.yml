@@ -14,11 +14,11 @@
 # unbound roles by setting openbao_approle_allow_unbound_cidrs. An unset
 # variable must not quietly produce the unbound role it was added to prevent.
 openbao_management_cidrs: >-
-  {{ lookup('env', 'OPENBAO_MANAGEMENT_CIDRS') | default('', true) }}
+  {{ lookup('env', 'OPENBAO_MANAGEMENT_CIDRS') | default('', true) | trim }}
 openbao_workstation_cidrs: >-
-  {{ lookup('env', 'OPENBAO_WORKSTATION_CIDRS') | default('', true) }}
+  {{ lookup('env', 'OPENBAO_WORKSTATION_CIDRS') | default('', true) | trim }}
 openbao_ci_cidrs: >-
-  {{ lookup('env', 'OPENBAO_CI_CIDRS') | default('', true) }}
+  {{ lookup('env', 'OPENBAO_CI_CIDRS') | default('', true) | trim }}
 openbao_hermes_private_agent_secret_id_cidr: >-
   {{ openbao_platform_env.get('OPENBAO_HERMES_PRIVATE_AGENT_SECRET_ID_CIDR', '')
      | default(lookup('env', 'OPENBAO_HERMES_PRIVATE_AGENT_SECRET_ID_CIDR'), true)
@@ -38,7 +38,8 @@ openbao_approle_allow_unbound_cidrs: >-
   {{ (lookup('env', 'OPENBAO_APPROLE_ALLOW_UNBOUND_CIDRS') | default('', true) | string | trim | lower)
      in ['1', 'true', 'yes', 'on'] }}
 # Roles whose secret_id and token CIDRs must render non-empty even when the
-# escape hatch is set: init/10-approles.yml refuses to create them unbound.
+# escape hatch is set. The same check also rejects any selected role's declared
+# empty source-address bind, using the normalized CLI parameter map.
 openbao_approle_bound_required:
   - "{{ openbao_hatchet_killtest_approle_name }}"
 openbao_approle_bound_required_unbound: >-
@@ -50,6 +51,14 @@ openbao_approle_bound_required_unbound: >-
   {%- set _ns.names = _ns.names + [_name] -%}
   {%- endif -%}
   {%- endfor -%}
+  {%- for _approle in (openbao_approle_config_targets | default(openbao_manageable_approles))
+      if 'secret_id_bound_cidrs' in _approle -%}
+  {%- set _params = openbao_approle_cli_parameters[_approle.name] -%}
+  {%- if (_params.secret_id_bound_cidrs | default('', true) | length == 0)
+        and _approle.name not in _ns.names -%}
+  {%- set _ns.names = _ns.names + [_approle.name] -%}
+  {%- endif -%}
+  {%- endfor -%}
   {{ _ns.names }}
 
 # Named classes, so a role declares WHERE it lives rather than a literal.
@@ -57,7 +66,7 @@ openbao_approle_cidr_classes:
   machine: "{{ openbao_management_cidrs }}"
   workstation: "{{ openbao_workstation_cidrs }}"
   ci: "{{ openbao_ci_cidrs }}"
-  sandbox_agent: "{{ openbao_sandbox_agent_cidrs }}"
+  sandbox_agent: "{{ openbao_sandbox_agent_cidrs | trim }}"
   # Union of machine + workstation, for an identity genuinely redeemed from
   # BOTH: never restate either range literally, derive from the two lists
   # above so there remains exactly one declaration of each.
@@ -264,7 +273,17 @@ openbao_approle_cli_parameters: >-
   {%- for _approle in openbao_approles -%}
   {%- set _cidr_class = openbao_approle_cidr_class_map[_approle.name] -%}
   {%- if 'secret_id_bound_cidrs' in _approle -%}
-  {%- set _cidr_csv = _approle.secret_id_bound_cidrs | default('', true) | trim -%}
+  {%- set _declared_cidrs = _approle.secret_id_bound_cidrs | default('', true) -%}
+  {%- if _declared_cidrs is sequence and _declared_cidrs is not string -%}
+  {%- set _cidr_items = _declared_cidrs | map('string') | map('trim') | list -%}
+  {%- if '' in _cidr_items -%}
+  {%- set _cidr_csv = '' -%}
+  {%- else -%}
+  {%- set _cidr_csv = (_cidr_items | join(',')) | trim -%}
+  {%- endif -%}
+  {%- else -%}
+  {%- set _cidr_csv = _declared_cidrs | string | trim -%}
+  {%- endif -%}
   {%- else -%}
   {%- set _cidr_csv = openbao_approle_cidr_classes[_cidr_class] | trim -%}
   {%- endif -%}
