@@ -34,6 +34,8 @@ openbao_github_personal_installation_id: >-
   {{ openbao_platform_env['OPENBAO_GITHUB_ADMIN_PERSONAL_INSTALLATION_ID'] | default('', true) }}
 openbao_github_jacobpevans_installation_id: >-
   {{ openbao_platform_env['OPENBAO_GITHUB_ADMIN_JACOBPEVANS_INSTALLATION_ID'] | default('', true) }}
+openbao_github_jacobpevans_ai_installation_id: >-
+  {{ openbao_platform_env['OPENBAO_GITHUB_ADMIN_JACOBPEVANS_AI_INSTALLATION_ID'] | default('', true) }}
 # The admin App's personal-account installation, under its own name.
 # openbao_github_personal_installation_id is also set in 03b-github-app-mounts.yml
 # for the user-owned App, and that later definition wins at load time.
@@ -303,6 +305,8 @@ openbao_github_org_secrets_installations:
     installation_id: "{{ openbao_github_dryvist_installation_id }}"
   - name: jacobpevans
     installation_id: "{{ openbao_github_jacobpevans_installation_id }}"
+  - name: jacobpevans-ai
+    installation_id: "{{ openbao_github_jacobpevans_ai_installation_id }}"
   - name: jpe-ansible
     installation_id: "{{ openbao_github_jpe_ansible_installation_id }}"
   - name: jpe-cribl

@@ -177,6 +177,7 @@ openbao_github_org_gitleaks_fields:
   - license_key
 openbao_github_org_release_key_path: github-org/GH_ACTION_RELEASE_PLEASE_PRIVATE_KEY
 openbao_github_org_release_key_field: private_key
+openbao_github_org_dify_pr_keeper_webhook_path: github-org/dify-pr-keeper-webhook
 # Dedicated read-only leaf for the org-secrets workspace, registered in
 # openbao_base_policies (07c) and attached only to its Terrakube JWT role.
 openbao_github_org_secrets_read_policy_name: github-org-secrets-read
@@ -349,6 +350,11 @@ openbao_open_llm_approle_name: open-llm
 # the shape). Empty falls back to the machine class.
 openbao_open_llm_secret_id_cidr: >-
   {{ lookup('env', 'OPENBAO_AI_SANDBOX_SECRET_ID_CIDR') | default('', true) }}
+# The OpenHands guest's single address as a /32 (init/10-approles.yml asserts
+# the shape), read from the platform environment document. Empty falls back to
+# the machine class.
+openbao_openhands_secret_id_cidr: >-
+  {{ openbao_platform_env['OPENBAO_OPENHANDS_SECRET_ID_CIDR'] | default('', true) }}
 # ai-readonly / ai-elevated are now ACTOR ROLES that ATTACH base capability
 # policies (below) — they no longer own a standalone `ai-*` policy object. Only
 # the AppRole names survive as vars; their token_policies are composed rollups.

@@ -256,10 +256,10 @@ openbao_base_approles_core:
     token_ttl: 15m
     token_max_ttl: 60m
   # openhands: service-runtime identity for the dedicated GitHub App mount,
-  # with a 1h token and the rotated-domain secret_id from the 08a overrides.
+  # bound to the OpenHands guest's /32, with a 1h token and the rotated-domain secret_id from the 08a overrides.
   - name: "{{ openbao_openhands_approle_name }}"
     policy: "{{ openbao_openhands_policy_name }}"
-    secret_id_bound_cidrs: "{{ openbao_open_llm_secret_id_cidr }}"
+    secret_id_bound_cidrs: "{{ openbao_openhands_secret_id_cidr }}"
     token_ttl: 1h
     token_max_ttl: 1h
   # ai-readonly / ai-elevated ACTOR roles: standing (ambient) READ tiers. Both
