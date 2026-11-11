@@ -1,4 +1,4 @@
-"""The PR-automation workflows set is exactly three write permissions in its own tier."""
+"""The PR-automation workflows set is exactly three write permissions in the admin tier."""
 
 from test_openbao_hatchet_eval_status_policy import _defaults, _render
 
@@ -25,7 +25,7 @@ def test_set_has_only_contents_pull_requests_and_workflows_write():
     assert _sets("4242") == [
         {
             "name": "jacobpevans-workflows-write",
-            "tier": "write",
+            "tier": "admin",
             "installation_id": "4242",
             "permissions": github["openbao_github_workflows_write_permissions"],
         }
@@ -37,6 +37,13 @@ def test_set_is_absent_without_an_installation_id():
     assert _sets("") == []
 
 
-def test_orchestrator_policy_rejects_the_write_tier():
-    template = (_defaults.__globals__["DEFAULTS"].parents[1] / "templates/ai-orchestrator-policy.hcl.j2").read_text()
-    assert "rejectattr('tier', 'equalto', 'write')" in template
+def _template(name):
+    return (_defaults.__globals__["DEFAULTS"].parents[1] / "templates" / name).read_text()
+
+
+def test_only_the_admin_policy_selects_the_admin_tier():
+    assert "selectattr('tier', 'equalto', 'admin')" in _template("github-admin-policy.hcl.j2")
+    write_policy = _template("github-write-policy.hcl.j2")
+    assert "selectattr('tier', 'equalto', 'write')" in write_policy
+    assert "'admin'" not in write_policy
+    assert "rejectattr('tier', 'equalto', 'admin')" in _template("ai-orchestrator-policy.hcl.j2")
