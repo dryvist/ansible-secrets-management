@@ -11,7 +11,7 @@
       X-Vault-Token: "{{ openbao_bootstrap_token }}"
     body_format: json
     body:
-      app_id: "{{ openbao_github_app_config_app_id | int }}"
+      app_id: "{{ openbao_github_app_config_app_id | int | string }}"
       prv_key: "{{ openbao_github_app_config_private_key }}"
       exclude_repository_metadata: true
     status_code:

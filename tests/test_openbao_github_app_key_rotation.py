@@ -137,7 +137,7 @@ def _assert_one_write(writes, app_id, key):
     assert writes[0]["token"] == TOKEN
     body = writes[0]["body"]
     assert set(body) == {"app_id", "prv_key", "exclude_repository_metadata"}
-    assert int(body["app_id"]) == app_id
+    assert body["app_id"] == str(app_id)
     assert body["prv_key"] == key
     assert body["exclude_repository_metadata"] is True
 
