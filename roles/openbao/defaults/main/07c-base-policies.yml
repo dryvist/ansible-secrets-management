@@ -184,6 +184,8 @@ openbao_base_policies_static:
     template: github-ci-resolver-policy.hcl.j2
   - name: "{{ openbao_github_git_mirror_policy_name }}"
     template: git-mirror-policy.hcl.j2
+  - name: "{{ openbao_github_pr_reconcile_policy_name }}"
+    template: pr-reconcile-policy.hcl.j2
   - name: "{{ openbao_openhands_policy_name }}"
     template: openhands-policy.hcl.j2
   - name: "{{ openbao_github_hermes_public_policy_name }}"
