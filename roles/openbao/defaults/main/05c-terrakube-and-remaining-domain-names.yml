@@ -158,15 +158,13 @@ openbao_ntfy_approle_name: ntfy
 # denylist_metadata.yml (init.yml) only stamps custom_metadata here; the term
 # list itself is seeded out of band, never through this converge.
 openbao_disclosure_denylist_mount: secrets-external
-openbao_disclosure_denylist_path: platform/disclosure-denylist
+openbao_disclosure_denylist_path: github-org/disclosure-denylist
 openbao_disclosure_denylist_field: terms
 openbao_disclosure_denylist_metadata:
   owner: JacobPEvans/.github
-  reader: "GitHub org secret DISCLOSURE_DENYLIST (org dryvist, visibility: all)"
+  reader: "GitHub org secret DISCLOSURE_DENYLIST, applied by the github-org-secrets workspace"
   docs: "JacobPEvans/.github _disclosure-gate.yml"
   rotation: "manual -- edit the term list directly; no scheduled rotation"
-# TODO: Follow up in Vikunja project 44 to remove the legacy
-# platform/disclosure-denylist custom metadata after consumers use github-org.
 # The org-secrets Terraform root reads exactly these KV-v2 leaves and fields.
 openbao_github_org_secrets_mount: secrets-external
 openbao_github_org_disclosure_denylist_path: github-org/disclosure-denylist
