@@ -233,12 +233,9 @@ def test_no_other_approle_carries_the_issuer_policy(rendered_defaults):
     assert carriers == [name]
 
 
-def test_shared_writer_keeps_its_pre_issuer_policies(rendered_defaults):
+def test_shared_writer_holds_only_the_converge_policy(rendered_defaults):
     values, _approles, _policies = rendered_defaults
     writer = values["openbao_ansible_converge_writer_approle_name"]
     policies = values["openbao_approle_cli_parameters"][writer]["token_policies"].split(",")
-    assert policies == [
-        values["openbao_ansible_converge_policy_name"],
-        values["openbao_authelia_signing_writer_policy_name"],
-    ]
+    assert policies == [values["openbao_ansible_converge_policy_name"]]
     assert values["openbao_seed_writer_dify_secret_id_issuer_policy_name"] not in policies

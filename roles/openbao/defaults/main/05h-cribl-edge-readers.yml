@@ -17,9 +17,10 @@ openbao_hatchet_killtest_kv_path: killtest/hatchet
 # (tests/test_openbao_authelia_signing_reach.py). The authelia role seeds this
 # leaf (authelia_service_secrets_kv_path); a test keeps the two values equal.
 openbao_authelia_service_secrets_kv_path: apps/authelia-signing
-# The seed writer's own grant on that leaf. A separate policy, attached to the
-# seed-writer AppRole only: the shared converge policy is also carried by semaphore.
+# The dedicated Authelia signing writer's grant on that leaf. A separate
+# policy, attached to its AppRole only: the shared converge policy is also carried by semaphore.
 openbao_authelia_signing_writer_policy_name: authelia-signing-writer
+openbao_authelia_signing_writer_approle_name: authelia-signing-writer
 # Explicit deny on that leaf for iac-platform-deploy, a standing CI identity that
 # reads apps/* through read-apps. Attached to that AppRole only.
 openbao_iac_platform_deploy_signing_deny_policy_name: iac-platform-deploy-signing-deny

@@ -6,13 +6,19 @@
 # unlimited like the other scheduled-rotation domains.
 openbao_seed_writer_approles:
   - name: "{{ openbao_ansible_converge_writer_approle_name }}"
-    # The Authelia signing leaf is written by this login alone (07c, authelia-signing-writer).
     token_policies:
       - "{{ openbao_ansible_converge_policy_name }}"
-      - "{{ openbao_authelia_signing_writer_policy_name }}"
     token_type: batch
     token_ttl: "{{ openbao_approle_token_max_ttl }}"
     token_max_ttl: "{{ openbao_approle_token_max_ttl }}"
+    secret_id_num_uses: 0
+  # The Authelia signing leaf is written by this login alone (07c, authelia-signing-writer).
+  - name: "{{ openbao_authelia_signing_writer_approle_name }}"
+    token_policies:
+      - "{{ openbao_authelia_signing_writer_policy_name }}"
+    token_type: batch
+    token_ttl: "{{ openbao_approle_token_ttl }}"
+    token_max_ttl: "{{ openbao_approle_token_ttl }}"
     secret_id_num_uses: 0
   # Issues the Dify agent SecretIDs (07j). Holds that policy alone.
   - name: "{{ openbao_dify_secret_id_issuer_approle_name }}"

@@ -275,6 +275,7 @@ openbao_secrets_domain_approle_names: >-
       openbao_github_pr_reconcile_approle_name,
       openbao_openhands_approle_name,
       openbao_ansible_converge_writer_approle_name,
+      openbao_authelia_signing_writer_approle_name,
       openbao_dify_secret_id_issuer_approle_name] }}
 # Roles using lookup proof despite the runner's source class allowing login.
 openbao_approle_rotation_lookup_proof_names: []
