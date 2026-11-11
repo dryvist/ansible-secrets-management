@@ -281,21 +281,28 @@ openbao_github_role_eval_status_permission_sets:
     installation_id: "{{ openbao_github_dryvist_installation_id }}"
     repositories: [ansible-proxmox-ai]
     permissions: "{{ openbao_github_role_eval_status_permissions }}"
-# PR-automation workflow files in the JacobPEvans owner: contents, pull requests
-# and workflows write, nothing else. Tier `admin`: only github-admin-policy
-# grants it, so the everyday write, orchestrator and ambient policies cannot
-# mint it. Declared only while the JacobPEvans installation ID is configured.
-openbao_github_workflows_write_set_name: jacobpevans-workflows-write
+# PR-automation workflow files: contents, pull requests and workflows write,
+# nothing else, one set per Enterprise installation in
+# openbao_github_org_secrets_installations (named <org>-workflows-write). Tier
+# `admin`: only github-admin-policy grants it, so the everyday write,
+# orchestrator and ambient policies cannot mint it. An installation without an
+# ID gets no set. The personal account is covered by its own mount's
+# personal-write set.
+openbao_github_workflows_write_set_suffix: -workflows-write
 openbao_github_workflows_write_permissions:
   contents: write
   pull_requests: write
   workflows: write
 openbao_github_workflows_write_permission_sets: >-
-  {{ [{'name': openbao_github_workflows_write_set_name,
-       'tier': 'admin',
-       'installation_id': openbao_github_jacobpevans_installation_id,
-       'permissions': openbao_github_workflows_write_permissions}]
-     if openbao_github_jacobpevans_installation_id | string | length > 0 else [] }}
+  {%- set _sets = [] -%}
+  {%- for org in openbao_github_org_secrets_installations -%}
+  {%- if org.installation_id | default('', true) | string | length > 0 -%}
+  {%- set _ = _sets.append({'name': org.name ~ openbao_github_workflows_write_set_suffix,
+      'tier': 'admin', 'installation_id': org.installation_id,
+      'permissions': openbao_github_workflows_write_permissions}) -%}
+  {%- endif -%}
+  {%- endfor -%}
+  {{ _sets }}
 openbao_github_docs_publisher_permission_sets: >-
   {{ [{'name': openbao_github_docs_publisher_set_name,
        'tier': 'publish',
