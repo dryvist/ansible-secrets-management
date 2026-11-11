@@ -182,6 +182,9 @@ openbao_base_approles_elevated:
     token_max_ttl: 15m
   - name: "{{ openbao_slack_admin_approle_name }}"
     policy: "{{ openbao_slack_admin_policy_name }}"
+    # Keep its machine-or-workstation class and add only the local rotator's source.
+    secret_id_bound_cidrs: >-
+      {{ openbao_approle_cidr_classes.machine_or_workstation }},127.0.0.1/32
     token_ttl: "{{ openbao_slack_admin_token_ttl }}"
     token_max_ttl: "{{ openbao_slack_admin_token_ttl }}"
     secret_id_ttl: "{{ openbao_slack_admin_secret_id_ttl }}"

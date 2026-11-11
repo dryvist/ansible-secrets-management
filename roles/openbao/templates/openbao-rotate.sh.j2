@@ -16,7 +16,7 @@
 set -uo pipefail
 
 ROTATOR_NAME="{{ rotator.name }}"
-BAO_ADDR="{{ openbao_api_addr }}"
+BAO_ADDR="http://127.0.0.1:{{ openbao_api_port }}"
 KV_DATA_PATH="{{ rotator.target.mount }}/data/{{ rotator.target.path }}"
 KV_METADATA_PATH="{{ rotator.target.mount }}/metadata/{{ rotator.target.path }}"
 NTFY_URL="{{ rotator.ntfy_url | default('') }}"
