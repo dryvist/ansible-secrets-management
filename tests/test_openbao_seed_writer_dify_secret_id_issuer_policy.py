@@ -277,19 +277,21 @@ def test_issuer_bound_cidr_reads_the_environment_document_before_the_process_env
 
 
 def test_blank_issuer_bound_cidr_in_the_environment_document_counts_as_empty():
+    # A blank platform value is empty, so the process environment value applies.
     assert (
         _rendered(
             "openbao_dify_secret_id_issuer_secret_id_cidr",
             issuer_cidr="   ",
             issuer_env="192.0.2.11/32",
         )
-        == ""
+        == "192.0.2.11/32"
     )
+    assert _rendered("openbao_dify_secret_id_issuer_secret_id_cidr", issuer_cidr="   ", issuer_env="  ") == ""
     with pytest.raises(
         AnsibleError,
         match="OPENBAO_DIFY_SECRET_ID_ISSUER_SECRET_ID_CIDR is empty",
     ):
-        _rendered("openbao_approles", issuer_cidr="   ", issuer_env="192.0.2.11/32")
+        _rendered("openbao_approles", issuer_cidr="   ", issuer_env="")
 
 
 def test_issuer_bound_cidr_does_not_change_other_approle_bounds():
