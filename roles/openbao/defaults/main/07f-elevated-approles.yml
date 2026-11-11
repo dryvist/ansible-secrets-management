@@ -96,9 +96,6 @@ openbao_base_approles_elevated:
     secret_id_num_uses: 1
   - name: "{{ openbao_snapshot_approle_name }}"
     policy: "{{ openbao_snapshot_policy_name }}"
-    # Keep the machine class and add only the local snapshot client's source.
-    secret_id_bound_cidrs: >-
-      {{ openbao_approle_cidr_classes.machine }},127.0.0.1/32
   # apps-seed: Doppler-published writer for secret/apps/* (Terraform vault-secrets).
   - name: "{{ openbao_apps_seed_approle_name }}"
     policy: "{{ openbao_apps_seed_policy_name }}"
@@ -182,9 +179,6 @@ openbao_base_approles_elevated:
     token_max_ttl: 15m
   - name: "{{ openbao_slack_admin_approle_name }}"
     policy: "{{ openbao_slack_admin_policy_name }}"
-    # Keep its machine-or-workstation class and add only the local rotator's source.
-    secret_id_bound_cidrs: >-
-      {{ openbao_approle_cidr_classes.machine_or_workstation }},127.0.0.1/32
     token_ttl: "{{ openbao_slack_admin_token_ttl }}"
     token_max_ttl: "{{ openbao_slack_admin_token_ttl }}"
     secret_id_ttl: "{{ openbao_slack_admin_secret_id_ttl }}"

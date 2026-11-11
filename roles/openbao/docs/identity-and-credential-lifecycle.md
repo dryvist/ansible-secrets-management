@@ -68,6 +68,14 @@ values arrive by environment and are never committed. A class that a declared
 role uses but which was never supplied **fails the converge** rather than
 quietly creating the unbound role the binding exists to prevent.
 
+Identities that authenticate through the node-local loopback listener and then
+use the resulting token from the same source are enumerated once in
+`openbao_loopback_client_approles`: every enabled `openbao_rotators` entry plus
+the snapshot, secret-age-audit and scheduled AppRole secret-id rotation
+identities. Both bind lists of each listed identity (`secret_id_bound_cidrs`
+and `token_bound_cidrs`) accept the node-local loopback source, so a credential
+redeemed over loopback is also usable from loopback.
+
 Two sibling asserts cover the class *assignment* rather than the class values.
 Every AppRole the converge loops must resolve to a class, so a role declared
 outside `openbao_approles` fails the run by name instead of dying on an

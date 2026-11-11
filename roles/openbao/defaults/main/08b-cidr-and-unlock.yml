@@ -239,6 +239,24 @@ openbao_approle_cidr_class_map: >-
      | combine(openbao_ai_apply_cidr_classes)
      | combine(openbao_app_agent_tier_cidr_classes)
      | combine(openbao_window_service_cidr_classes) }}
+# Identities that log in over the node-local loopback listener and then use
+# the resulting token from that same source: every enabled openbao_rotators
+# entry plus the snapshot timer, the secret-age auditor and the scheduled
+# AppRole secret-id rotation (openbao.hcl.j2 loopback listener). The CLI
+# parameter derivation below adds the loopback address to BOTH bound lists
+# of each name here, so a credential redeemed over loopback is also accepted
+# on its first use from loopback.
+openbao_loopback_client_approles: >-
+  {%- set _ns = namespace(names=[]) -%}
+  {%- for _rotator in openbao_rotators | dict2items -%}
+  {%- if _rotator.value.enabled is defined and (_rotator.value.enabled | bool) -%}
+  {%- set _ns.names = _ns.names + [_rotator.value.approle] -%}
+  {%- endif -%}
+  {%- endfor -%}
+  {{ _ns.names
+     + [openbao_snapshot_approle_name,
+        openbao_secret_age_audit_approle_name,
+        openbao_approle_secret_id_rotate_scheduled_approle_name] }}
 # Exact strings passed by `bao write ... key=value`; keep these shared by the
 # reconcile writer and its ACL so neither side can change independently.
 openbao_approle_cli_parameters: >-
@@ -247,6 +265,11 @@ openbao_approle_cli_parameters: >-
   {%- set _cidr_class = openbao_approle_cidr_class_map[_approle.name] -%}
   {%- set _cidr_csv = _approle.secret_id_bound_cidrs | default('', true)
       or openbao_approle_cidr_classes[_cidr_class] -%}
+  {%- if _approle.name in openbao_loopback_client_approles
+        and '127.0.0.1/32' not in (_cidr_csv | split(',') | map('trim') | list) -%}
+  {%- set _cidr_csv = ((_cidr_csv | trim ~ ',') if (_cidr_csv | trim | length > 0) else '')
+      ~ '127.0.0.1/32' -%}
+  {%- endif -%}
   {%- set _ = _parameters.update({_approle.name: {
       'token_policies': ((_approle.token_policies | default([_approle.policy])) | join(',')),
       'bind_secret_id': ((_approle.bind_secret_id | default(openbao_approle_bind_secret_id)) | bool | string | lower),
