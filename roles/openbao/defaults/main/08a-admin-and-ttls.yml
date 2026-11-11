@@ -126,6 +126,7 @@ openbao_approle_secret_id_ttl_overrides_base:
   open-llm: "{{ openbao_rotated_domain_secret_id_ttl }}"
   ci-resolver: "{{ openbao_rotated_domain_secret_id_ttl }}"
   git-mirror: "{{ openbao_rotated_domain_secret_id_ttl }}"
+  pr-reconcile: "{{ openbao_rotated_domain_secret_id_ttl }}"
   openhands: "{{ openbao_rotated_domain_secret_id_ttl }}"
   llm-router-agent-keys: "{{ openbao_rotated_domain_secret_id_ttl }}"
   agentgateway-agent-keys: "{{ openbao_rotated_domain_secret_id_ttl }}"
@@ -171,6 +172,9 @@ openbao_approle_secret_id_num_uses_overrides:
   # git-mirror redeems its secret_id on every token mint, so a use cap would
   # strand it between rotations. Bounded by its 36h ttl and scheduled rotation.
   git-mirror: 0
+  # pr-reconcile redeems its secret_id on every token mint, so a use cap would
+  # strand it between rotations. Bounded by its 36h ttl and scheduled rotation.
+  pr-reconcile: 0
   # openhands: unlimited uses, bounded by scheduled rotation and its secret_id
   # CIDR bind, as for ci-resolver.
   openhands: 0

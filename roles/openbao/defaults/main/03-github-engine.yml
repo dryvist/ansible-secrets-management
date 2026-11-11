@@ -245,6 +245,31 @@ openbao_github_git_mirror_permission_sets: >-
        'installation_id': openbao_github_admin_personal_installation_id,
        'permissions': openbao_github_git_mirror_permissions}]
      | selectattr('installation_id') | list }}
+# The PR reconcile agent writes pull requests, issues and commit statuses of
+# two owners, one installation each, through installation-wide sets with no
+# repository list (so each covers the whole installation). Tier `agents` keeps
+# them out of the ambient mint and orchestrator policies; only the pr-reconcile
+# policy names them. A set is declared only while its owner's installation ID
+# is configured.
+openbao_github_pr_reconcile_permissions:
+  contents: write
+  issues: write
+  metadata: read
+  pull_requests: write
+  statuses: write
+openbao_github_pr_reconcile_set_names:
+  - pr-reconcile-JacobPEvans-ai
+  - pr-reconcile-JacobPEvans
+openbao_github_pr_reconcile_permission_sets: >-
+  {{ [{'name': 'pr-reconcile-JacobPEvans-ai',
+       'tier': 'agents',
+       'installation_id': openbao_github_jacobpevans_ai_installation_id,
+       'permissions': openbao_github_pr_reconcile_permissions},
+      {'name': 'pr-reconcile-JacobPEvans',
+       'tier': 'agents',
+       'installation_id': openbao_github_jacobpevans_installation_id,
+       'permissions': openbao_github_pr_reconcile_permissions}]
+     | selectattr('installation_id') | list }}
 # The Hatchet eval worker can post commit statuses to one repository only.
 openbao_github_role_eval_status_set_name: role-eval-status
 openbao_github_role_eval_status_permissions:
@@ -338,6 +363,7 @@ openbao_github_admin_permission_sets: >-
      + openbao_github_ci_resolver_permission_sets
      + openbao_github_router_snapshot_permission_sets
      + openbao_github_git_mirror_permission_sets
+     + openbao_github_pr_reconcile_permission_sets
      + openbao_github_role_eval_status_permission_sets }}
 # Every set on every GitHub mount, each tagged with its mount, for the policy
 # templates.

@@ -1,6 +1,8 @@
 ---
-# Dify authenticates on every workflow run with one reusable, human-issued
-# SecretID held as a Dify secret. Do not create either role without its host CIDR.
+# Dify authenticates on every workflow run with one reusable SecretID held as a Dify secret.
+# The shared Ansible converge login (the seed-writer login every scheduled converge uses)
+# issues it at converge through the seed-writer-dify-secret-id-issuer policy; this role does not
+# mint or store it. Do not create any of these roles without its host CIDR.
 openbao_dify_agent_approles: >-
   {{ ([{'name': openbao_dify_agent_code_simplifier_approle_name,
         'policy': openbao_dify_agent_code_simplifier_policy_name,

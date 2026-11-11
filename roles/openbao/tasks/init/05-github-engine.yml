@@ -274,6 +274,34 @@
     - openbao_bootstrap_token is defined
     - openbao_github_engine_enabled | bool
 
+- name: Assert the pr-reconcile permission map is exactly its five permissions
+  ansible.builtin.assert:
+    that:
+      - >-
+        openbao_github_pr_reconcile_permissions.keys() | list
+        == ['contents', 'issues', 'metadata', 'pull_requests', 'statuses']
+      - openbao_github_pr_reconcile_permissions.contents == 'write'
+      - openbao_github_pr_reconcile_permissions.issues == 'write'
+      - openbao_github_pr_reconcile_permissions.metadata == 'read'
+      - openbao_github_pr_reconcile_permissions.pull_requests == 'write'
+      - openbao_github_pr_reconcile_permissions.statuses == 'write'
+      - >-
+        (openbao_github_pr_reconcile_permission_sets
+         | map(attribute='permissions')
+         | selectattr('workflows', 'defined') | list) == []
+      - >-
+        (openbao_github_pr_reconcile_permission_sets
+         | map(attribute='permissions')
+         | selectattr('administration', 'defined') | list) == []
+    fail_msg: >-
+      openbao_github_pr_reconcile_permissions must be exactly
+      {contents: write, issues: write, metadata: read, pull_requests: write,
+      statuses: write}; no set may hold workflows or administration. Add a new
+      tier instead of widening this one.
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_github_engine_enabled | bool
+
 - name: Assert the org-admin permission map is exactly organization_administration:write
   ansible.builtin.assert:
     that:

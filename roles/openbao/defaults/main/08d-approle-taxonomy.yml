@@ -87,6 +87,7 @@ openbao_approle_class_map: >-
     'operator-workstation': 'operator-admin',
     'packer': 'service-runtime',
     'proxman': 'service-runtime',
+    'pr-reconcile': 'service-runtime',
     'rustfs-rotate': 'converge-automation',
     'sandbox-agent-read': 'untrusted-sandbox',
     'sandbox-agent-write': 'untrusted-sandbox',
