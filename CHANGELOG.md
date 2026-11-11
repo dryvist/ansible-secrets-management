@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.94.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.93.0...v0.94.0) (2026-11-11)
+
+
+### Features
+
+* **openbao:** add the pr-reconcile token sets, AppRole and policy ([#620](https://github.com/dryvist/ansible-secrets-management/issues/620)) ([eabeff2](https://github.com/dryvist/ansible-secrets-management/commit/eabeff277b1bc56067e2098994724705f0546447))
+
 ## [0.93.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.92.0...v0.93.0) (2026-11-11)
 
 
