@@ -154,7 +154,9 @@ openbao_ai_runner_approle_name: ai-runner
 # secret_id CIDR bind, and the runner guest's restrictive egress firewall
 # profile (tofu-proxmox ai-github tag) is the compensating control.
 openbao_ai_runner_secret_id_cidr: >-
-  {{ lookup('env', 'OPENBAO_AI_RUNNER_SECRET_ID_CIDR') | default('', true) }}
+  {{ openbao_platform_env.get('OPENBAO_AI_RUNNER_SECRET_ID_CIDR', '')
+     | default(lookup('env', 'OPENBAO_AI_RUNNER_SECRET_ID_CIDR'), true)
+     | default('', true) }}
 
 # clickhouse — dedicated reader for the application and reader passwords
 # stored at the exact internal secret/ai/clickhouse leaf.

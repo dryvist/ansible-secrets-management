@@ -350,7 +350,9 @@ openbao_open_llm_approle_name: open-llm
 # The dispatcher host's single address as a /32 (init/10-approles.yml asserts
 # the shape). Empty falls back to the machine class.
 openbao_open_llm_secret_id_cidr: >-
-  {{ lookup('env', 'OPENBAO_AI_SANDBOX_SECRET_ID_CIDR') | default('', true) }}
+  {{ openbao_platform_env.get('OPENBAO_AI_SANDBOX_SECRET_ID_CIDR', '')
+     | default(lookup('env', 'OPENBAO_AI_SANDBOX_SECRET_ID_CIDR'), true)
+     | default('', true) }}
 # Read like the address values in 08b: the platform environment document, then
 # the process environment. A blank value counts as empty. 07i requires a value
 # whenever Dify agent AppRoles are declared.

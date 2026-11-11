@@ -357,3 +357,21 @@ def test_openhands_approle_has_only_its_policy_and_one_hour_tokens(pepper_defaul
         pepper_defaults, "{{ openbao_approle_cli_parameters }}"
     )
     assert parameters["openhands"]["token_policies"] == "openhands"
+
+
+@pytest.mark.parametrize(
+    ("variable", "key"),
+    [
+        ("openbao_sandbox_agent_cidrs", "OPENBAO_SANDBOX_AGENT_CIDRS"),
+        ("openbao_ai_runner_secret_id_cidr", "OPENBAO_AI_RUNNER_SECRET_ID_CIDR"),
+        ("openbao_open_llm_secret_id_cidr", "OPENBAO_AI_SANDBOX_SECRET_ID_CIDR"),
+    ],
+)
+def test_guest_binds_read_the_platform_env_before_the_process_env(
+    pepper_defaults, monkeypatch, variable, key
+):
+    monkeypatch.setenv(key, "process-fixture-cidr")
+    pepper_defaults["openbao_platform_env"][key] = "platform-fixture-cidr"
+    assert _render_value(pepper_defaults, "{{ %s }}" % variable) == "platform-fixture-cidr"
+    del pepper_defaults["openbao_platform_env"][key]
+    assert _render_value(pepper_defaults, "{{ %s }}" % variable) == "process-fixture-cidr"
