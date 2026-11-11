@@ -1,0 +1,10 @@
+{{ ansible_managed | comment }}
+# pr-reconcile — the PR reconcile agent's token identity. Mints only the two
+# installation sets for its owners, each named explicitly. No other tier, no
+# raw token path and no KV path is granted.
+{% for set_name in openbao_github_pr_reconcile_set_names %}
+
+path "{{ openbao_github_mount }}/token/{{ set_name }}" {
+  capabilities = ["create", "read", "update"]
+}
+{% endfor %}
