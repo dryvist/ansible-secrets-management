@@ -152,9 +152,7 @@ openbao_ai_runner_approle_name: ai-runner
 # are never committed (public repo) — delivered via env, the same channel and
 # pattern as OPENBAO_SSH_SOURCE_CIDRS. Empty fails the converge.
 openbao_ai_runner_secret_id_cidr: >-
-  {{ openbao_platform_env.get('OPENBAO_AI_RUNNER_SECRET_ID_CIDR', '') | string | trim
-     | default(lookup('env', 'OPENBAO_AI_RUNNER_SECRET_ID_CIDR') | trim, true)
-     | default('', true) }}
+  {{ openbao_platform_bind_cidrs['OPENBAO_AI_RUNNER_SECRET_ID_CIDR'] }}
 
 # clickhouse — dedicated reader for the application and reader passwords
 # stored at the exact internal secret/ai/clickhouse leaf.

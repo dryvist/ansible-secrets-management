@@ -365,6 +365,10 @@ def test_openhands_approle_has_only_its_policy_and_one_hour_tokens(pepper_defaul
         ("openbao_sandbox_agent_cidrs", "OPENBAO_SANDBOX_AGENT_CIDRS"),
         ("openbao_ai_runner_secret_id_cidr", "OPENBAO_AI_RUNNER_SECRET_ID_CIDR"),
         ("openbao_open_llm_secret_id_cidr", "OPENBAO_AI_SANDBOX_SECRET_ID_CIDR"),
+        ("openbao_openhands_secret_id_cidr", "OPENBAO_OPENHANDS_SECRET_ID_CIDR"),
+        ("openbao_hermes_private_agent_secret_id_cidr", "OPENBAO_HERMES_PRIVATE_AGENT_SECRET_ID_CIDR"),
+        ("openbao_pepper_secret_id_cidr", "OPENBAO_PEPPER_SECRET_ID_CIDR"),
+        ("openbao_dify_agent_cidrs", "OPENBAO_DIFY_AGENT_CIDR"),
     ],
 )
 def test_guest_binds_read_the_platform_env_before_the_process_env(
@@ -377,3 +381,7 @@ def test_guest_binds_read_the_platform_env_before_the_process_env(
     assert _render_value(pepper_defaults, "{{ %s }}" % variable) == "process-fixture-cidr"
     pepper_defaults["openbao_platform_env"][key] = "   "
     assert _render_value(pepper_defaults, "{{ %s }}" % variable) == "process-fixture-cidr"
+    pepper_defaults["openbao_platform_env"][key] = None
+    assert _render_value(pepper_defaults, "{{ %s }}" % variable) == "process-fixture-cidr"
+    monkeypatch.delenv(key)
+    assert _render_value(pepper_defaults, "{{ %s }}" % variable) == ""
