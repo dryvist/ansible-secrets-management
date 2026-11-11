@@ -59,9 +59,6 @@ def _defaults_context(roster):
     values["tofu_data"] = {"agents": roster}
     values["ansible_managed"] = "Ansible managed"
     values["llm_router_key_catalog_facts"] = {"openbao_router_key_catalog": {}}
-    # The Dify AppRoles, and so the issuer policy's targets, exist only when
-    # their host CIDR is supplied (08b).
-    values["openbao_dify_agent_cidrs"] = "192.0.2.10/32"
     return {name: _trust_values(value) for name, value in values.items()}
 
 

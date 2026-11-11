@@ -17,9 +17,6 @@ from openbao_reconcile_bounds_helpers import _templar, _trust, rendered_defaults
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULTS = ROOT / "roles/openbao/defaults/main"
 TEMPLATE_NAME = "seed-writer-dify-secret-id-issuer-policy.hcl.j2"
-POLICY_NAME_VARIABLE = "{{ openbao_seed_writer_dify_secret_id_issuer_policy_name }}"
-WRITER_NAME_VARIABLE = "{{ openbao_ansible_converge_writer_approle_name }}"
-ISSUER_NAME_VARIABLE = "{{ openbao_dify_secret_id_issuer_approle_name }}"
 DECLARED_ROLES = (
     "agent-code-simplifier",
     "agent-ci-fixer",
@@ -45,7 +42,12 @@ def _render(role_names) -> str:
     loader = DataLoader()
     loader.set_basedir(str(ROOT / "roles" / "openbao"))
     templar = Templar(loader=loader)
-    templar.available_variables = {"ansible_managed": "Ansible managed"}
+    templar.available_variables = {
+        "ansible_managed": "Ansible managed",
+        "openbao_roster_agent_slug_pattern": _yaml("05k-roster-agents.yml")[
+            "openbao_roster_agent_slug_pattern"
+        ],
+    }
     item = {"targets": list(role_names)}
     expression = "{{ lookup('template', '%s', template_vars={'item': %s}) }}" % (
         TEMPLATE_NAME,
@@ -56,6 +58,41 @@ def _render(role_names) -> str:
 
 def _stanzas(policy: str) -> list[tuple[str, list[str]]]:
     return [(path, json.loads(caps)) for path, caps in STANZA.findall(policy)]
+
+
+def _catalogs(rendered_defaults, dify_cidr: str, issuer_cidr: str):
+    rendered_values, _, _ = rendered_defaults
+    values = {}
+    for path in sorted(DEFAULTS.glob("*.yml")):
+        values.update(yaml.safe_load(path.read_text(encoding="utf-8")) or {})
+    values.update(
+        tofu_data={"agents": {}},
+        ansible_managed="Ansible managed",
+        llm_router_key_catalog_facts={"openbao_router_key_catalog": {}},
+        openbao_management_cidrs=rendered_values["openbao_management_cidrs"],
+        openbao_workstation_cidrs=rendered_values["openbao_workstation_cidrs"],
+        openbao_ci_cidrs=rendered_values["openbao_ci_cidrs"],
+        openbao_ssh_source_cidrs=rendered_values["openbao_ssh_source_cidrs"],
+        openbao_sandbox_agent_cidrs=rendered_values["openbao_sandbox_agent_cidrs"],
+        openbao_dify_agent_cidrs=dify_cidr,
+        openbao_dify_secret_id_issuer_secret_id_cidr=issuer_cidr,
+    )
+    templar = _templar(_trust(values))
+    approles = templar.template(_trust(values["openbao_approles"]))
+    policies = templar.template(_trust(values["openbao_policies"]))
+    values.update(openbao_approles=approles, openbao_policies=policies)
+    templar = _templar(_trust(values))
+    for name in (
+        "openbao_approle_cidr_classes",
+        "openbao_approle_cidr_class_map",
+        "openbao_approle_secret_id_ttl_overrides",
+        "openbao_secrets_domain_approle_names",
+    ):
+        values[name] = templar.template(_trust(values[name]))
+    values["openbao_approle_cli_parameters"] = templar.template(
+        _trust(values["openbao_approle_cli_parameters"])
+    )
+    return values, approles, policies
 
 
 def test_declared_role_names_are_exactly_the_five_dify_agent_roles():
@@ -110,6 +147,24 @@ def test_empty_target_list_fails_validation():
         _render(())
 
 
+@pytest.mark.parametrize(
+    "name", ["agent+grant", "agent/grant", "agent*grant", "", "Agent-grant"]
+)
+def test_target_names_reject_values_outside_the_agent_slug_pattern(name):
+    with pytest.raises(
+        AnsibleError, match=r"item\.targets\[0\]"
+    ) as error:
+        _render((name,))
+    if name:
+        assert name not in str(error.value)
+
+
+def test_target_name_matching_the_agent_slug_pattern_renders():
+    assert {path for path, _ in _stanzas(_render(("agent-valid-2",)))} == {
+        f"auth/approle/role/agent-valid-2/{kind}" for kind in CAPABILITIES
+    }
+
+
 def test_second_target_list_renders_disjoint_policy_paths():
     first = {path for path, _ in _stanzas(_render(("synthetic-target-a",)))}
     second = {path for path, _ in _stanzas(_render(("synthetic-target-b",)))}
@@ -134,7 +189,9 @@ def test_issuer_policy_body_is_generated_from_targets_with_one_source():
 
 
 def test_second_entry_in_the_seed_writer_list_becomes_a_second_approle(rendered_defaults):
-    values, _approles, _policies = rendered_defaults
+    values, _approles, _policies = _catalogs(
+        rendered_defaults, "192.0.2.10/32", "198.51.100.10/32"
+    )
     synthetic = {
         "name": "synthetic-issuer-b",
         "token_policies": ["{{ openbao_ansible_converge_policy_name }}"],
@@ -144,28 +201,34 @@ def test_second_entry_in_the_seed_writer_list_becomes_a_second_approle(rendered_
         "secret_id_num_uses": 0,
     }
     extended = dict(values)
-    extended["openbao_seed_writer_approles"] = values["openbao_seed_writer_approles"] + [synthetic]
+    seed_writer_approles = _expand(values, "{{ openbao_seed_writer_approles }}")
+    extended["openbao_seed_writer_approles"] = seed_writer_approles + [synthetic]
     names = _expand(extended, "{{ openbao_base_approles | map(attribute='name') | list }}")
     assert names.count("dify-agent-secret-id-issuer") == 1
     assert names.count("synthetic-issuer-b") == 1
 
 
-def test_policy_is_registered_and_attached_only_to_the_issuer_approle():
-    static_rows = _yaml("07c-base-policies.yml")["openbao_base_policies_static"]
-    rows = [row for row in static_rows if row["name"] == POLICY_NAME_VARIABLE]
+def test_policy_is_registered_and_attached_only_to_the_issuer_approle(rendered_defaults):
+    values, approles, policies = _catalogs(
+        rendered_defaults, "192.0.2.10/32", "198.51.100.10/32"
+    )
+    policy_name = values["openbao_seed_writer_dify_secret_id_issuer_policy_name"]
+    rows = [row for row in policies if row["name"] == policy_name]
     assert len(rows) == 1
     assert rows[0]["template"] == TEMPLATE_NAME
 
-    seed_rows = _yaml("07i-seed-writer-approles.yml")["openbao_seed_writer_approles"]
-    writers = [row for row in seed_rows if row["name"] == WRITER_NAME_VARIABLE]
+    seed_rows = approles
+    writer_name = values["openbao_ansible_converge_writer_approle_name"]
+    issuer_name = values["openbao_dify_secret_id_issuer_approle_name"]
+    writers = [row for row in seed_rows if row["name"] == writer_name]
     assert len(writers) == 1
-    assert POLICY_NAME_VARIABLE not in writers[0]["token_policies"]
-    issuers = [row for row in seed_rows if row["name"] == ISSUER_NAME_VARIABLE]
+    assert policy_name not in writers[0]["token_policies"]
+    issuers = [row for row in seed_rows if row["name"] == issuer_name]
     assert len(issuers) == 1
-    assert issuers[0]["token_policies"] == [POLICY_NAME_VARIABLE]
+    assert issuers[0]["token_policies"] == [policy_name]
     for row in seed_rows:
         if row is not issuers[0]:
-            assert POLICY_NAME_VARIABLE not in row.get("token_policies", [])
+            assert policy_name not in row.get("token_policies", [])
 
     owners = {
         path.name
@@ -192,12 +255,16 @@ def _expand(values, expression):
     return _templar(_trust(values)).template(trust_as_template(expression))
 
 
-def test_issuer_approle_is_a_single_policy_batch_login_on_the_machine_class(rendered_defaults):
-    values, approles, _policies = rendered_defaults
+def test_issuer_approle_uses_its_dedicated_bound_cidr(rendered_defaults):
+    issuer_cidr = "198.51.100.10/32"
+    values, approles, _policies = _catalogs(
+        rendered_defaults, "192.0.2.10/32", issuer_cidr
+    )
     name = values["openbao_dify_secret_id_issuer_approle_name"]
-    writer = values["openbao_ansible_converge_writer_approle_name"]
     assert name == "dify-agent-secret-id-issuer"
-    assert [role["name"] for role in approles].count(name) == 1
+    issuer_rows = [role for role in approles if role["name"] == name]
+    assert len(issuer_rows) == 1
+    assert issuer_rows[0]["secret_id_bound_cidrs"] == issuer_cidr
 
     parameters = values["openbao_approle_cli_parameters"][name]
     assert parameters["token_policies"] == "seed-writer-dify-secret-id-issuer"
@@ -207,14 +274,45 @@ def test_issuer_approle_is_a_single_policy_batch_login_on_the_machine_class(rend
     assert parameters["secret_id_num_uses"] == "0"
     assert parameters["secret_id_ttl"] == values["openbao_rotated_domain_secret_id_ttl"]
 
-    classes = values["openbao_approle_cidr_class_map"]
-    assert classes[name] == classes[writer] == "machine"
-    assert parameters["secret_id_bound_cidrs"] == values["openbao_management_cidrs"]
-    assert parameters["token_bound_cidrs"] == values["openbao_management_cidrs"]
+    assert parameters["secret_id_bound_cidrs"] == issuer_cidr
+    assert parameters["token_bound_cidrs"] == issuer_cidr
+
+
+def test_empty_issuer_bound_cidr_fails_with_dify_targets(rendered_defaults):
+    with pytest.raises(
+        AnsibleError,
+        match="OPENBAO_DIFY_SECRET_ID_ISSUER_SECRET_ID_CIDR is empty",
+    ):
+        _catalogs(rendered_defaults, "192.0.2.10/32", "")
+
+
+def test_issuer_bound_cidr_does_not_change_other_approle_bounds(rendered_defaults):
+    values, approles, _policies = _catalogs(
+        rendered_defaults, "192.0.2.10/32", "198.51.100.10/32"
+    )
+    issuer = values["openbao_dify_secret_id_issuer_approle_name"]
+    previous_approles = [role for role in approles if role["name"] != issuer]
+    previous_values = dict(values, openbao_approles=previous_approles)
+    previous_parameters = _expand(
+        previous_values,
+        _yaml("08b-cidr-and-unlock.yml")["openbao_approle_cli_parameters"],
+    )
+    current_parameters = values["openbao_approle_cli_parameters"]
+    bound_parameters = ("secret_id_bound_cidrs", "token_bound_cidrs")
+    assert {
+        name: {key: current_parameters[name][key] for key in bound_parameters}
+        for name in current_parameters
+        if name != issuer
+    } == {
+        name: {key: previous_parameters[name][key] for key in bound_parameters}
+        for name in previous_parameters
+    }
 
 
 def test_issuer_approle_is_on_the_rotation_ttl_map_and_domain_list(rendered_defaults):
-    values, _approles, _policies = rendered_defaults
+    values, _approles, _policies = _catalogs(
+        rendered_defaults, "192.0.2.10/32", "198.51.100.10/32"
+    )
     name = values["openbao_dify_secret_id_issuer_approle_name"]
     overrides = _expand(values, "{{ openbao_approle_secret_id_ttl_overrides }}")
     assert overrides[name] == values["openbao_rotated_domain_secret_id_ttl"]
@@ -222,7 +320,9 @@ def test_issuer_approle_is_on_the_rotation_ttl_map_and_domain_list(rendered_defa
 
 
 def test_no_other_approle_carries_the_issuer_policy(rendered_defaults):
-    values, _approles, _policies = rendered_defaults
+    values, _approles, _policies = _catalogs(
+        rendered_defaults, "192.0.2.10/32", "198.51.100.10/32"
+    )
     policy = values["openbao_seed_writer_dify_secret_id_issuer_policy_name"]
     name = values["openbao_dify_secret_id_issuer_approle_name"]
     carriers = sorted(
@@ -242,3 +342,21 @@ def test_shared_writer_keeps_its_pre_issuer_policies(rendered_defaults):
         values["openbao_authelia_signing_writer_policy_name"],
     ]
     assert values["openbao_seed_writer_dify_secret_id_issuer_policy_name"] not in policies
+
+
+def test_issuer_catalog_entries_follow_dify_targets(rendered_defaults):
+    issuer = "dify-agent-secret-id-issuer"
+    policy_name = "seed-writer-dify-secret-id-issuer"
+    values, approles, policies = _catalogs(rendered_defaults, "", "")
+    assert issuer not in {role["name"] for role in approles}
+    assert policy_name not in {policy["name"] for policy in policies}
+    assert issuer not in values["openbao_secrets_domain_approle_names"]
+    assert issuer not in values["openbao_approle_secret_id_ttl_overrides"]
+
+    values, approles, policies = _catalogs(
+        rendered_defaults, "192.0.2.10/32", "198.51.100.10/32"
+    )
+    assert issuer in {role["name"] for role in approles}
+    assert policy_name in {policy["name"] for policy in policies}
+    assert issuer in values["openbao_secrets_domain_approle_names"]
+    assert issuer in values["openbao_approle_secret_id_ttl_overrides"]

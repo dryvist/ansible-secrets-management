@@ -131,7 +131,6 @@ openbao_approle_secret_id_ttl_overrides_base:
   llm-router-agent-keys: "{{ openbao_rotated_domain_secret_id_ttl }}"
   agentgateway-agent-keys: "{{ openbao_rotated_domain_secret_id_ttl }}"
   ansible-converge-writer: "{{ openbao_rotated_domain_secret_id_ttl }}"
-  dify-agent-secret-id-issuer: "{{ openbao_rotated_domain_secret_id_ttl }}"
   approle-secret-id-rotate-scheduled: "{{ openbao_rotated_domain_secret_id_ttl }}"
   # Standing identities outside the scheduled rotation: their secret_id is
   # rendered onto the host (or held by the operator's deploy) at converge
@@ -156,7 +155,10 @@ openbao_approle_secret_id_ttl_overrides: >-
                     | map(attribute='tier')
                     | map('regex_replace', '^', 'app-agent-') | list
                     | zip([openbao_rotated_domain_secret_id_ttl]
-                         * (openbao_app_agent_tier_readers | length)))) }}
+                         * (openbao_app_agent_tier_readers | length))))
+     | combine({openbao_dify_secret_id_issuer_approle_name:
+               openbao_rotated_domain_secret_id_ttl}
+              if openbao_dify_secret_id_issuer_targets | length > 0 else {}) }}
 # num_uses 0 (unlimited redemptions) is permitted ONLY with a reason on the line.
 openbao_approle_secret_id_num_uses_overrides:
   # Its secret_id is live, non-expiring, and in active use by every agent

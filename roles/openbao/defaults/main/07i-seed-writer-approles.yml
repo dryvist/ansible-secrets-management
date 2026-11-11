@@ -4,21 +4,22 @@
 # token lives as long as the AppRole token ceiling. The 12h scheduled rotation
 # re-mints the secret_id (36h ttl, 08a); every run redeems it, so uses are
 # unlimited like the other scheduled-rotation domains.
-openbao_seed_writer_approles:
-  - name: "{{ openbao_ansible_converge_writer_approle_name }}"
-    # The Authelia signing leaf is written by this login alone (07c, authelia-signing-writer).
-    token_policies:
-      - "{{ openbao_ansible_converge_policy_name }}"
-      - "{{ openbao_authelia_signing_writer_policy_name }}"
-    token_type: batch
-    token_ttl: "{{ openbao_approle_token_max_ttl }}"
-    token_max_ttl: "{{ openbao_approle_token_max_ttl }}"
-    secret_id_num_uses: 0
-  # Issues the Dify agent SecretIDs (07j). Holds that policy alone.
-  - name: "{{ openbao_dify_secret_id_issuer_approle_name }}"
-    token_policies:
-      - "{{ openbao_seed_writer_dify_secret_id_issuer_policy_name }}"
-    token_type: batch
-    token_ttl: "{{ openbao_approle_token_ttl }}"
-    token_max_ttl: "{{ openbao_approle_token_ttl }}"
-    secret_id_num_uses: 0
+# The first entry writes the Authelia signing leaf; the issuer is conditional on
+# the Dify agent AppRoles being declared.
+openbao_seed_writer_approles: >-
+  {{ [{'name': openbao_ansible_converge_writer_approle_name,
+       'token_policies': [openbao_ansible_converge_policy_name,
+                          openbao_authelia_signing_writer_policy_name],
+       'token_type': 'batch',
+       'token_ttl': openbao_approle_token_max_ttl,
+       'token_max_ttl': openbao_approle_token_max_ttl,
+       'secret_id_num_uses': 0}]
+     + ([{'name': openbao_dify_secret_id_issuer_approle_name,
+          'token_policies': [openbao_seed_writer_dify_secret_id_issuer_policy_name],
+          'token_type': 'batch',
+          'token_ttl': openbao_approle_token_ttl,
+          'token_max_ttl': openbao_approle_token_ttl,
+          'secret_id_num_uses': 0,
+          'secret_id_bound_cidrs': openbao_dify_secret_id_issuer_secret_id_cidr
+              | default(undef('OPENBAO_DIFY_SECRET_ID_ISSUER_SECRET_ID_CIDR is empty'), true)}]
+        if openbao_dify_secret_id_issuer_targets | length > 0 else []) }}
