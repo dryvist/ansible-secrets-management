@@ -1,5 +1,35 @@
 # Changelog
 
+## [0.96.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.95.2...v0.96.0) (2026-11-11)
+
+
+### Features
+
+* **openbao:** add a declared GitHub App key rotation mode ([#634](https://github.com/dryvist/ansible-secrets-management/issues/634)) ([d23e3ec](https://github.com/dryvist/ansible-secrets-management/commit/d23e3ec9f83c0f37c7a188ddf9db5c728fa3e81d))
+* **openbao:** add the Dify agent secret-id issuer AppRole ([#632](https://github.com/dryvist/ansible-secrets-management/issues/632)) ([8197aec](https://github.com/dryvist/ansible-secrets-management/commit/8197aec7091a15b5908a762e587aa68c6edc9c23))
+* **openbao:** declare a workflows-write permission set per installation ([#637](https://github.com/dryvist/ansible-secrets-management/issues/637)) ([4657406](https://github.com/dryvist/ansible-secrets-management/commit/46574063fcaaa79a6493b60f4ac95fb4456d9b1d))
+* **openbao:** remove the pr-reconcile AppRole, policy and token sets ([#635](https://github.com/dryvist/ansible-secrets-management/issues/635)) ([acc4ff9](https://github.com/dryvist/ansible-secrets-management/commit/acc4ff92ae2b8a2b1c0b97b6ba3c7ab34648ba64))
+
+
+### Bug Fixes
+
+* **openbao:** accept the loopback source in both binds of every loopback-client identity ([#638](https://github.com/dryvist/ansible-secrets-management/issues/638)) ([d695724](https://github.com/dryvist/ansible-secrets-management/commit/d695724cea2826c586740bbb5268398a06203638))
+* **openbao:** read the Dify issuer bound value from the environment document ([#640](https://github.com/dryvist/ansible-secrets-management/issues/640)) ([809ae9a](https://github.com/dryvist/ansible-secrets-management/commit/809ae9ad1966f65ea52c248ce6ec37e8ef4e7fd1))
+
+## [0.95.2](https://github.com/dryvist/ansible-secrets-management/compare/v0.95.1...v0.95.2) (2026-11-11)
+
+
+### Bug Fixes
+
+* **openbao:** stamp disclosure-denylist metadata on the github-org path ([#609](https://github.com/dryvist/ansible-secrets-management/issues/609)) ([bcdefdd](https://github.com/dryvist/ansible-secrets-management/commit/bcdefdd3df1d4d7c77ddf37e586dd4719bf99ec8))
+
+## [0.95.1](https://github.com/dryvist/ansible-secrets-management/compare/v0.95.0...v0.95.1) (2026-11-11)
+
+
+### Bug Fixes
+
+* **openbao:** route rotate and secret-age login through loopback ([#625](https://github.com/dryvist/ansible-secrets-management/issues/625)) ([4c118af](https://github.com/dryvist/ansible-secrets-management/commit/4c118afe41691731de0df946569035cef6accd8f))
+
 ## [0.95.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.94.0...v0.95.0) (2026-11-11)
 
 

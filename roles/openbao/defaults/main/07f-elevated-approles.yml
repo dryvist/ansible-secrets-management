@@ -96,9 +96,6 @@ openbao_base_approles_elevated:
     secret_id_num_uses: 1
   - name: "{{ openbao_snapshot_approle_name }}"
     policy: "{{ openbao_snapshot_policy_name }}"
-    # Keep the machine class and add only the local snapshot client's source.
-    secret_id_bound_cidrs: >-
-      {{ openbao_approle_cidr_classes.machine }},127.0.0.1/32
   # apps-seed: Doppler-published writer for secret/apps/* (Terraform vault-secrets).
   - name: "{{ openbao_apps_seed_approle_name }}"
     policy: "{{ openbao_apps_seed_policy_name }}"
@@ -149,9 +146,9 @@ openbao_base_approles_elevated:
   # openbao_secrets prefetch play in ansible-proxmox-ai logs in each converge
   # with AI_RUNNER_VAULT_ROLE_ID / _SECRET_ID and reads the dispatch-queue +
   # model-provider keys. secret_id is CIDR-bound to the runner guest's
-  # reservation when openbao_ai_runner_secret_id_cidr is set (env-delivered,
-  # never committed); when unset, the create task leaves it unbound and warns,
-  # and the guest's egress firewall profile is the compensating control.
+  # reservation from openbao_ai_runner_secret_id_cidr (env-delivered, never
+  # committed); the converge fails with this role named when the declared bind
+  # is empty.
   - name: "{{ openbao_ai_runner_approle_name }}"
     policy: "{{ openbao_ai_runner_policy_name }}"
     secret_id_bound_cidrs: "{{ openbao_ai_runner_secret_id_cidr }}"

@@ -42,16 +42,6 @@
     - openbao_bootstrap_token is defined
     - openbao_approle_allow_unbound_cidrs | bool
 
-# Not downgraded by the escape hatch: these roles are never created unbound.
-- name: Refuse an unbound secret_id or token CIDR on a bound-required AppRole
-  ansible.builtin.assert:
-    that: openbao_approle_bound_required_unbound | length == 0
-    fail_msg: >-
-      AppRoles {{ openbao_approle_bound_required_unbound | join(', ') }} must bind both
-      secret_id_bound_cidrs and token_bound_cidrs; their CIDR class is empty.
-    quiet: true
-  when: openbao_bootstrap_token is defined
-
 - name: Assert every AppRole this run creates has a source-address class
   vars:
     _unclassed: >-
@@ -146,6 +136,19 @@
 - name: Keep the selected AppRole config objects
   ansible.builtin.set_fact:
     openbao_approle_config_targets: "{{ openbao_object_targets }}"
+
+# Not downgraded by the escape hatch: these roles are never created unbound.
+# The same normalized check rejects any selected role's declared empty bind.
+- name: Refuse an unbound secret_id or token CIDR on a bound-required AppRole
+  ansible.builtin.assert:
+    that: openbao_approle_bound_required_unbound | length == 0
+    fail_msg: >-
+      AppRoles {{ openbao_approle_bound_required_unbound | join(', ') }} have an
+      empty declared source-address bind or a required CIDR bind. Supply the
+      declared secret_id_bound_cidrs; bound-required roles must bind both
+      secret_id_bound_cidrs and token_bound_cidrs.
+    quiet: true
+  when: openbao_bootstrap_token is defined
 
 # The complementary half of the two asserts above: those catch a role this
 # converge CREATES with no source-address class. This one catches a role that

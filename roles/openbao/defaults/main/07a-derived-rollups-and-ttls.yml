@@ -150,11 +150,9 @@ openbao_ai_runner_policy_name: ai-runner
 openbao_ai_runner_approle_name: ai-runner
 # secret_id CIDR binding for the runner guest's fixed reservation. Real CIDRs
 # are never committed (public repo) — delivered via env, the same channel and
-# pattern as OPENBAO_SSH_SOURCE_CIDRS. Empty => the AppRole is created WITHOUT a
-# secret_id CIDR bind, and the runner guest's restrictive egress firewall
-# profile (tofu-proxmox ai-github tag) is the compensating control.
+# pattern as OPENBAO_SSH_SOURCE_CIDRS. Empty fails the converge.
 openbao_ai_runner_secret_id_cidr: >-
-  {{ lookup('env', 'OPENBAO_AI_RUNNER_SECRET_ID_CIDR') | default('', true) }}
+  {{ openbao_platform_bind_cidrs['OPENBAO_AI_RUNNER_SECRET_ID_CIDR'] }}
 
 # clickhouse — dedicated reader for the application and reader passwords
 # stored at the exact internal secret/ai/clickhouse leaf.

@@ -212,26 +212,45 @@ class TestShippedDeclarationIsClean(unittest.TestCase):
             self.assertEqual(roles_by_name[name]["secret_id_bound_cidrs"],
                              cidr_classes[reader["cidr_class"]])
 
-    def test_snapshot_role_adds_loopback_to_both_bounds_only(self):
+    def test_loopback_roles_add_loopback_to_both_bounds_only(self):
         loaded = {}
         for path in sorted((ROOT / "roles/openbao/defaults/main").glob("*.yml")):
             loaded.update(yaml.safe_load(path.read_text(encoding="utf-8")) or {})
         machine_cidrs = "192.0.2.0/24"
+        workstation_cidrs = "198.51.100.0/24"
         loaded["openbao_management_cidrs"] = machine_cidrs
+        loaded["openbao_workstation_cidrs"] = workstation_cidrs
         roles = _render("{{ openbao_approles }}", loaded)
         loaded["openbao_approles"] = roles
         class_map = _render("{{ openbao_approle_cidr_class_map }}", loaded)
+        cidr_classes = _render("{{ openbao_approle_cidr_classes }}", loaded)
         parameters = _render("{{ openbao_approle_cli_parameters }}", loaded)
+        roles_by_name = {role["name"]: role for role in roles}
+        loopback_roles = _render("{{ openbao_loopback_client_approles }}", loaded)
 
-        expected = f"{machine_cidrs},127.0.0.1/32"
-        self.assertEqual(class_map["snapshot"], "machine")
-        self.assertEqual(parameters["snapshot"]["secret_id_bound_cidrs"], expected)
-        self.assertEqual(parameters["snapshot"]["token_bound_cidrs"], expected)
+        # The declared loopback clients (rotation timers, snapshot timer,
+        # secret-age auditor, scheduled secret-id rotation) all log in through
+        # the node-local loopback listener. Each keeps its existing class
+        # (slack-admin is machine-or-workstation) and adds loopback only.
+        for name in loopback_roles:
+            base = cidr_classes[class_map[name]]
+            self.assertIn(machine_cidrs, base.split(","), name)
+            expected = f"{base},127.0.0.1/32"
+            self.assertEqual(parameters[name]["secret_id_bound_cidrs"], expected, name)
+            self.assertEqual(parameters[name]["token_bound_cidrs"], expected, name)
+        self.assertEqual(class_map["slack-admin"], "machine_or_workstation")
+        self.assertIn(workstation_cidrs, parameters["slack-admin"]["secret_id_bound_cidrs"])
+
+        # Every other role keeps its bound CIDRs: no loopback, and a default
+        # machine-class role still binds exactly the machine class.
         for name, role in parameters.items():
-            if name == "snapshot":
+            if name in loopback_roles:
                 continue
-            self.assertNotIn("127.0.0.1/32", role["secret_id_bound_cidrs"], name)
-            self.assertNotIn("127.0.0.1/32", role["token_bound_cidrs"], name)
+            self.assertNotIn("127.0.0.1", role["secret_id_bound_cidrs"], name)
+            self.assertNotIn("127.0.0.1", role["token_bound_cidrs"], name)
+            if class_map[name] == "machine" and "secret_id_bound_cidrs" not in roles_by_name[name]:
+                self.assertEqual(role["secret_id_bound_cidrs"], machine_cidrs, name)
+                self.assertEqual(role["token_bound_cidrs"], machine_cidrs, name)
 
 
 if __name__ == "__main__":

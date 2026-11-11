@@ -15,8 +15,12 @@ HATCH = "OPENBAO_APPROLE_ALLOW_UNBOUND_CIDRS"
 
 
 def _rendered(expression, overrides=None, **env):
+    variables = {**role_defaults(), **(overrides or {})}
+    variables.setdefault("openbao_manageable_approles", [
+        {"name": variables["openbao_hatchet_killtest_approle_name"]},
+    ])
     with mock.patch.dict(os.environ, {**REQUIRED_ENV, **env}):
-        return render({**role_defaults(), **(overrides or {})}, "{{ " + expression + " }}")
+        return render(variables, "{{ " + expression + " }}")
 
 
 class EscapeHatch(unittest.TestCase):

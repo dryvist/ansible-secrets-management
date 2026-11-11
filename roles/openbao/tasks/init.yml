@@ -187,6 +187,7 @@
   loop_control:
     loop_var: gm
     label: "{{ gm.mount }}"
+  no_log: true
   vars:
     _policy_sync_capabilities: "{{ openbao_policy_sync_capability_map | default({}) }}"
     _policy_sync_update_paths: >-
@@ -228,6 +229,7 @@
   loop_control:
     loop_var: ga
     label: "{{ ga.app_id }}"
+  no_log: true
   when:
     - not (openbao_reconcile_mode | default(false))
     - openbao_select | default({}) | length == 0

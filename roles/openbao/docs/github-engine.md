@@ -210,6 +210,25 @@ the drift refusal (issue #1079). A live acceptance run must issue and revoke
 one token from each permission set — and prove an off-allowlist `github/token`
 request is denied — before the engine is considered deployed.
 
+## Key rotation
+
+`openbao_github_app_key_rotate_mounts` is a list of mount names, empty by
+default. A configured mount named in it has its App credentials rewritten from
+the supplied App ID and private key on that run; it accepts `github-admin` and
+any per-App mount. A mount not named in it is written only on first
+configuration, so a supplied key alone does not replace a stored one.
+
+Two asserts run before the write for a listed, configured mount:
+
+- the supplied App ID must equal the stored one, so a rotation replaces the key
+  and never the App;
+- the supplied private key must be non-empty, and the run fails naming the
+  mount and the variable otherwise.
+
+First configuration and rotation share one write
+(`tasks/init/github_app_config_write.yml`). Empty the list after the rotation
+run; while a mount stays listed, each run with its key supplied writes it again.
+
 The `github-personal` mount uses
 `OPENBAO_GITHUB_PERSONAL_APP_ID` and
 `OPENBAO_GITHUB_PERSONAL_APP_PRIVATE_KEY` from the one-time environment. Its

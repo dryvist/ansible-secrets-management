@@ -168,7 +168,7 @@ def test_ansible_converge_writer_renders_exact_machine_bound_batch_parameters(re
     ) == (
         "machine",
         {
-            "token_policies": "ansible-converge",
+            "token_policies": "ansible-converge,authelia-signing-writer",
             "token_type": "batch",
             "token_ttl": ceiling,
             "token_max_ttl": ceiling,
@@ -176,6 +176,3 @@ def test_ansible_converge_writer_renders_exact_machine_bound_batch_parameters(re
         },
         "0",
     )
-    assert parameters["token_policies"].split(",") == [
-        values["openbao_ansible_converge_policy_name"]
-    ]
