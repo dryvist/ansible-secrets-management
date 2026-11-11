@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.95.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.94.0...v0.95.0) (2026-11-11)
+
+
+### Features
+
+* **openbao:** add the jacobpevans-workflows-write permission set for PR-automation workflow files ([#624](https://github.com/dryvist/ansible-secrets-management/issues/624)) ([14b2546](https://github.com/dryvist/ansible-secrets-management/commit/14b2546dc193124aaf6684a193ae30288bdf4c4a))
+* **openbao:** let the seed-writer login issue Dify agent SecretIDs ([#622](https://github.com/dryvist/ansible-secrets-management/issues/622)) ([c0a1a3d](https://github.com/dryvist/ansible-secrets-management/commit/c0a1a3de58596bab03aff6f541543adac3fc9751))
+
 ## [0.94.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.93.0...v0.94.0) (2026-11-11)
 
 
