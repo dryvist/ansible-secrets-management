@@ -253,10 +253,10 @@ openbao_github_git_mirror_permission_sets: >-
 # is configured.
 openbao_github_pr_reconcile_permissions:
   contents: write
-  pull_requests: write
   issues: write
-  statuses: write
   metadata: read
+  pull_requests: write
+  statuses: write
 openbao_github_pr_reconcile_set_names:
   - pr-reconcile-JacobPEvans-ai
   - pr-reconcile-JacobPEvans

@@ -51,6 +51,10 @@
       ansible.builtin.assert:
         that:
           - _pr_sets | length == 2
+          # Same expression as the converge-time assertion in tasks/init/05-github-engine.yml.
+          - >-
+            openbao_github_pr_reconcile_permissions.keys() | list
+            == ['contents', 'issues', 'metadata', 'pull_requests', 'statuses']
           - >-
             (_pr_sets | map(attribute='name') | sort)
             == (openbao_github_pr_reconcile_set_names | sort)
