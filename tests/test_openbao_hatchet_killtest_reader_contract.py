@@ -107,6 +107,7 @@ class HatchetKillTestReaderContract(unittest.TestCase):
                 "openbao_approles": [rendered_reader],
                 "openbao_approle_cidr_class_map": {"hatchet-killtest": "machine"},
                 "openbao_approle_cidr_classes": {"machine": "192.0.2.0/24"},
+                "openbao_loopback_client_approles": [],
                 "openbao_approle_bind_secret_id": True,
                 "openbao_approle_token_ttl": "1h",
                 "openbao_approle_token_max_ttl": "4h",
