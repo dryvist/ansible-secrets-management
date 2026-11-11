@@ -9,6 +9,7 @@ openbao_dify_agent_vikunja_triage_policy_name: agent-vikunja-triage
 openbao_dify_agent_vikunja_triage_approle_name: agent-vikunja-triage
 openbao_dify_agent_docs_updater_policy_name: agent-docs-updater
 openbao_dify_agent_docs_updater_approle_name: agent-docs-updater
+openbao_seed_writer_dify_secret_id_issuer_policy_name: seed-writer-dify-secret-id-issuer
 
 # 07c-base-policies.yml includes this list in openbao_base_policies.
 openbao_dify_agent_policies:
