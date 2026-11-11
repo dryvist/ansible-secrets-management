@@ -1,9 +1,10 @@
 ---
 # One GitHub App mount (loop var `gm`, from openbao_github_app_mounts): enable,
 # configure the App, refuse silent App-ID drift, reconcile its permission sets
-# and delete undeclared ones. The App is (re)configured only when a private key
-# is supplied: first configuration, or a deliberate key or App change. Plugin
-# registration is shared with the admin mount (05-github-engine.yml runs first).
+# and delete undeclared ones. The App credentials are written on first
+# configuration, and again for a configured mount only while it is listed in
+# openbao_github_app_key_rotate_mounts. Plugin registration is shared with the
+# admin mount (05-github-engine.yml runs first).
 - name: "Enable GitHub App mount {{ gm.mount }}"
   ansible.builtin.command:
     cmd: >-
@@ -44,30 +45,6 @@
          and ((openbao_github_app_mount_config.stdout | default('{}', true)
                | from_json).data.app_id | default(0, true) | int) != 0 }}
 
-- name: "Configure the App credentials (first or deliberate) on mount {{ gm.mount }}"
-  ansible.builtin.uri:
-    url: "{{ openbao_cli_addr }}/v1/{{ gm.mount }}/config"
-    method: POST
-    headers:
-      X-Vault-Token: "{{ openbao_bootstrap_token }}"
-    body_format: json
-    body:
-      app_id: "{{ gm.app_id | int | string }}"
-      prv_key: "{{ gm.private_key }}"
-      exclude_repository_metadata: true
-    status_code:
-      - 200
-      - 204
-  delegate_to: "{{ openbao_cli_host }}"
-  become: "{{ openbao_cli_become }}"
-  vars:
-    ansible_become: "{{ openbao_cli_become }}"
-  no_log: true
-  register: openbao_github_app_mount_configure
-  when:
-    - gm.app_id | length > 0
-    - gm.private_key | length > 0
-
 - name: "Refuse an unexpected App ID drift on mount {{ gm.mount }}"
   ansible.builtin.assert:
     that:
@@ -79,8 +56,35 @@
       Rotate deliberately; a routine converge will not replace it.
   when:
     - openbao_github_app_mount_configured | bool
+    - >-
+      gm.app_id | length > 0
+      or gm.mount in openbao_github_app_key_rotate_mounts
+
+- name: "Require the private key for a declared key rotation on mount {{ gm.mount }}"
+  ansible.builtin.assert:
+    that:
+      - gm.private_key | length > 0
+    fail_msg: >-
+      {{ gm.mount }} is listed in openbao_github_app_key_rotate_mounts but no
+      private key is supplied. Supply the new key, or remove the mount from
+      the list.
+  when:
+    - openbao_github_app_mount_configured | bool
+    - gm.mount in openbao_github_app_key_rotate_mounts
+
+- name: "Write the App credentials (first configuration or declared key rotation) on mount {{ gm.mount }}"
+  ansible.builtin.include_tasks: github_app_config_write.yml
+  vars:
+    openbao_github_app_config_mount: "{{ gm.mount }}"
+    openbao_github_app_config_app_id: "{{ gm.app_id }}"
+    openbao_github_app_config_private_key: "{{ gm.private_key }}"
+  no_log: true
+  when:
     - gm.app_id | length > 0
-    - openbao_github_app_mount_configure is skipped
+    - gm.private_key | length > 0
+    - >-
+      not (openbao_github_app_mount_configured | bool)
+      or gm.mount in openbao_github_app_key_rotate_mounts
 
 - name: "Assert every set declares an administration-free ceiling on mount {{ gm.mount }}"
   ansible.builtin.assert:
