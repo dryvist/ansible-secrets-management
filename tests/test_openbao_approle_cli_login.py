@@ -91,6 +91,23 @@ def test_snapshot_uses_the_enabled_loopback_listener_by_default() -> None:
     assert "ONBOX_IP" not in script
 
 
+def test_rotate_and_secret_age_log_in_through_the_loopback_listener() -> None:
+    for name in ("openbao-rotate.sh.j2", "openbao-secret-age.sh.j2"):
+        script = _text(name)
+        assert 'BAO_ADDR="http://127.0.0.1:{{ openbao_api_port }}"' in script, name
+        assert "openbao_api_addr" not in script, name
+
+
+def test_rotate_and_secret_age_tasks_require_the_loopback_listener() -> None:
+    for task_file in ("rotate.yml", "secret_age.yml"):
+        tasks = yaml.safe_load(
+            (_ROOT / "roles" / "openbao" / "tasks" / task_file).read_text(encoding="utf-8")
+        )
+        assert tasks[0]["ansible.builtin.assert"]["that"] == [
+            "openbao_snapshot_loopback_listener_enabled | bool"
+        ], task_file
+
+
 def test_rendered_snapshot_listener_is_loopback_only_and_omits_xff() -> None:
     rendered = _render_openbao_config(loopback_enabled=True)
     snapshot_listener = re.search(
