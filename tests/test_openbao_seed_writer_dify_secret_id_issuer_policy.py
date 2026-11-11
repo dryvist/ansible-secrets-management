@@ -6,7 +6,9 @@ import json
 import re
 from pathlib import Path
 
+import pytest
 import yaml
+from ansible.errors import AnsibleError
 from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar, trust_as_template
 
@@ -39,15 +41,16 @@ def _yaml(name: str) -> dict:
 
 
 def _render(role_names) -> str:
-    """Render the real template through lookup(), as the role's own render does."""
+    """Render the real template the way the policy row does: lookup() with item."""
     loader = DataLoader()
     loader.set_basedir(str(ROOT / "roles" / "openbao"))
     templar = Templar(loader=loader)
-    templar.available_variables = {
-        "openbao_dify_agent_approles": [{"name": name} for name in role_names],
-        "ansible_managed": "Ansible managed",
-    }
-    expression = "{{ lookup('template', '%s') }}" % TEMPLATE_NAME
+    templar.available_variables = {"ansible_managed": "Ansible managed"}
+    item = {"targets": list(role_names)}
+    expression = "{{ lookup('template', '%s', template_vars={'item': %s}) }}" % (
+        TEMPLATE_NAME,
+        json.dumps(item),
+    )
     return templar.template(trust_as_template(expression))
 
 
@@ -102,10 +105,49 @@ def test_role_names_come_from_the_list_not_the_template():
     assert base <= extended
 
 
-def test_empty_role_list_renders_no_path_stanza():
-    policy = _render(())
-    assert not re.search(r"(?m)^path ", policy)
-    assert _stanzas(policy) == []
+def test_empty_target_list_fails_validation():
+    with pytest.raises(AnsibleError, match="must name at least one AppRole"):
+        _render(())
+
+
+def test_second_target_list_renders_disjoint_policy_paths():
+    first = {path for path, _ in _stanzas(_render(("synthetic-target-a",)))}
+    second = {path for path, _ in _stanzas(_render(("synthetic-target-b",)))}
+    assert first == {f"auth/approle/role/synthetic-target-a/{kind}" for kind in CAPABILITIES}
+    assert second == {f"auth/approle/role/synthetic-target-b/{kind}" for kind in CAPABILITIES}
+    assert first.isdisjoint(second)
+
+
+def test_issuer_policy_body_is_generated_from_targets_with_one_source():
+    body = (ROOT / "roles/openbao/templates" / TEMPLATE_NAME).read_text(encoding="utf-8")
+    assert "{% for name in item.targets %}" in body
+    assert not [role for role in DECLARED_ROLES if role in body]
+    literal_copies = [
+        path.relative_to(ROOT).as_posix()
+        for path in (ROOT / "roles").rglob("*")
+        if path.is_file()
+        and path.name != TEMPLATE_NAME
+        and "/defaults/" not in path.as_posix()
+        and "seed-writer-dify-secret-id-issuer" in path.read_text(encoding="utf-8", errors="ignore")
+    ]
+    assert literal_copies == []
+
+
+def test_second_entry_in_the_seed_writer_list_becomes_a_second_approle(rendered_defaults):
+    values, _approles, _policies = rendered_defaults
+    synthetic = {
+        "name": "synthetic-issuer-b",
+        "token_policies": ["{{ openbao_ansible_converge_policy_name }}"],
+        "token_type": "batch",
+        "token_ttl": "{{ openbao_approle_token_ttl }}",
+        "token_max_ttl": "{{ openbao_approle_token_ttl }}",
+        "secret_id_num_uses": 0,
+    }
+    extended = dict(values)
+    extended["openbao_seed_writer_approles"] = values["openbao_seed_writer_approles"] + [synthetic]
+    names = _expand(extended, "{{ openbao_base_approles | map(attribute='name') | list }}")
+    assert names.count("dify-agent-secret-id-issuer") == 1
+    assert names.count("synthetic-issuer-b") == 1
 
 
 def test_policy_is_registered_and_attached_only_to_the_issuer_approle():
@@ -189,3 +231,14 @@ def test_no_other_approle_carries_the_issuer_policy(rendered_defaults):
         if policy in parameters["token_policies"].split(",")
     )
     assert carriers == [name]
+
+
+def test_shared_writer_keeps_its_pre_issuer_policies(rendered_defaults):
+    values, _approles, _policies = rendered_defaults
+    writer = values["openbao_ansible_converge_writer_approle_name"]
+    policies = values["openbao_approle_cli_parameters"][writer]["token_policies"].split(",")
+    assert policies == [
+        values["openbao_ansible_converge_policy_name"],
+        values["openbao_authelia_signing_writer_policy_name"],
+    ]
+    assert values["openbao_seed_writer_dify_secret_id_issuer_policy_name"] not in policies

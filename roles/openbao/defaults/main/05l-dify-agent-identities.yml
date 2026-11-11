@@ -10,6 +10,8 @@ openbao_dify_agent_vikunja_triage_approle_name: agent-vikunja-triage
 openbao_dify_agent_docs_updater_policy_name: agent-docs-updater
 openbao_dify_agent_docs_updater_approle_name: agent-docs-updater
 openbao_seed_writer_dify_secret_id_issuer_policy_name: seed-writer-dify-secret-id-issuer
+# The AppRoles the issuer policy covers: the Dify agent AppRoles declared above.
+openbao_dify_secret_id_issuer_targets: "{{ openbao_dify_agent_approles | map(attribute='name') | list }}"
 
 # 07c-base-policies.yml includes this list in openbao_base_policies.
 openbao_dify_agent_policies:
