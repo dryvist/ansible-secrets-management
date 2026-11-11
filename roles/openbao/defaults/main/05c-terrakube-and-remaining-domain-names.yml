@@ -351,12 +351,13 @@ openbao_open_llm_approle_name: open-llm
 # the shape). Empty falls back to the machine class.
 openbao_open_llm_secret_id_cidr: >-
   {{ lookup('env', 'OPENBAO_AI_SANDBOX_SECRET_ID_CIDR') | default('', true) }}
-# Read from the platform environment document, then the process environment.
-# Empty by default; 07i requires it whenever Dify agent AppRoles are declared.
+# Read like the address values in 08b: the platform environment document, then
+# the process environment. A blank value counts as empty. 07i requires a value
+# whenever Dify agent AppRoles are declared.
 openbao_dify_secret_id_issuer_secret_id_cidr: >-
-  {{ (openbao_platform_env | default({}))['OPENBAO_DIFY_SECRET_ID_ISSUER_SECRET_ID_CIDR']
-     | default(lookup('env', 'OPENBAO_DIFY_SECRET_ID_ISSUER_SECRET_ID_CIDR'), true)
-     | default('', true) }}
+  {{ (openbao_platform_env.get('OPENBAO_DIFY_SECRET_ID_ISSUER_SECRET_ID_CIDR', '')
+      | default(lookup('env', 'OPENBAO_DIFY_SECRET_ID_ISSUER_SECRET_ID_CIDR'), true)
+      | default('', true)) | string | trim }}
 # The OpenHands guest's single address as a /32 (init/10-approles.yml asserts
 # the shape), read from the platform environment document. Empty falls back to
 # the machine class.
