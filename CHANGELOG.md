@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.93.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.92.0...v0.93.0) (2026-11-11)
+
+
+### Features
+
+* **openbao:** bind the openhands secret_id to its own /32 ([#615](https://github.com/dryvist/ansible-secrets-management/issues/615)) ([820e5f4](https://github.com/dryvist/ansible-secrets-management/commit/820e5f4eb758c4602111a801ffcc7d2e1e173bb8))
+
+
+### Bug Fixes
+
+* **openbao:** read the openhands bind from the platform environment ([#616](https://github.com/dryvist/ansible-secrets-management/issues/616)) ([588aef9](https://github.com/dryvist/ansible-secrets-management/commit/588aef93db3def521011f451a2dbb45d7b7c1566))
+* **openbao:** run the GitHub engine converge on its own tag ([#612](https://github.com/dryvist/ansible-secrets-management/issues/612)) ([3fc76cc](https://github.com/dryvist/ansible-secrets-management/commit/3fc76ccb015b109e395fa5b84d2c445ad1fe3a33))
+
 ## [0.92.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.91.0...v0.92.0) (2026-11-10)
 
 
