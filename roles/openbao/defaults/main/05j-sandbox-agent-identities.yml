@@ -17,6 +17,6 @@ openbao_sandbox_cursor_write_policy_name: sandbox-cursor-write
 openbao_sandbox_cursor_write_approle_name: sandbox-cursor-write
 # The sandbox subnet is supplied by the private environment, never committed.
 openbao_sandbox_agent_cidrs: >-
-  {{ openbao_platform_env.get('OPENBAO_SANDBOX_AGENT_CIDRS', '')
-     | default(lookup('env', 'OPENBAO_SANDBOX_AGENT_CIDRS'), true)
+  {{ openbao_platform_env.get('OPENBAO_SANDBOX_AGENT_CIDRS', '') | string | trim
+     | default(lookup('env', 'OPENBAO_SANDBOX_AGENT_CIDRS') | trim, true)
      | default('', true) }}

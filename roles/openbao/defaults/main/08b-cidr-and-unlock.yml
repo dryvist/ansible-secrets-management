@@ -275,7 +275,7 @@ openbao_approle_cli_parameters: >-
   {%- if 'secret_id_bound_cidrs' in _approle -%}
   {%- set _declared_cidrs = _approle.secret_id_bound_cidrs | default('', true) -%}
   {%- if _declared_cidrs is sequence and _declared_cidrs is not string -%}
-  {%- set _cidr_items = _declared_cidrs | map('string') | map('trim') | list -%}
+  {%- set _cidr_items = _declared_cidrs | map('default', '', true) | map('string') | map('trim') | list -%}
   {%- if '' in _cidr_items -%}
   {%- set _cidr_csv = '' -%}
   {%- else -%}

@@ -85,7 +85,7 @@ class TestDeclaredSourceAddressBind(unittest.TestCase):
         self.assertEqual(params["token_bound_cidrs"], expected)
 
     def test_blank_list_items_and_null_use_the_empty_bind_guard(self):
-        for bind in ([""], ["  "], None):
+        for bind in ([""], ["  "], None, [], [None], ["192.0.2.7/32", None], ["192.0.2.7/32", "  "]):
             with self.subTest(bind=bind):
                 params = _parameters({"secret_id_bound_cidrs": bind})
                 bad_role = {"name": ROLE_NAME, "secret_id_bound_cidrs": bind}

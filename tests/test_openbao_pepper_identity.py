@@ -375,3 +375,5 @@ def test_guest_binds_read_the_platform_env_before_the_process_env(
     assert _render_value(pepper_defaults, "{{ %s }}" % variable) == "platform-fixture-cidr"
     del pepper_defaults["openbao_platform_env"][key]
     assert _render_value(pepper_defaults, "{{ %s }}" % variable) == "process-fixture-cidr"
+    pepper_defaults["openbao_platform_env"][key] = "   "
+    assert _render_value(pepper_defaults, "{{ %s }}" % variable) == "process-fixture-cidr"
