@@ -135,7 +135,9 @@
              | select('search', 'pr-reconcile') | list) == []
         fail_msg: A policy other than pr-reconcile grants a pr-reconcile token path.
 
-    - name: Assert the AppRole uses the pr-reconcile policy on the machine class
+    - name: Assert the AppRole uses the pr-reconcile policy, unbound while no bind is supplied
+      vars:
+        cli: "{{ openbao_approle_cli_parameters['pr-reconcile'] }}"
       ansible.builtin.assert:
         that:
           - >-
@@ -143,7 +145,9 @@
              | map(attribute='policy') | first) == openbao_github_pr_reconcile_policy_name
           - openbao_github_pr_reconcile_policy_name == 'pr-reconcile'
           - openbao_github_pr_reconcile_approle_name == 'pr-reconcile'
-          - openbao_approle_cidr_class_map['pr-reconcile'] == 'machine'
+          - openbao_approle_cidr_class_map['pr-reconcile'] == 'unbound'
+          - cli.secret_id_bound_cidrs == ''
+          - cli.token_bound_cidrs == ''
           - >-
             (openbao_approles | selectattr('name', 'equalto', 'pr-reconcile')
              | map(attribute='token_ttl') | first) == '15m'
@@ -151,8 +155,29 @@
             (openbao_approles | selectattr('name', 'equalto', 'pr-reconcile')
              | map(attribute='token_max_ttl') | first) == '60m'
         fail_msg: >-
-          The pr-reconcile AppRole must attach the pr-reconcile policy and bind
-          to the machine class.
+          The pr-reconcile AppRole must attach the pr-reconcile policy and
+          resolve to no bind at all while OPENBAO_PR_RECONCILE_SECRET_ID_CIDR
+          is empty -- never the machine-class fallback.
+
+    # set_fact outranks include_vars, and the class map and CLI parameters are
+    # lazy templates, so supplying the bind here re-resolves both below.
+    - name: Supply the guest bind for the bound state
+      ansible.builtin.set_fact:
+        openbao_pr_reconcile_secret_id_cidr: "192.0.2.30/32"
+
+    - name: Assert the bound state binds both fields and stays in the rotated set
+      vars:
+        cli: "{{ openbao_approle_cli_parameters['pr-reconcile'] }}"
+      ansible.builtin.assert:
+        that:
+          - openbao_approle_cidr_class_map['pr-reconcile'] == openbao_approle_default_cidr_class
+          - cli.secret_id_bound_cidrs == openbao_pr_reconcile_secret_id_cidr
+          - cli.token_bound_cidrs == openbao_pr_reconcile_secret_id_cidr
+          - "'pr-reconcile' in openbao_secrets_domain_approle_names"
+        fail_msg: >-
+          With OPENBAO_PR_RECONCILE_SECRET_ID_CIDR supplied, pr-reconcile must
+          bind both the secret_id and the token to that single /32 and stay in
+          the rotated, published domain set.
 
     - name: Assert the AppRole's secret_id is rotated with the domain identities
       ansible.builtin.assert:

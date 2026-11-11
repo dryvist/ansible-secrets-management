@@ -227,6 +227,10 @@ openbao_app_agent_tier_cidr_classes: >-
 # lookup never has to cope with a missing key. (`map('extract', dict, default)`
 # does NOT take a default: it raises on the first name absent from the override
 # map, which is most of them. Verified, not assumed.)
+# pr-reconcile is unbound while its guest bind is empty -- never the machine
+# fallback, because an empty bind also keeps it out of the rotated set (05c),
+# so no secret_id exists for an unbound bind to expose. With the bind supplied,
+# the declared bind (07b) carries both fields and the class is the default.
 openbao_approle_cidr_class_map: >-
   {{ dict(openbao_approles | map(attribute='name') | list
           | zip(openbao_approles | map(attribute='name')
@@ -238,7 +242,10 @@ openbao_approle_cidr_class_map: >-
      | combine(openbao_roster_key_reader_cidr_classes)
      | combine(openbao_ai_apply_cidr_classes)
      | combine(openbao_app_agent_tier_cidr_classes)
-     | combine(openbao_window_service_cidr_classes) }}
+     | combine(openbao_window_service_cidr_classes)
+     | combine({openbao_github_pr_reconcile_approle_name:
+                ('unbound' if openbao_pr_reconcile_secret_id_cidr | length == 0
+                 else openbao_approle_default_cidr_class)}) }}
 # Exact strings passed by `bao write ... key=value`; keep these shared by the
 # reconcile writer and its ACL so neither side can change independently.
 openbao_approle_cli_parameters: >-

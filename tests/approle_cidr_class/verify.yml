@@ -159,10 +159,11 @@
           next to it; unbound is the documented opt-out, not the fallback.
 
     # include_vars outranks task vars, so the fixture bind is a fact.
-    - name: Supply documentation-range binds for open-llm, ci-resolver, and openhands
+    - name: Supply documentation-range binds for open-llm, ci-resolver, openhands and pr-reconcile
       ansible.builtin.set_fact:
         openbao_open_llm_secret_id_cidr: "192.0.2.10/32"
         openbao_openhands_secret_id_cidr: "192.0.2.20/32"
+        openbao_pr_reconcile_secret_id_cidr: "192.0.2.30/32"
 
     - name: The open-llm role is machine class, bound to one /32, with a renewable 15m/60m token
       vars:

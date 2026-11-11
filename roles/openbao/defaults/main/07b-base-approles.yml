@@ -255,11 +255,14 @@ openbao_base_approles_core:
     policy: "{{ openbao_github_git_mirror_policy_name }}"
     token_ttl: 15m
     token_max_ttl: 60m
-  # pr-reconcile: the PR reconcile agent's token identity. It stays on the
-  # default machine class (08b) and is rotated with the openbao_secrets domain
-  # identities (05c), so its env-document pair is republished on each rotation.
+  # pr-reconcile: the PR reconcile agent's token identity. Bound to its guest's
+  # /32 on both fields (08b derives token_bound_cidrs from the same value).
+  # While the bind is empty the role is unbound (08b), never the machine
+  # default, and it leaves the rotated set (05c), so no secret_id exists to
+  # publish.
   - name: "{{ openbao_github_pr_reconcile_approle_name }}"
     policy: "{{ openbao_github_pr_reconcile_policy_name }}"
+    secret_id_bound_cidrs: "{{ openbao_pr_reconcile_secret_id_cidr }}"
     token_ttl: 15m
     token_max_ttl: 60m
   # openhands: service-runtime identity for the dedicated GitHub App mount,
