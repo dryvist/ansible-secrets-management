@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.95.1](https://github.com/dryvist/ansible-secrets-management/compare/v0.95.0...v0.95.1) (2026-11-11)
+
+
+### Bug Fixes
+
+* **openbao:** route rotate and secret-age login through loopback ([#625](https://github.com/dryvist/ansible-secrets-management/issues/625)) ([4c118af](https://github.com/dryvist/ansible-secrets-management/commit/4c118afe41691731de0df946569035cef6accd8f))
+
 ## [0.95.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.94.0...v0.95.0) (2026-11-11)
 
 
