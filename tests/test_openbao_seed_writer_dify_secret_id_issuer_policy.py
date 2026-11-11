@@ -10,11 +10,14 @@ import yaml
 from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar, trust_as_template
 
+from openbao_reconcile_bounds_helpers import _templar, _trust, rendered_defaults
+
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULTS = ROOT / "roles/openbao/defaults/main"
 TEMPLATE_NAME = "seed-writer-dify-secret-id-issuer-policy.hcl.j2"
 POLICY_NAME_VARIABLE = "{{ openbao_seed_writer_dify_secret_id_issuer_policy_name }}"
 WRITER_NAME_VARIABLE = "{{ openbao_ansible_converge_writer_approle_name }}"
+ISSUER_NAME_VARIABLE = "{{ openbao_dify_secret_id_issuer_approle_name }}"
 DECLARED_ROLES = (
     "agent-code-simplifier",
     "agent-ci-fixer",
@@ -105,7 +108,7 @@ def test_empty_role_list_renders_no_path_stanza():
     assert _stanzas(policy) == []
 
 
-def test_policy_is_registered_and_attached_to_no_seed_writer_row():
+def test_policy_is_registered_and_attached_only_to_the_issuer_approle():
     static_rows = _yaml("07c-base-policies.yml")["openbao_base_policies_static"]
     rows = [row for row in static_rows if row["name"] == POLICY_NAME_VARIABLE]
     assert len(rows) == 1
@@ -114,8 +117,13 @@ def test_policy_is_registered_and_attached_to_no_seed_writer_row():
     seed_rows = _yaml("07i-seed-writer-approles.yml")["openbao_seed_writer_approles"]
     writers = [row for row in seed_rows if row["name"] == WRITER_NAME_VARIABLE]
     assert len(writers) == 1
+    assert POLICY_NAME_VARIABLE not in writers[0]["token_policies"]
+    issuers = [row for row in seed_rows if row["name"] == ISSUER_NAME_VARIABLE]
+    assert len(issuers) == 1
+    assert issuers[0]["token_policies"] == [POLICY_NAME_VARIABLE]
     for row in seed_rows:
-        assert POLICY_NAME_VARIABLE not in row.get("token_policies", [])
+        if row is not issuers[0]:
+            assert POLICY_NAME_VARIABLE not in row.get("token_policies", [])
 
     owners = {
         path.name
@@ -127,6 +135,7 @@ def test_policy_is_registered_and_attached_to_no_seed_writer_row():
     assert owners == {
         "05l-dify-agent-identities.yml",
         "07c-base-policies.yml",
+        "07i-seed-writer-approles.yml",
     }
 
 
@@ -135,3 +144,48 @@ def test_dify_agent_approle_rows_stay_inert():
     inert = text.count("'manage_secret_id': false")
     entries = len(re.findall(r"'name':", text))
     assert inert == entries == len(DECLARED_ROLES)
+
+
+def _expand(values, expression):
+    return _templar(_trust(values)).template(trust_as_template(expression))
+
+
+def test_issuer_approle_is_a_single_policy_batch_login_on_the_machine_class(rendered_defaults):
+    values, approles, _policies = rendered_defaults
+    name = values["openbao_dify_secret_id_issuer_approle_name"]
+    writer = values["openbao_ansible_converge_writer_approle_name"]
+    assert name == "dify-agent-secret-id-issuer"
+    assert [role["name"] for role in approles].count(name) == 1
+
+    parameters = values["openbao_approle_cli_parameters"][name]
+    assert parameters["token_policies"] == "seed-writer-dify-secret-id-issuer"
+    assert parameters["token_type"] == "batch"
+    assert parameters["token_ttl"] == values["openbao_approle_token_ttl"]
+    assert parameters["token_max_ttl"] == values["openbao_approle_token_ttl"]
+    assert parameters["secret_id_num_uses"] == "0"
+    assert parameters["secret_id_ttl"] == values["openbao_rotated_domain_secret_id_ttl"]
+
+    classes = values["openbao_approle_cidr_class_map"]
+    assert classes[name] == classes[writer] == "machine"
+    assert parameters["secret_id_bound_cidrs"] == values["openbao_management_cidrs"]
+    assert parameters["token_bound_cidrs"] == values["openbao_management_cidrs"]
+
+
+def test_issuer_approle_is_on_the_rotation_ttl_map_and_domain_list(rendered_defaults):
+    values, _approles, _policies = rendered_defaults
+    name = values["openbao_dify_secret_id_issuer_approle_name"]
+    overrides = _expand(values, "{{ openbao_approle_secret_id_ttl_overrides }}")
+    assert overrides[name] == values["openbao_rotated_domain_secret_id_ttl"]
+    assert name in _expand(values, "{{ openbao_secrets_domain_approle_names }}")
+
+
+def test_no_other_approle_carries_the_issuer_policy(rendered_defaults):
+    values, _approles, _policies = rendered_defaults
+    policy = values["openbao_seed_writer_dify_secret_id_issuer_policy_name"]
+    name = values["openbao_dify_secret_id_issuer_approle_name"]
+    carriers = sorted(
+        role
+        for role, parameters in values["openbao_approle_cli_parameters"].items()
+        if policy in parameters["token_policies"].split(",")
+    )
+    assert carriers == [name]

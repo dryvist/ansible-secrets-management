@@ -14,3 +14,11 @@ openbao_seed_writer_approles:
     token_ttl: "{{ openbao_approle_token_max_ttl }}"
     token_max_ttl: "{{ openbao_approle_token_max_ttl }}"
     secret_id_num_uses: 0
+  # Issues the Dify agent SecretIDs (07j). Holds that policy alone.
+  - name: "{{ openbao_dify_secret_id_issuer_approle_name }}"
+    token_policies:
+      - "{{ openbao_seed_writer_dify_secret_id_issuer_policy_name }}"
+    token_type: batch
+    token_ttl: "{{ openbao_approle_token_ttl }}"
+    token_max_ttl: "{{ openbao_approle_token_ttl }}"
+    secret_id_num_uses: 0

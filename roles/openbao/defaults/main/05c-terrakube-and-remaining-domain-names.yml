@@ -98,6 +98,7 @@ openbao_ansible_converge_policy_name: ansible-converge
 openbao_ansible_converge_approle_name: ansible-converge
 # Seed plays use the same policy through a short-lived batch-token identity.
 openbao_ansible_converge_writer_approle_name: ansible-converge-writer
+openbao_dify_secret_id_issuer_approle_name: dify-agent-secret-id-issuer
 # The machine-identity environment document. Each converge identity reads one
 # document per mount listed here; ansible-converge-policy.hcl.j2 derives its
 # grants from these two declarations, so the path is written once.
@@ -273,7 +274,8 @@ openbao_secrets_domain_approle_names: >-
       openbao_github_git_mirror_approle_name,
       openbao_github_pr_reconcile_approle_name,
       openbao_openhands_approle_name,
-      openbao_ansible_converge_writer_approle_name] }}
+      openbao_ansible_converge_writer_approle_name,
+      openbao_dify_secret_id_issuer_approle_name] }}
 # Roles using lookup proof despite the runner's source class allowing login.
 openbao_approle_rotation_lookup_proof_names: []
 # Provider-level API credentials live on exact leaves under a separately

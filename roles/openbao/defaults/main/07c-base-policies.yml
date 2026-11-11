@@ -83,7 +83,7 @@ openbao_base_policies_static:
   # shared converge policy above is carried by semaphore too.
   - name: "{{ openbao_authelia_signing_writer_policy_name }}"
     template: authelia-signing-writer-policy.hcl.j2
-  # Attached to the seed-writer AppRole only (07i).
+  # Attached to the Dify secret-id issuer AppRole only (07i).
   - name: "{{ openbao_seed_writer_dify_secret_id_issuer_policy_name }}"
     template: seed-writer-dify-secret-id-issuer-policy.hcl.j2
   # Attached to iac-platform-deploy only (07f). Denies the signing leaf that its
