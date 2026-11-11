@@ -105,7 +105,7 @@ def test_empty_role_list_renders_no_path_stanza():
     assert _stanzas(policy) == []
 
 
-def test_policy_is_registered_and_attached_only_to_the_seed_writer():
+def test_policy_is_registered_and_attached_to_no_seed_writer_row():
     static_rows = _yaml("07c-base-policies.yml")["openbao_base_policies_static"]
     rows = [row for row in static_rows if row["name"] == POLICY_NAME_VARIABLE]
     assert len(rows) == 1
@@ -114,10 +114,8 @@ def test_policy_is_registered_and_attached_only_to_the_seed_writer():
     seed_rows = _yaml("07i-seed-writer-approles.yml")["openbao_seed_writer_approles"]
     writers = [row for row in seed_rows if row["name"] == WRITER_NAME_VARIABLE]
     assert len(writers) == 1
-    assert POLICY_NAME_VARIABLE in writers[0]["token_policies"]
     for row in seed_rows:
-        if row is not writers[0]:
-            assert POLICY_NAME_VARIABLE not in row.get("token_policies", [])
+        assert POLICY_NAME_VARIABLE not in row.get("token_policies", [])
 
     owners = {
         path.name
@@ -129,7 +127,6 @@ def test_policy_is_registered_and_attached_only_to_the_seed_writer():
     assert owners == {
         "05l-dify-agent-identities.yml",
         "07c-base-policies.yml",
-        "07i-seed-writer-approles.yml",
     }
 
 
