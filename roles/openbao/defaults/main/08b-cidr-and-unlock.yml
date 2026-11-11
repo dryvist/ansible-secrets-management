@@ -14,23 +14,35 @@
 # unbound roles by setting openbao_approle_allow_unbound_cidrs. An unset
 # variable must not quietly produce the unbound role it was added to prevent.
 openbao_management_cidrs: >-
-  {{ lookup('env', 'OPENBAO_MANAGEMENT_CIDRS') | default('', true) }}
+  {{ lookup('env', 'OPENBAO_MANAGEMENT_CIDRS') | default('', true) | trim }}
 openbao_workstation_cidrs: >-
-  {{ lookup('env', 'OPENBAO_WORKSTATION_CIDRS') | default('', true) }}
+  {{ lookup('env', 'OPENBAO_WORKSTATION_CIDRS') | default('', true) | trim }}
 openbao_ci_cidrs: >-
-  {{ lookup('env', 'OPENBAO_CI_CIDRS') | default('', true) }}
+  {{ lookup('env', 'OPENBAO_CI_CIDRS') | default('', true) | trim }}
+# Guest source-address binds: the platform env document first, then the process
+# env. A missing, null, blank or whitespace platform value falls through.
+openbao_platform_bind_keys:
+  - OPENBAO_HERMES_PRIVATE_AGENT_SECRET_ID_CIDR
+  - OPENBAO_PEPPER_SECRET_ID_CIDR
+  - OPENBAO_DIFY_AGENT_CIDR
+  - OPENBAO_SANDBOX_AGENT_CIDRS
+  - OPENBAO_AI_RUNNER_SECRET_ID_CIDR
+  - OPENBAO_AI_SANDBOX_SECRET_ID_CIDR
+  - OPENBAO_OPENHANDS_SECRET_ID_CIDR
+  - OPENBAO_DIFY_SECRET_ID_ISSUER_SECRET_ID_CIDR
+openbao_platform_bind_cidrs: >-
+  {%- set _ns = namespace(binds={}) -%}
+  {%- for _key in openbao_platform_bind_keys -%}
+  {%- set _platform = openbao_platform_env.get(_key) | default('', true) | string | trim -%}
+  {%- set _ = _ns.binds.update({_key: _platform or (lookup('env', _key) | default('', true) | trim)}) -%}
+  {%- endfor -%}
+  {{ _ns.binds }}
 openbao_hermes_private_agent_secret_id_cidr: >-
-  {{ openbao_platform_env.get('OPENBAO_HERMES_PRIVATE_AGENT_SECRET_ID_CIDR', '')
-     | default(lookup('env', 'OPENBAO_HERMES_PRIVATE_AGENT_SECRET_ID_CIDR'), true)
-     | default('', true) }}
+  {{ openbao_platform_bind_cidrs['OPENBAO_HERMES_PRIVATE_AGENT_SECRET_ID_CIDR'] }}
 openbao_pepper_secret_id_cidr: >-
-  {{ openbao_platform_env.get('OPENBAO_PEPPER_SECRET_ID_CIDR', '')
-     | default(lookup('env', 'OPENBAO_PEPPER_SECRET_ID_CIDR'), true)
-     | default('', true) }}
+  {{ openbao_platform_bind_cidrs['OPENBAO_PEPPER_SECRET_ID_CIDR'] }}
 openbao_dify_agent_cidrs: >-
-  {{ openbao_platform_env.get('OPENBAO_DIFY_AGENT_CIDR', '')
-     | default(lookup('env', 'OPENBAO_DIFY_AGENT_CIDR'), true)
-     | default('', true) }}
+  {{ openbao_platform_bind_cidrs['OPENBAO_DIFY_AGENT_CIDR'] }}
 # Escape hatch for a first bootstrap, where no CIDR is known yet. Only a true
 # value (1, true, yes, on) downgrades the assert to the loud warning that
 # preceded it; "false" or any other string keeps the assert.
@@ -38,7 +50,9 @@ openbao_approle_allow_unbound_cidrs: >-
   {{ (lookup('env', 'OPENBAO_APPROLE_ALLOW_UNBOUND_CIDRS') | default('', true) | string | trim | lower)
      in ['1', 'true', 'yes', 'on'] }}
 # Roles whose secret_id and token CIDRs must render non-empty even when the
-# escape hatch is set: init/10-approles.yml refuses to create them unbound.
+# escape hatch is set. The same check also rejects any selected role's declared
+# empty source-address bind, using the normalized declared value in the CLI
+# parameter map before any loopback source is appended.
 openbao_approle_bound_required:
   - "{{ openbao_hatchet_killtest_approle_name }}"
 openbao_approle_bound_required_unbound: >-
@@ -46,8 +60,17 @@ openbao_approle_bound_required_unbound: >-
   {%- for _name in openbao_approle_bound_required if _name in openbao_approle_cli_parameters -%}
   {%- set _params = openbao_approle_cli_parameters[_name] -%}
   {%- if (_params.secret_id_bound_cidrs | trim | length == 0)
-        or (_params.token_bound_cidrs | trim | length == 0) -%}
+        or (_params.token_bound_cidrs | trim | length == 0)
+        or (_params.declared_secret_id_bound_cidrs | default('', true) | trim | length == 0) -%}
   {%- set _ns.names = _ns.names + [_name] -%}
+  {%- endif -%}
+  {%- endfor -%}
+  {%- for _approle in (openbao_approle_config_targets | default(openbao_manageable_approles))
+      if 'secret_id_bound_cidrs' in _approle -%}
+  {%- set _params = openbao_approle_cli_parameters[_approle.name] -%}
+  {%- if (_params.declared_secret_id_bound_cidrs | default('', true) | trim | length == 0)
+        and _approle.name not in _ns.names -%}
+  {%- set _ns.names = _ns.names + [_approle.name] -%}
   {%- endif -%}
   {%- endfor -%}
   {{ _ns.names }}
@@ -57,7 +80,7 @@ openbao_approle_cidr_classes:
   machine: "{{ openbao_management_cidrs }}"
   workstation: "{{ openbao_workstation_cidrs }}"
   ci: "{{ openbao_ci_cidrs }}"
-  sandbox_agent: "{{ openbao_sandbox_agent_cidrs }}"
+  sandbox_agent: "{{ openbao_sandbox_agent_cidrs | trim }}"
   # Union of machine + workstation, for an identity genuinely redeemed from
   # BOTH: never restate either range literally, derive from the two lists
   # above so there remains exactly one declaration of each.
@@ -263,8 +286,22 @@ openbao_approle_cli_parameters: >-
   {%- set _parameters = {} -%}
   {%- for _approle in openbao_approles -%}
   {%- set _cidr_class = openbao_approle_cidr_class_map[_approle.name] -%}
-  {%- set _cidr_csv = _approle.secret_id_bound_cidrs | default('', true)
-      or openbao_approle_cidr_classes[_cidr_class] -%}
+  {%- if 'secret_id_bound_cidrs' in _approle -%}
+  {%- set _declared_cidrs = _approle.secret_id_bound_cidrs | default('', true) -%}
+  {%- if _declared_cidrs is sequence and _declared_cidrs is not string -%}
+  {%- set _cidr_items = _declared_cidrs | map('default', '', true) | map('string') | map('trim') | list -%}
+  {%- if '' in _cidr_items -%}
+  {%- set _cidr_csv = '' -%}
+  {%- else -%}
+  {%- set _cidr_csv = (_cidr_items | join(',')) | trim -%}
+  {%- endif -%}
+  {%- else -%}
+  {%- set _cidr_csv = _declared_cidrs | string | trim -%}
+  {%- endif -%}
+  {%- else -%}
+  {%- set _cidr_csv = openbao_approle_cidr_classes[_cidr_class] | trim -%}
+  {%- endif -%}
+  {%- set _declared_secret_id_bound_cidrs = _cidr_csv -%}
   {%- if _approle.name in openbao_loopback_client_approles
         and '127.0.0.1/32' not in (_cidr_csv | split(',') | map('trim') | list) -%}
   {%- set _cidr_csv = ((_cidr_csv | trim ~ ',') if (_cidr_csv | trim | length > 0) else '')
@@ -284,6 +321,7 @@ openbao_approle_cli_parameters: >-
           | default(openbao_approle_secret_id_num_uses_overrides[_approle.name]
                    if _approle.name in openbao_approle_secret_id_num_uses_overrides
                    else openbao_approle_secret_id_num_uses) | string),
+      'declared_secret_id_bound_cidrs': _declared_secret_id_bound_cidrs,
       'secret_id_bound_cidrs': _cidr_csv,
       'token_bound_cidrs': _cidr_csv
   }}) -%}

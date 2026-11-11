@@ -248,7 +248,7 @@ class TestShippedDeclarationIsClean(unittest.TestCase):
                 continue
             self.assertNotIn("127.0.0.1", role["secret_id_bound_cidrs"], name)
             self.assertNotIn("127.0.0.1", role["token_bound_cidrs"], name)
-            if class_map[name] == "machine" and not roles_by_name[name].get("secret_id_bound_cidrs"):
+            if class_map[name] == "machine" and "secret_id_bound_cidrs" not in roles_by_name[name]:
                 self.assertEqual(role["secret_id_bound_cidrs"], machine_cidrs, name)
                 self.assertEqual(role["token_bound_cidrs"], machine_cidrs, name)
 

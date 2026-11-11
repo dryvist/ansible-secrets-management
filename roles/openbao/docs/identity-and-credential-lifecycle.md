@@ -66,7 +66,10 @@ probe.
 Source binding uses named CIDR classes (`machine` / `workstation` / `ci`), whose
 values arrive by environment and are never committed. A class that a declared
 role uses but which was never supplied **fails the converge** rather than
-quietly creating the unbound role the binding exists to prevent.
+quietly creating the unbound role the binding exists to prevent. A role that
+explicitly declares an empty `secret_id_bound_cidrs` also fails the converge.
+Omitting that key resolves the configured CIDR class (the default is
+`machine`); omission never selects `unbound`.
 
 Identities that authenticate through the node-local loopback listener and then
 use the resulting token from the same source are enumerated once in

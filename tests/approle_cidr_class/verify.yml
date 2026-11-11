@@ -244,3 +244,52 @@
         fail_msg: >-
           A retired AppRole or policy is still declared, so the converge would
           recreate what it deletes.
+
+    - name: Prepare a selected loopback AppRole with an empty declaration
+      ansible.builtin.set_fact:
+        openbao_approles:
+          - name: loopback-fixture
+            policy: loopback-fixture
+            secret_id_bound_cidrs: ""
+        openbao_loopback_client_approles:
+          - loopback-fixture
+        openbao_approle_config_targets:
+          - name: loopback-fixture
+            secret_id_bound_cidrs: ""
+
+    - name: Detect the empty declaration even when loopback adds an effective bind
+      ansible.builtin.assert:
+        that:
+          - openbao_approle_bound_required_unbound == ['loopback-fixture']
+          - openbao_approle_cli_parameters['loopback-fixture'].secret_id_bound_cidrs | length > 0
+          - openbao_approle_cli_parameters['loopback-fixture'].token_bound_cidrs | length > 0
+        fail_msg: An empty declared bind was accepted for a selected loopback client.
+
+    - name: Detect a required role whose declared bind is empty behind a loopback append
+      ansible.builtin.set_fact:
+        openbao_approles:
+          - name: required-loopback-fixture
+            policy: required-loopback-fixture
+        openbao_approle_cidr_class_overrides: >-
+          {{ openbao_approle_cidr_class_overrides
+             | combine({'required-loopback-fixture': 'unbound'}) }}
+        openbao_loopback_client_approles:
+          - required-loopback-fixture
+        openbao_approle_bound_required:
+          - required-loopback-fixture
+        openbao_approle_config_targets: []
+
+    - name: Reject an empty declared bind for a required role even with a loopback append
+      ansible.builtin.assert:
+        that:
+          - openbao_approle_bound_required_unbound == ['required-loopback-fixture']
+          - openbao_approle_cidr_class_map['required-loopback-fixture'] == 'unbound'
+          - >-
+            openbao_approle_cli_parameters['required-loopback-fixture']
+            .declared_secret_id_bound_cidrs | trim | length == 0
+          - openbao_approle_cli_parameters['required-loopback-fixture'].secret_id_bound_cidrs | length > 0
+          - openbao_approle_cli_parameters['required-loopback-fixture'].token_bound_cidrs | length > 0
+          - >-
+            openbao_approle_config_targets
+            | selectattr('name', 'equalto', 'required-loopback-fixture') | list | length == 0
+        fail_msg: A required role with an empty declared bind passed behind a loopback append.
