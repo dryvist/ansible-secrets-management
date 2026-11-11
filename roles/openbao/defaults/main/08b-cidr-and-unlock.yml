@@ -60,7 +60,8 @@ openbao_approle_bound_required_unbound: >-
   {%- for _name in openbao_approle_bound_required if _name in openbao_approle_cli_parameters -%}
   {%- set _params = openbao_approle_cli_parameters[_name] -%}
   {%- if (_params.secret_id_bound_cidrs | trim | length == 0)
-        or (_params.token_bound_cidrs | trim | length == 0) -%}
+        or (_params.token_bound_cidrs | trim | length == 0)
+        or (_params.declared_secret_id_bound_cidrs | default('', true) | trim | length == 0) -%}
   {%- set _ns.names = _ns.names + [_name] -%}
   {%- endif -%}
   {%- endfor -%}

@@ -264,3 +264,12 @@
           - openbao_approle_cli_parameters['loopback-fixture'].secret_id_bound_cidrs | length > 0
           - openbao_approle_cli_parameters['loopback-fixture'].token_bound_cidrs | length > 0
         fail_msg: An empty declared bind was accepted for a selected loopback client.
+
+    - name: Detect a required role whose declared bind is empty behind a loopback append
+      vars:
+        openbao_approle_bound_required:
+          - loopback-fixture
+      ansible.builtin.assert:
+        that:
+          - openbao_approle_bound_required_unbound == ['loopback-fixture']
+        fail_msg: A required role with an empty declared bind passed behind a loopback append.
