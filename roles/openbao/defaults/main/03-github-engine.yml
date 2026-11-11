@@ -28,6 +28,12 @@ openbao_github_plugin_checksums_signature_url: >-
 openbao_github_app_id: "{{ lookup('env', 'OPENBAO_GITHUB_APP_ID') | default('', true) }}"
 openbao_github_app_private_key: >-
   {{ lookup('env', 'OPENBAO_GITHUB_APP_PRIVATE_KEY') | default('', true) }}
+# Mount names whose already-configured App gets its private key rewritten from
+# the supplied one on this run. The supplied App ID must equal the stored one
+# and the key must be non-empty. A mount not listed is written only on first
+# configuration. Applies to openbao_github_mount and every
+# openbao_github_app_mounts entry.
+openbao_github_app_key_rotate_mounts: []
 openbao_github_dryvist_installation_id: >-
   {{ openbao_platform_env['OPENBAO_GITHUB_ADMIN_DRYVIST_INSTALLATION_ID'] | default('', true) }}
 openbao_github_personal_installation_id: >-

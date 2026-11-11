@@ -13,6 +13,7 @@ from ansible.template import Templar, trust_as_template
 ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE = ROOT / "roles/openbao/templates/github-mount-config-policy.hcl.j2"
 MOUNT_TASK = ROOT / "roles/openbao/tasks/init/05b-github-app-mount.yml"
+CONFIG_WRITE_TASK = ROOT / "roles/openbao/tasks/init/github_app_config_write.yml"
 PERMISSION_SET_TASK = "Reconcile the permission sets on mount {{ gm.mount }}"
 APP_ENVIRONMENT = {
     "github-public": (
@@ -310,7 +311,7 @@ def test_mount_task_touches_only_declared_permission_set_names():
 
 def test_mount_task_sends_numeric_github_ids_as_strings():
     tasks = yaml.safe_load(MOUNT_TASK.read_text(encoding="utf-8"))
-    config = next(task for task in tasks if "Configure the App credentials" in task.get("name", ""))
+    config = yaml.safe_load(CONFIG_WRITE_TASK.read_text(encoding="utf-8"))[0]
     private_token = next(
         task for task in tasks if "private-only on mount" in task.get("name", "")
     )
@@ -318,7 +319,9 @@ def test_mount_task_sends_numeric_github_ids_as_strings():
         task for task in tasks if task.get("name", "").startswith("Reconcile the permission sets")
     )
 
-    assert config["ansible.builtin.uri"]["body"]["app_id"] == "{{ gm.app_id | int | string }}"
+    assert config["ansible.builtin.uri"]["body"]["app_id"] == (
+        "{{ openbao_github_app_config_app_id | int | string }}"
+    )
     assert private_token["ansible.builtin.uri"]["body"]["installation_id"] == (
         "{{ item.installation_id | int | string }}"
     )

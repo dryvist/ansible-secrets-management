@@ -4,7 +4,8 @@
 # every set below states its permission map explicitly (05b asserts none holds
 # administration). App IDs and private keys arrive via environment;
 # installation IDs come from the env document (openbao_platform_env). A
-# supplied private key is a deliberate (re)configuration.
+# supplied private key is written on first configuration, or for a mount listed
+# in openbao_github_app_key_rotate_mounts.
 #
 #   github         everyday read/write
 #   github-agents  untrusted-tier public read/write, scoped by its installation
