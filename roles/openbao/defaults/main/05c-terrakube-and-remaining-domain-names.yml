@@ -269,7 +269,6 @@ openbao_secrets_domain_approle_names: >-
       openbao_open_llm_approle_name,
       openbao_github_ci_resolver_approle_name,
       openbao_github_git_mirror_approle_name,
-      openbao_github_pr_reconcile_approle_name,
       openbao_openhands_approle_name,
       openbao_ansible_converge_writer_approle_name] }}
 # Roles using lookup proof despite the runner's source class allowing login.
