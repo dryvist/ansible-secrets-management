@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.95.2](https://github.com/dryvist/ansible-secrets-management/compare/v0.95.1...v0.95.2) (2026-11-11)
+
+
+### Bug Fixes
+
+* **openbao:** stamp disclosure-denylist metadata on the github-org path ([#609](https://github.com/dryvist/ansible-secrets-management/issues/609)) ([bcdefdd](https://github.com/dryvist/ansible-secrets-management/commit/bcdefdd3df1d4d7c77ddf37e586dd4719bf99ec8))
+
 ## [0.95.1](https://github.com/dryvist/ansible-secrets-management/compare/v0.95.0...v0.95.1) (2026-11-11)
 
 

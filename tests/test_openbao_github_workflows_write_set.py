@@ -1,40 +1,50 @@
-"""The PR-automation workflows set is exactly three write permissions in the admin tier."""
+"""The PR-automation workflows sets are exactly three write permissions in the admin tier, one per installation."""
 
 from test_openbao_hatchet_eval_status_policy import _defaults, _render
 
 
-def _sets(installation_id):
+def _sets(installations):
     github = _defaults("03-github-engine.yml")
     return _render(
         github["openbao_github_workflows_write_permission_sets"],
         {
-            "openbao_github_workflows_write_set_name": github["openbao_github_workflows_write_set_name"],
+            "openbao_github_workflows_write_set_suffix": github["openbao_github_workflows_write_set_suffix"],
             "openbao_github_workflows_write_permissions": github["openbao_github_workflows_write_permissions"],
-            "openbao_github_jacobpevans_installation_id": installation_id,
+            "openbao_github_org_secrets_installations": installations,
         },
     )
 
 
-def test_set_has_only_contents_pull_requests_and_workflows_write():
+def test_one_set_per_installation_with_only_three_write_permissions():
     github = _defaults("03-github-engine.yml")
     assert github["openbao_github_workflows_write_permissions"] == {
         "contents": "write",
         "pull_requests": "write",
         "workflows": "write",
     }
-    assert _sets("4242") == [
+    sets = _sets([
+        {"name": "owner-a", "installation_id": "4242"},
+        {"name": "owner-b", "installation_id": "4343"},
+    ])
+    assert sets == [
         {
-            "name": "jacobpevans-workflows-write",
+            "name": f"{name}-workflows-write",
             "tier": "admin",
-            "installation_id": "4242",
+            "installation_id": iid,
             "permissions": github["openbao_github_workflows_write_permissions"],
         }
+        for name, iid in (("owner-a", "4242"), ("owner-b", "4343"))
     ]
     assert "openbao_github_workflows_write_permission_sets" in github["openbao_github_admin_permission_sets"]
 
 
-def test_set_is_absent_without_an_installation_id():
-    assert _sets("") == []
+def test_installation_without_an_id_gets_no_set():
+    assert _sets([{"name": "owner-a", "installation_id": ""}]) == []
+
+
+def test_sets_follow_the_shared_installation_list():
+    github = _defaults("03-github-engine.yml")
+    assert "openbao_github_org_secrets_installations" in github["openbao_github_workflows_write_permission_sets"]
 
 
 def _template(name):

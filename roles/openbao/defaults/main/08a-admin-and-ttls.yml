@@ -126,7 +126,6 @@ openbao_approle_secret_id_ttl_overrides_base:
   open-llm: "{{ openbao_rotated_domain_secret_id_ttl }}"
   ci-resolver: "{{ openbao_rotated_domain_secret_id_ttl }}"
   git-mirror: "{{ openbao_rotated_domain_secret_id_ttl }}"
-  pr-reconcile: "{{ openbao_rotated_domain_secret_id_ttl }}"
   openhands: "{{ openbao_rotated_domain_secret_id_ttl }}"
   llm-router-agent-keys: "{{ openbao_rotated_domain_secret_id_ttl }}"
   agentgateway-agent-keys: "{{ openbao_rotated_domain_secret_id_ttl }}"
@@ -155,7 +154,10 @@ openbao_approle_secret_id_ttl_overrides: >-
                     | map(attribute='tier')
                     | map('regex_replace', '^', 'app-agent-') | list
                     | zip([openbao_rotated_domain_secret_id_ttl]
-                         * (openbao_app_agent_tier_readers | length)))) }}
+                         * (openbao_app_agent_tier_readers | length))))
+     | combine({openbao_dify_secret_id_issuer_approle_name:
+               openbao_rotated_domain_secret_id_ttl}
+              if openbao_dify_secret_id_issuer_targets | length > 0 else {}) }}
 # num_uses 0 (unlimited redemptions) is permitted ONLY with a reason on the line.
 openbao_approle_secret_id_num_uses_overrides:
   # Its secret_id is live, non-expiring, and in active use by every agent
@@ -172,9 +174,6 @@ openbao_approle_secret_id_num_uses_overrides:
   # git-mirror redeems its secret_id on every token mint, so a use cap would
   # strand it between rotations. Bounded by its 36h ttl and scheduled rotation.
   git-mirror: 0
-  # pr-reconcile redeems its secret_id on every token mint, so a use cap would
-  # strand it between rotations. Bounded by its 36h ttl and scheduled rotation.
-  pr-reconcile: 0
   # openhands: unlimited uses, bounded by scheduled rotation and its secret_id
   # CIDR bind, as for ci-resolver.
   openhands: 0

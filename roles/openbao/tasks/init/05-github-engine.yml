@@ -145,6 +145,15 @@
     - openbao_bootstrap_token is defined
     - openbao_github_engine_enabled | bool
 
+- name: Assert the GitHub engine configuration read succeeded
+  ansible.builtin.assert:
+    that:
+      - openbao_github_config_check.rc == 0
+    fail_msg: The GitHub secrets engine config read failed; nothing was written.
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_github_engine_enabled | bool
+
 # A virgin mount answers the config read with rc=0 and app_id=0 — "endpoint
 # readable" is NOT "App configured" (issue #1079: gating first configuration
 # on rc alone made the first-config path unreachable and tripped the drift
@@ -167,36 +176,11 @@
     fail_msg: >-
       The GitHub secrets engine is unconfigured. Supply OPENBAO_GITHUB_APP_ID
       and OPENBAO_GITHUB_APP_PRIVATE_KEY for this one-time sealed write.
-  when:
-    - openbao_bootstrap_token is defined
-    - openbao_github_engine_enabled | bool
-    - not (openbao_github_app_configured | default(false) | bool)
-
-- name: Configure the GitHub App credentials (first configuration only)
-  ansible.builtin.uri:
-    url: "{{ openbao_cli_addr }}/v1/{{ openbao_github_mount }}/config"
-    method: POST
-    headers:
-      X-Vault-Token: "{{ openbao_bootstrap_token }}"
-    body_format: json
-    body:
-      app_id: "{{ openbao_github_app_id | int }}"
-      prv_key: "{{ openbao_github_app_private_key }}"
-      exclude_repository_metadata: true
-    status_code:
-      - 200
-      - 204
-  delegate_to: "{{ openbao_cli_host }}"
-  become: "{{ openbao_cli_become }}"
-  vars:
-    ansible_become: "{{ openbao_cli_become }}"
   no_log: true
   when:
     - openbao_bootstrap_token is defined
     - openbao_github_engine_enabled | bool
     - not (openbao_github_app_configured | default(false) | bool)
-    - openbao_github_app_id | length > 0
-    - openbao_github_app_private_key | length > 0
 
 - name: Refuse an unexpected GitHub App ID drift
   ansible.builtin.assert:
@@ -211,7 +195,40 @@
     - openbao_bootstrap_token is defined
     - openbao_github_engine_enabled | bool
     - openbao_github_app_configured | default(false) | bool
+    - >-
+      openbao_github_app_id | length > 0
+      or openbao_github_mount in openbao_github_app_key_rotate_mounts
+
+- name: Require the GitHub App private key for a declared key rotation
+  ansible.builtin.assert:
+    that:
+      - openbao_github_app_private_key | length > 0
+    fail_msg: >-
+      {{ openbao_github_mount }} is listed in openbao_github_app_key_rotate_mounts
+      but no private key is supplied. Supply the new key, or remove the mount
+      from the list.
+  no_log: true
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_github_engine_enabled | bool
+    - openbao_github_app_configured | default(false) | bool
+    - openbao_github_mount in openbao_github_app_key_rotate_mounts
+
+- name: Write the GitHub App credentials (first configuration or declared key rotation)
+  ansible.builtin.include_tasks: github_app_config_write.yml
+  vars:
+    openbao_github_app_config_mount: "{{ openbao_github_mount }}"
+    openbao_github_app_config_app_id: "{{ openbao_github_app_id }}"
+    openbao_github_app_config_private_key: "{{ openbao_github_app_private_key }}"
+  no_log: true
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_github_engine_enabled | bool
     - openbao_github_app_id | length > 0
+    - openbao_github_app_private_key | length > 0
+    - >-
+      not (openbao_github_app_configured | default(false) | bool)
+      or openbao_github_mount in openbao_github_app_key_rotate_mounts
 
 - name: Require both GitHub App installation IDs
   ansible.builtin.assert:
@@ -270,34 +287,6 @@
       openbao_github_openhands_permissions must be exactly
       {checks: read, contents: write, metadata: read, pull_requests: write};
       add a new tier instead of widening this one.
-  when:
-    - openbao_bootstrap_token is defined
-    - openbao_github_engine_enabled | bool
-
-- name: Assert the pr-reconcile permission map is exactly its five permissions
-  ansible.builtin.assert:
-    that:
-      - >-
-        openbao_github_pr_reconcile_permissions.keys() | list
-        == ['contents', 'issues', 'metadata', 'pull_requests', 'statuses']
-      - openbao_github_pr_reconcile_permissions.contents == 'write'
-      - openbao_github_pr_reconcile_permissions.issues == 'write'
-      - openbao_github_pr_reconcile_permissions.metadata == 'read'
-      - openbao_github_pr_reconcile_permissions.pull_requests == 'write'
-      - openbao_github_pr_reconcile_permissions.statuses == 'write'
-      - >-
-        (openbao_github_pr_reconcile_permission_sets
-         | map(attribute='permissions')
-         | selectattr('workflows', 'defined') | list) == []
-      - >-
-        (openbao_github_pr_reconcile_permission_sets
-         | map(attribute='permissions')
-         | selectattr('administration', 'defined') | list) == []
-    fail_msg: >-
-      openbao_github_pr_reconcile_permissions must be exactly
-      {contents: write, issues: write, metadata: read, pull_requests: write,
-      statuses: write}; no set may hold workflows or administration. Add a new
-      tier instead of widening this one.
   when:
     - openbao_bootstrap_token is defined
     - openbao_github_engine_enabled | bool

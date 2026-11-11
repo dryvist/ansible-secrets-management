@@ -98,6 +98,7 @@ openbao_ansible_converge_policy_name: ansible-converge
 openbao_ansible_converge_approle_name: ansible-converge
 # Seed plays use the same policy through a short-lived batch-token identity.
 openbao_ansible_converge_writer_approle_name: ansible-converge-writer
+openbao_dify_secret_id_issuer_approle_name: dify-agent-secret-id-issuer
 # The machine-identity environment document. Each converge identity reads one
 # document per mount listed here; ansible-converge-policy.hcl.j2 derives its
 # grants from these two declarations, so the path is written once.
@@ -158,15 +159,13 @@ openbao_ntfy_approle_name: ntfy
 # denylist_metadata.yml (init.yml) only stamps custom_metadata here; the term
 # list itself is seeded out of band, never through this converge.
 openbao_disclosure_denylist_mount: secrets-external
-openbao_disclosure_denylist_path: platform/disclosure-denylist
+openbao_disclosure_denylist_path: github-org/disclosure-denylist
 openbao_disclosure_denylist_field: terms
 openbao_disclosure_denylist_metadata:
   owner: JacobPEvans/.github
-  reader: "GitHub org secret DISCLOSURE_DENYLIST (org dryvist, visibility: all)"
+  reader: "GitHub org secret DISCLOSURE_DENYLIST, applied by the github-org-secrets workspace"
   docs: "JacobPEvans/.github _disclosure-gate.yml"
   rotation: "manual -- edit the term list directly; no scheduled rotation"
-# TODO: Follow up in Vikunja project 44 to remove the legacy
-# platform/disclosure-denylist custom metadata after consumers use github-org.
 # The org-secrets Terraform root reads exactly these KV-v2 leaves and fields.
 openbao_github_org_secrets_mount: secrets-external
 openbao_github_org_disclosure_denylist_path: github-org/disclosure-denylist
@@ -271,9 +270,10 @@ openbao_secrets_domain_approle_names: >-
       openbao_open_llm_approle_name,
       openbao_github_ci_resolver_approle_name,
       openbao_github_git_mirror_approle_name,
-      openbao_github_pr_reconcile_approle_name,
       openbao_openhands_approle_name,
-      openbao_ansible_converge_writer_approle_name] }}
+      openbao_ansible_converge_writer_approle_name]
+     + ([openbao_dify_secret_id_issuer_approle_name]
+        if openbao_dify_secret_id_issuer_targets | length > 0 else []) }}
 # Roles using lookup proof despite the runner's source class allowing login.
 openbao_approle_rotation_lookup_proof_names: []
 # Provider-level API credentials live on exact leaves under a separately
@@ -351,6 +351,13 @@ openbao_open_llm_approle_name: open-llm
 # the shape). Empty falls back to the machine class.
 openbao_open_llm_secret_id_cidr: >-
   {{ lookup('env', 'OPENBAO_AI_SANDBOX_SECRET_ID_CIDR') | default('', true) }}
+# Read like the address values in 08b: the platform environment document, then
+# the process environment. A blank value counts as empty. 07i requires a value
+# whenever Dify agent AppRoles are declared.
+openbao_dify_secret_id_issuer_secret_id_cidr: >-
+  {{ (openbao_platform_env.get('OPENBAO_DIFY_SECRET_ID_ISSUER_SECRET_ID_CIDR', '')
+      | default(lookup('env', 'OPENBAO_DIFY_SECRET_ID_ISSUER_SECRET_ID_CIDR'), true)
+      | default('', true)) | string | trim }}
 # The OpenHands guest's single address as a /32 (init/10-approles.yml asserts
 # the shape), read from the platform environment document. Empty falls back to
 # the machine class.

@@ -28,6 +28,12 @@ openbao_github_plugin_checksums_signature_url: >-
 openbao_github_app_id: "{{ lookup('env', 'OPENBAO_GITHUB_APP_ID') | default('', true) }}"
 openbao_github_app_private_key: >-
   {{ lookup('env', 'OPENBAO_GITHUB_APP_PRIVATE_KEY') | default('', true) }}
+# Mount names whose already-configured App gets its private key rewritten from
+# the supplied one on this run. The supplied App ID must equal the stored one
+# and the key must be non-empty. A mount not listed is written only on first
+# configuration. Applies to openbao_github_mount and every
+# openbao_github_app_mounts entry.
+openbao_github_app_key_rotate_mounts: []
 openbao_github_dryvist_installation_id: >-
   {{ openbao_platform_env['OPENBAO_GITHUB_ADMIN_DRYVIST_INSTALLATION_ID'] | default('', true) }}
 openbao_github_personal_installation_id: >-
@@ -245,31 +251,6 @@ openbao_github_git_mirror_permission_sets: >-
        'installation_id': openbao_github_admin_personal_installation_id,
        'permissions': openbao_github_git_mirror_permissions}]
      | selectattr('installation_id') | list }}
-# The PR reconcile agent writes pull requests, issues and commit statuses of
-# two owners, one installation each, through installation-wide sets with no
-# repository list (so each covers the whole installation). Tier `agents` keeps
-# them out of the ambient mint and orchestrator policies; only the pr-reconcile
-# policy names them. A set is declared only while its owner's installation ID
-# is configured.
-openbao_github_pr_reconcile_permissions:
-  contents: write
-  issues: write
-  metadata: read
-  pull_requests: write
-  statuses: write
-openbao_github_pr_reconcile_set_names:
-  - pr-reconcile-JacobPEvans-ai
-  - pr-reconcile-JacobPEvans
-openbao_github_pr_reconcile_permission_sets: >-
-  {{ [{'name': 'pr-reconcile-JacobPEvans-ai',
-       'tier': 'agents',
-       'installation_id': openbao_github_jacobpevans_ai_installation_id,
-       'permissions': openbao_github_pr_reconcile_permissions},
-      {'name': 'pr-reconcile-JacobPEvans',
-       'tier': 'agents',
-       'installation_id': openbao_github_jacobpevans_installation_id,
-       'permissions': openbao_github_pr_reconcile_permissions}]
-     | selectattr('installation_id') | list }}
 # The Hatchet eval worker can post commit statuses to one repository only.
 openbao_github_role_eval_status_set_name: role-eval-status
 openbao_github_role_eval_status_permissions:
@@ -281,21 +262,28 @@ openbao_github_role_eval_status_permission_sets:
     installation_id: "{{ openbao_github_dryvist_installation_id }}"
     repositories: [ansible-proxmox-ai]
     permissions: "{{ openbao_github_role_eval_status_permissions }}"
-# PR-automation workflow files in the JacobPEvans owner: contents, pull requests
-# and workflows write, nothing else. Tier `admin`: only github-admin-policy
-# grants it, so the everyday write, orchestrator and ambient policies cannot
-# mint it. Declared only while the JacobPEvans installation ID is configured.
-openbao_github_workflows_write_set_name: jacobpevans-workflows-write
+# PR-automation workflow files: contents, pull requests and workflows write,
+# nothing else, one set per Enterprise installation in
+# openbao_github_org_secrets_installations (named <org>-workflows-write). Tier
+# `admin`: only github-admin-policy grants it, so the everyday write,
+# orchestrator and ambient policies cannot mint it. An installation without an
+# ID gets no set. The personal account is covered by its own mount's
+# personal-write set.
+openbao_github_workflows_write_set_suffix: -workflows-write
 openbao_github_workflows_write_permissions:
   contents: write
   pull_requests: write
   workflows: write
 openbao_github_workflows_write_permission_sets: >-
-  {{ [{'name': openbao_github_workflows_write_set_name,
-       'tier': 'admin',
-       'installation_id': openbao_github_jacobpevans_installation_id,
-       'permissions': openbao_github_workflows_write_permissions}]
-     if openbao_github_jacobpevans_installation_id | string | length > 0 else [] }}
+  {%- set _sets = [] -%}
+  {%- for org in openbao_github_org_secrets_installations -%}
+  {%- if org.installation_id | default('', true) | string | length > 0 -%}
+  {%- set _ = _sets.append({'name': org.name ~ openbao_github_workflows_write_set_suffix,
+      'tier': 'admin', 'installation_id': org.installation_id,
+      'permissions': openbao_github_workflows_write_permissions}) -%}
+  {%- endif -%}
+  {%- endfor -%}
+  {{ _sets }}
 openbao_github_docs_publisher_permission_sets: >-
   {{ [{'name': openbao_github_docs_publisher_set_name,
        'tier': 'publish',
@@ -378,7 +366,6 @@ openbao_github_admin_permission_sets: >-
      + openbao_github_ci_resolver_permission_sets
      + openbao_github_router_snapshot_permission_sets
      + openbao_github_git_mirror_permission_sets
-     + openbao_github_pr_reconcile_permission_sets
      + openbao_github_role_eval_status_permission_sets
      + openbao_github_workflows_write_permission_sets }}
 # Every set on every GitHub mount, each tagged with its mount, for the policy
