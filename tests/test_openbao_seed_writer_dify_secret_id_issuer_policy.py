@@ -51,20 +51,26 @@ def _stanzas(policy: str) -> list[tuple[str, list[str]]]:
     return [(path, json.loads(caps)) for path, caps in STANZA.findall(policy)]
 
 
+ISSUER_CIDR_KEY = "OPENBAO_DIFY_SECRET_ID_ISSUER_SECRET_ID_CIDR"
+
+
 def _rendered(
     expression,
     *,
     dify_cidr="192.0.2.10/32",
     issuer_cidr="198.51.100.10/32",
+    issuer_env=None,
     overrides=None,
 ):
     environment = {
         **REQUIRED_ENV,
-        "OPENBAO_DIFY_SECRET_ID_ISSUER_SECRET_ID_CIDR": issuer_cidr,
+        ISSUER_CIDR_KEY: issuer_cidr if issuer_env is None else issuer_env,
     }
     with mock.patch.dict(os.environ, environment):
+        defaults = role_defaults()
+        defaults["openbao_platform_env"][ISSUER_CIDR_KEY] = issuer_cidr
         variables = {
-            **role_defaults(),
+            **defaults,
             "openbao_dify_agent_cidrs": dify_cidr,
             **(overrides or {}),
         }
@@ -258,6 +264,32 @@ def test_empty_issuer_bound_cidr_fails_with_dify_targets():
         match="OPENBAO_DIFY_SECRET_ID_ISSUER_SECRET_ID_CIDR is empty",
     ):
         _rendered("openbao_approles", issuer_cidr="")
+
+
+def test_issuer_bound_cidr_reads_the_environment_document_before_the_process_environment():
+    expression = "openbao_dify_secret_id_issuer_secret_id_cidr"
+    assert (
+        _rendered(expression, issuer_cidr="198.51.100.10/32", issuer_env="192.0.2.11/32")
+        == "198.51.100.10/32"
+    )
+    assert _rendered(expression, issuer_cidr="", issuer_env="192.0.2.11/32") == "192.0.2.11/32"
+    assert _rendered(expression, issuer_cidr=None, issuer_env="192.0.2.11/32") == "192.0.2.11/32"
+
+
+def test_blank_issuer_bound_cidr_in_the_environment_document_counts_as_empty():
+    assert (
+        _rendered(
+            "openbao_dify_secret_id_issuer_secret_id_cidr",
+            issuer_cidr="   ",
+            issuer_env="192.0.2.11/32",
+        )
+        == ""
+    )
+    with pytest.raises(
+        AnsibleError,
+        match="OPENBAO_DIFY_SECRET_ID_ISSUER_SECRET_ID_CIDR is empty",
+    ):
+        _rendered("openbao_approles", issuer_cidr="   ", issuer_env="192.0.2.11/32")
 
 
 def test_issuer_bound_cidr_does_not_change_other_approle_bounds():
