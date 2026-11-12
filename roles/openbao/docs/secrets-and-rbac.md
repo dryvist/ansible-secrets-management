@@ -171,9 +171,9 @@ Listing auth methods and audit devices remains allowed.
 
 `ai-admin-window-rbac` grants exact named paths for the protected policies and
 human-gated AppRole configurations eligible for selected reconciliation. Policy
-contents and AppRole parameters are pinned to the declared templates and role
-defaults. The reconcile policy has its own exact write grant and is synchronized
-only when selected. A run using this session must provide a bounded `openbao_select`;
+contents and AppRole parameters are not pinned. The reconcile policy has its own
+exact write grant and is synchronized only when selected. A run using this session
+must provide a bounded `openbao_select`;
 the resolver and live capability check reject names outside those grants before
 any policy-sync write. The one-shot `ai-admin` role remains unguarded for
 operations the guard protects. The separate `tofu-state-admin` policy grants

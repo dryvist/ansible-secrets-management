@@ -270,9 +270,14 @@
          | reject('in', _openbao_non_empty_names) | list | sort }}
   when: openbao_bootstrap_token is defined
 
+# The window guard denies the AppRole collection listing this audit needs.
+# Keep the audit for full and reconcile runs; the window selection is validated
+# against its exact grants before writes.
 - name: Refuse live objects that collide with roster agent names
   ansible.builtin.import_tasks: 08a-roster-live-collisions.yml
-  when: openbao_ai_agents | length > 0
+  when:
+    - openbao_ai_agents | length > 0
+    - not (openbao_ai_admin_window_mode | default(false) | bool)
 
 - name: Read the stored RBAC policies and write what differs
   ansible.builtin.import_tasks: 08b-rbac-policy-writes.yml

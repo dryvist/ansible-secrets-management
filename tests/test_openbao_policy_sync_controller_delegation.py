@@ -2,9 +2,10 @@
 roles/openbao/tasks/init/02b-policy-sync.yml.
 
 The routine reconcile identity and the selected ai-admin-session window can
-pass the exact reconcile-policy capability check. The window grant pins that
-policy body to the declared template. Routine reconciliation uses the inert
-openbao-policy-sync AppRole (defaults/main/07f-workstation-approles.yml),
+pass the exact reconcile-policy capability check. The window grant permits
+writing to the exact reconcile-policy path without pinning its body. Routine
+reconciliation uses the inert openbao-policy-sync AppRole
+(defaults/main/07f-workstation-approles.yml),
 which is bound to the WORKSTATION CIDR class
 (defaults/main/08b-cidr-and-unlock.yml) -- a token issued to it is usable
 only from the controller. Both tasks used to run ON the OpenBao node against

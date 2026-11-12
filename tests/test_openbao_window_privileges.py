@@ -110,6 +110,7 @@ def test_window_grant_is_exact_and_matches_only_eligible_protected_objects(rende
     values, _, _ = rendered_defaults
     text = _render(WINDOW_GRANT, values)
     stanzas = dict(_stanzas(text))
+    assert all("*" not in path and "+" not in path for path in stanzas)
     expected_policy_paths = {
         f"sys/policies/acl/{policy['name']}"
         for policy in values["openbao_ai_admin_window_manageable_policies"]
@@ -142,6 +143,13 @@ def test_window_grant_is_exact_and_matches_only_eligible_protected_objects(rende
         if line.lstrip().startswith('path "')
     ]
     assert not any("secret-id" in path or "*" in path for path in path_declarations)
+
+
+def test_window_grant_does_not_pin_policy_contents_or_approle_parameters(rendered_defaults):
+    values, _, _ = rendered_defaults
+    for path, body in _stanzas(_render(WINDOW_GRANT, values)):
+        assert "allowed_parameters" not in body, path
+        assert "required_parameters" not in body, path
 
 
 @pytest.mark.parametrize("kind", ["policies", "approles"])
@@ -185,6 +193,25 @@ def test_window_selection_resolver_accepts_granted_and_refuses_self_protecting_n
     assert "human-gated path" in selection_render(gate["ansible.builtin.assert"]["fail_msg"], {
         "_outside_grant": outside, "openbao_select_kind": kind,
     })
+
+
+@pytest.mark.parametrize(("selection", "accepted"), [
+    ({}, False),
+    ({"secrets": ["x"]}, False),
+    ({"approles": ["sandbox-agent-read"]}, True),
+    ({"policies": ["apps"], "reconcile_policy": ["openbao-reconcile"]}, True),
+])
+def test_window_run_requires_a_nonempty_bounded_selection(selection, accepted):
+    task = next(
+        t for t in yaml.safe_load(WINDOW_INIT.read_text())
+        if t.get("name") == "Require an explicit bounded selection for ai-admin-session"
+    )
+    assert task["when"] == "openbao_ai_admin_window_mode | default(false) | bool"
+    results = [
+        _templar(_trust({"openbao_select": selection})).template(_trust("{{ " + c + " }}")) in (True, "True")
+        for c in task["ansible.builtin.assert"]["that"]
+    ]
+    assert all(results) is accepted
 
 
 def test_window_identity_uses_lookup_self_and_preflights_before_policy_sync(rendered_defaults):
