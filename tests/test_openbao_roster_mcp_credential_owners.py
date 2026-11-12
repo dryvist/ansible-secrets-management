@@ -45,6 +45,9 @@ def _render_only_inputs(monkeypatch):
     monkeypatch.setenv("OPENBAO_TERRAKUBE_AWS_WORKSPACE", "fixture-aws")
     monkeypatch.setenv("OPENBAO_AI_API_KEY_MOUNT", "secret")
     monkeypatch.setenv("OPENBAO_AI_API_KEY_PATH_PREFIX", "fixture-provider-keys")
+    monkeypatch.setenv(
+        "OPENBAO_DIFY_SECRET_ID_ISSUER_SECRET_ID_CIDR", "192.0.2.11/32"
+    )
     monkeypatch.setenv("PROXMOX_SUBDOMAIN", "example.com")
 
 
