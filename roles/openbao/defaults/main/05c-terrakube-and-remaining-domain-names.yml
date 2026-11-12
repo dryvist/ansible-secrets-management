@@ -57,7 +57,9 @@ openbao_terrakube_workspaces:
     # the desired-state object out of the store to derive its DNS records and
     # every subnet it configures, so it needs the same store credential
     # tofu-proxmox holds. Its plans failed at the ephemeral read without it.
-    kv_read: [infrastructure/unifi, platform/object-storage]
+    # unifi/main/terrakube: the workspace's own UniFi controller credential on
+    # its exact leaf, kept alongside infrastructure/unifi until a later cutover retires it.
+    kv_read: [infrastructure/unifi, platform/object-storage, unifi/main/terrakube]
   - name: "{{ openbao_terrakube_aws_workspace }}"
     api_update: ["aws/sts/{{ openbao_terrakube_aws_workspace }}"]
     # The webhook HMAC and Function URL use separate exposure-specific mounts.

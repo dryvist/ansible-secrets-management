@@ -176,6 +176,26 @@ Transit data-key plaintext and decrypt paths for the OpenTofu state key. The
 reconcile policy pins its rendered body and attaches it to `ai-admin-session`
 through the role's `token_policies` field.
 
+### UniFi controller credential tiers
+
+The UniFi controller credentials live on four exact KV v2 leaves under
+`secret/unifi/main/`, one per tier. Each is deliberately an exact leaf and not
+an `openbao_ai_domains` entry: a domain entry would render a subtree-wide
+`read-unifi` that covers every tier at once.
+
+| Leaf | Read by |
+| --- | --- |
+| `secret/unifi/main/read` | `ai-elevated` (standing read tier) via `unifi-read` |
+| `secret/unifi/main/write` | `ai-apply-unifi` (human-unlocked, 6h window) via `unifi-write` + `unifi-read` |
+| `secret/unifi/main/admin` | `window-unifi` seeding service only |
+| `secret/unifi/main/terrakube` | the `terrakube-<network workspace>` JWT role; written by `window-unifi` |
+
+Every tier policy is read-only on its one leaf. The `window-unifi` service is
+the only writer: a human unlocks a batch token scoped to exactly the four
+leaves, seeds or rotates the documents, and the token dies with its parent
+session. No identity spans tiers, and no credential ever has to be copied
+through a workstation keychain to reach the controller.
+
 ### Identity and credential lifecycle
 
 See [Identity and credential lifecycle](identity-and-credential-lifecycle.md) for

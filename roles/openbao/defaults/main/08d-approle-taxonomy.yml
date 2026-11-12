@@ -9,6 +9,7 @@ openbao_approle_class_map: >-
     'ai-admin': 'operator-admin',
     'ai-admin-session': 'operator-admin',
     'ai-apply-all': 'operator-admin',
+    'ai-apply-unifi': 'operator-admin',
     'ai-rotate': 'converge-automation',
     'ai-orchestrator': 'trusted-agent-write',
     'ai-public': 'untrusted-sandbox',

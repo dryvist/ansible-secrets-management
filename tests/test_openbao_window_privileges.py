@@ -106,7 +106,9 @@ def test_guard_retains_protected_roles_and_policies(rendered_defaults):
 def test_guard_pins_child_token_parameters(rendered_defaults):
     values, _, _ = rendered_defaults
     body = dict(_stanzas(_render(GUARD, values)))["auth/token/create"]
-    assert _allowed_parameters(body) == {name: [value] for name, value in _request().items()}
+    expected = {name: [value] for name, value in _request().items()}
+    expected["policies"] = _window_policy_sets(values)
+    assert _allowed_parameters(body) == expected
 
 
 @pytest.mark.parametrize("family", IDENTITY_FAMILIES)
@@ -165,6 +167,13 @@ def _parent(base, values, ttl="1h"):
 def _request():
     return {"policies": ["window-github"], "type": "batch", "ttl": "15m",
             "no_parent": False, "no_default_policy": True, "renewable": False}
+
+
+def _window_policy_sets(values):
+    """Exactly the child-policy sets the guard pins issuance to: one declared
+    window service per set, in declaration order."""
+    services = _templar(_trust(values)).template(_trust(values["openbao_window_services"]))
+    return [[f"window-{service['name']}"] for service in services]
 
 
 def test_native_composition_denies_dangerous_and_protected_paths(window_server):

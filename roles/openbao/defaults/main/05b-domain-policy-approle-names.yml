@@ -66,6 +66,16 @@ openbao_packer_policy_name: packer
 openbao_packer_approle_name: packer
 openbao_backblaze_admin_policy_name: backblaze-admin
 openbao_backblaze_admin_approle_name: backblaze-admin
+# UniFi controller credential tiers. Each tier's credential is one exact KV-v2
+# leaf under secret/unifi/main/<tier>, and each policy reads exactly its own
+# leaf, so no identity holds more than its tier. The controller has no secrets
+# engine, so KV is the tier per the plugins-first rule. These are exact leaves,
+# deliberately not an openbao_ai_domains entry: a `unifi` domain would render a
+# read-unifi capability leaf over the whole secret/unifi/* subtree, covering the
+# write/admin/terrakube leaves too and defeating the tiering.
+openbao_unifi_read_policy_name: unifi-read
+openbao_unifi_write_policy_name: unifi-write
+openbao_unifi_admin_policy_name: unifi-admin
 # GitHub token tiers for the workstation git/gh path — engine-minted App
 # installation tokens, NEVER stored PATs (there is no secret/github/* KV path;
 # see the plugins-first rule). nix-darwin's

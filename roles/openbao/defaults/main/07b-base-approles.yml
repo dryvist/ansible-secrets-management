@@ -274,10 +274,15 @@ openbao_base_approles_core:
   # ability to mint 1h ai-agent SSH certs. Deliberate, documented tradeoff
   # (agents must pull SSH access friction-free) — bounded by non-root
   # principals, default-deny host opt-in, cert TTL, and audit-logged signs.
+  # unifi-read joins the same standing read tier through its own exact-leaf
+  # policy, NOT through openbao_ai_domains: a `unifi` domain entry would render
+  # read-unifi over the whole secret/unifi/* subtree and put the write, admin
+  # and terrakube credential leaves on every elevated actor too.
   - name: "{{ openbao_ai_elevated_approle_name }}"
     token_policies: >-
       {{ openbao_ai_trusted_read_all_policies
          + (openbao_ai_readonly_extra_subtrees | map('regex_replace', '^(.+)$', 'read-\1') | list)
+         + [openbao_unifi_read_policy_name]
          + (['ssh-sign-automation-ai'] if openbao_ssh_engine_enabled else []) }}
   # Enterprise GitHub tiers use raw token endpoints pinned by their policies.
   # Both roles are inert: a human unlocks one single-use secret_id per elevation.
