@@ -113,6 +113,14 @@ openbao_ai_admin_window_protected_approle_names: >-
       openbao_ansible_converge_approle_name]
      + (openbao_window_service_approles | map(attribute='name') | list)
      | unique | list }}
+# The AppRoles that can change this window, its guard, or policy text itself.
+# Every policy any of them attaches is self-protecting, except the reconcile
+# policy: syncing it is the window's own job (it stands in for policy-sync).
+openbao_ai_admin_window_self_protecting_approle_names: >-
+  {{ [openbao_ai_admin_approle_name, openbao_ai_admin_session_approle_name,
+      'admin', openbao_approle_issuer_approle_name, openbao_policy_sync_approle_name]
+     + (openbao_window_service_approles | map(attribute='name') | list)
+     | unique | list }}
 openbao_ai_admin_window_self_protecting_policy_names: >-
   {%- set _protected = [openbao_ai_admin_policy_name,
       openbao_ai_admin_guard_policy_name, openbao_ai_admin_window_policy_name,
@@ -123,22 +131,28 @@ openbao_ai_admin_window_self_protecting_policy_names: >-
       'default'] -%}
   {# The service-token session inherits OpenBao's built-in default policy. #}
   {%- for _role in openbao_approles
-      | selectattr('name', 'in', [openbao_ai_admin_session_approle_name]
-          + (openbao_window_service_policies | map(attribute='name') | list)) -%}
-  {%- set _attached = _role.token_policies | default([_role.policy] if _role.policy is defined else []) -%}
-  {%- set _ = _protected.extend(_attached) -%}
+      | selectattr('name', 'in', openbao_ai_admin_window_self_protecting_approle_names) -%}
+  {%- set _ = _protected.extend(_role.token_policies
+      | default([_role.policy] if _role.policy is defined else [])
+      | reject('equalto', openbao_reconcile_policy_name)) -%}
   {%- endfor -%}
   {{ (_protected + (openbao_window_service_policies | map(attribute='name') | list)) | unique | list }}
-# GitHub admin policy templates grant only GitHub token minting. They do not
-# grant sys/policies/acl/ai-admin-guard or an auth/approle secret-id path;
-# this session's guard denies both classes, so these human-gated tiers belong
-# in the window grant rather than its self-protection deny set.
+# The human-gated policy universe, from the declared sources themselves: the
+# reconcile exclusions, the self-protecting set, and every policy attached to
+# any human-gated AppRole that is declared here. Each lands in exactly one of
+# grant or guard deny.
 openbao_ai_admin_window_human_gated_policy_names: >-
-  {{ (openbao_policies
+  {%- set _names = openbao_policies
       | selectattr('name', 'in', openbao_reconcile_policy_excluded_names)
       | map(attribute='name') | list
-      + openbao_ai_admin_window_self_protecting_policy_names
-      ) | unique | list }}
+      + openbao_ai_admin_window_self_protecting_policy_names -%}
+  {%- set _declared = openbao_policies | map(attribute='name') | list -%}
+  {%- for _role in openbao_ai_admin_window_human_gated_approles -%}
+  {%- set _ = _names.extend(_role.token_policies
+      | default([_role.policy] if _role.policy is defined else [])
+      | select('in', _declared)) -%}
+  {%- endfor -%}
+  {{ _names | unique | list }}
 openbao_ai_admin_window_human_gated_policies: >-
   {{ openbao_policies
      | selectattr('name', 'in', openbao_ai_admin_window_human_gated_policy_names)

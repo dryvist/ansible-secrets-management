@@ -152,18 +152,29 @@ def test_window_grant_and_guard_partition_the_human_gated_objects(rendered_defau
     assert granted_policy_names.isdisjoint(denied_policy_names)
     assert granted_policy_names | denied_policy_names == human_policy_names
 
+    # The universe, computed here from the declared sources rather than from the
+    # role's derived lists: every policy attached to any human-gated AppRole,
+    # every reconcile-excluded policy, and every self-protecting AppRole's policies.
+    def attached(role):
+        return set(role.get("token_policies") or ([role["policy"]] if role.get("policy") else []))
+
     declared_policy_names = {policy["name"] for policy in policies}
-    expected_policy_names = {
-        policy["name"] for policy in policies
-        if policy["name"] in values["openbao_reconcile_policy_excluded_names"]
-    } | set(resolve("openbao_ai_admin_window_self_protecting_policy_names"))
-    assert human_policy_names == expected_policy_names
+    self_protecting_roles = set(resolve("openbao_ai_admin_window_self_protecting_approle_names"))
+    assert values["openbao_policy_sync_approle_name"] in self_protecting_roles
+    self_attached = set().union(*(attached(r) for r in approles if r["name"] in self_protecting_roles))
+    gated_attached = declared_policy_names & set().union(
+        *(attached(r) for r in approles if r["name"] in names(human_approles)))
+    excluded = declared_policy_names & set(values["openbao_reconcile_policy_excluded_names"])
+    assert human_policy_names >= gated_attached | excluded | self_attached
+    reconcile_policy = values["openbao_reconcile_policy_name"]
+    assert self_attached - {reconcile_policy} <= denied_policy_names
+    assert human_policy_names - set(resolve("openbao_ai_admin_window_self_protecting_policy_names")) \
+        == (gated_attached | excluded) - denied_policy_names
+    if "github-mount-config" in declared_policy_names:
+        assert "github-mount-config" in denied_policy_names
     assert granted_policy_names <= declared_policy_names
-    if values["openbao_reconcile_policy_name"] in declared_policy_names:
-        reconcile_policy = values["openbao_reconcile_policy_name"]
-        assert reconcile_policy in human_policy_names
-        if reconcile_policy not in denied_policy_names:
-            assert reconcile_policy in granted_policy_names
+    if reconcile_policy in declared_policy_names:
+        assert reconcile_policy in granted_policy_names
 
     for approle_key, policy_key in (
         ("openbao_github_admin_approle_name", "openbao_github_admin_policy_name"),

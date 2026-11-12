@@ -169,8 +169,12 @@ generation. It allows only the pinned batch-child token shape; children carry
 one declared service policy and stop working with their parent session.
 Listing auth methods and audit devices remains allowed.
 
-`ai-admin-window-rbac` grants exact named paths for the protected policies and
-human-gated AppRole configurations eligible for selected reconciliation. Policy
+`ai-admin-window-rbac` grants exact named paths for the human-gated policies and
+AppRole configurations eligible for selected reconciliation. The human-gated
+policies are the reconcile exclusions plus every declared policy attached to a
+human-gated AppRole. Each one is either granted here or denied by the guard;
+policies attached to a self-protecting AppRole (the admin, issuer, policy-sync
+and window service roles) are denied, except the reconcile policy. Policy
 contents and AppRole parameters are not pinned. The reconcile policy has its own
 exact write grant and is synchronized only when selected. A run using this session
 must provide a bounded `openbao_select`;
