@@ -1,4 +1,4 @@
-"""Authelia's service secrets are seeded through the shared generate-if-absent contract, from the controller."""
+"""Authelia's service secrets use the dedicated signing writer and shared seed contract."""
 
 from pathlib import Path
 
@@ -15,15 +15,43 @@ REQUIREMENTS = ROOT / "requirements.yml"
 def _seed_task():
     tasks = yaml.safe_load(SERVICE_SECRETS.read_text(encoding="utf-8"))
     return next(
-        task for task in tasks if task.get("name") == "Seed the Authelia service secrets in OpenBao through the shared contract"
+        task
+        for task in tasks
+        if task.get("name")
+        == "Seed the Authelia service secrets in OpenBao through the shared contract"
     )
 
 
-def test_seed_runs_the_shared_contract_on_the_controller_with_the_converge_token():
+def test_seed_logs_in_as_the_signing_writer_and_uses_the_shared_contract():
     seed = _seed_task()
     assert seed["delegate_to"] == "localhost"
     assert seed["no_log"] is True
-    [call] = seed["block"]
+    login = next(task for task in seed["block"] if "ansible.builtin.uri" in task)
+    assert login["ansible.builtin.uri"] == {
+        "url": (
+            "{{ lookup('env', 'BAO_ADDR') | default('', true)\n"
+            "   | regex_replace('/+$', '') }}/v1/auth/approle/login"
+        ),
+        "method": "POST",
+        "body_format": "json",
+        "body": {
+            "role_id": (
+                "{{ lookup('env', 'OPENBAO_APPROLE_AUTHELIA_SIGNING_WRITER_ROLE_ID')\n"
+                "   | default('', true) }}"
+            ),
+            "secret_id": (
+                "{{ lookup('env', 'OPENBAO_APPROLE_AUTHELIA_SIGNING_WRITER_SECRET_ID')\n"
+                "   | default('', true) }}"
+            ),
+        },
+        "status_code": 200,
+        "follow_redirects": "none",
+        "use_proxy": False,
+        "timeout": 10,
+    }
+    assert login["register"] == "authelia_signing_writer_login"
+    assert login["no_log"] is True
+    call = next(task for task in seed["block"] if "ansible.builtin.include_role" in task)
     assert call["ansible.builtin.include_role"] == {
         "name": "dryvist.homelab.openbao_secrets",
         "tasks_from": "seed_generated",
@@ -31,13 +59,15 @@ def test_seed_runs_the_shared_contract_on_the_controller_with_the_converge_token
     inputs = call["vars"]
     assert inputs["openbao_secrets_seed_mount"] == "secret"
     assert inputs["openbao_secrets_seed_path"] == "{{ authelia_service_secrets_kv_path }}"
-    assert inputs["openbao_secrets_seed_token"] == "{{ lookup('env', 'BAO_TOKEN') | default('', true) }}"
+    assert inputs["openbao_secrets_seed_token"] == "{{ authelia_signing_writer_login.json.auth.client_token }}"
+    assert inputs["openbao_secrets_seed_expected_writer_policy"] == "authelia-signing-writer"
     assert inputs["openbao_secrets_seed_addr"] == "{{ lookup('env', 'BAO_ADDR') | default('', true) }}"
     assert inputs["openbao_secrets_seed_check_capabilities"] is True
     assert inputs["openbao_secrets_seed_register"] == "authelia_seed_result"
-    # Fail closed: no local fallback values, and the token is never revoked (the converge run still uses it).
+    # Fail closed: no local fallback values and no use of the ambient converge token.
     assert "openbao_secrets_seed_local_values" not in inputs
     assert "openbao_secrets_seed_revoke_token" not in inputs
+    assert "BAO_TOKEN" not in inputs["openbao_secrets_seed_token"]
 
 
 def test_field_names_are_the_ones_the_previous_publish_wrote():
