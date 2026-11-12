@@ -132,9 +132,11 @@ def test_org_secrets_read_policy_grants_only_declared_exact_kv_leaves():
         "secrets-external/data/github-org/GH_ACTION_RELEASE_PLEASE_PRIVATE_KEY",
         "secrets-external/data/github-org/dify-pr-keeper-webhook",
         "secrets-external/data/github-org/pr-reconcile-exclude",
+        "secrets-external/data/ai/saas/openrouter-provisioning",
     ]
-    assert capabilities == ['["read"]'] * 5
+    assert capabilities == ['["read"]'] * 6
     assert source["openbao_github_org_pr_reconcile_exclude_field"] == "repos"
+    assert source["openbao_github_org_openrouter_provisioning_field"] == "provisioning_key"
 
 
 def test_selected_permission_set_capability_probe_names_one_exact_endpoint():
