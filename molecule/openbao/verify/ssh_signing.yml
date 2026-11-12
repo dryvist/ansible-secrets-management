@@ -134,6 +134,17 @@
     converge_role: "{{ openbao_approles | selectattr('name', 'equalto', 'ansible-converge') | first }}"
     semaphore_role: "{{ openbao_approles | selectattr('name', 'equalto', 'semaphore') | first }}"
     apply_roles: "{{ openbao_approles | selectattr('name', 'match', '^ai-apply-') | list }}"
+    # The domain-generated ai-apply-<svc> roles (07a) each compose the
+    # ssh-sign attribution leaf. ai-apply-unifi is declared explicitly (07f)
+    # precisely so it composes no rollup leaves, so the family splits here.
+    # Rendered in vars: rather than inline in that: — a bare Jinja conditional
+    # decodes the single-quoted 'ai-apply-\1' replacement as an octal escape
+    # (see provider_api_keys.yml).
+    domain_apply_roles: >-
+      {{ openbao_approles
+         | selectattr('name', 'in',
+                      (openbao_ai_domains | map('regex_replace', '^(.+)$', 'ai-apply-\1') | list))
+         | list }}
   ansible.builtin.assert:
     that:
       # ai-elevated signs ONLY automation-ai — never ansible/ci/host roles.
@@ -161,23 +172,17 @@
         semaphore_role.token_policies | select('match', '^ssh-sign-')
         | reject('equalto', 'ssh-sign-automation-semaphore')
         | list | length == 0
-      # every ai-apply-<svc> minted from openbao_ai_domains, and the
-      # cross-domain ai-apply-all rollup, sign ONLY automation-ai; every
-      # other declared apply role carries NO ssh-sign policy at all.
+      # every DOMAIN-GENERATED ai-apply-<svc> signs ONLY automation-ai: 07a
+      # composes ssh-sign-automation-ai into each of those roles.
       - >-
-        apply_roles | selectattr('name', 'in',
-        (openbao_ai_domains | map('regex_replace', '^', 'ai-apply-') | list)
-        + ['ai-apply-all'])
-        | map(attribute='token_policies')
+        domain_apply_roles | map(attribute='token_policies')
         | select('contains', 'ssh-sign-automation-ai') | list
-        | length == (openbao_ai_domains | length) + 1
+        | length == (domain_apply_roles | length)
+      # the declared ai-apply-unifi composes no attribution leaves by design,
+      # so it must sign nothing at all.
       - >-
-        apply_roles | rejectattr('name', 'in',
-        (openbao_ai_domains | map('regex_replace', '^', 'ai-apply-') | list)
-        + ['ai-apply-all'])
-        | map(attribute='token_policies')
-        | map('select', 'match', '^ssh-sign-')
-        | map('list') | flatten | length == 0
+        (apply_roles | selectattr('name', 'equalto', 'ai-apply-unifi') | first
+        ).token_policies | select('match', '^ssh-sign-') | list | length == 0
       - >-
         apply_roles | map(attribute='token_policies')
         | map('select', 'match', '^ssh-sign-')
@@ -185,6 +190,6 @@
         | map('list') | flatten | length == 0
     fail_msg: >-
       SSH signing attachment drifted from the security decisions
-      (ai-elevated and the generated ai-apply-* sign only automation-ai;
-      every other declared ai-apply-* role signs nothing; readonly none;
-      ansible-converge only automation-ansible).
+      (ai-elevated and the domain-generated ai-apply-* sign only
+      automation-ai, the declared ai-apply-unifi signs nothing; readonly
+      none; ansible-converge only automation-ansible).
