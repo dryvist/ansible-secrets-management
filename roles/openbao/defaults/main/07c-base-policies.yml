@@ -82,11 +82,14 @@ openbao_base_policies_static:
   # terrakube workspace leaf read through that workspace's own policy. Exact
   # leaves, not an openbao_ai_domains entry — see 05b.
   - name: "{{ openbao_unifi_read_policy_name }}"
-    template: unifi-read-policy.hcl.j2
+    template: unifi-tier-policy.hcl.j2
+    tier: read
   - name: "{{ openbao_unifi_write_policy_name }}"
-    template: unifi-write-policy.hcl.j2
+    template: unifi-tier-policy.hcl.j2
+    tier: write
   - name: "{{ openbao_unifi_admin_policy_name }}"
-    template: unifi-admin-policy.hcl.j2
+    template: unifi-tier-policy.hcl.j2
+    tier: admin
   - name: "{{ openbao_ansible_converge_policy_name }}"
     template: ansible-converge-policy.hcl.j2
   # Attached to the seed-writer AppRole only (07i), never to semaphore: the
