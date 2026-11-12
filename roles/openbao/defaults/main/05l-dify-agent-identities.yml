@@ -9,6 +9,12 @@ openbao_dify_agent_vikunja_triage_policy_name: agent-vikunja-triage
 openbao_dify_agent_vikunja_triage_approle_name: agent-vikunja-triage
 openbao_dify_agent_docs_updater_policy_name: agent-docs-updater
 openbao_dify_agent_docs_updater_approle_name: agent-docs-updater
+openbao_dify_agent_pr_keeper_policy_name: agent-pr-keeper
+openbao_dify_agent_pr_keeper_approle_name: agent-pr-keeper
+openbao_dify_agent_github_clerk_policy_name: agent-github-clerk
+openbao_dify_agent_github_clerk_approle_name: agent-github-clerk
+openbao_dify_agent_merge_steward_policy_name: agent-merge-steward
+openbao_dify_agent_merge_steward_approle_name: agent-merge-steward
 openbao_seed_writer_dify_secret_id_issuer_policy_name: seed-writer-dify-secret-id-issuer
 # The AppRoles the issuer policy covers: the Dify agent AppRoles declared above.
 openbao_dify_secret_id_issuer_targets: "{{ openbao_dify_agent_approles | map(attribute='name') | list }}"
@@ -25,3 +31,9 @@ openbao_dify_agent_policies:
     template: agent-vikunja-triage-policy.hcl.j2
   - name: "{{ openbao_dify_agent_docs_updater_policy_name }}"
     template: agent-docs-updater-policy.hcl.j2
+  - name: "{{ openbao_dify_agent_pr_keeper_policy_name }}"
+    template: agent-pr-keeper-policy.hcl.j2
+  - name: "{{ openbao_dify_agent_github_clerk_policy_name }}"
+    template: agent-github-clerk-policy.hcl.j2
+  - name: "{{ openbao_dify_agent_merge_steward_policy_name }}"
+    template: agent-merge-steward-policy.hcl.j2

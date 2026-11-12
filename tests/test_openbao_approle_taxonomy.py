@@ -18,6 +18,11 @@ CLASSES = {
     "service-runtime",
     "untrusted-sandbox",
 }
+ONE_USE_DIFY_APPROLES = {
+    "agent-pr-keeper",
+    "agent-github-clerk",
+    "agent-merge-steward",
+}
 
 
 def _trust(value):
@@ -115,7 +120,10 @@ class TestAppRoleTaxonomy(unittest.TestCase):
             self.assertEqual(role["policy"], name)
             self.assertEqual(role["secret_id_bound_cidrs"], "192.0.2.10/32")
             self.assertEqual(role["secret_id_ttl"], "720h")
-            self.assertEqual(role["secret_id_num_uses"], 0)
+            self.assertEqual(
+                role["secret_id_num_uses"],
+                1 if name in ONE_USE_DIFY_APPROLES else 0,
+            )
             self.assertEqual(role["token_ttl"], "15m")
             self.assertEqual(role["token_max_ttl"], "15m")
             self.assertFalse(role["manage_secret_id"])

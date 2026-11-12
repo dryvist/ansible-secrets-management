@@ -291,6 +291,35 @@ openbao_github_docs_publisher_permission_sets: >-
        'repositories': openbao_github_docs_publisher_repos,
        'permissions': openbao_github_docs_publisher_permissions}]
      if openbao_github_docs_publisher_repos | length > 0 else [] }}
+# Dify PR automation uses repository names relative to the JacobPEvans-ai
+# installation. Both sets share this single allowlist; an omitted repository
+# field would grant the whole installation, so no empty set is declared.
+openbao_dify_pr_automation_repositories:
+  - pr-automation-fixture
+openbao_github_dify_pr_automation_read_set_name: dify-pr-automation-read
+openbao_github_dify_pr_automation_write_set_name: dify-pr-automation-write
+openbao_github_dify_pr_automation_read_permissions:
+  contents: read
+  pull_requests: read
+  checks: read
+  statuses: read
+  metadata: read
+openbao_github_dify_pr_automation_write_permissions: >-
+  {{ openbao_github_dify_pr_automation_read_permissions
+     | combine({'contents': 'write', 'pull_requests': 'write'}) }}
+openbao_github_dify_pr_automation_permission_sets: >-
+  {{ [{'name': openbao_github_dify_pr_automation_read_set_name,
+       'tier': 'agents',
+       'installation_id': openbao_github_jacobpevans_ai_installation_id,
+       'repositories': openbao_dify_pr_automation_repositories,
+       'permissions': openbao_github_dify_pr_automation_read_permissions},
+      {'name': openbao_github_dify_pr_automation_write_set_name,
+       'tier': 'agents',
+       'installation_id': openbao_github_jacobpevans_ai_installation_id,
+       'repositories': openbao_dify_pr_automation_repositories,
+       'permissions': openbao_github_dify_pr_automation_write_permissions}]
+     if (openbao_github_jacobpevans_ai_installation_id | length > 0
+         and openbao_dify_pr_automation_repositories | length > 0) else [] }}
 # tier drives which identities may mint a set (see the github-*-policy
 # templates): `read` sets are ambient; `admin` sets (installation-wide, full
 # App ceiling) are minted only through the inert, human-gated github-admin
@@ -363,6 +392,7 @@ openbao_github_org_secrets_permission_sets: >-
 openbao_github_admin_permission_sets: >-
   {{ openbao_github_base_permission_sets + openbao_github_org_secrets_permission_sets
      + openbao_github_docs_publisher_permission_sets
+     + openbao_github_dify_pr_automation_permission_sets
      + openbao_github_ci_resolver_permission_sets
      + openbao_github_router_snapshot_permission_sets
      + openbao_github_git_mirror_permission_sets

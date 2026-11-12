@@ -22,6 +22,11 @@ from ansible.template import Templar, trust_as_template
 
 
 ROOT = Path(__file__).resolve().parents[1]
+ONE_USE_DIFY_ROLES = {
+    "agent-pr-keeper",
+    "agent-github-clerk",
+    "agent-merge-steward",
+}
 TASKS = ROOT / "roles" / "openbao" / "tasks" / "init" / "10-approles.yml"
 DEFAULTS = ROOT / "roles" / "openbao" / "defaults" / "main" / "08b-cidr-and-unlock.yml"
 IDENTITIES = ROOT / "roles" / "openbao" / "defaults" / "main" / "05l-dify-agent-identities.yml"
@@ -157,7 +162,10 @@ class TestShippedDeclarationIsClean(unittest.TestCase):
             self.assertEqual(role["policy"], name)
             self.assertEqual(role["secret_id_bound_cidrs"], host_cidr)
             self.assertEqual(role["secret_id_ttl"], "720h")
-            self.assertEqual(role["secret_id_num_uses"], 0)
+            self.assertEqual(
+                role["secret_id_num_uses"],
+                1 if name in ONE_USE_DIFY_ROLES else 0,
+            )
             self.assertEqual(role["token_ttl"], "15m")
             self.assertEqual(role["token_max_ttl"], "15m")
             self.assertFalse(role["manage_secret_id"])

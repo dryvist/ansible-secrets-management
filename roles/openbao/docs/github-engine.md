@@ -126,6 +126,16 @@ Token access is tiered; the tier IS the privilege boundary:
   KV grants, use the `service-runtime` identity class, and are created only when
   `OPENBAO_DIFY_AGENT_CIDR` is set. Their SecretIDs last 720h and are bound to
   the configured CIDR; OpenBao tokens are capped at 15m.
+- **Dify PR automation (`agent-pr-keeper`, `agent-github-clerk`, and
+  `agent-merge-steward`)** — the first two roles mint only
+  `dify-pr-automation-read`; the merge steward mints only
+  `dify-pr-automation-write`. Both sets use the JacobPEvans-ai installation
+  and the repository names in `openbao_dify_pr_automation_repositories`.
+  The read set grants `contents`, `pull_requests`, `checks`, `statuses`, and
+  `metadata` read. The write set grants `contents` and `pull_requests` write
+  while keeping the other permissions read-only. Each role receives one-use
+  SecretIDs with the same 720h lifetime as the existing Dify agents; tokens
+  are capped at 15m.
 - **hermes (`hermes-public`, `hermes-private`)** — four sets on
   `github-hermes`. `hermes-review-*`: `pull_requests`/`issues` write,
   `contents`/`checks`/`metadata` read, over the organization's public (or
