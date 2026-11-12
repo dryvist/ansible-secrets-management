@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.98.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.97.0...v0.98.0) (2026-11-12)
+
+
+### Features
+
+* **openbao:** let the workstation identity read the Slack reader token ([#649](https://github.com/dryvist/ansible-secrets-management/issues/649)) ([79bbebe](https://github.com/dryvist/ansible-secrets-management/commit/79bbebe31eadc0f58d1c53fbf15cb9cbb1edf8ad))
+
 ## [0.97.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.96.0...v0.97.0) (2026-11-12)
 
 
