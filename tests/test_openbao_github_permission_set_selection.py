@@ -1,7 +1,10 @@
 """Selected GitHub permission sets use the shared selector and scoped writers."""
 
+import re
+
 import pytest
 import yaml
+from jinja2 import Environment
 
 from test_openbao_select import ROLE, condition, render, resolve, task
 
@@ -10,6 +13,8 @@ KIND = "github_permission_sets"
 SELECTED_NAME = "jacobpevans-ai-org-secrets"
 SELECTION = {KIND: [SELECTED_NAME]}
 PERMISSION_SETS = ROLE / "tasks/init/05-github-permission-sets.yml"
+GITHUB_DEFAULTS = ROLE / "defaults/main/03-github-engine.yml"
+TERRAKUBE_DEFAULTS = ROLE / "defaults/main/05c-terrakube-and-remaining-domain-names.yml"
 
 
 def changes(results):
@@ -42,6 +47,94 @@ def test_permission_set_profile_uses_the_declared_admin_mount_sets():
     assert resolve({}, KIND, tuple(item["name"] for item in candidates))[1] == [
         {"name": item["name"]} for item in candidates
     ]
+
+
+def test_org_secrets_names_and_workspace_reads_match_each_requested_owner():
+    defaults = yaml.safe_load(GITHUB_DEFAULTS.read_text())
+    installations = defaults["openbao_github_org_secrets_installations"]
+    owners = [installation["name"] for installation in installations]
+    assert owners == [
+        "dryvist", "jacobpevans", "jacobpevans-ai", "jpe-ansible", "jpe-cribl",
+        "jpe-nix", "jpe-private", "jpe-splunk", "jpe-openbao-plugin-secrets",
+    ]
+    assert len(owners) == len(set(owners))
+
+    expected_input_keys = {
+        "jacobpevans": "OPENBAO_GITHUB_ADMIN_JACOBPEVANS_INSTALLATION_ID",
+        "jacobpevans-ai": "OPENBAO_GITHUB_ADMIN_JACOBPEVANS_AI_INSTALLATION_ID",
+        "jpe-nix": "OPENBAO_GITHUB_ADMIN_JPE_NIX_INSTALLATION_ID",
+    }
+    for owner, input_key in expected_input_keys.items():
+        assert defaults[f"openbao_github_{owner.replace('-', '_')}_installation_id"] == (
+            "{{ openbao_platform_env['" + input_key + "'] | default('', true) }}"
+        )
+
+    fixture_installations = [
+        {**installation, "installation_id": str(index + 100)}
+        for index, installation in enumerate(installations)
+    ]
+    sets = render(defaults["openbao_github_org_secrets_permission_sets"], {
+        "openbao_github_org_secrets_installations": fixture_installations,
+        "openbao_github_org_secrets_permissions": defaults[
+            "openbao_github_org_secrets_permissions"
+        ],
+    })
+    expected_names = [
+        "dryvist-org-secrets", "JacobPEvans-org-secrets", "jacobpevans-ai-org-secrets",
+        "jpe-ansible-org-secrets", "jpe-cribl-org-secrets", "jpe-nix-org-secrets",
+        "jpe-private-org-secrets", "jpe-splunk-org-secrets",
+        "jpe-openbao-plugin-secrets-org-secrets",
+    ]
+    assert [item["name"] for item in sets] == expected_names
+    assert len({item["name"] for item in sets}) == len(sets)
+    assert all(item["tier"] == "org-secrets" for item in sets)
+    assert all(item["permissions"] == {"organization_secrets": "write"} for item in sets)
+    jpe_nix = [item for item in sets if item["name"] == "jpe-nix-org-secrets"]
+    assert jpe_nix == [{
+        "name": "jpe-nix-org-secrets",
+        "tier": "org-secrets",
+        "installation_id": "105",
+        "permissions": {"organization_secrets": "write"},
+    }]
+
+    workspace_defaults = yaml.safe_load(TERRAKUBE_DEFAULTS.read_text())
+    workspace = next(
+        item for item in workspace_defaults["openbao_terrakube_workspaces"]
+        if item["name"] == "{{ openbao_terrakube_org_secrets_workspace_name }}"
+    )
+    api_reads = render(workspace["api_read"], {
+        "openbao_github_org_secrets_permission_sets": sets,
+        "openbao_github_mount": "github-configured",
+    })
+    assert api_reads == [f"github-configured/token/{name}" for name in expected_names]
+    for name in (
+        "JacobPEvans-org-secrets", "jacobpevans-ai-org-secrets", "jpe-nix-org-secrets",
+    ):
+        assert f"github-configured/token/{name}" in api_reads
+
+
+def test_org_secrets_read_policy_grants_only_declared_exact_kv_leaves():
+    source = yaml.safe_load(TERRAKUBE_DEFAULTS.read_text())
+    template = (ROLE / "templates/github-org-secrets-read-policy.hcl.j2").read_text()
+    environment = Environment()
+    environment.filters["comment"] = lambda value: "\n".join(
+        "# " + line for line in str(value).splitlines()
+    )
+    rendered = environment.from_string(template).render(
+        ansible_managed="fixture",
+        **source,
+    )
+    paths = re.findall(r'(?m)^path "([^"]+)"', rendered)
+    capabilities = re.findall(r'(?m)^  capabilities = (.*)$', rendered)
+    assert paths == [
+        "secrets-external/data/github-org/disclosure-denylist",
+        "secrets-external/data/github-org/gitleaks",
+        "secrets-external/data/github-org/GH_ACTION_RELEASE_PLEASE_PRIVATE_KEY",
+        "secrets-external/data/github-org/dify-pr-keeper-webhook",
+        "secrets-external/data/github-org/pr-reconcile-exclude",
+    ]
+    assert capabilities == ['["read"]'] * 5
+    assert source["openbao_github_org_pr_reconcile_exclude_field"] == "repos"
 
 
 def test_selected_permission_set_capability_probe_names_one_exact_endpoint():
