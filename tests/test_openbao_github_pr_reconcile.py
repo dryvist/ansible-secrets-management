@@ -102,8 +102,8 @@ def test_oidc_role_has_exact_claims_one_policy_short_batch_token_and_drift_guard
     assert defaults["openbao_github_pr_reconcile_policy_name"] == "pr-reconcile-sweep"
     assert defaults["openbao_github_pr_reconcile_audience"] == "openbao"
     assert defaults["openbao_github_pr_reconcile_repository"] == "JacobPEvans/.github-ai"
-    assert defaults["openbao_github_pr_reconcile_job_workflow_ref"] == (
-        "JacobPEvans/.github-ai/.github/workflows/pr-reconcile.yml@refs/heads/main"
+    assert defaults["openbao_github_pr_reconcile_workflow_ref"] == (
+        "JacobPEvans/.github-ai/.github/workflows/pr-reconcile-sweep.yml@refs/heads/main"
     )
     assert defaults["openbao_github_pr_reconcile_ref"] == "refs/heads/main"
     assert defaults["openbao_github_pr_reconcile_event_names"] == [
@@ -115,14 +115,16 @@ def test_oidc_role_has_exact_claims_one_policy_short_batch_token_and_drift_guard
 
     assert write["vars"]["_pr_reconcile_role_claims"] == {
         "repository": "{{ openbao_github_pr_reconcile_repository }}",
-        "job_workflow_ref": "{{ openbao_github_pr_reconcile_job_workflow_ref }}",
+        "workflow_ref": "{{ openbao_github_pr_reconcile_workflow_ref }}",
         "ref": "{{ openbao_github_pr_reconcile_ref }}",
         "event_name": "{{ openbao_github_pr_reconcile_event_names }}",
         "runner_environment": "{{ openbao_github_pr_reconcile_runner_environment }}",
     }
     payload = write["ansible.builtin.command"]["stdin"]
     assert "'role_type': 'jwt'" in payload
-    assert "'user_claim': 'job_workflow_ref'" in payload
+    assert "'user_claim': 'workflow_ref'" in payload
+    assert "job_workflow_ref" not in payload
+    assert "job_workflow_ref" not in write["vars"]["_pr_reconcile_role_claims"]
     assert "'bound_audiences': [openbao_github_pr_reconcile_audience]" in payload
     assert "'bound_claims_type': 'string'" in payload
     assert "'token_policies': [openbao_github_pr_reconcile_policy_name]" in payload

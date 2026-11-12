@@ -82,8 +82,8 @@ Token access is tiered; the tier IS the privilege boundary:
   requiring `org_name` from `openbao_pr_reconcile_owners` and the exact
   `contents`, `issues`, `pull_requests` and `statuses` write map;
   `installation_id` and `repository_ids` are denied. Its OIDC role binds
-  `repository=JacobPEvans/.github-ai` and `job_workflow_ref` to
-  `JacobPEvans/.github-ai/.github/workflows/pr-reconcile.yml@refs/heads/main`,
+  `repository=JacobPEvans/.github-ai` and `workflow_ref` to
+  `JacobPEvans/.github-ai/.github/workflows/pr-reconcile-sweep.yml@refs/heads/main`,
   plus the main ref, schedule/dispatch events, and self-hosted runners. The
   OpenBao batch token lasts 5m (10m max); GitHub's installation token keeps its
   one-hour lifetime.
