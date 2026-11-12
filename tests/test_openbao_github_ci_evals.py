@@ -45,9 +45,9 @@ def test_ci_evals_role_is_bound_to_the_repository_workflow_and_default_branch():
     assert write is not None
 
     assert defaults["openbao_ci_evals_policy_name"] == "ci-evals"
-    assert defaults["openbao_ci_evals_repository"] == "dryvist/llm-prompt-evals"
+    assert defaults["openbao_ci_evals_repository"] == "JacobPEvans-ai/llm-prompt-evals"
     assert defaults["openbao_ci_evals_job_workflow_ref"] == (
-        "dryvist/llm-prompt-evals/.github/workflows/scheduled-local-benchmark.yml"
+        "JacobPEvans-ai/llm-prompt-evals/.github/workflows/scheduled-local-benchmark.yml"
         "@refs/heads/develop"
     )
     assert defaults["openbao_ci_evals_ref"] == "refs/heads/develop"
