@@ -20,6 +20,9 @@ permission set. `sandbox-agent-write` reads both leaves and mints from
 15-minute SecretIDs. The `open-llm` dispatcher can mint wrapped SecretIDs for
 either role and reads the exact `secrets-external/ai/saas/zai` leaf. Its internal
 leaf no longer carries the sandbox service tokens.
+The `local-llm` role reads the exact QwenCloud data leaf at
+`secrets-external/ai/saas/qwencloud`. Its promoted fields are `QWEN_API_TOKEN`
+and `QWEN_URL_OPENAI`; the Anthropic-style URL field name remains unverified.
 
 The `sandbox-zcode-read` and `sandbox-zcode-write` roles read only the Z.ai
 provider leaf; `sandbox-opencode-read` and `sandbox-opencode-write` read only

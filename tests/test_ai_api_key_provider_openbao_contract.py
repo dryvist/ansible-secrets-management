@@ -1,7 +1,9 @@
 """Static contracts for provider-level API credentials in OpenBao."""
 
+import re
 from pathlib import Path
 
+import jinja2
 import yaml
 
 
@@ -27,6 +29,25 @@ def _read(relative_path: str) -> str:
 
 def _read_defaults(filename: str) -> dict:
     return yaml.safe_load(_read(f"roles/openbao/defaults/main/{filename}"))
+
+
+def _render_local_llm_policy() -> str:
+    environment = jinja2.Environment()
+    environment.filters["comment"] = lambda value: "# " + str(value)
+    return environment.from_string(
+        _read("roles/openbao/templates/local-llm-policy.hcl.j2")
+    ).render(ansible_managed="test fixture", openbao_kv_mount="secret")
+
+
+def _policy_grants(policy: str) -> list[tuple[str, list[str]]]:
+    stanzas = re.findall(
+        r'(?ms)^path "([^"]+)" \{\s*capabilities = \[([^\]]+)\]\s*\}',
+        policy,
+    )
+    return [
+        (path, [capability.strip().strip('"') for capability in capabilities.split(",")])
+        for path, capabilities in stanzas
+    ]
 
 
 def test_provider_inventory_is_complete_and_single_sourced():
@@ -78,13 +99,51 @@ def test_local_llm_attaches_the_derived_provider_policy_set():
 
 
 def test_legacy_internal_provider_area_remains_denied():
-    local_policy = _read("roles/openbao/templates/local-llm-policy.hcl.j2")
+    grants = dict(_policy_grants(_render_local_llm_policy()))
 
-    assert 'path "{{ openbao_kv_mount }}/data/ai/saas/*"' in local_policy
-    assert 'path "{{ openbao_kv_mount }}/metadata/ai/saas/*"' in local_policy
-    assert 'path "{{ openbao_kv_mount }}/data/ai/saas/*" {\n  capabilities = ["deny"]\n}' in local_policy
-    assert 'path "{{ openbao_kv_mount }}/metadata/ai/saas/*" {\n  capabilities = ["deny"]\n}' in local_policy
-    assert "externally configured leaves" in local_policy
+    assert grants["secret/data/ai/saas/*"] == ["deny"]
+    assert grants["secret/metadata/ai/saas/*"] == ["deny"]
+    assert [path for path in grants if path.startswith("secret/data/ai/saas/")] == [
+        "secret/data/ai/saas/*"
+    ]
+    assert [path for path in grants if path.startswith("secret/metadata/ai/saas/")] == [
+        "secret/metadata/ai/saas/*"
+    ]
+
+
+def test_local_llm_reads_only_the_qwencloud_external_data_leaf():
+    declarations = _policy_grants(_render_local_llm_policy())
+    grants = dict(declarations)
+    external_paths = [
+        path for path, _capabilities in declarations if path.startswith("secrets-external/")
+    ]
+
+    assert [path for path, _capabilities in declarations] == [
+        "secret/data/ai/*",
+        "secret/metadata/ai/*",
+        "secret/data/ai/saas/*",
+        "secret/metadata/ai/saas/*",
+        "secrets-external/data/ai/saas/qwencloud",
+        "secret/data/ai/clickhouse",
+        "secret/metadata/ai/clickhouse",
+        "secret/data/ai/clickhouse-ingest",
+        "secret/metadata/ai/clickhouse-ingest",
+        "secret/data/ai/clickhouse-wall",
+        "secret/metadata/ai/clickhouse-wall",
+    ]
+    assert external_paths == ["secrets-external/data/ai/saas/qwencloud"]
+    assert grants["secrets-external/data/ai/saas/qwencloud"] == ["read"]
+
+
+def test_qwencloud_external_secret_promotes_only_the_known_verbatim_fields():
+    promoted = _read_defaults("01b-app-secrets.yml")["openbao_promoted_external_secrets"]
+
+    # The following readiness check consumes the final promotion result for Z.ai.
+    assert list(promoted)[-1] == "zai-coding"
+    assert promoted["ai/saas/qwencloud"] == {
+        "QWEN_API_TOKEN": "QWEN_API_TOKEN",
+        "QWEN_URL_OPENAI": "QWEN_URL_OPENAI",
+    }
 
 
 def test_each_agent_tier_reader_policy_reads_only_its_own_leaf():
