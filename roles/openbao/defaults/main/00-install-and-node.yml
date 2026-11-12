@@ -91,6 +91,13 @@ openbao_write_addr: "{{ openbao_api_addr }}"
 # on the openbao node does not exist ('openbao_cli_become' is undefined). A
 # role default is in scope for every host the play touches. Lazy, so
 # openbao_write_addr's init/02 override is still honoured at use time.
+# The one environment for every bao call through the admin-window proxy: the
+# proxy injects the window identity, so the caller token stays empty.
+openbao_window_proxy_env:
+  BAO_ADDR: "{{ openbao_window_proxy_addr | default('') }}"
+  BAO_AGENT_ADDR: "{{ openbao_window_proxy_addr | default('') }}"
+  BAO_CONFIG_PATH: "{{ lookup('env', 'BAO_CONFIG_PATH') }}"
+  BAO_TOKEN: ""
 openbao_cli_proxy_active: >-
   {{ openbao_window_proxy_mode | default(false) | bool
      and (openbao_status | default({})).initialized | default(false) | bool }}

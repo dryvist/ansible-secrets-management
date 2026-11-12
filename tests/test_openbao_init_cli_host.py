@@ -35,6 +35,19 @@ INCLUDE_KEYS = (
     "import_tasks",
 )
 BLOCK_KEYS = ("block", "rescue", "always")
+# The admin-window proxy reads take their whole environment from one role default.
+PROXY_ENV_REF = "{{ openbao_window_proxy_env }}"
+PROXY_ENV = yaml.safe_load(
+    (ROOT / "roles" / "openbao" / "defaults" / "main" / "00-install-and-node.yml").read_text(encoding="utf-8")
+)["openbao_window_proxy_env"]
+
+
+def _environment(task):
+    environment = task.get("environment") or {}
+    if environment == PROXY_ENV_REF:
+        return PROXY_ENV
+    assert isinstance(environment, dict), f"unresolvable environment on {task.get('name')}: {environment}"
+    return environment
 
 
 def _tasks(nodes):
@@ -54,7 +67,7 @@ def _effective(nodes, inherited=None):
         if not isinstance(task, dict):
             continue
         scope = {
-            "env": {**inherited.get("env", {}), **(task.get("environment") or {})},
+            "env": {**inherited.get("env", {}), **_environment(task)},
             "delegate_to": task.get("delegate_to", inherited.get("delegate_to")),
             "become": task.get("become", inherited.get("become")),
             "vars": {**inherited.get("vars", {}), **(task.get("vars") or {})},

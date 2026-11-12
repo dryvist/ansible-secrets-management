@@ -117,25 +117,24 @@
 - name: Read OpenBao status through the admin-window proxy
   ansible.builtin.command:
     cmd: bao status -format=json
-  environment:
-    BAO_ADDR: "{{ openbao_window_proxy_addr }}"
-    BAO_AGENT_ADDR: "{{ openbao_window_proxy_addr }}"
-    BAO_CONFIG_PATH: "{{ lookup('env', 'BAO_CONFIG_PATH') }}"
-    BAO_TOKEN: ""
+  environment: "{{ openbao_window_proxy_env }}"
   delegate_to: localhost
   connection: local
   become: false
   vars:
     ansible_become: false
   when: openbao_window_proxy_mode | default(false) | bool
-  register: openbao_status_raw
+  register: openbao_status_proxy_raw
   changed_when: false
   check_mode: false
-  failed_when: openbao_status_raw.rc not in [0, 2]
+  failed_when: openbao_status_proxy_raw.rc not in [0, 2]
 
 - name: Parse OpenBao status
   ansible.builtin.set_fact:
-    openbao_status: "{{ openbao_status_raw.stdout | from_json }}"
+    # Each read registers its own name: a skipped task would overwrite a shared register.
+    openbao_status: >-
+      {{ ((openbao_status_proxy_raw if openbao_window_proxy_mode | default(false) | bool
+           else openbao_status_raw).stdout) | from_json }}
 
 # --- Data-loss guard: never fresh-init on top of an existing cluster ---------
 # A rolling expansion of a LIVE cluster must JOIN, never re-init. Before the

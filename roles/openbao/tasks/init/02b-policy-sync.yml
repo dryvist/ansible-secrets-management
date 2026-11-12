@@ -52,22 +52,19 @@
   register: openbao_leader_status_raw
   check_mode: false
   changed_when: false
+  failed_when: false
   when: not (openbao_cli_proxy_active | default(false) | bool)
 
 - name: Read OpenBao status through the admin-window proxy to resolve the current Raft leader
   ansible.builtin.command:
     cmd: bao status -format=json
-  environment:
-    BAO_ADDR: "{{ openbao_window_proxy_addr }}"
-    BAO_AGENT_ADDR: "{{ openbao_window_proxy_addr }}"
-    BAO_CONFIG_PATH: "{{ lookup('env', 'BAO_CONFIG_PATH') }}"
-    BAO_TOKEN: ""
+  environment: "{{ openbao_window_proxy_env }}"
   delegate_to: localhost
   connection: local
   become: false
   vars:
     ansible_become: false
-  register: openbao_leader_status_raw
+  register: openbao_leader_status_proxy_raw
   check_mode: false
   changed_when: false
   when: openbao_cli_proxy_active | default(false) | bool
@@ -80,7 +77,9 @@
 - name: Point provisioning writes at the Raft leader
   ansible.builtin.set_fact:
     openbao_write_addr: >-
-      {{ ((openbao_leader_status_raw.stdout | default('{}', true) | from_json)
+      {{ (((openbao_leader_status_proxy_raw
+              if openbao_cli_proxy_active | default(false) | bool
+              else openbao_leader_status_raw).stdout | default('{}', true) | from_json)
           .leader_address | default('', true)) or openbao_api_addr }}
 
 - name: Report where this run's provisioning writes are going

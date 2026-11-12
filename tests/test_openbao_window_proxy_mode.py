@@ -46,6 +46,11 @@ def _named(nodes, name):
     return next(node for node in nodes if node.get("name") == name)
 
 
+def _proxy_env(context):
+    return {key: render(value, context) if isinstance(value, str) else value
+            for key, value in DEFAULTS["openbao_window_proxy_env"].items()}
+
+
 def _proxy_defaults(mode):
     context = {
         "openbao_window_proxy_mode": mode,
@@ -90,11 +95,13 @@ def test_proxy_import_forwards_agent_and_window_config_and_clears_token():
         "BAO_AGENT_ADDR": PROXY_ADDR,
         "BAO_CONFIG_PATH": PROXY_CONFIG,
     }, clear=True):
+        proxy_env = _proxy_env({"openbao_window_proxy_addr": PROXY_ADDR})
         inherited = render(bootstrap["environment"], {
             "openbao_cli_proxy_active": True,
-            "openbao_window_proxy_addr": PROXY_ADDR,
+            "openbao_window_proxy_env": proxy_env,
         })
     assert inherited == {
+        "BAO_ADDR": PROXY_ADDR,
         "BAO_AGENT_ADDR": PROXY_ADDR,
         "BAO_CONFIG_PATH": PROXY_CONFIG,
         "BAO_TOKEN": "",
@@ -240,7 +247,10 @@ def test_guest_side_bao_calls_are_delegated_or_gated_by_fresh_init():
     assert not condition(status["when"], {"openbao_window_proxy_mode": True})
     assert condition(proxy_status["when"], {"openbao_window_proxy_mode": True})
     assert proxy_status["delegate_to"] == "localhost"
-    assert proxy_status["environment"]["BAO_TOKEN"] == ""
+    assert proxy_status["environment"] == "{{ openbao_window_proxy_env }}"
+    proxy_env = _proxy_env({"openbao_window_proxy_addr": PROXY_ADDR})
+    assert proxy_env["BAO_ADDR"] == proxy_env["BAO_AGENT_ADDR"] == PROXY_ADDR
+    assert proxy_env["BAO_TOKEN"] == ""
 
     leader = yaml.safe_load((TASKS / "init/02b-policy-sync.yml").read_text(encoding="utf-8"))
     leader_status = _named(leader, "Read OpenBao status again to resolve the current Raft leader")
@@ -255,8 +265,7 @@ def test_guest_side_bao_calls_are_delegated_or_gated_by_fresh_init():
     }
     assert condition(proxy_leader_status["when"], context)
     assert render(proxy_leader_status["delegate_to"], context) == "localhost"
-    assert render(proxy_leader_status["environment"]["BAO_ADDR"], context) == PROXY_ADDR
-    assert proxy_leader_status["environment"]["BAO_TOKEN"] == ""
+    assert proxy_leader_status["environment"] == "{{ openbao_window_proxy_env }}"
 
     init = yaml.safe_load((TASKS / "init/02-initialize-cluster.yml").read_text(encoding="utf-8"))
     fresh_init = _named(init, "Initialize OpenBao (recovery keys via static-key auto-unseal)")
@@ -312,3 +321,23 @@ def test_fresh_operator_init_remains_on_the_openbao_guest():
     ).lower() == "false"
     environment = render(bootstrap["environment"], fresh_context)
     assert environment == {"BAO_AGENT_ADDR": ""}
+
+
+def test_status_reads_keep_their_failure_rules_and_separate_registers():
+    # A skipped task overwrites its register, so the plain and proxy reads must not share one.
+    preflight = yaml.safe_load((TASKS / "init/01-preflight-and-cluster-probe.yml").read_text(encoding="utf-8"))
+    status = _named(preflight, "Read OpenBao status")
+    proxy_status = _named(preflight, "Read OpenBao status through the admin-window proxy")
+    assert status["register"] != proxy_status["register"]
+    assert status["failed_when"] == f"{status['register']}.rc not in [0, 2]"
+    assert proxy_status["failed_when"] == f"{proxy_status['register']}.rc not in [0, 2]"
+
+    leader = yaml.safe_load((TASKS / "init/02b-policy-sync.yml").read_text(encoding="utf-8"))
+    leader_status = _named(leader, "Read OpenBao status again to resolve the current Raft leader")
+    proxy_leader_status = _named(
+        leader,
+        "Read OpenBao status through the admin-window proxy to resolve the current Raft leader",
+    )
+    assert leader_status["failed_when"] is False
+    assert proxy_leader_status["failed_when"] is False
+    assert leader_status["register"] != proxy_leader_status["register"]
