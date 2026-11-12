@@ -55,7 +55,9 @@ including rolling expansion and seal-key rotation, are in
 The retired `openbao_rbac_policy_name` and `openbao_approle_config_name` inputs still
 select one object. Passing either beside `openbao_select` fails the run.
 Supported kinds are `policies`, `approles`, `ssh_roles`,
-`github_permission_sets`, and `rotation_exempt`.
+`github_permission_sets`, `rotation_exempt`, and `reconcile_policy`.
+The singleton `reconcile_policy` kind selects the declared
+`openbao_reconcile_policy_name`, syncs only that policy, and shows its diff in check mode.
 GitHub permission-set names come from `openbao_github_admin_permission_sets`
 on `openbao_github_mount`. Rotation-exempt names use the declared `mount:path`
 form. Every selector must
@@ -79,8 +81,8 @@ ungranted selection fails with its name and requires the human-gated path.
 KV seeding also writes a separate policy, so selective runs skip that phase.
 Engine and auth setup also write mounts, keys, and shared configuration;
 credential issuance also publishes credentials. Those phases, human-gated
-AppRole attachment updates, policy sync, and the singleton disclosure metadata
-declaration run only in full-set mode. SSH engine and CA setup likewise stay
+AppRole attachment updates, and the singleton disclosure metadata declaration
+run only in full-set mode. SSH engine and CA setup likewise stay
 in full-set mode; SSH signing-role and GitHub permission-set objects remain
 selectable.
 
