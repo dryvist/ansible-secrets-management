@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.101.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.100.0...v0.101.0) (2026-11-12)
+
+
+### Features
+
+* **openbao:** add one exact converge policy path ([#662](https://github.com/dryvist/ansible-secrets-management/issues/662)) ([b3509e8](https://github.com/dryvist/ansible-secrets-management/commit/b3509e8a16b4407b5bcde309aaaa88667a2cfa69))
+* **openbao:** let converge publish the Splunk platform search token ([b3509e8](https://github.com/dryvist/ansible-secrets-management/commit/b3509e8a16b4407b5bcde309aaaa88667a2cfa69))
+
 ## [0.100.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.99.0...v0.100.0) (2026-11-12)
 
 
