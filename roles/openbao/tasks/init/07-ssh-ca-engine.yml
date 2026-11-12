@@ -26,7 +26,7 @@
   changed_when: true
   when:
     - openbao_select | default({}) | length == 0
-    - not (openbao_reconcile_mode | default(false))
+    - not (openbao_bounded_rbac_mode | default(false) | bool)
     - openbao_bootstrap_token is defined
     - openbao_ssh_engine_enabled | bool
     - (openbao_ssh_mount ~ '/') not in (openbao_mounts_raw.stdout | from_json).keys()
@@ -51,7 +51,7 @@
   failed_when: false
   when:
     - openbao_select | default({}) | length == 0
-    - not (openbao_reconcile_mode | default(false))
+    - not (openbao_bounded_rbac_mode | default(false) | bool)
     - openbao_bootstrap_token is defined
     - openbao_ssh_engine_enabled | bool
 
@@ -78,7 +78,7 @@
   changed_when: true
   when:
     - openbao_select | default({}) | length == 0
-    - not (openbao_reconcile_mode | default(false))
+    - not (openbao_bounded_rbac_mode | default(false) | bool)
     - openbao_bootstrap_token is defined
     - openbao_ssh_engine_enabled | bool
     - (openbao_ssh_ca_check.rc | default(1)) != 0
@@ -102,7 +102,7 @@
   check_mode: false
   when:
     - openbao_select | default({}) | length == 0
-    - not (openbao_reconcile_mode | default(false))
+    - not (openbao_bounded_rbac_mode | default(false) | bool)
     - openbao_bootstrap_token is defined
     - openbao_ssh_engine_enabled | bool
 
@@ -117,7 +117,7 @@
   changed_when: false
   when:
     - openbao_select | default({}) | length == 0
-    - not (openbao_reconcile_mode | default(false))
+    - not (openbao_bounded_rbac_mode | default(false) | bool)
     - openbao_bootstrap_token is defined
     - openbao_ssh_engine_enabled | bool
 
@@ -126,7 +126,7 @@
     msg: "SSH CA fingerprint (pin in ansible-proxmox ssh_ca_trust): {{ openbao_ssh_ca_fingerprint.stdout }}"
   when:
     - openbao_select | default({}) | length == 0
-    - not (openbao_reconcile_mode | default(false))
+    - not (openbao_bounded_rbac_mode | default(false) | bool)
     - openbao_bootstrap_token is defined
     - openbao_ssh_engine_enabled | bool
 

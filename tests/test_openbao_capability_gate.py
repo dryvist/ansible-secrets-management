@@ -97,13 +97,13 @@ def reachable(declared, ungranted):
 FINAL_FAIL_TASK = "FAIL -- the reconcile identity cannot manage every declared policy"
 
 
-def final_fail_fires(ungranted, reconcile_mode=True, bootstrap_token="s.test"):
+def final_fail_fires(ungranted, bounded_mode=True, bootstrap_token="s.test"):
     """Render the task file's OWN `when` for the post-write ungranted-name fail."""
     task = _task(FINAL_FAIL_TASK)
     templar = Templar(loader=DataLoader())
     templar.available_variables = {
         "openbao_ungranted_policy_names": ungranted,
-        "openbao_reconcile_mode": reconcile_mode,
+        "openbao_bounded_rbac_mode": bounded_mode,
         "openbao_bootstrap_token": bootstrap_token,
     }
     return all(
@@ -265,10 +265,10 @@ class ReachableWritesSurviveAnUngrantedName(unittest.TestCase):
         self.assertEqual(sorted(reachable(NAMES, ungranted)), sorted(NAMES))
         self.assertFalse(final_fail_fires(ungranted))
 
-    def test_the_final_fail_never_fires_outside_reconcile_mode(self):
+    def test_the_final_fail_never_fires_outside_bounded_rbac_mode(self):
         # A provisioning-token run has no exclusions and no ungranted names
         # by construction; guard against the `when` firing on a stray input.
-        self.assertFalse(final_fail_fires(["uicheck"], reconcile_mode=False))
+        self.assertFalse(final_fail_fires(["uicheck"], bounded_mode=False))
 
 
 class ProbeAsksAboutRealPaths(unittest.TestCase):

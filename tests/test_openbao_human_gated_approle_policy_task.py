@@ -56,7 +56,7 @@ def test_reconcile_mount_include_keeps_policy_sync_and_mount_capability_gate():
     mount_include = _task(tasks, "Configure the per-App GitHub mounts")
     when_text = " ".join(str(condition) for condition in mount_include["when"])
 
-    assert "openbao_reconcile_mode" in when_text
+    assert "openbao_bounded_rbac_mode" in when_text
     assert "openbao_policy_sync_caps.rc" in when_text
     assert "sys/policies/acl/" in when_text
     assert "openbao_reconcile_policy_name" in when_text

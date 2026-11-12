@@ -48,7 +48,7 @@
   no_log: true
   when:
     - openbao_bootstrap_token is defined
-    - openbao_reconcile_mode | default(false)
+    - openbao_bounded_rbac_mode | default(false) | bool
 
 # sys/capabilities-self returns the per-path capability lists BOTH at the top
 # level and under `data`, and which of the two a given client surfaces is not
@@ -72,7 +72,7 @@
   # writable that is not: a false green in the guard built to prevent one.
   when:
     - openbao_bootstrap_token is defined
-    - openbao_reconcile_mode | default(false)
+    - openbao_bounded_rbac_mode | default(false) | bool
     - (openbao_policy_capabilities.rc | default(1)) == 0
 
 # An uninformative probe is NOT a denial. If the response carried capability
@@ -99,7 +99,7 @@
       envelope before concluding anything about grants.
   when:
     - openbao_bootstrap_token is defined
-    - openbao_reconcile_mode | default(false)
+    - openbao_bounded_rbac_mode | default(false) | bool
     - (openbao_policy_capabilities.rc | default(1)) == 0
     - openbao_manageable_policies | length > 0
     - >-
@@ -119,7 +119,7 @@
     _caps: "{{ openbao_policy_caps | default({}) }}"
   when:
     - openbao_bootstrap_token is defined
-    - openbao_reconcile_mode | default(false)
+    - openbao_bounded_rbac_mode | default(false) | bool
     - (openbao_policy_capabilities.rc | default(1)) == 0
 
 # Everything that is NOT ungranted, so the render/write steps below act on
@@ -270,9 +270,14 @@
          | reject('in', _openbao_non_empty_names) | list | sort }}
   when: openbao_bootstrap_token is defined
 
+# The window guard denies the AppRole collection listing this audit needs.
+# Keep the audit for full and reconcile runs; the window selection is validated
+# against its exact grants before writes.
 - name: Refuse live objects that collide with roster agent names
   ansible.builtin.import_tasks: 08a-roster-live-collisions.yml
-  when: openbao_ai_agents | length > 0
+  when:
+    - openbao_ai_agents | length > 0
+    - not (openbao_ai_admin_window_mode | default(false) | bool)
 
 - name: Read the stored RBAC policies and write what differs
   ansible.builtin.import_tasks: 08b-rbac-policy-writes.yml
@@ -300,7 +305,7 @@
   when:
     - openbao_select | default({}) | length == 0
     - openbao_bootstrap_token is defined
-    - openbao_reconcile_mode | default(false)
+    - openbao_bounded_rbac_mode | default(false) | bool
     - openbao_ungranted_policy_names | default([]) | length > 0
 
 # --- AppRole auth method (add-if-missing) -----------------------------------

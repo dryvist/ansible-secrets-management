@@ -24,6 +24,9 @@ openbao_reconcile_excluded_policies:
   - "{{ openbao_ai_admin_policy_name }}"
   # Keep the admin deny overlay outside routine policy reconciliation.
   - "{{ openbao_ai_admin_guard_policy_name }}"
+  # This finite grant belongs only to ai-admin-session; routine reconcile
+  # cannot replace the policy that authorizes its protected-path selection.
+  - "{{ openbao_ai_admin_window_policy_name }}"
   - "{{ openbao_github_admin_policy_name }}"
   - "{{ openbao_slack_admin_policy_name }}"
   - "{{ openbao_reconcile_policy_name }}"

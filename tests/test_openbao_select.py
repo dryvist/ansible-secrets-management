@@ -31,11 +31,16 @@ def condition(expression, variables):
     return render("{{ " + expression + " }}", variables)
 
 
-def resolve(select, kind="policies", names=("apps", "read-apps", "read-other")):
+def resolve(select, kind="policies", names=("apps", "read-apps", "read-other"),
+            declared_names=None):
+    candidates = [{"name": name} for name in names]
     variables = {
         "openbao_select": select,
         "openbao_select_kind": kind,
-        "openbao_select_candidates": [{"name": n} for n in names],
+        "openbao_select_candidates": candidates,
+        "openbao_select_declared_candidates": [
+            {"name": name} for name in (declared_names if declared_names is not None else names)
+        ],
     }
     expression = task("Match every selector against the declared OpenBao candidates")[
         "ansible.builtin.set_fact"]["openbao_selector_matches"]

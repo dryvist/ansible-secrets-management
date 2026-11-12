@@ -70,6 +70,76 @@
     - openbao_status.initialized
     - openbao_provisioning_token | length > 0
 
+# A supplied ai-admin-session token is distinguishable by its existing policy
+# set. Read only this token's own metadata; a partial/legacy guarded session
+# must fail closed instead of falling through to the broad provisioning path.
+- name: Look up the supplied token's own policies
+  ansible.builtin.command:
+    cmd: bao read -format=json auth/token/lookup-self
+  environment:
+    BAO_ADDR: "{{ openbao_cli_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
+  register: openbao_supplied_token_lookup
+  no_log: true
+  check_mode: false
+  changed_when: false
+  failed_when: false
+  when:
+    - openbao_status.initialized
+    - openbao_provisioning_token | length > 0
+
+- name: FAIL — the supplied provisioning token policy set could not be verified
+  ansible.builtin.fail:
+    msg: >-
+      OpenBao could not verify the supplied token with auth/token/lookup-self.
+      No provisioning or selected RBAC writes were attempted.
+  when:
+    - openbao_supplied_token_lookup is defined
+    - not (openbao_supplied_token_lookup.skipped | default(false))
+    - (openbao_supplied_token_lookup.rc | default(1)) != 0
+
+- name: Resolve whether the supplied token is the ai-admin-session window
+  ansible.builtin.set_fact:
+    openbao_ai_admin_window_policies: "{{ _lookup.get('data', {}).get('policies', []) }}"
+    openbao_ai_admin_window_mode: >-
+      {{ openbao_ai_admin_guard_policy_name in _lookup.get('data', {}).get('policies', [])
+         and openbao_ai_admin_window_policy_name in _lookup.get('data', {}).get('policies', [])
+         and openbao_ai_admin_policy_name in _lookup.get('data', {}).get('policies', [])
+         and openbao_tofu_state_admin_policy_name in _lookup.get('data', {}).get('policies', []) }}
+  vars:
+    _lookup: "{{ openbao_supplied_token_lookup.stdout | from_json }}"
+  no_log: true
+  changed_when: false
+  when:
+    - openbao_supplied_token_lookup is defined
+    - not (openbao_supplied_token_lookup.skipped | default(false))
+    - (openbao_supplied_token_lookup.rc | default(1)) == 0
+
+- name: FAIL — a partial admin-window policy set is present
+  ansible.builtin.assert:
+    that:
+      - >-
+        (openbao_ai_admin_guard_policy_name not in openbao_ai_admin_window_policies
+         and openbao_ai_admin_window_policy_name not in openbao_ai_admin_window_policies)
+        or (openbao_ai_admin_guard_policy_name in openbao_ai_admin_window_policies
+            and openbao_ai_admin_window_policy_name in openbao_ai_admin_window_policies
+            and openbao_ai_admin_policy_name in openbao_ai_admin_window_policies
+            and openbao_tofu_state_admin_policy_name in openbao_ai_admin_window_policies)
+    fail_msg: >-
+      This token carries only part of the current ai-admin-session policy set.
+      Re-open ai-admin-session after its role policy attachment has been
+      reconciled; this token cannot take the selected RBAC path.
+    quiet: true
+  when:
+    - openbao_ai_admin_window_policies is defined
+    - >-
+      openbao_ai_admin_guard_policy_name in openbao_ai_admin_window_policies
+      or openbao_ai_admin_window_policy_name in openbao_ai_admin_window_policies
+
 # Routine reconciliation. A change to the CONTENT of an already-declared policy
 # needs no operator: openbao-reconcile owns exactly the names this repo declares
 # and cannot reach the break-glass tiers or its own policy. Each routine run
@@ -249,6 +319,54 @@
     - not (openbao_reconcile_login.skipped | default(false))
     - (openbao_reconcile_login.login | default({})).auth is not defined
 
+- name: Resolve whether this run uses the bounded RBAC path
+  ansible.builtin.set_fact:
+    openbao_bounded_rbac_mode: >-
+      {{ (openbao_reconcile_mode | default(false) | bool)
+         or (openbao_ai_admin_window_mode | default(false) | bool) }}
+  changed_when: false
+
+# Resolve the identity-specific candidates before policy-sync. The session's
+# first selection pass is deliberately early: it validates every requested
+# target and capability before the reconcile policy can be written.
+- name: Resolve the RBAC set this run's identity may manage
+  ansible.builtin.set_fact:
+    openbao_manageable_policies: >-
+      {{ openbao_ai_admin_window_manageable_policies
+         if (openbao_ai_admin_window_mode | default(false) | bool)
+         else (openbao_policies
+               if not (openbao_reconcile_mode | default(false))
+               else (openbao_policies
+                     | rejectattr('name', 'in', openbao_reconcile_policy_excluded_names)
+                     | list)) }}
+    openbao_manageable_approles: >-
+      {{ openbao_ai_admin_window_manageable_approles
+         if (openbao_ai_admin_window_mode | default(false) | bool)
+         else (openbao_approles
+               if not (openbao_reconcile_mode | default(false))
+               else (openbao_approles
+                     | rejectattr('manage_secret_id', 'defined')
+                     | rejectattr('name', 'in', openbao_reconcile_excluded_policies)
+                     | list)) }}
+  when: openbao_bootstrap_token is defined
+
+- name: Require an explicit bounded selection for ai-admin-session
+  ansible.builtin.assert:
+    that:
+      - openbao_select | default({}) is mapping
+      - openbao_select | default({}) | length > 0
+      - openbao_select | default({}) | difference(['policies', 'approles', 'reconcile_policy']) | length == 0
+    fail_msg: >-
+      ai-admin-session accepts only a nonempty openbao_select containing
+      policies, approles, and/or reconcile_policy. It cannot run the full
+      provisioning path.
+    quiet: true
+  when: openbao_ai_admin_window_mode | default(false) | bool
+
+- name: Resolve ai-admin-session selections and grants before policy-sync
+  ansible.builtin.import_tasks: selection-preflight.yml
+  when: openbao_ai_admin_window_mode | default(false) | bool
+
 # Resolves openbao_write_addr (the Raft leader) and runs the policy-sync
 # ask-and-rewrite pair, right after the reconcile login above -- BEFORE any
 # other init step consumes a reconcile grant for a newly declared name (see
@@ -257,31 +375,11 @@
 - name: Resolve the Raft leader and sync the reconcile policy before any grant consumer runs
   ansible.builtin.import_tasks: 02b-policy-sync.yml
 
-# The reconcile identity is deliberately narrower than a provisioning token: it
-# cannot write the break-glass policies, nor create the inert human-gated
-# AppRoles. Filter the managed set to what this run's identity may actually
-# touch, so a routine converge reconciles everything it owns instead of failing
-# on the first path it was never granted.
-- name: Resolve the RBAC set this run's identity may manage
-  ansible.builtin.set_fact:
-    openbao_manageable_policies: >-
-      {{ openbao_policies
-         if not (openbao_reconcile_mode | default(false))
-         else (openbao_policies
-               | rejectattr('name', 'in', openbao_reconcile_policy_excluded_names)
-               | list) }}
-    openbao_manageable_approles: >-
-      {{ openbao_approles
-         if not (openbao_reconcile_mode | default(false))
-         else (openbao_approles
-               | rejectattr('manage_secret_id', 'defined')
-               | rejectattr('name', 'in', openbao_reconcile_excluded_policies)
-               | list) }}
-  when: openbao_bootstrap_token is defined
-
 - name: Resolve all object selections before phase writes
   ansible.builtin.import_tasks: selection-preflight.yml
-  when: openbao_bootstrap_token is defined
+  when:
+    - openbao_bootstrap_token is defined
+    - not (openbao_ai_admin_window_mode | default(false) | bool)
 
 - name: Report that this run reconciles as the least-privilege identity
   ansible.builtin.debug:

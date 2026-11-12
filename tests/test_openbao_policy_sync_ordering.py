@@ -124,8 +124,8 @@ class PolicySyncRunsBeforeItsGrantConsumers(unittest.TestCase):
 
     def test_sync_pair_is_adjacent_to_the_reconcile_login(self):
         """The sync pair belongs directly after the reconcile login succeeds,
-        not buried later in the sequence -- keep it next to the one fact
-        (openbao_bootstrap_token / openbao_reconcile_mode) it depends on."""
+        not buried later in the sequence -- keep it next to the bootstrap token
+        and bounded execution-mode facts it depends on."""
         order = _global_task_order()
         login_index = order.index("Use the per-call reconcile token when it authenticated")
         ask_index = order.index(ASK_TASK)

@@ -25,7 +25,7 @@ def grants(
         openbao_policy_sync_approle_name="openbao-policy-sync",
         openbao_approle_cli_parameters={
             "ai-admin-session": {
-                "token_policies": "ai-admin,ai-admin-guard,tofu-state-admin"
+                "token_policies": "ai-admin,ai-admin-guard,ai-admin-window-rbac,tofu-state-admin"
             },
             "openbao-policy-sync": {
                 "token_policies": "openbao-reconcile,policy-sync,github-mount-config"

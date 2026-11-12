@@ -286,19 +286,23 @@
 
 # Both human-gated administrator roles attach the standalone ai-admin policy,
 # never composed base leaves. The session role adds the ai-admin-guard deny
-# overlay and the tofu-state-admin state-key grant, and has a service token
-# and a 12h cap.
+# overlay, ai-admin-window-rbac selection grants and tofu-state-admin state-key
+# grant, and has a service token and a 12h cap.
 - name: Assert the administrator roles use the standalone policy, the guard and bounded session type
   vars:
-    admin_role: "{{ openbao_approles | selectattr('name', 'equalto', 'ai-admin') | first }}"
+    admin_role: >-
+      {{ openbao_approles | selectattr('name', 'equalto', openbao_ai_admin_approle_name) | first }}
     session_role: >-
-      {{ openbao_approles | selectattr('name', 'equalto', 'ai-admin-session') | first }}
+      {{ openbao_approles | selectattr('name', 'equalto', openbao_ai_admin_session_approle_name) | first }}
   ansible.builtin.assert:
     that:
-      - admin_role.policy | default('') == 'ai-admin'
+      - admin_role.policy | default('') == openbao_ai_admin_policy_name
       - admin_role.token_policies is not defined
       - session_role.policy is not defined
-      - session_role.token_policies == ['ai-admin', 'ai-admin-guard', 'tofu-state-admin']
+      - >-
+        (session_role.token_policies | sort)
+        == ([openbao_ai_admin_policy_name, openbao_ai_admin_guard_policy_name,
+             openbao_ai_admin_window_policy_name, openbao_tofu_state_admin_policy_name] | sort)
       - session_role.token_type == 'service'
       - session_role.token_ttl == '1h'
       - session_role.token_max_ttl == '12h'
