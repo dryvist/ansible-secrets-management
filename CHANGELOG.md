@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.103.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.102.0...v0.103.0) (2026-11-12)
+
+
+### Features
+
+* **openbao:** admin window manages declared protected policies and AppRoles ([#670](https://github.com/dryvist/ansible-secrets-management/issues/670)) ([1aa64ed](https://github.com/dryvist/ansible-secrets-management/commit/1aa64edb656c38b4eb107689d82daa8c2acd3e7e))
+
 ## [0.102.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.101.1...v0.102.0) (2026-11-12)
 
 
