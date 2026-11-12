@@ -124,9 +124,15 @@ def test_check_mode_preview_reads_live_policy_and_only_prints_real_diffs():
 
     diff = task("Compute a unified line diff for the reconcile policy", POLICY_PREVIEW)
     assert diff["check_mode"] is False
-    assert "diff -u" in diff["ansible.builtin.shell"]
+    assert diff["changed_when"] is False
+    assert diff["ansible.utils.fact_diff"] == {
+        "before": "{{ openbao_reconcile_policy_live_text }}",
+        "after": "{{ openbao_reconcile_policy_rendered_text }}",
+    }
+    assert "ansible.builtin.shell" not in diff
+    assert diff["when"] == "openbao_reconcile_policy_live_text != openbao_reconcile_policy_rendered_text"
     report = task("Show the reconcile policy diff in check mode", POLICY_PREVIEW)
-    assert report["ansible.builtin.debug"]["msg"] == "{{ openbao_reconcile_policy_diff.stdout }}"
+    assert report["ansible.builtin.debug"]["msg"] == "{{ openbao_reconcile_policy_diff.diff_lines }}"
 
 
 def test_rbac_tag_reaches_the_policy_sync_import():
