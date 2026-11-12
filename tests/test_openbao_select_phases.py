@@ -50,8 +50,8 @@ def test_all_cross_object_phases_are_skipped_in_selective_mode(selection):
     {"github_permission_sets": ["jacobpevans-ai-org-secrets"]},
 ])
 def test_selective_mode_suppresses_policy_sync_and_cleanup(selection):
+    # Policy sync is gated by the reconcile_policy selection fact; test_openbao_reconcile_policy_selection.py pins it.
     paths_and_names = [
-        ("02b-policy-sync.yml", "Sync the reconcile policy from the declared set (policy-sync)"),
         ("08b-rbac-policy-writes.yml", "Delete retired RBAC policies that still exist"),
         ("08b-rbac-policy-writes.yml", "Report retired RBAC policies that would be deleted in check mode"),
         ("10d-approle-undeclared-live.yml", "Delete retired AppRoles that still exist live"),

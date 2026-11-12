@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.101.1](https://github.com/dryvist/ansible-secrets-management/compare/v0.101.0...v0.101.1) (2026-11-12)
+
+
+### Bug Fixes
+
+* **openbao:** scope the molecule ssh-sign apply invariant around the declared unifi role ([#661](https://github.com/dryvist/ansible-secrets-management/issues/661)) ([93fee66](https://github.com/dryvist/ansible-secrets-management/commit/93fee662b8987486371c3692680b0297eb2d0eb7))
+
 ## [0.101.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.100.0...v0.101.0) (2026-11-12)
 
 

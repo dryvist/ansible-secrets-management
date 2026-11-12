@@ -30,3 +30,9 @@ openbao_select_profiles:
     name_replacement: /metadata/
     suffixes: [""]
     capability: patch
+  reconcile_policy:
+    candidates:
+      - name: "{{ openbao_reconcile_policy_name }}"
+    prefix: sys/policies/acl/
+    suffixes: [""]
+    capability: update
