@@ -21,6 +21,29 @@
 # Resolved here (immediately after the reconcile login), not further down:
 # the policy-sync pair right below needs it, and every write task after that
 # needs it too.
+# The generic selection preflight follows this pair so it can inspect grants
+# after policy sync; validate this singleton's selectors here to avoid writing
+# it for an unknown or partially unmatched reconcile_policy selection.
+- name: Resolve whether the reconcile policy is selected for sync
+  ansible.builtin.set_fact:
+    openbao_reconcile_policy_selected_for_sync: >-
+      {%- set selection = openbao_select | default({}) -%}
+      {%- set selectors = selection.get('reconcile_policy', []) if selection is mapping else [] -%}
+      {%- set invalid = [] -%}
+      {%- if selectors is not sequence or selectors is string or selectors is mapping -%}
+      {%- set selectors = [] -%}
+      {%- set _ = invalid.append('invalid selector list') -%}
+      {%- endif -%}
+      {%- for selector in selectors -%}
+      {%- if selector is not string
+          or [openbao_reconcile_policy_name]
+             | select('dryvist.secrets_management.openbao_glob', selector) | list | length == 0 -%}
+      {%- set _ = invalid.append(selector) -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {{ (selection is mapping and (selection | length == 0))
+         or (selectors | length > 0 and invalid | length == 0) }}
+
 - name: Read OpenBao status again to resolve the current Raft leader
   ansible.builtin.command:
     cmd: bao status -format=json
@@ -188,6 +211,19 @@
     - openbao_bootstrap_token is defined
     - openbao_reconcile_mode | default(false)
 
+- name: Preview reconcile policy changes in check mode
+  ansible.builtin.import_tasks: 02c-policy-sync-preview.yml
+  when:
+    - ansible_check_mode
+    - openbao_reconcile_policy_selected_for_sync | bool
+    - openbao_bootstrap_token is defined
+    - openbao_reconcile_mode | default(false)
+    - (openbao_policy_sync_caps.rc | default(1)) == 0
+    - >-
+      'update' in ((openbao_policy_sync_caps.stdout | from_json).get('data', {})
+      | combine(openbao_policy_sync_caps.stdout | from_json))
+      .get('sys/policies/acl/' ~ openbao_reconcile_policy_name, [])
+
 - name: Sync the reconcile policy from the declared set (policy-sync)
   ansible.builtin.command:
     cmd: "bao policy write {{ openbao_reconcile_policy_name }} -"
@@ -202,7 +238,7 @@
   no_log: true
   changed_when: true
   when:
-    - openbao_select | default({}) | length == 0
+    - openbao_reconcile_policy_selected_for_sync | bool
     - openbao_bootstrap_token is defined
     - openbao_reconcile_mode | default(false)
     - (openbao_policy_sync_caps.rc | default(1)) == 0

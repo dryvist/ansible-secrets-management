@@ -1,0 +1,60 @@
+---
+- name: Read the live reconcile policy for check-mode diff
+  ansible.builtin.command:
+    argv:
+      - bao
+      - policy
+      - read
+      - -format=json
+      - "{{ openbao_reconcile_policy_name }}"
+  environment:
+    BAO_ADDR: "{{ openbao_cli_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
+  register: openbao_reconcile_policy_live_read
+  check_mode: false
+  changed_when: false
+  failed_when: >-
+    openbao_reconcile_policy_live_read.rc != 0
+    and not (((openbao_reconcile_policy_live_read.stdout | default(''))
+              ~ (openbao_reconcile_policy_live_read.stderr | default('')))
+             | lower is search('no value found|404'))
+  no_log: true
+
+- name: Render the reconcile policy for check-mode diff
+  ansible.builtin.set_fact:
+    openbao_reconcile_policy_live_text: >-
+      {{ ((openbao_reconcile_policy_live_read.stdout | from_json).policy | default('') | trim)
+         if (openbao_reconcile_policy_live_read.rc | default(1)) == 0 else '' }}
+    openbao_reconcile_policy_rendered_text: >-
+      {{ lookup('template', 'openbao-reconcile-policy.hcl.j2') | trim }}
+  no_log: true
+
+- name: Compute a unified line diff for the reconcile policy
+  ansible.builtin.shell: >-
+    diff -u -L "live policy" -L "rendered policy"
+    <(printf '%s\n' "$OPENBAO_RECONCILE_POLICY_LIVE")
+    <(printf '%s\n' "$OPENBAO_RECONCILE_POLICY_RENDERED")
+  args:
+    executable: /bin/bash
+  environment:
+    OPENBAO_RECONCILE_POLICY_LIVE: "{{ openbao_reconcile_policy_live_text }}"
+    OPENBAO_RECONCILE_POLICY_RENDERED: "{{ openbao_reconcile_policy_rendered_text }}"
+  # Local text diff only: no OpenBao call, so it runs on the controller, not through the openbao_cli_* switch.
+  delegate_to: localhost
+  become: false
+  register: openbao_reconcile_policy_diff
+  check_mode: false
+  changed_when: false
+  failed_when: openbao_reconcile_policy_diff.rc not in [0, 1]
+  when: openbao_reconcile_policy_live_text != openbao_reconcile_policy_rendered_text
+
+- name: Show the reconcile policy diff in check mode
+  ansible.builtin.debug:
+    msg: "{{ openbao_reconcile_policy_diff.stdout }}"
+  when:
+    - openbao_reconcile_policy_diff is defined
+    - (openbao_reconcile_policy_diff.rc | default(0)) == 1
