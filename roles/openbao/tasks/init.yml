@@ -159,6 +159,13 @@
   tags:
     - openbao_rbac
 
+- name: Reconcile selected GitHub permission sets
+  ansible.builtin.import_tasks: init/05-github-permission-sets.yml
+  tags:
+    - openbao_rbac
+  when:
+    - "'github_permission_sets' in (openbao_select | default({}))"
+
 - name: Reconcile the two human-gated AppRole policy attachments
   ansible.builtin.import_tasks: init/08c-human-gated-approle-policies.yml
   tags:

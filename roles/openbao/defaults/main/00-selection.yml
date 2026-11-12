@@ -18,6 +18,11 @@ openbao_select_profiles:
     prefix: "{{ openbao_ssh_mount }}/roles/"
     suffixes: [""]
     capability: update
+  github_permission_sets:
+    candidates: "{{ openbao_github_admin_permission_sets }}"
+    prefix: "{{ openbao_github_mount }}/permissionset/"
+    suffixes: [""]
+    capability: update
   rotation_exempt:
     candidates: "{{ openbao_rotation_exempt | map('community.general.dict_kv', 'name') | list }}"
     prefix: ""
