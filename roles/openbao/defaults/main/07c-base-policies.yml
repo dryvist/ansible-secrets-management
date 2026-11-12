@@ -200,6 +200,8 @@ openbao_base_policies_static:
     template: github-exporter-policy.hcl.j2
   - name: "{{ openbao_github_docs_publisher_policy_name }}"
     template: github-docs-publisher-policy.hcl.j2
+  - name: "{{ openbao_github_pr_reconcile_policy_name }}"
+    template: pr-reconcile-sweep-policy.hcl.j2
   - name: "{{ openbao_github_ci_resolver_policy_name }}"
     template: github-ci-resolver-policy.hcl.j2
   - name: "{{ openbao_github_git_mirror_policy_name }}"

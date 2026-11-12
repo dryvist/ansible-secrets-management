@@ -1,0 +1,30 @@
+---
+# The fleet PR reconcile workflow authenticates through GitHub Actions OIDC;
+# it carries no stored runner credential.
+openbao_github_pr_reconcile_policy_name: pr-reconcile-sweep
+openbao_github_pr_reconcile_audience: openbao
+openbao_github_pr_reconcile_repository: JacobPEvans/.github-ai
+openbao_github_pr_reconcile_job_workflow_ref: >-
+  JacobPEvans/.github-ai/.github/workflows/pr-reconcile.yml@refs/heads/main
+openbao_github_pr_reconcile_ref: refs/heads/main
+openbao_github_pr_reconcile_event_names: [schedule, workflow_dispatch]
+openbao_github_pr_reconcile_runner_environment: self-hosted
+openbao_github_pr_reconcile_token_ttl: 5m
+openbao_github_pr_reconcile_token_max_ttl: 10m
+
+# Owners whose everyday-App installation the sweep may mint for, by name.
+openbao_pr_reconcile_owners:
+  - JacobPEvans
+  - JacobPEvans-ai
+  - jpe-nix
+  - jpe-private
+  - jpe-ansible
+  - jpe-cribl
+  - jpe-splunk
+  - jpe-openbao-plugin-secrets
+
+openbao_github_pr_reconcile_permissions:
+  contents: write
+  issues: write
+  pull_requests: write
+  statuses: write
