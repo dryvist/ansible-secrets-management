@@ -178,6 +178,12 @@
         domain_apply_roles | map(attribute='token_policies')
         | select('contains', 'ssh-sign-automation-ai') | list
         | length == (domain_apply_roles | length)
+      # the declared cross-domain ai-apply-all rollup (07f) composes the
+      # ssh-sign attribution leaf too, so dropping that attachment fails
+      # here as well.
+      - >-
+        'ssh-sign-automation-ai' in
+        (apply_roles | selectattr('name', 'equalto', 'ai-apply-all') | first).token_policies
       # the declared ai-apply-unifi composes no attribution leaves by design,
       # so it must sign nothing at all.
       - >-
@@ -190,6 +196,7 @@
         | map('list') | flatten | length == 0
     fail_msg: >-
       SSH signing attachment drifted from the security decisions
-      (ai-elevated and the domain-generated ai-apply-* sign only
-      automation-ai, the declared ai-apply-unifi signs nothing; readonly
-      none; ansible-converge only automation-ansible).
+      (ai-elevated and every ai-apply-* role that signs — the
+      domain-generated ones and ai-apply-all — carry only
+      ssh-sign-automation-ai, the declared ai-apply-unifi signs nothing;
+      readonly none; ansible-converge only automation-ansible).
