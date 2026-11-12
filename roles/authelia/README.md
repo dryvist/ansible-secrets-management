@@ -77,9 +77,9 @@ environment to those lookups. ansible-proxmox-apps sets both flags in its
   at `secret/apps/authelia-signing` in OpenBao (`authelia_service_secrets_kv_path`),
   apart from the OIDC client secrets at `secret/apps/authelia`. A system that
   reads a client secret never reaches the key that signs Authelia's tokens, and
-  the AI global-read tier is denied this leaf. The shared `seed_generated` task seeds
-  any missing field with the converge token from the controller, and it never
-  replaces a stored field. A guest copy in the secrets directory is fed to the
+  the AI global-read tier is denied this leaf. The shared `seed_generated` task
+  seeds any missing field through the dedicated `authelia-signing-writer`
+  AppRole on the controller and never replaces a stored field. A guest copy in the secrets directory is fed to the
   process via `AUTHELIA_*_FILE` env vars in the systemd unit, and is never
   rendered into config. A missing copy is written from OpenBao. A copy that
   differs from OpenBao fails the converge and changes nothing. The storage

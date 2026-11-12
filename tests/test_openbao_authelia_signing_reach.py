@@ -24,7 +24,7 @@ from test_openbao_hatchet_killtest_policy_reach import (
 ROLE = Path(__file__).resolve().parents[1] / "roles/openbao"
 DATA = "secret/data/apps/authelia-signing"
 # Break-glass and human-unlocked identities, the human operator, and the apps/*
-# writers (the seed writer, apps seed and rotation). No standing AI reader:
+# writers (the Authelia signing writer, apps seed and rotation). No standing AI reader:
 # ai-readonly and ai-elevated carry ai-global-read, whose deny on this leaf
 # overrides read-apps. The standing CI deploy identity is denied explicitly.
 READERS = {
@@ -34,7 +34,6 @@ READERS = {
     "ai-apply-all",
     "ai-apply-apps",
     "apps-rotate",
-    "ansible-converge-writer",
     "apps-seed",
     "operator-workstation",
 }
@@ -52,6 +51,7 @@ def _policies(role):
 def reach_by_approle():
     with mock.patch.dict(os.environ, REQUIRED_ENV):
         variables = role_defaults()
+        writer_name = variables["openbao_authelia_signing_writer_approle_name"]
         approles = render(variables, "{{ openbao_approles }}")
         rendered = {
             policy["name"]: render(
@@ -86,28 +86,30 @@ def reach_by_approle():
     finally:
         server.terminate()
         server.wait(timeout=30)
-    return caps, policy_caps
+    return caps, policy_caps, writer_name
 
 
 def test_the_approles_that_can_read_the_signing_key_are_exact(reach_by_approle):
-    caps, _ = reach_by_approle
+    caps, _, writer_name = reach_by_approle
     readers = {name for name, held in caps.items() if "read" in held or "root" in held}
-    assert readers == READERS
+    assert readers == READERS | {writer_name}
 
 
-def test_the_seed_writer_holds_exactly_create_read_update_on_the_signing_key(reach_by_approle):
-    caps, _ = reach_by_approle
-    assert caps["ansible-converge-writer"] == ["create", "read", "update"]
+def test_the_authelia_signing_writer_holds_exactly_create_read_update_on_the_signing_key(
+    reach_by_approle,
+):
+    caps, _, writer_name = reach_by_approle
+    assert caps[writer_name] == ["create", "read", "update"]
 
 
 def test_no_standing_ai_reader_reaches_the_signing_key(reach_by_approle):
-    caps, _ = reach_by_approle
+    caps, _, _writer_name = reach_by_approle
     for name in ("ai-readonly", "ai-elevated", "ai-orchestrator", "semaphore", "ansible-converge"):
         assert caps[name] == ["deny"], name
 
 
 def test_client_secret_readers_cannot_reach_the_signing_key(reach_by_approle):
-    _, policy_caps = reach_by_approle
+    _, policy_caps, _writer_name = reach_by_approle
     for name in CLIENT_SECRET_READERS:
         assert policy_caps[name] == ["deny"], name
 
@@ -115,5 +117,5 @@ def test_client_secret_readers_cannot_reach_the_signing_key(reach_by_approle):
 def test_the_standing_ci_deploy_identity_is_denied_the_signing_key(reach_by_approle):
     # iac-platform-deploy reads apps/* through read-apps, so it holds a client-secret
     # read on the same leaf family. Denied at the AppRole's full policy list.
-    caps, _ = reach_by_approle
+    caps, _, _writer_name = reach_by_approle
     assert caps["iac-platform-deploy"] == ["deny"]

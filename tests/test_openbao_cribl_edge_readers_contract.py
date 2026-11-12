@@ -274,6 +274,7 @@ class CriblEdgeReaderContract(unittest.TestCase):
             "05b-domain-policy-approle-names.yml",
             "05c-terrakube-and-remaining-domain-names.yml",
             "05c-ai-agent-names.yml",
+            "05h-cribl-edge-readers.yml",
             "07a-derived-rollups-and-ttls.yml",
             "05-ssh-ca-engine.yml",
         ):

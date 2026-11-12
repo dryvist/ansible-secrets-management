@@ -333,14 +333,11 @@ def test_no_other_approle_carries_the_issuer_policy():
     assert carriers == [name]
 
 
-def test_shared_writer_keeps_its_pre_issuer_policies():
+def test_shared_writer_keeps_only_its_converge_policy():
     writer = _rendered("openbao_ansible_converge_writer_approle_name", dify_cidr="")
     parameters = _rendered("openbao_approle_cli_parameters", dify_cidr="")
     policies = parameters[writer]["token_policies"].split(",")
-    assert policies == [
-        _rendered("openbao_ansible_converge_policy_name", dify_cidr=""),
-        _rendered("openbao_authelia_signing_writer_policy_name", dify_cidr=""),
-    ]
+    assert policies == [_rendered("openbao_ansible_converge_policy_name", dify_cidr="")]
     policy_name = _rendered(
         "openbao_seed_writer_dify_secret_id_issuer_policy_name", dify_cidr=""
     )

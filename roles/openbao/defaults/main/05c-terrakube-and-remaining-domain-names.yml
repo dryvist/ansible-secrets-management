@@ -271,6 +271,7 @@ openbao_secrets_domain_approle_names: >-
       openbao_github_ci_resolver_approle_name,
       openbao_github_git_mirror_approle_name,
       openbao_openhands_approle_name,
+      openbao_authelia_signing_writer_approle_name,
       openbao_ansible_converge_writer_approle_name]
      + ([openbao_dify_secret_id_issuer_approle_name]
         if openbao_dify_secret_id_issuer_targets | length > 0 else []) }}

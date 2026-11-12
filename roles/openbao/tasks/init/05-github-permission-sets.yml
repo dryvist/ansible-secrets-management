@@ -1,0 +1,187 @@
+---
+- name: Select GitHub permission set objects
+  ansible.builtin.import_tasks: select-objects.yml
+  vars:
+    openbao_select_kind: github_permission_sets
+    openbao_select_candidates: "{{ openbao_github_admin_permission_sets }}"
+
+- name: Keep the selected GitHub permission set objects
+  ansible.builtin.set_fact:
+    openbao_github_permission_set_targets: "{{ openbao_object_targets }}"
+
+# Full runs validate every map; selective runs validate the selected tiers.
+- name: Assert the repo-create permission map is exactly administration:write
+  ansible.builtin.assert:
+    that:
+      - openbao_github_repo_create_permissions.keys() | list == ['administration']
+      - openbao_github_repo_create_permissions.administration == 'write'
+    fail_msg: >-
+      openbao_github_repo_create_permissions must be exactly
+      {administration: write}. Widening it defeats the narrow-tier design —
+      a token minted from this set must never gain contents/pull_requests
+      (push) or any other permission; add a new tier instead of broadening
+      this one.
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_github_engine_enabled | bool
+    - >-
+      openbao_select | default({}) | length == 0
+      or 'repo-create' in (openbao_github_permission_set_targets | map(attribute='tier', default='') | list)
+
+- name: Assert the CI resolver permission map is exactly its four write permissions
+  ansible.builtin.assert:
+    that:
+      - openbao_github_ci_resolver_permissions.keys() | list == ['actions', 'checks', 'contents', 'pull_requests']
+      - openbao_github_ci_resolver_permissions.actions == 'write'
+      - openbao_github_ci_resolver_permissions.checks == 'write'
+      - openbao_github_ci_resolver_permissions.contents == 'write'
+      - openbao_github_ci_resolver_permissions.pull_requests == 'write'
+    fail_msg: >-
+      openbao_github_ci_resolver_permissions must be exactly
+      {actions: write, checks: write, contents: write, pull_requests: write};
+      add a new tier instead of widening this one.
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_github_engine_enabled | bool
+    - >-
+      openbao_select | default({}) | length == 0
+      or 'ci-resolver' in (openbao_github_permission_set_targets | map(attribute='tier', default='') | list)
+
+- name: Assert the OpenHands permission map is exactly its four permissions
+  ansible.builtin.assert:
+    that:
+      - openbao_github_openhands_permissions.keys() | list == ['checks', 'contents', 'metadata', 'pull_requests']
+      - openbao_github_openhands_permissions.checks == 'read'
+      - openbao_github_openhands_permissions.contents == 'write'
+      - openbao_github_openhands_permissions.metadata == 'read'
+      - openbao_github_openhands_permissions.pull_requests == 'write'
+    fail_msg: >-
+      openbao_github_openhands_permissions must be exactly
+      {checks: read, contents: write, metadata: read, pull_requests: write};
+      add a new tier instead of widening this one.
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_github_engine_enabled | bool
+    - >-
+      openbao_select | default({}) | length == 0
+      or 'openhands' in (openbao_github_permission_set_targets | map(attribute='tier', default='') | list)
+
+- name: Assert the org-admin permission map is exactly organization_administration:write
+  ansible.builtin.assert:
+    that:
+      - openbao_github_org_admin_permissions.keys() | list == ['organization_administration']
+      - openbao_github_org_admin_permissions.organization_administration == 'write'
+    fail_msg: >-
+      openbao_github_org_admin_permissions must be exactly
+      {organization_administration: write}; add a new tier instead of
+      broadening this one.
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_github_engine_enabled | bool
+    - >-
+      openbao_select | default({}) | length == 0
+      or 'org-admin' in (openbao_github_permission_set_targets | map(attribute='tier', default='') | list)
+
+- name: Assert the org-secrets permission map is exactly organization_secrets:write
+  ansible.builtin.assert:
+    that:
+      - openbao_github_org_secrets_permissions.keys() | list == ['organization_secrets']
+      - openbao_github_org_secrets_permissions.organization_secrets == 'write'
+    fail_msg: >-
+      openbao_github_org_secrets_permissions must be exactly
+      {organization_secrets: write}; add a new tier instead of broadening it.
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_github_engine_enabled | bool
+    - >-
+      openbao_select | default({}) | length == 0
+      or 'org-secrets' in (openbao_github_permission_set_targets | map(attribute='tier', default='') | list)
+
+# init/02 resolves this run's token, including the per-call reconcile token,
+# into openbao_bootstrap_token. Only a 404 establishes that a set is missing.
+- name: Read the GitHub token permission sets
+  ansible.builtin.uri:
+    url: "{{ openbao_cli_addr }}/v1/{{ openbao_github_mount }}/permissionset/{{ item.name }}"
+    method: GET
+    headers:
+      X-Vault-Token: "{{ openbao_bootstrap_token }}"
+    status_code: [200, 404]
+    follow_redirects: none
+    use_proxy: false
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
+  loop: "{{ openbao_github_permission_set_targets }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: openbao_github_permission_set_checks
+  no_log: true
+  changed_when: false
+  check_mode: false
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_github_engine_enabled | bool
+
+- name: Resolve GitHub permission sets that are missing or changed
+  ansible.builtin.set_fact:
+    openbao_github_permission_set_changes: >-
+      {%- set changes = [] -%}
+      {%- for result in openbao_github_permission_set_checks.results | default([]) -%}
+      {%- set live = (result.json | default({})).get('data', {}) -%}
+      {%- if result.status == 404
+         or (live.installation_id | int) != (result.item.installation_id | int)
+         or (live.permissions | default({}, true)) != (result.item.permissions | default({}, true))
+         or (live.repositories | default([], true)) != (result.item.repositories | default([], true)) -%}
+      {%- set _ = changes.append(result.item) -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {{ changes }}
+  no_log: true
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_github_engine_enabled | bool
+
+- name: Report GitHub permission sets that would be written in check mode
+  ansible.builtin.debug:
+    msg: >-
+      {{ ('Would write GitHub permission sets: ' ~
+          (openbao_github_permission_set_changes | map(attribute='name') | join(', ')))
+         if openbao_github_permission_set_changes | length > 0
+         else 'No GitHub permission set writes are needed.' }}
+  when:
+    - ansible_check_mode
+    - openbao_bootstrap_token is defined
+    - openbao_github_engine_enabled | bool
+
+# An omitted permissions map preserves the App ceiling on admin-tier sets;
+# an omitted repository list means every repository of the installation.
+- name: Reconcile the GitHub token permission sets
+  ansible.builtin.uri:
+    url: "{{ openbao_cli_addr }}/v1/{{ openbao_github_mount }}/permissionset/{{ item.name }}"
+    method: POST
+    headers:
+      X-Vault-Token: "{{ openbao_bootstrap_token }}"
+    body_format: json
+    body: >-
+      {{ {'installation_id': item.installation_id | int}
+         | combine({'permissions': item.permissions}
+                   if item.permissions is defined else {})
+         | combine({'repositories': item.repositories}
+                   if item.repositories is defined else {}) }}
+    status_code: [200, 204]
+    follow_redirects: none
+    use_proxy: false
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
+  loop: "{{ openbao_github_permission_set_changes | default([]) }}"
+  loop_control:
+    label: "{{ item.name }}"
+  no_log: true
+  changed_when: true
+  when:
+    - not ansible_check_mode
+    - openbao_bootstrap_token is defined
+    - openbao_github_engine_enabled | bool

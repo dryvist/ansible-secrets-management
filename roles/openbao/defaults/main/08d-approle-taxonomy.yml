@@ -21,6 +21,7 @@ openbao_approle_class_map: >-
     'agent-workstation': 'trusted-agent-read',
     'ansible-converge': 'converge-automation',
     'ansible-converge-writer': 'converge-automation',
+    'authelia-signing-writer': 'converge-automation',
     'apps': 'service-runtime',
     'apps-rotate': 'converge-automation',
     'apps-seed': 'converge-automation',

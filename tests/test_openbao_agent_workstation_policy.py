@@ -27,6 +27,7 @@ READS = (
     "secret/data/ai/mcp/zammad",
     "secret/data/ai/youtrack",
     "secret/data/ai/dify/agent-apps/test-app",
+    "secrets-external/data/slack/claude-reader/ro",
 )
 DENIED_READS = (
     "secret/data/ai/hermes",
@@ -34,6 +35,8 @@ DENIED_READS = (
     "secret/data/ai/mcp/hermes",
     "secret/data/apps/sandbox-agent",
     "secret/data/apps/youtrack",
+    "secrets-external/data/slack/claude-reader/rw",
+    "secrets-external/metadata/slack/claude-reader/ro",
 )
 DENIED_WRITES = READS + (
     "secret/data/ai/hermes/embedding",
@@ -103,6 +106,7 @@ def test_rendered_agent_workstation_policy_contains_only_its_exact_reads():
         ("secret/data/ai/mcp/zammad", '["read"]'),
         ("secret/data/ai/youtrack", '["read"]'),
         ("secret/data/ai/dify/agent-apps/*", '["read"]'),
+        ("secrets-external/data/slack/claude-reader/ro", '["read"]'),
     ]
 
 
@@ -138,17 +142,19 @@ def agent_workstation_token():
         status, body = _call(base, "root", "GET", "sys/mounts")
         assert status == 200
         mounts = json.loads(body)["data"]
-        if "secret/" not in mounts:
-            status, _ = _call(
-                base,
-                "root",
-                "POST",
-                "sys/mounts/secret",
-                {"type": "kv", "options": {"version": "2"}},
-            )
-            assert status == 204
-        else:
-            assert mounts["secret/"]["options"].get("version") == "2"
+        for mount in ("secret", "secrets-external"):
+            mount_path = f"{mount}/"
+            if mount_path not in mounts:
+                status, _ = _call(
+                    base,
+                    "root",
+                    "POST",
+                    f"sys/mounts/{mount}",
+                    {"type": "kv", "options": {"version": "2"}},
+                )
+                assert status == 204
+            else:
+                assert mounts[mount_path]["options"].get("version") == "2"
 
         status, body = _call(base, "root", "GET", "sys/auth")
         assert status == 200
@@ -191,6 +197,8 @@ def agent_workstation_token():
         assert status == 204
 
         for path in READS + DENIED_READS:
+            if "/metadata/" in path:
+                continue
             status, _ = _call(
                 base,
                 "root",

@@ -54,8 +54,11 @@ including rolling expansion and seal-key rotation, are in
 (`*`, `?`, and bracket ranges). Its default `{}` keeps full-set behavior.
 The retired `openbao_rbac_policy_name` and `openbao_approle_config_name` inputs still
 select one object. Passing either beside `openbao_select` fails the run.
-Supported kinds are `policies`, `approles`, `ssh_roles`, and `rotation_exempt`.
-Rotation-exempt names use the declared `mount:path` form. Every selector must
+Supported kinds are `policies`, `approles`, `ssh_roles`,
+`github_permission_sets`, and `rotation_exempt`.
+GitHub permission-set names come from `openbao_github_admin_permission_sets`
+on `openbao_github_mount`. Rotation-exempt names use the declared `mount:path`
+form. Every selector must
 match a declared, manageable object. Names are printed before phase writes.
 `openbao_select_max` caps the combined resolved set across kinds at 25 by
 default; set a larger positive integer for a larger reviewed batch.
@@ -65,6 +68,10 @@ deletes and credential issuance are skipped. Policy templates render only for
 selected policies. Global collision, undeclared-role, and CIDR checks retain the
 full declared set.
 AppRole selection changes only config, policy attachments, and bounds.
+GitHub permission-set selection runs with `openbao_rbac` or `openbao` tags and
+uses the run's own identity. In check mode, `Would write GitHub permission sets:`
+lists only selected sets that are missing or differ from live. A real run writes
+those selected changes.
 Reconcile mode requires both a manageable declaration and a live capability
 grant for every selected write endpoint before phase writes. A protected or
 ungranted selection fails with its name and requires the human-gated path.
@@ -74,7 +81,8 @@ Engine and auth setup also write mounts, keys, and shared configuration;
 credential issuance also publishes credentials. Those phases, human-gated
 AppRole attachment updates, policy sync, and the singleton disclosure metadata
 declaration run only in full-set mode. SSH engine and CA setup likewise stay
-in full-set mode; SSH signing-role objects remain selectable.
+in full-set mode; SSH signing-role and GitHub permission-set objects remain
+selectable.
 
 Roster collision checks compare AppRole policy attachments through per-field
 reads with the declared policy parameter; reconcile retains the write bounds.
