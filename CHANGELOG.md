@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.100.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.99.0...v0.100.0) (2026-11-12)
+
+
+### Features
+
+* **openbao:** add Dify PR automation GitHub mint sets ([#656](https://github.com/dryvist/ansible-secrets-management/issues/656)) ([fd53e8d](https://github.com/dryvist/ansible-secrets-management/commit/fd53e8df0e445a07365a40212aa58b847139fd5a))
+* **openbao:** seed generated Crawl4AI API token ([#657](https://github.com/dryvist/ansible-secrets-management/issues/657)) ([4f1c1e5](https://github.com/dryvist/ansible-secrets-management/commit/4f1c1e53956dac3d085d6f888259e97a53845a72))
+
 ## [0.99.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.98.0...v0.99.0) (2026-11-12)
 
 
