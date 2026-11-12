@@ -1,14 +1,14 @@
 ---
-# The scheduled local eval benchmark's OIDC identity (dryvist/llm-prompt-evals,
+# The scheduled local eval benchmark's OIDC identity (JacobPEvans-ai/llm-prompt-evals,
 # .github/workflows/scheduled-local-benchmark.yml). Three independent bounds:
-# repository stops any other repository, job_workflow_ref stops any other
-# workflow in that repository, and ref stops branch and pull-request runs —
+# repository stops any other repository, workflow_ref (the top-level
+# workflow's claim) stops any other workflow in that repository, and ref stops branch and pull-request runs —
 # the builds a fork's contributor controls — so only the default-branch
 # schedule can log in.
 openbao_ci_evals_policy_name: ci-evals
-openbao_ci_evals_repository: dryvist/llm-prompt-evals
-openbao_ci_evals_job_workflow_ref: >-
-  dryvist/llm-prompt-evals/.github/workflows/scheduled-local-benchmark.yml@refs/heads/develop
+openbao_ci_evals_repository: JacobPEvans-ai/llm-prompt-evals
+openbao_ci_evals_workflow_ref: >-
+  JacobPEvans-ai/llm-prompt-evals/.github/workflows/scheduled-local-benchmark.yml@refs/heads/develop
 openbao_ci_evals_ref: refs/heads/develop
 openbao_ci_evals_audience: openbao
 openbao_ci_evals_token_ttl: 5m

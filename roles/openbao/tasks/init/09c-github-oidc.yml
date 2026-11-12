@@ -320,7 +320,8 @@
 
 # The scheduled local eval benchmark: one repository, one workflow file, one
 # ref. repository confines the role to the eval source repository,
-# job_workflow_ref to its benchmark workflow, and ref to the default branch —
+# workflow_ref (the top-level workflow's claim) to its benchmark workflow,
+# and ref to the default branch —
 # excluding the branch and pull-request builds a fork's contributor controls.
 - name: Read the ci-evals OIDC role
   ansible.builtin.command:
@@ -346,7 +347,7 @@
     ansible_become: "{{ openbao_cli_become }}"
     _ci_evals_role_claims:
       repository: "{{ openbao_ci_evals_repository }}"
-      job_workflow_ref: "{{ openbao_ci_evals_job_workflow_ref }}"
+      workflow_ref: "{{ openbao_ci_evals_workflow_ref }}"
       ref: "{{ openbao_ci_evals_ref }}"
     _ci_evals_role_live: >-
       {{ (openbao_github_oidc_ci_evals_role_current.stdout | default('{}') | from_json).data
@@ -360,7 +361,7 @@
       auth/{{ openbao_github_oidc_auth_path }}/role/{{ openbao_ci_evals_policy_name }} -
     stdin: >-
       {{ {'role_type': 'jwt',
-            'user_claim': 'job_workflow_ref',
+            'user_claim': 'workflow_ref',
             'bound_audiences': [openbao_ci_evals_audience],
             'bound_claims': _ci_evals_role_claims,
             'bound_claims_type': 'string',
@@ -385,7 +386,7 @@
       or (_ci_evals_role_live.bound_claims_type | default(''))
          != 'string'
       or (_ci_evals_role_live.user_claim | default(''))
-         != 'job_workflow_ref'
+         != 'workflow_ref'
       or (_ci_evals_role_live.token_policies | default([]) | sort)
          != [openbao_ci_evals_policy_name]
       or (_ci_evals_role_live.token_ttl | default(0) | int)
