@@ -1,5 +1,6 @@
 """Selection confines object loops and suppresses cross-object writes."""
 
+import pytest
 import yaml
 
 from test_openbao_select import ROLE, condition, render, task
@@ -16,7 +17,11 @@ def selection_gate(task_node, selection):
     return condition(gate, {"openbao_select": selection})
 
 
-def test_all_cross_object_phases_are_skipped_in_selective_mode():
+@pytest.mark.parametrize("selection", [
+    {"policies": ["apps"]},
+    {"github_permission_sets": ["jacobpevans-ai-org-secrets"]},
+])
+def test_all_cross_object_phases_are_skipped_in_selective_mode(selection):
     imports = {
         "init/03-kv-mounts-and-seed-secrets.yml",
         "init/04-aws-engine.yml", "init/04b-azure-engine.yml",
@@ -35,12 +40,16 @@ def test_all_cross_object_phases_are_skipped_in_selective_mode():
             imported = imported["file"]
         if imported in imports:
             found.add(imported)
-            assert not selection_gate(node, {"policies": ["apps"]})
+            assert not selection_gate(node, selection)
             assert selection_gate(node, {})
     assert found == imports
 
 
-def test_selective_mode_suppresses_policy_sync_and_cleanup():
+@pytest.mark.parametrize("selection", [
+    {"approles": ["apps"]},
+    {"github_permission_sets": ["jacobpevans-ai-org-secrets"]},
+])
+def test_selective_mode_suppresses_policy_sync_and_cleanup(selection):
     paths_and_names = [
         ("02b-policy-sync.yml", "Sync the reconcile policy from the declared set (policy-sync)"),
         ("08b-rbac-policy-writes.yml", "Delete retired RBAC policies that still exist"),
@@ -50,7 +59,7 @@ def test_selective_mode_suppresses_policy_sync_and_cleanup():
     ]
     for filename, name in paths_and_names:
         node = task(name, ROLE / "tasks/init" / filename)
-        assert not selection_gate(node, {"approles": ["apps"]})
+        assert not selection_gate(node, selection)
         assert selection_gate(node, {})
 
 

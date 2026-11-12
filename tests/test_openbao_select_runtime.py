@@ -102,7 +102,7 @@ def test_retired_input_beside_a_different_selection_is_refused(tmp_path, selecti
     assert "TASK [Assert the selected targets]" not in output
 
 
-def _run_selection(tmp_path, inputs, cap, expected, role_inputs=False):
+def _run_selection(tmp_path, inputs, cap, expected, role_inputs=False, profiles=None):
     collection_root = tmp_path / "collections"
     namespace = collection_root / "ansible_collections/dryvist"
     namespace.mkdir(parents=True)
@@ -130,7 +130,7 @@ def _run_selection(tmp_path, inputs, cap, expected, role_inputs=False):
     variables = {
         **inputs, "openbao_select_max": cap, "expected": expected,
         "openbao_cli_host": "localhost",
-        "openbao_select_profiles": {
+        "openbao_select_profiles": profiles if profiles is not None else {
             "policies": {"candidates": [{"name": "apps"}, {"name": "read-apps"}]},
             "approles": {"candidates": [{"name": "backup"}]},
         },
@@ -142,6 +142,24 @@ def _run_selection(tmp_path, inputs, cap, expected, role_inputs=False):
         text=True, capture_output=True, timeout=60, check=False,
     )
     return result.stdout + result.stderr, result.returncode
+
+
+def test_github_permission_set_selection_leaves_every_other_kind_empty(tmp_path):
+    selected_name = "jacobpevans-ai-org-secrets"
+    profiles = {
+        kind: {"candidates": [{"name": "unselected"}]}
+        for kind in ("policies", "approles", "ssh_roles", "rotation_exempt")
+    }
+    profiles["github_permission_sets"] = {
+        "candidates": [{"name": selected_name}, {"name": "another-org-secrets"}],
+    }
+    expected = {kind: [] for kind in profiles}
+    expected["github_permission_sets"] = [{"name": selected_name}]
+    output, returncode = _run_selection(
+        tmp_path, {"openbao_select": {"github_permission_sets": [selected_name]}},
+        25, expected, profiles=profiles,
+    )
+    assert returncode == 0, output
 
 
 def test_policy_render_is_scoped_before_templates_are_evaluated(tmp_path):
