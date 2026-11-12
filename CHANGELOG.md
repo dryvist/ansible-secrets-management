@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.97.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.96.0...v0.97.0) (2026-11-12)
+
+
+### Features
+
+* **openbao:** deliver the QwenCloud key to the router role ([#644](https://github.com/dryvist/ansible-secrets-management/issues/644)) ([58ebcdf](https://github.com/dryvist/ansible-secrets-management/commit/58ebcdfe5e5e6697103ace508271772bc3a50e02))
+
+
+### Bug Fixes
+
+* **openbao:** use the declared secret_id_bound_cidrs for each AppRole ([#631](https://github.com/dryvist/ansible-secrets-management/issues/631)) ([e8ec3c9](https://github.com/dryvist/ansible-secrets-management/commit/e8ec3c9822d40311f58abf1059bc3eaeb3753297))
+
 ## [0.96.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.95.2...v0.96.0) (2026-11-11)
 
 
