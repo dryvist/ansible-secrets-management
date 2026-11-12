@@ -132,8 +132,9 @@ def test_every_apps_domain_path_is_granted_to_the_apps_reader():
 @pytest.mark.parametrize("app,field", [
     ("langflow", "langflow_llm_router_key"),
     ("grafana-llm", "grafana_llm_router_key"),
+    ("crawl4ai", "crawl4ai_api_token"),
 ])
-def test_generated_router_apps_have_exact_read_only_grants(app, field):
+def test_generated_apps_have_exact_read_only_grants(app, field):
     names = _yaml(NAMES_FILE)
     assert _yaml(GENERATED_FILE)["openbao_generated_app_secrets"][app] == [field]
     assert app not in names["openbao_apps_read_published_apps"]
@@ -149,6 +150,11 @@ def test_generated_router_apps_have_exact_read_only_grants(app, field):
         (f"secret/data/apps/{app}", ("read",)),
         (f"secret/metadata/apps/{app}", ("read", "list")),
     }
+    assert not any(
+        path.startswith(("secret/data/apps/", "secret/metadata/apps/"))
+        and ("*" in path or "+" in path)
+        for path, _ in grants
+    )
 
 
 def test_grafana_service_bucket_stays_outside_the_apps_reader():
