@@ -14,8 +14,8 @@ openbao_seed_writer_approles: >-
       {'name': openbao_authelia_signing_writer_approle_name,
        'token_policies': [openbao_authelia_signing_writer_policy_name],
        'token_type': 'batch',
-       'token_ttl': openbao_approle_token_max_ttl,
-       'token_max_ttl': openbao_approle_token_max_ttl,
+       'token_ttl': '10m',
+       'token_max_ttl': '10m',
        'secret_id_num_uses': 0}]
      + ([{'name': openbao_dify_secret_id_issuer_approle_name,
           'token_policies': [openbao_seed_writer_dify_secret_id_issuer_policy_name],
