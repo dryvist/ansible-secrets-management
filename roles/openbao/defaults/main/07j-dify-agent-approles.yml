@@ -1,5 +1,6 @@
 ---
-# Dify authenticates on every workflow run with one reusable SecretID held as a Dify secret.
+# The existing Dify agents use a reusable SecretID held as a Dify secret. The
+# PR-automation agents use a one-use SecretID issued for each call.
 # The dedicated issuer AppRole (07i, dify-agent-secret-id-issuer) holds the
 # seed-writer-dify-secret-id-issuer policy that mints it; this role does not mint or store it.
 # Do not create any of these roles without its host CIDR.
@@ -32,6 +33,24 @@ openbao_dify_agent_approles: >-
         'policy': openbao_dify_agent_docs_updater_policy_name,
         'secret_id_bound_cidrs': openbao_dify_agent_cidrs,
         'secret_id_ttl': '720h', 'secret_id_num_uses': 0,
+        'token_ttl': '15m', 'token_max_ttl': '15m',
+        'manage_secret_id': false},
+       {'name': openbao_dify_agent_pr_keeper_approle_name,
+        'policy': openbao_dify_agent_pr_keeper_policy_name,
+        'secret_id_bound_cidrs': openbao_dify_agent_cidrs,
+        'secret_id_ttl': '720h', 'secret_id_num_uses': 1,
+        'token_ttl': '15m', 'token_max_ttl': '15m',
+        'manage_secret_id': false},
+       {'name': openbao_dify_agent_github_clerk_approle_name,
+        'policy': openbao_dify_agent_github_clerk_policy_name,
+        'secret_id_bound_cidrs': openbao_dify_agent_cidrs,
+        'secret_id_ttl': '720h', 'secret_id_num_uses': 1,
+        'token_ttl': '15m', 'token_max_ttl': '15m',
+        'manage_secret_id': false},
+       {'name': openbao_dify_agent_merge_steward_approle_name,
+        'policy': openbao_dify_agent_merge_steward_policy_name,
+        'secret_id_bound_cidrs': openbao_dify_agent_cidrs,
+        'secret_id_ttl': '720h', 'secret_id_num_uses': 1,
         'token_ttl': '15m', 'token_max_ttl': '15m',
         'manage_secret_id': false}]
      if openbao_dify_agent_cidrs | length > 0 else []) }}

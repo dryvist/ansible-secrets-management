@@ -161,11 +161,23 @@
         semaphore_role.token_policies | select('match', '^ssh-sign-')
         | reject('equalto', 'ssh-sign-automation-semaphore')
         | list | length == 0
-      # every ai-apply-<svc> signs ONLY automation-ai.
+      # every ai-apply-<svc> minted from openbao_ai_domains, and the
+      # cross-domain ai-apply-all rollup, sign ONLY automation-ai; every
+      # other declared apply role carries NO ssh-sign policy at all.
       - >-
-        apply_roles | map(attribute='token_policies')
+        apply_roles | selectattr('name', 'in',
+        (openbao_ai_domains | map('regex_replace', '^', 'ai-apply-') | list)
+        + ['ai-apply-all'])
+        | map(attribute='token_policies')
         | select('contains', 'ssh-sign-automation-ai') | list
-        | length == (apply_roles | length)
+        | length == (openbao_ai_domains | length) + 1
+      - >-
+        apply_roles | rejectattr('name', 'in',
+        (openbao_ai_domains | map('regex_replace', '^', 'ai-apply-') | list)
+        + ['ai-apply-all'])
+        | map(attribute='token_policies')
+        | map('select', 'match', '^ssh-sign-')
+        | map('list') | flatten | length == 0
       - >-
         apply_roles | map(attribute='token_policies')
         | map('select', 'match', '^ssh-sign-')
@@ -173,5 +185,6 @@
         | map('list') | flatten | length == 0
     fail_msg: >-
       SSH signing attachment drifted from the security decisions
-      (ai-elevated/apply sign only automation-ai; readonly none;
+      (ai-elevated and the generated ai-apply-* sign only automation-ai;
+      every other declared ai-apply-* role signs nothing; readonly none;
       ansible-converge only automation-ansible).

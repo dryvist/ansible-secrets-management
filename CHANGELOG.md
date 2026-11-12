@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.99.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.98.0...v0.99.0) (2026-11-12)
+
+
+### Features
+
+* **openbao:** add selective GitHub permission-set runs ([#651](https://github.com/dryvist/ansible-secrets-management/issues/651)) ([363a711](https://github.com/dryvist/ansible-secrets-management/commit/363a711a7440b91dc134a66d24c3515539821efe))
+* **openbao:** tiered unifi controller credential access ([#601](https://github.com/dryvist/ansible-secrets-management/issues/601)) ([c0009f4](https://github.com/dryvist/ansible-secrets-management/commit/c0009f4126bb8a7ab5d4676b199dd8affec0e59a))
+
+
+### Bug Fixes
+
+* **authelia:** cap the signing-writer token at 10m and log in under check mode ([#653](https://github.com/dryvist/ansible-secrets-management/issues/653)) ([074a5d9](https://github.com/dryvist/ansible-secrets-management/commit/074a5d994cab5ef0a96462b3247cb2f07799e46d))
+* **openbao:** give the Authelia signing writer its own login ([#639](https://github.com/dryvist/ansible-secrets-management/issues/639)) ([894dac1](https://github.com/dryvist/ansible-secrets-management/commit/894dac1107eb52a9274cbf52799190304992f690))
+
 ## [0.98.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.97.0...v0.98.0) (2026-11-12)
 
 

@@ -23,6 +23,9 @@ DECLARED_ROLES = (
     "agent-vikunja-clerk",
     "agent-vikunja-triage",
     "agent-docs-updater",
+    "agent-pr-keeper",
+    "agent-github-clerk",
+    "agent-merge-steward",
 )
 CAPABILITIES = {
     "role-id": ["read"],
@@ -77,7 +80,7 @@ def _rendered(
         return render(variables, "{{ " + expression + " }}")
 
 
-def test_declared_role_names_are_exactly_the_five_dify_agent_roles():
+def test_declared_role_names_are_exactly_the_dify_agent_roles():
     names = _yaml("05l-dify-agent-identities.yml")
     declared = [
         value
@@ -94,8 +97,8 @@ def test_rendered_policy_has_exactly_four_paths_per_declared_role():
         for role in DECLARED_ROLES
         for kind in CAPABILITIES
     }
-    assert len(paths) == 20
-    assert len(set(paths)) == 20
+    assert len(paths) == len(DECLARED_ROLES) * len(CAPABILITIES)
+    assert len(set(paths)) == len(expected)
     assert set(paths) == expected
 
 

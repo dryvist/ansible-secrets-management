@@ -20,13 +20,25 @@ files, never a reimplementation.
 from pathlib import Path
 import unittest
 
+import pytest
+import yaml
+
 from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar, trust_as_template
-import yaml
+
+from openbao_reconcile_bounds_helpers import (
+    _capabilities,
+    _render_value,
+    _stanzas,
+    rendered_defaults,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 TASKS = ROOT / "roles" / "openbao" / "tasks" / "init" / "08-rbac-policies.yml"
 RENDER_TASK = "Render the RBAC policies on the controller"
+
+UNIFI_TIERS = ("read", "write", "admin")
+WINDOW_TIERS = UNIFI_TIERS + ("terrakube",)
 
 WORKSPACE_POLICY = {
     "name": "terrakube-iac-platform",
@@ -80,6 +92,89 @@ class RenderDoesNotFailOnAnItemReferencingTemplate(unittest.TestCase):
         pairs = render([policy])
         self.assertEqual(pairs[0]["key"], "write-apps")
         self.assertIn('path "secret/data/apps/*"', pairs[0]["value"])
+
+
+def _policy_named(policies, name):
+    return next(policy for policy in policies if policy["name"] == name)
+
+
+def _capability_map(text):
+    return {
+        path: _capabilities(body)
+        for path, body in _stanzas(text)
+    }
+
+
+# The UniFi controller credential tiers: one exact KV leaf per tier, one
+# read-only policy per leaf, rendered here exactly as 08-rbac-policies.yml
+# renders them.
+@pytest.mark.parametrize("tier", UNIFI_TIERS)
+def test_unifi_tier_policy_grants_exactly_its_own_leaf(tier, rendered_defaults):
+    values, _, policies = rendered_defaults
+    policy = _policy_named(policies, values[f"openbao_unifi_{tier}_policy_name"])
+    assert _capability_map(render([policy])[0]["value"]) == {
+        f"secret/data/unifi/main/{tier}": ["read"],
+    }
+
+
+def test_unifi_is_not_a_capability_domain(rendered_defaults):
+    # The tiering exists only while `unifi` stays out of openbao_ai_domains: a
+    # domain entry would mint read-unifi/write-unifi over the whole subtree,
+    # covering the admin and terrakube leaves too.
+    values, _, policies = rendered_defaults
+    assert "unifi" not in values["openbao_ai_domains"]
+    names = {policy["name"] for policy in policies}
+    assert "read-unifi" not in names
+    assert "write-unifi" not in names
+
+
+def test_ai_elevated_carries_only_the_unifi_read_tier(rendered_defaults):
+    values, approles, _ = rendered_defaults
+    elevated = next(role for role in approles
+                    if role["name"] == values["openbao_ai_elevated_approle_name"])
+    assert values["openbao_unifi_read_policy_name"] in elevated["token_policies"]
+
+
+def test_ai_apply_unifi_carries_exactly_the_write_and_read_tiers(rendered_defaults):
+    # Mirrors the generated ai-apply-<svc> unlock window (6h/12h, inert) but is
+    # declared explicitly, so pin the whole shape here.
+    values, approles, _ = rendered_defaults
+    role = next(role for role in approles if role["name"] == "ai-apply-unifi")
+    assert role["token_policies"] == [
+        values["openbao_unifi_write_policy_name"],
+        values["openbao_unifi_read_policy_name"],
+    ]
+    assert role["token_ttl"] == "6h"
+    assert role["token_max_ttl"] == "12h"
+    assert role["manage_secret_id"] is False
+    assert role["secret_id_ttl"] == "15m"
+    assert role["secret_id_num_uses"] == 1
+    # Both classifications every declared role must carry.
+    assert values["openbao_approle_cidr_class_map"]["ai-apply-unifi"] == "workstation"
+    class_map = _render_value(values, values["openbao_approle_class_map"])
+    assert class_map["ai-apply-unifi"] == "operator-admin"
+
+
+def test_unifi_window_service_reaches_exactly_the_four_tier_leaves(rendered_defaults):
+    values, approles, policies = rendered_defaults
+    policy = _policy_named(policies, "window-unifi")
+    stanzas = _capability_map(render([policy])[0]["value"])
+    assert stanzas == {
+        f"secret/data/unifi/main/{tier}": ["create", "update", "read"]
+        for tier in WINDOW_TIERS
+    }
+    role = next(role for role in approles if role["name"] == "window-unifi")
+    assert role["manage_secret_id"] is False
+    assert values["openbao_approle_cidr_class_map"]["window-unifi"] == "workstation"
+
+
+def test_github_window_service_keeps_the_parameter_deny(rendered_defaults):
+    # The deny_all_parameters opt-out exists for KV-v2 writes; the github mint
+    # keeps the parameter-free pinning that denies every parameter.
+    _, _, policies = rendered_defaults
+    policy = _policy_named(policies, "window-github")
+    for _path, body in _stanzas(render([policy])[0]["value"]):
+        assert "denied_parameters" in body
 
 
 if __name__ == "__main__":

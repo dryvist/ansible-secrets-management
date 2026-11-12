@@ -19,6 +19,14 @@ import yaml
 from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar, trust_as_template
 
+from openbao_reconcile_bounds_helpers import (
+    _capabilities,
+    _render_value,
+    _stanzas,
+    rendered_defaults,
+)
+from test_openbao_rbac_policy_render import render as render_policy_pairs
+
 ROOT = Path(__file__).resolve().parents[1]
 OPENBAO_DEFAULTS_DIR = ROOT / "roles" / "openbao" / "defaults" / "main"
 WORKSPACES_FILE = OPENBAO_DEFAULTS_DIR / "05c-terrakube-and-remaining-domain-names.yml"
@@ -71,6 +79,23 @@ class TerrakubeBasePoliciesDerivation(unittest.TestCase):
         for entry, workspace in zip(entries, workspaces):
             self.assertEqual(entry["name"], "terrakube-" + workspace["name"])
             self.assertEqual(entry["workspace"], workspace)
+
+
+def test_network_workspace_reads_the_unifi_terrakube_leaf(rendered_defaults):
+    # The workspace's own UniFi controller credential on its exact leaf, while
+    # the shared infrastructure/unifi read stays until a later cutover.
+    values, _, policies = rendered_defaults
+    workspace_name = _render_value(values, values["openbao_terrakube_network_workspace"])
+    entry = next(policy for policy in policies
+                 if policy["template"] == "terrakube-workspace-policy.hcl.j2"
+                 and policy["workspace"]["name"] == workspace_name)
+    assert "infrastructure/unifi" in entry["workspace"]["kv_read"]
+    assert "unifi/main/terrakube" in entry["workspace"]["kv_read"]
+    stanzas = {
+        path: _capabilities(body)
+        for path, body in _stanzas(render_policy_pairs([entry])[0]["value"])
+    }
+    assert stanzas["secret/data/unifi/main/terrakube"] == ["read"]
 
 
 if __name__ == "__main__":

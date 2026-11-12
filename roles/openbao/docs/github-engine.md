@@ -14,7 +14,7 @@ configuration, so each App's own grant caps every token its mount mints:
 | Mount | App | Permission sets |
 | --- | --- | --- |
 | `github` | everyday | read sets and the raw `github/token` write endpoint |
-| `github-admin` | admin | admin, repo-create, docs-publisher, ci-resolver, runner, exporter |
+| `github-admin` | admin | admin, repo-create, docs-publisher, ci-resolver, runner, exporter, dify-pr-automation-read, dify-pr-automation-write |
 | `github-agents` | agents | public-read/write and five least-privilege fleet-agent sets, scoped to public dryvist repositories |
 | `github-hermes` | hermes | `hermes-review-{public,private}`, `hermes-read-public`, `hermes-author-public`, split by repository visibility |
 | `github-work` | work | a derived `read` set and the raw token endpoint for write; the App's grant is the only write ceiling |
@@ -126,6 +126,16 @@ Token access is tiered; the tier IS the privilege boundary:
   KV grants, use the `service-runtime` identity class, and are created only when
   `OPENBAO_DIFY_AGENT_CIDR` is set. Their SecretIDs last 720h and are bound to
   the configured CIDR; OpenBao tokens are capped at 15m.
+- **Dify PR automation (`agent-pr-keeper`, `agent-github-clerk`, and
+  `agent-merge-steward`)** — the first two roles mint only
+  `dify-pr-automation-read`; the merge steward mints only
+  `dify-pr-automation-write`. Both sets use the JacobPEvans-ai installation
+  and the repository names in `openbao_dify_pr_automation_repositories`.
+  The read set grants `contents`, `pull_requests`, `checks`, `statuses`, and
+  `metadata` read. The write set grants `contents` and `pull_requests` write
+  while keeping the other permissions read-only. Each role receives one-use
+  SecretIDs with the same 720h lifetime as the existing Dify agents; tokens
+  are capped at 15m.
 - **hermes (`hermes-public`, `hermes-private`)** — four sets on
   `github-hermes`. `hermes-review-*`: `pull_requests`/`issues` write,
   `contents`/`checks`/`metadata` read, over the organization's public (or

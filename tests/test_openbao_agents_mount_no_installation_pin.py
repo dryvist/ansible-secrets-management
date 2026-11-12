@@ -15,7 +15,13 @@ IDENTITIES = yaml.safe_load(IDENTITY_DEFAULTS.read_text(encoding="utf-8"))
 ALLOWED_NAMED_SETS = {"public-read", "public-write"} | {
     value
     for name, value in IDENTITIES.items()
-    if name.startswith("openbao_dify_agent_") and name.endswith("_policy_name")
+    if name.startswith("openbao_dify_agent_")
+    and name.endswith("_policy_name")
+    and value not in {
+        "agent-pr-keeper",
+        "agent-github-clerk",
+        "agent-merge-steward",
+    }
 }
 RAW_MINT_PERMISSIONS = yaml.safe_load(GITHUB_MOUNT_DEFAULTS.read_text(encoding="utf-8"))[
     "openbao_github_agents_raw_mint_permissions"

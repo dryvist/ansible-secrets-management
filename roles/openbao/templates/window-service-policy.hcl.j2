@@ -1,10 +1,16 @@
 {{ ansible_managed | comment }}
 # {{ item.service.name }} window: native credential lifetime {{ item.service.lifetime }}.
+# deny_all_parameters (default true) pins a request to carry no parameters at
+# all — the mint paths that read a fully-pinned permission set. A service that
+# writes KV-v2 documents must set it false: the write request IS parameters,
+# and the overlay would refuse it.
 {% for credential_path in item.service.credential_paths %}
 path "{{ credential_path }}" {
   capabilities = {{ item.service.scope | tojson }}
+{% if item.service.deny_all_parameters | default(true) %}
   denied_parameters = {
     "*" = []
   }
+{% endif %}
 }
 {% endfor %}
