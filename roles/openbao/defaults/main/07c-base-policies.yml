@@ -281,6 +281,10 @@ openbao_base_policies_static:
   # Explicit deny overlay limiting the human-unlocked admin roles.
   - name: "{{ openbao_ai_admin_guard_policy_name }}"
     template: ai-admin-guard-policy.hcl.j2
+  # Exact path grants for the selected protected-policy and AppRole config
+  # flow opened by ai-admin-session. The guard remains the hard deny layer.
+  - name: "{{ openbao_ai_admin_window_policy_name }}"
+    template: ai-admin-window-policy.hcl.j2
   - name: "{{ openbao_snapshot_policy_name }}"
     template: snapshot-policy.hcl.j2
   - name: "{{ openbao_apps_seed_policy_name }}"

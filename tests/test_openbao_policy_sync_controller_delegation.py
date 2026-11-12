@@ -1,8 +1,11 @@
-"""Delegation contract for the reconcile-mode policy-sync pair in
+"""Delegation contract for the bounded-mode policy-sync pair in
 roles/openbao/tasks/init/02b-policy-sync.yml.
 
-The only identity that ever passes the capability check below is the inert
-openbao-policy-sync AppRole (defaults/main/07f-workstation-approles.yml),
+The routine reconcile identity and the selected ai-admin-session window can
+pass the exact reconcile-policy capability check. The window grant permits
+writing to the exact reconcile-policy path without pinning its body. Routine
+reconciliation uses the inert openbao-policy-sync AppRole
+(defaults/main/07f-workstation-approles.yml),
 which is bound to the WORKSTATION CIDR class
 (defaults/main/08b-cidr-and-unlock.yml) -- a token issued to it is usable
 only from the controller. Both tasks used to run ON the OpenBao node against
@@ -79,16 +82,16 @@ class PolicySyncPairRunsFromTheController(unittest.TestCase):
             )
 
     def test_conditions_and_no_log_are_unchanged(self):
-        # The fix is delegation only -- the reconcile-mode gating and the
-        # no_log on both tasks must survive untouched.
+        # The pair is gated on bounded execution mode, which covers routine
+        # reconcile and selected admin-window runs.
         ask = _task(ASK_TASK)
         sync = _task(SYNC_TASK)
         self.assertTrue(ask.get("no_log"))
         self.assertTrue(sync.get("no_log"))
         self.assertIn("openbao_bootstrap_token is defined", ask["when"])
-        self.assertIn("openbao_reconcile_mode | default(false)", ask["when"])
+        self.assertIn("openbao_bounded_rbac_mode | default(false) | bool", ask["when"])
         self.assertIn("openbao_bootstrap_token is defined", sync["when"])
-        self.assertIn("openbao_reconcile_mode | default(false)", sync["when"])
+        self.assertIn("openbao_bounded_rbac_mode | default(false) | bool", sync["when"])
 
 if __name__ == "__main__":
     unittest.main()

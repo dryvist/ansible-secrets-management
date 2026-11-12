@@ -307,7 +307,7 @@
           paths while limiting child tokens to the declared batch service grants.
         quiet: true
 
-    - name: Assert only the admin window attaches the guard overlay
+    - name: Assert only the admin window attaches the guard and RBAC policies
       vars:
         _ai_admin_role: >-
           {{ openbao_approles | selectattr('name', 'equalto', openbao_ai_admin_approle_name) | first }}
@@ -322,7 +322,7 @@
           - >-
             (_ai_admin_session_role.token_policies | sort)
             == ([openbao_ai_admin_policy_name, openbao_ai_admin_guard_policy_name,
-                 openbao_tofu_state_admin_policy_name] | sort)
+                 openbao_ai_admin_window_policy_name, openbao_tofu_state_admin_policy_name] | sort)
           - _operator_admin_role.policy == openbao_ai_admin_policy_name
           - _operator_admin_role.token_policies is not defined
         quiet: true

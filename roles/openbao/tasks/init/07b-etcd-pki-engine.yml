@@ -51,7 +51,7 @@
   no_log: true
   changed_when: true
   when:
-    - not (openbao_reconcile_mode | default(false))
+    - not (openbao_bounded_rbac_mode | default(false) | bool)
     - openbao_bootstrap_token is defined
     - (item.mount ~ '/') not in (openbao_mounts_raw.stdout | from_json).keys()
 
@@ -84,7 +84,7 @@
   check_mode: false
   failed_when: false
   when:
-    - not (openbao_reconcile_mode | default(false))
+    - not (openbao_bounded_rbac_mode | default(false) | bool)
     - openbao_bootstrap_token is defined
 
 - name: Generate each etcd PKI root CA (first configuration only, never exported)
@@ -112,7 +112,7 @@
   no_log: true
   changed_when: true
   when:
-    - not (openbao_reconcile_mode | default(false))
+    - not (openbao_bounded_rbac_mode | default(false) | bool)
     - openbao_bootstrap_token is defined
     - (item.1.rc | default(1)) != 0
 

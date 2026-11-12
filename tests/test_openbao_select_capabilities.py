@@ -69,5 +69,5 @@ def test_all_selected_write_endpoints_are_probed_before_phase_writes():
     preflight = task("Check every selected object's live reconcile grant before phase writes",
                      ROLE / "tasks/init/selection-preflight.yml")
     assert preflight["ansible.builtin.import_tasks"] == "selection-capabilities.yml"
-    assert all(condition(c, {"openbao_select": {"policies": ["apps"]}, "openbao_reconcile_mode": True})
+    assert all(condition(c, {"openbao_select": {"policies": ["apps"]}, "openbao_bounded_rbac_mode": True})
                for c in preflight["when"])

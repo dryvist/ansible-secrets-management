@@ -155,26 +155,34 @@ plans):
 | `ai-apply-<svc>` | `read-<svc>` | `write-<svc>` + `github-mint` | Task-scoped WRITE, one service; no standing secret_id; ≤1h[^ai-tiers] |
 | `ai-apply-all` | `read-write-all` | `read-write-all` + `github-mint` | Cross-domain WRITE rollup; no standing secret_id; ≤1h[^ai-tiers] |
 | `ai-admin` | all KV + policy/auth admin | policy/AppRole/token, all KV, AWS STS | Break-glass; human-gated; alerted[^ai-tiers] |
-| `ai-admin-session` | `ai-admin` | `ai-admin` + `tofu-state-admin` | Human-gated service-token session; 1h renewal / 12h explicit maximum; alerted[^ai-tiers] |
+| `ai-admin-session` | `ai-admin` | `ai-admin` + guard + window RBAC + `tofu-state-admin` | Human-gated; selected RBAC; 1h / 12h max; alerted[^ai-tiers] |
 | `elevate-trusted` (`auth/authelia`) | `human-unlock` | secret_id mint, human-gated tiers | Phone-approved; 5m[^elevate] |
 | `elevate-untrusted` (`auth/authelia`) | `human-unlock-untrusted` | secret_id mint, `ai-apply-<svc>` | Phone-approved, untrusted; 5m[^elevate] |
 | `snapshot` | `sys/storage/raft/snapshot` | — | least-priv backup identity |
 
-The `ai-admin-session` role also attaches `ai-admin-guard`, which
-denies orphan and role-based token creation, AppRole changes or secret_id minting,
-reads of or changes to `ai-admin`, `ai-admin-guard`, or either
-human-unlock policy, enabling, disabling or tuning auth methods and audit
-devices, userpass or MFA settings, and
-moving or retuning the Enterprise owner-token mount. Window child tokens carry
-exactly one declared service policy, use the shared batch-token defaults, and stop
-working with their parent session. The guard also denies seal, unseal, rekey,
-rotation, and root or recovery token generation. Listing auth methods and audit
-devices remains allowed. The one-shot
-`ai-admin` role stays unguarded; provisioning runs that change these objects use it.
-The separate `tofu-state-admin` policy grants `update` only on the configured
-Transit data-key plaintext and decrypt paths for the OpenTofu state key. The
-reconcile policy pins its rendered body and attaches it to `ai-admin-session`
-through the role's `token_policies` field.
+The `ai-admin-session` role also attaches `ai-admin-guard` and
+`ai-admin-window-rbac`. The guard protects the `ai-admin`, `ai-admin-guard`,
+human-unlock, issuer and policy-sync grants; the session and its child service
+identities; auth-method and audit-device configuration; the Enterprise
+owner-token mount; seal, unseal, rekey, rotation, and root or recovery token
+generation. It allows only the pinned batch-child token shape; children carry
+one declared service policy and stop working with their parent session.
+Listing auth methods and audit devices remains allowed.
+
+`ai-admin-window-rbac` grants exact named paths for the human-gated policies and
+AppRole configurations eligible for selected reconciliation. The human-gated
+policies are the reconcile exclusions plus every declared policy attached to a
+human-gated AppRole. Each one is either granted here or denied by the guard;
+policies attached to a self-protecting AppRole (the admin, issuer, policy-sync
+and window service roles) are denied, except the reconcile policy. Policy
+contents and AppRole parameters are not pinned. The reconcile policy has its own
+exact write grant and is synchronized only when selected. A run using this session
+must provide a bounded `openbao_select`;
+the resolver and live capability check reject names outside those grants before
+any policy-sync write. The one-shot `ai-admin` role remains unguarded for
+operations the guard protects. The separate `tofu-state-admin` policy grants
+`update` only on the configured Transit data-key plaintext and decrypt paths for
+the OpenTofu state key.
 
 ### UniFi controller credential tiers
 

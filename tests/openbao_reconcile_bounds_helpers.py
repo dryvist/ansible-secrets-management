@@ -80,6 +80,10 @@ def rendered_defaults(monkeypatch, request):
         "openbao_approle_cidr_class_map",
         "openbao_reconcile_excluded_policies",
         "openbao_reconcile_policy_excluded_names",
+        "openbao_ai_admin_window_protected_approle_names",
+        "openbao_ai_admin_window_protected_policy_names",
+        "openbao_ai_admin_window_manageable_policies",
+        "openbao_ai_admin_window_manageable_approles",
         "openbao_retired_approles",
         "openbao_retired_policies",
     ):
