@@ -103,23 +103,25 @@ openbao_ai_admin_session_token_max_ttl: 12h
 openbao_ai_admin_session_token_explicit_max_ttl: 12h
 # The 12-hour admin session has an additional exact-path policy for the
 # bounded RBAC selection flow. Keep identities that can change this window,
-# the execution plane, or its children outside that grant. The attached-policy
-# closure is derived from the declared roles so a new plane policy cannot be
-# reached merely because its role was renamed.
+# the execution plane, or its children outside that grant. AppRoles and
+# policies are partitioned by their own typed declarations; policy names are
+# never used to classify AppRoles.
 openbao_ai_admin_window_protected_approle_names: >-
   {{ [openbao_ai_admin_approle_name, openbao_ai_admin_session_approle_name,
       'admin', openbao_reconcile_approle_name, openbao_approle_issuer_approle_name,
       openbao_policy_sync_approle_name, openbao_semaphore_approle_name,
       openbao_ansible_converge_approle_name]
-     + (openbao_window_service_policies | map(attribute='name') | list)
+     + (openbao_window_service_approles | map(attribute='name') | list)
      | unique | list }}
-openbao_ai_admin_window_protected_policy_names: >-
+openbao_ai_admin_window_self_protecting_policy_names: >-
   {%- set _protected = [openbao_ai_admin_policy_name,
       openbao_ai_admin_guard_policy_name, openbao_ai_admin_window_policy_name,
       openbao_human_unlock_policy_name, openbao_human_unlock_untrusted_policy_name,
       openbao_approle_issuer_policy_name, openbao_policy_sync_policy_name,
       openbao_policy_sync_unlock_policy_name,
-      openbao_tofu_state_admin_policy_name] -%}
+      openbao_tofu_state_admin_policy_name,
+      'default'] -%}
+  {# The service-token session inherits OpenBao's built-in default policy. #}
   {%- for _role in openbao_approles
       | selectattr('name', 'in', [openbao_ai_admin_session_approle_name]
           + (openbao_window_service_policies | map(attribute='name') | list)) -%}
@@ -127,19 +129,59 @@ openbao_ai_admin_window_protected_policy_names: >-
   {%- set _ = _protected.extend(_attached) -%}
   {%- endfor -%}
   {{ (_protected + (openbao_window_service_policies | map(attribute='name') | list)) | unique | list }}
-openbao_ai_admin_window_manageable_policies: >-
+# GitHub admin policy templates grant only GitHub token minting. They do not
+# grant sys/policies/acl/ai-admin-guard or an auth/approle secret-id path;
+# this session's guard denies both classes, so these human-gated tiers belong
+# in the window grant rather than its self-protection deny set.
+openbao_ai_admin_window_human_gated_policy_names: >-
+  {{ (openbao_policies
+      | selectattr('name', 'in', openbao_reconcile_policy_excluded_names)
+      | map(attribute='name') | list
+      + openbao_ai_admin_window_self_protecting_policy_names
+      ) | unique | list }}
+openbao_ai_admin_window_human_gated_policies: >-
   {{ openbao_policies
-     | selectattr('name', 'in', openbao_reconcile_policy_excluded_names)
-     | rejectattr('name', 'equalto', openbao_reconcile_policy_name)
-     | rejectattr('name', 'in', openbao_ai_admin_window_protected_policy_names)
+     | selectattr('name', 'in', openbao_ai_admin_window_human_gated_policy_names)
      | list }}
-openbao_ai_admin_window_manageable_approles: >-
+# openbao-reconcile remains in the human-gated population through its explicit
+# entry in openbao_reconcile_excluded_policies; it stays grantable unless a
+# current self-protecting attachment moves it into the guard deny set.
+openbao_ai_admin_window_guard_deny_policy_names: >-
+  {{ openbao_ai_admin_window_human_gated_policy_names
+     | select('in', openbao_ai_admin_window_self_protecting_policy_names)
+     | list }}
+openbao_ai_admin_window_protected_policy_names: >-
+  {{ openbao_ai_admin_window_guard_deny_policy_names }}
+openbao_ai_admin_window_grant_policy_names: >-
+  {{ openbao_ai_admin_window_human_gated_policy_names
+     | reject('in', openbao_ai_admin_window_guard_deny_policy_names)
+     | list }}
+openbao_ai_admin_window_grant_policies: >-
+  {{ openbao_ai_admin_window_human_gated_policies
+     | selectattr('name', 'in', openbao_ai_admin_window_grant_policy_names)
+     | list }}
+# Retain exact denies for named self-protecting roles even when their
+# per-call secret_id flow has no manage_secret_id:false marker.
+openbao_ai_admin_window_human_gated_approles: >-
   {{ openbao_approles
-     | selectattr('manage_secret_id', 'defined')
-     | rejectattr('manage_secret_id')
-     | rejectattr('name', 'in', openbao_reconcile_excluded_policies)
+     | selectattr('name', 'in',
+         ((openbao_approles
+           | selectattr('manage_secret_id', 'defined')
+           | rejectattr('manage_secret_id')
+           | map(attribute='name') | list)
+          + openbao_ai_admin_window_protected_approle_names) | unique | list)
+     | list }}
+openbao_ai_admin_window_guard_deny_approles: >-
+  {{ openbao_ai_admin_window_human_gated_approles
+     | selectattr('name', 'in', openbao_ai_admin_window_protected_approle_names)
+     | list }}
+openbao_ai_admin_window_grant_approles: >-
+  {{ openbao_ai_admin_window_human_gated_approles
      | rejectattr('name', 'in', openbao_ai_admin_window_protected_approle_names)
      | list }}
+# Keep the task/selection API names aligned with the exact grant partitions.
+openbao_ai_admin_window_manageable_policies: "{{ openbao_ai_admin_window_grant_policies }}"
+openbao_ai_admin_window_manageable_approles: "{{ openbao_ai_admin_window_grant_approles }}"
 # Token/secret_id bounds for the elevated tiers, as the "unlock window" model:
 # one human unlock (a wrapped, single-use secret_id) -> one login -> a token that
 # lives the window, so an agent works unattended for the window instead of a

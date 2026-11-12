@@ -4,11 +4,10 @@
 # Listing auth methods and audit devices (sys/auth, sys/audit) stays allowed;
 # enabling, disabling or tuning them (sys/auth/*, sys/audit/*) does not.
 
-{% set guarded_approles = openbao_ai_admin_window_protected_approle_names
+{% set guarded_approles = openbao_ai_admin_window_guard_deny_approles
+     | map(attribute='name') | unique | sort | list %}
+{% set guarded_policies = openbao_ai_admin_window_guard_deny_policy_names
      | unique | sort | list %}
-{% set session_approle = openbao_approles
-     | selectattr('name', 'equalto', openbao_ai_admin_session_approle_name) | first %}
-{% set session_policies = session_approle.token_policies + ['default'] %}
 {% set window_policies = openbao_window_service_policies | map(attribute='name') | list %}
 {% set window_policy_sets = [] %}
 {% for policy_name in window_policies %}
@@ -94,16 +93,7 @@ path "auth/approle/role/{{ approle_name }}/*" {
 }
 {% endfor %}
 
-{% for policy_name in ([
-     openbao_ai_admin_policy_name,
-     openbao_ai_admin_guard_policy_name,
-     openbao_human_unlock_policy_name,
-     openbao_human_unlock_untrusted_policy_name,
-     openbao_approle_issuer_policy_name,
-     openbao_policy_sync_policy_name,
-     openbao_policy_sync_unlock_policy_name,
-     openbao_ai_admin_window_policy_name] + session_policies + window_policies)
-     | unique | sort %}
+{% for policy_name in guarded_policies %}
 {% for suffix in ['', '/*'] %}
 path "sys/policies/acl/{{ policy_name }}{{ suffix }}" {
   capabilities = ["deny"]

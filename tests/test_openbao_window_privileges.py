@@ -97,13 +97,94 @@ def test_generic_template_does_not_grant_undeclared_paths(rendered_defaults):
 def test_guard_retains_protected_roles_and_policies(rendered_defaults):
     values, _, _ = rendered_defaults
     stanzas = dict(_stanzas(_render(GUARD, values)))
-    for name in values["openbao_ai_admin_window_protected_approle_names"]:
+    human_approles = _templar(_trust(values)).template(
+        _trust(values["openbao_ai_admin_window_human_gated_approles"])
+    )
+    guard_approles = _templar(_trust(values)).template(
+        _trust(values["openbao_ai_admin_window_guard_deny_approles"])
+    )
+    expected_guard_roles = {
+        role["name"] for role in human_approles
+        if role["name"] in values["openbao_ai_admin_window_protected_approle_names"]
+    }
+    assert {role["name"] for role in guard_approles} == expected_guard_roles
+    for name in expected_guard_roles:
         for suffix in ("", "/*"):
             assert _capabilities(stanzas[f"auth/approle/role/{name}{suffix}"]) == ["deny"]
     for name in values["openbao_ai_admin_window_protected_policy_names"]:
         for suffix in ("", "/*"):
             assert _capabilities(stanzas[f"sys/policies/acl/{name}{suffix}"]) == ["deny"]
     assert "auth/approle/role/*" in stanzas
+
+
+def test_window_grant_and_guard_partition_the_human_gated_objects(rendered_defaults):
+    values, approles, policies = rendered_defaults
+
+    def resolve(name):
+        return _templar(_trust(values)).template(_trust(values[name]))
+
+    def names(items):
+        return {item["name"] for item in items}
+
+    human_approles = resolve("openbao_ai_admin_window_human_gated_approles")
+    granted_approles = resolve("openbao_ai_admin_window_grant_approles")
+    denied_approles = resolve("openbao_ai_admin_window_guard_deny_approles")
+    false_approle_names = {
+        role["name"] for role in approles if role.get("manage_secret_id") is False
+    }
+    protected_approle_names = set(values["openbao_ai_admin_window_protected_approle_names"])
+    assert names(human_approles) == false_approle_names | (
+        {role["name"] for role in approles} & protected_approle_names
+    )
+    assert names(granted_approles).isdisjoint(names(denied_approles))
+    assert names(granted_approles) | names(denied_approles) == names(human_approles)
+    for role_name in false_approle_names:
+        assert (role_name in names(granted_approles)) + (role_name in names(denied_approles)) == 1
+
+    human_policy_names = set(resolve("openbao_ai_admin_window_human_gated_policy_names"))
+    human_policies = resolve("openbao_ai_admin_window_human_gated_policies")
+    granted_policies = resolve("openbao_ai_admin_window_grant_policies")
+    denied_policy_names = set(resolve("openbao_ai_admin_window_guard_deny_policy_names"))
+    granted_policy_names = names(granted_policies)
+    assert names(human_policies) == human_policy_names & {
+        policy["name"] for policy in policies
+    }
+    assert granted_policy_names.isdisjoint(denied_policy_names)
+    assert granted_policy_names | denied_policy_names == human_policy_names
+
+    declared_policy_names = {policy["name"] for policy in policies}
+    expected_policy_names = {
+        policy["name"] for policy in policies
+        if policy["name"] in values["openbao_reconcile_policy_excluded_names"]
+    } | set(resolve("openbao_ai_admin_window_self_protecting_policy_names"))
+    assert human_policy_names == expected_policy_names
+    assert granted_policy_names <= declared_policy_names
+    if values["openbao_reconcile_policy_name"] in declared_policy_names:
+        reconcile_policy = values["openbao_reconcile_policy_name"]
+        assert reconcile_policy in human_policy_names
+        if reconcile_policy not in denied_policy_names:
+            assert reconcile_policy in granted_policy_names
+
+    for approle_key, policy_key in (
+        ("openbao_github_admin_approle_name", "openbao_github_admin_policy_name"),
+        ("openbao_github_enterprise_admin_approle_name",
+         "openbao_github_enterprise_admin_policy_name"),
+    ):
+        approle_name = values[approle_key]
+        approle = next((role for role in approles if role["name"] == approle_name), None)
+        assert approle is not None
+        assert approle["manage_secret_id"] is False
+        assert approle_name in names(granted_approles)
+        assert approle_name not in names(denied_approles)
+
+        policy_name = values[policy_key]
+        policy = next((item for item in policies if item["name"] == policy_name), None)
+        # The enterprise admin policy is omitted when its installation id is unset (07c-policy-composition.yml).
+        if policy is None:
+            assert policy_name not in granted_policy_names | denied_policy_names
+            continue
+        assert policy_name in granted_policy_names
+        assert policy_name not in denied_policy_names
 
 
 def test_window_grant_is_exact_and_matches_only_eligible_protected_objects(rendered_defaults):

@@ -11,18 +11,13 @@ path "sys/policies/acl" {
   capabilities = ["list"]
 }
 
-{% for _policy in openbao_ai_admin_window_manageable_policies %}
+{% for _policy in openbao_ai_admin_window_grant_policies %}
 path "sys/policies/acl/{{ _policy.name }}" {
   capabilities = ["create", "read", "update"]
 }
 {% endfor %}
 
-# The reconcile policy is synchronized only when explicitly selected.
-path "sys/policies/acl/{{ openbao_reconcile_policy_name }}" {
-  capabilities = ["create", "read", "update"]
-}
-
-{% for _approle in openbao_ai_admin_window_manageable_approles %}
+{% for _approle in openbao_ai_admin_window_grant_approles %}
 path "auth/approle/role/{{ _approle.name }}" {
   capabilities = ["create", "read", "update"]
 }
