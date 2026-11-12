@@ -131,7 +131,12 @@ def test_ansible_converge_owns_the_exact_splunk_publisher_paths():
     assert data_grant in policy
     assert metadata_grant in policy
     assert exact_grant in policy
-    assert undelete_declarations == [f"{CANONICAL_UNDELETE_PATH} {{"]
+    # The only other exact undelete is the platform search token publisher
+    # (tests/test_openbao_splunk_search_token_grant.py).
+    assert undelete_declarations == [
+        f"{CANONICAL_UNDELETE_PATH} {{",
+        'path "{{ openbao_kv_mount }}/undelete/platform/splunk/search" {',
+    ]
 
 
 def test_local_llm_fetch_contract_merges_canonical_splunk_fields():
