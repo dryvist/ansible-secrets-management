@@ -134,6 +134,13 @@
     converge_role: "{{ openbao_approles | selectattr('name', 'equalto', 'ansible-converge') | first }}"
     semaphore_role: "{{ openbao_approles | selectattr('name', 'equalto', 'semaphore') | first }}"
     apply_roles: "{{ openbao_approles | selectattr('name', 'match', '^ai-apply-') | list }}"
+    # The apply roles minted from openbao_ai_domains, plus the cross-domain
+    # ai-apply-all rollup, carry the automation-ai signing leaf. Any other
+    # declared ai-apply-<svc> role (unifi: exact KV leaves, not a capability
+    # subtree) has no attribution leaves and signs nothing.
+    automation_apply_names: >-
+      {{ (openbao_ai_domains | map('regex_replace', '^', 'ai-apply-') | list)
+         + ['ai-apply-all'] }}
   ansible.builtin.assert:
     that:
       # ai-elevated signs ONLY automation-ai — never ansible/ci/host roles.
@@ -161,11 +168,19 @@
         semaphore_role.token_policies | select('match', '^ssh-sign-')
         | reject('equalto', 'ssh-sign-automation-semaphore')
         | list | length == 0
-      # every ai-apply-<svc> signs ONLY automation-ai.
+      # every ai-apply-<svc> minted from openbao_ai_domains, and the
+      # cross-domain ai-apply-all rollup, sign ONLY automation-ai; every
+      # other declared apply role carries NO ssh-sign policy at all.
       - >-
-        apply_roles | map(attribute='token_policies')
+        apply_roles | selectattr('name', 'in', automation_apply_names)
+        | map(attribute='token_policies')
         | select('contains', 'ssh-sign-automation-ai') | list
-        | length == (apply_roles | length)
+        | length == (automation_apply_names | length)
+      - >-
+        apply_roles | rejectattr('name', 'in', automation_apply_names)
+        | map(attribute='token_policies')
+        | map('select', 'match', '^ssh-sign-')
+        | map('list') | flatten | length == 0
       - >-
         apply_roles | map(attribute='token_policies')
         | map('select', 'match', '^ssh-sign-')
@@ -173,5 +188,6 @@
         | map('list') | flatten | length == 0
     fail_msg: >-
       SSH signing attachment drifted from the security decisions
-      (ai-elevated/apply sign only automation-ai; readonly none;
+      (ai-elevated and the generated ai-apply-* sign only automation-ai;
+      every other declared ai-apply-* role signs nothing; readonly none;
       ansible-converge only automation-ansible).
