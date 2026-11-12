@@ -137,7 +137,7 @@ openbao_base_approles_elevated:
     secret_id_num_uses: 0
   # agent-workstation: the automation account on the operator workstation,
   # kept as its own identity so it can be revoked and audited apart from the
-  # operator's. Its dedicated policy grants only the two consumer reads.
+  # operator's. Its dedicated policy grants only the declared consumer reads.
   # Rotates every 12h with a 36h secret_id TTL and a 100-use cap.
   - name: "{{ openbao_agent_workstation_approle_name }}"
     policy: "{{ openbao_agent_workstation_policy_name }}"
