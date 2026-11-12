@@ -45,12 +45,14 @@ INIT_02 = TASKS / "init/02-initialize-cluster.yml"
 # alongside 02 so this test still finds it wherever it lives.
 INIT_02B = TASKS / "init/02b-policy-sync.yml"
 DEFAULTS_00 = ROOT / "roles/openbao/defaults/main/00-install-and-node.yml"
+STATUS_READ = TASKS / "init/status-read.yml"
 
 # Node-local by design: they talk to THIS node before/while a leader exists.
 NODE_LOCAL = {
     "01-preflight-and-cluster-probe.yml",
     "02-initialize-cluster.yml",
     "02b-policy-sync.yml",
+    "status-read.yml",
 }
 
 SELF_ADDR = "http://192.0.2.10:8200"
@@ -97,12 +99,21 @@ def _walk_tasks(node):
 
 
 def _resolve(stdout):
+    keep = next(
+        task for task in yaml.safe_load(STATUS_READ.read_text(encoding="utf-8"))
+        if "ansible.builtin.set_fact" in task
+    )["ansible.builtin.set_fact"]["openbao_status_read"]
+    parsed = _render(
+        keep,
+        {
+            "openbao_status_read_via_proxy": False,
+            "openbao_status_direct_raw": {"stdout": stdout},
+            "openbao_status_proxy_raw": {"skipped": True},
+        },
+    )
     return _render(
         _write_addr_expr(),
-        {
-            "openbao_leader_status_raw": {"stdout": stdout},
-            "openbao_api_addr": SELF_ADDR,
-        },
+        {"openbao_status_read": parsed, "openbao_api_addr": SELF_ADDR},
     ).strip()
 
 

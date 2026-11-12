@@ -1,0 +1,38 @@
+---
+# One `bao status` read, direct or through the admin-window proxy. Callers set
+# openbao_status_read_via_proxy (read through the proxy) and
+# openbao_status_read_strict (fail on an error exit; `bao status` exits 0 when
+# unsealed, 2 when sealed, 1 on error). The parsed body lands in
+# openbao_status_read ({} when the read produced nothing).
+# Each read registers its own name: a skipped task would overwrite a shared register.
+- name: Read OpenBao status directly
+  ansible.builtin.command:
+    cmd: bao status -format=json
+  environment:
+    BAO_ADDR: "{{ openbao_api_addr }}"
+  register: openbao_status_direct_raw
+  changed_when: false
+  check_mode: false
+  failed_when: openbao_status_read_strict | bool and openbao_status_direct_raw.rc not in [0, 2]
+  when: not (openbao_status_read_via_proxy | bool)
+
+- name: Read OpenBao status through the admin-window proxy
+  ansible.builtin.command:
+    cmd: bao status -format=json
+  environment: "{{ openbao_window_proxy_env }}"
+  delegate_to: localhost
+  connection: local
+  become: false
+  vars:
+    ansible_become: false
+  register: openbao_status_proxy_raw
+  changed_when: false
+  check_mode: false
+  failed_when: openbao_status_read_strict | bool and openbao_status_proxy_raw.rc not in [0, 2]
+  when: openbao_status_read_via_proxy | bool
+
+- name: Keep the parsed status body
+  ansible.builtin.set_fact:
+    openbao_status_read: >-
+      {{ ((openbao_status_proxy_raw if openbao_status_read_via_proxy | bool
+           else openbao_status_direct_raw).stdout | default('{}', true)) | from_json }}

@@ -242,10 +242,16 @@ def test_guest_side_bao_calls_are_delegated_or_gated_by_fresh_init():
     preflight = yaml.safe_load(
         (TASKS / "init/01-preflight-and-cluster-probe.yml").read_text(encoding="utf-8")
     )
-    status = _named(preflight, "Read OpenBao status")
-    proxy_status = _named(preflight, "Read OpenBao status through the admin-window proxy")
-    assert not condition(status["when"], {"openbao_window_proxy_mode": True})
-    assert condition(proxy_status["when"], {"openbao_window_proxy_mode": True})
+    read = yaml.safe_load((TASKS / "init/status-read.yml").read_text(encoding="utf-8"))
+    status = _named(read, "Read OpenBao status directly")
+    proxy_status = _named(read, "Read OpenBao status through the admin-window proxy")
+    include = _named(preflight, "Read OpenBao status")
+    assert include["ansible.builtin.include_tasks"] == "status-read.yml"
+    via_proxy = include["vars"]["openbao_status_read_via_proxy"]
+    assert render(via_proxy, {"openbao_window_proxy_mode": True}) is True
+    assert render(via_proxy, {}) is False
+    assert not condition(status["when"], {"openbao_status_read_via_proxy": True})
+    assert condition(proxy_status["when"], {"openbao_status_read_via_proxy": True})
     assert proxy_status["delegate_to"] == "localhost"
     assert proxy_status["environment"] == "{{ openbao_window_proxy_env }}"
     proxy_env = _proxy_env({"openbao_window_proxy_addr": PROXY_ADDR})
@@ -253,19 +259,11 @@ def test_guest_side_bao_calls_are_delegated_or_gated_by_fresh_init():
     assert proxy_env["BAO_TOKEN"] == ""
 
     leader = yaml.safe_load((TASKS / "init/02b-policy-sync.yml").read_text(encoding="utf-8"))
-    leader_status = _named(leader, "Read OpenBao status again to resolve the current Raft leader")
-    proxy_leader_status = _named(
-        leader,
-        "Read OpenBao status through the admin-window proxy to resolve the current Raft leader",
-    )
-    assert not condition(leader_status["when"], {"openbao_cli_proxy_active": True})
-    context = {
-        "openbao_cli_proxy_active": True,
-        "openbao_window_proxy_addr": PROXY_ADDR,
-    }
-    assert condition(proxy_leader_status["when"], context)
-    assert render(proxy_leader_status["delegate_to"], context) == "localhost"
-    assert proxy_leader_status["environment"] == "{{ openbao_window_proxy_env }}"
+    leader_include = _named(leader, "Read OpenBao status again to resolve the current Raft leader")
+    assert leader_include["ansible.builtin.include_tasks"] == "status-read.yml"
+    leader_via_proxy = leader_include["vars"]["openbao_status_read_via_proxy"]
+    assert render(leader_via_proxy, {"openbao_cli_proxy_active": True}) is True
+    assert render(leader_via_proxy, {}) is False
 
     init = yaml.safe_load((TASKS / "init/02-initialize-cluster.yml").read_text(encoding="utf-8"))
     fresh_init = _named(init, "Initialize OpenBao (recovery keys via static-key auto-unseal)")
@@ -325,19 +323,20 @@ def test_fresh_operator_init_remains_on_the_openbao_guest():
 
 def test_status_reads_keep_their_failure_rules_and_separate_registers():
     # A skipped task overwrites its register, so the plain and proxy reads must not share one.
-    preflight = yaml.safe_load((TASKS / "init/01-preflight-and-cluster-probe.yml").read_text(encoding="utf-8"))
-    status = _named(preflight, "Read OpenBao status")
-    proxy_status = _named(preflight, "Read OpenBao status through the admin-window proxy")
+    read = yaml.safe_load((TASKS / "init/status-read.yml").read_text(encoding="utf-8"))
+    status = _named(read, "Read OpenBao status directly")
+    proxy_status = _named(read, "Read OpenBao status through the admin-window proxy")
     assert status["register"] != proxy_status["register"]
-    assert status["failed_when"] == f"{status['register']}.rc not in [0, 2]"
-    assert proxy_status["failed_when"] == f"{proxy_status['register']}.rc not in [0, 2]"
+    for task in (status, proxy_status):
+        failed_when = task["failed_when"]
+        rc = {"rc": 1}
+        assert condition(failed_when, {"openbao_status_read_strict": True, task["register"]: rc})
+        assert not condition(failed_when, {"openbao_status_read_strict": False, task["register"]: rc})
+        assert not condition(failed_when, {"openbao_status_read_strict": True, task["register"]: {"rc": 2}})
 
+    # The preflight read fails on an error exit; the leader read never fails the run.
+    preflight = yaml.safe_load((TASKS / "init/01-preflight-and-cluster-probe.yml").read_text(encoding="utf-8"))
+    assert _named(preflight, "Read OpenBao status")["vars"]["openbao_status_read_strict"] is True
     leader = yaml.safe_load((TASKS / "init/02b-policy-sync.yml").read_text(encoding="utf-8"))
-    leader_status = _named(leader, "Read OpenBao status again to resolve the current Raft leader")
-    proxy_leader_status = _named(
-        leader,
-        "Read OpenBao status through the admin-window proxy to resolve the current Raft leader",
-    )
-    assert leader_status["failed_when"] is False
-    assert proxy_leader_status["failed_when"] is False
-    assert leader_status["register"] != proxy_leader_status["register"]
+    leader_include = _named(leader, "Read OpenBao status again to resolve the current Raft leader")
+    assert leader_include["vars"]["openbao_status_read_strict"] is False

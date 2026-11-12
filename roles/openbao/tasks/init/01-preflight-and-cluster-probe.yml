@@ -104,37 +104,14 @@
 # uninitialized node the command still exits 0/2 with "initialized": false in
 # the JSON body, so we parse the body rather than trust the exit code alone.
 - name: Read OpenBao status
-  ansible.builtin.command:
-    cmd: bao status -format=json
-  environment:
-    BAO_ADDR: "{{ openbao_api_addr }}"
-  when: not (openbao_window_proxy_mode | default(false) | bool)
-  register: openbao_status_raw
-  changed_when: false
-  check_mode: false
-  failed_when: openbao_status_raw.rc not in [0, 2]
-
-- name: Read OpenBao status through the admin-window proxy
-  ansible.builtin.command:
-    cmd: bao status -format=json
-  environment: "{{ openbao_window_proxy_env }}"
-  delegate_to: localhost
-  connection: local
-  become: false
+  ansible.builtin.include_tasks: status-read.yml
   vars:
-    ansible_become: false
-  when: openbao_window_proxy_mode | default(false) | bool
-  register: openbao_status_proxy_raw
-  changed_when: false
-  check_mode: false
-  failed_when: openbao_status_proxy_raw.rc not in [0, 2]
+    openbao_status_read_via_proxy: "{{ openbao_window_proxy_mode | default(false) | bool }}"
+    openbao_status_read_strict: true
 
 - name: Parse OpenBao status
   ansible.builtin.set_fact:
-    # Each read registers its own name: a skipped task would overwrite a shared register.
-    openbao_status: >-
-      {{ ((openbao_status_proxy_raw if openbao_window_proxy_mode | default(false) | bool
-           else openbao_status_raw).stdout) | from_json }}
+    openbao_status: "{{ openbao_status_read }}"
 
 # --- Data-loss guard: never fresh-init on top of an existing cluster ---------
 # A rolling expansion of a LIVE cluster must JOIN, never re-init. Before the
