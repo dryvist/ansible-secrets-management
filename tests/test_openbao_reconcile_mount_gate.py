@@ -41,6 +41,9 @@ class ReconcileModeMountHandling(unittest.TestCase):
         for name in (FAIL_TASK, WARN_TASK, GATED_BLOCK):
             assert name in cls.tasks, f"{name!r} not found in {TASKS}"
         cls.env = Environment()
+        # These task conditions use Ansible's bool filter. The test contexts
+        # below pass booleans, for which Python's bool has the same behavior.
+        cls.env.filters["bool"] = bool
 
     def _fires(self, task_name, **context):
         conds = self.tasks[task_name]["when"]
@@ -57,6 +60,7 @@ class ReconcileModeMountHandling(unittest.TestCase):
                 FAIL_TASK,
                 openbao_bootstrap_token="tok",
                 openbao_reconcile_mode=True,
+                openbao_bounded_rbac_mode=True,
                 openbao_mounts_raw={"rc": 1},
             )
         )
@@ -67,6 +71,7 @@ class ReconcileModeMountHandling(unittest.TestCase):
                 FAIL_TASK,
                 openbao_bootstrap_token="tok",
                 openbao_reconcile_mode=False,
+                openbao_bounded_rbac_mode=False,
                 openbao_mounts_raw={"rc": 1},
             )
         )
@@ -77,6 +82,7 @@ class ReconcileModeMountHandling(unittest.TestCase):
                 WARN_TASK,
                 openbao_bootstrap_token="tok",
                 openbao_reconcile_mode=True,
+                openbao_bounded_rbac_mode=True,
                 openbao_mounts_raw={"rc": 1},
             )
         )
@@ -87,6 +93,7 @@ class ReconcileModeMountHandling(unittest.TestCase):
                 WARN_TASK,
                 openbao_bootstrap_token="tok",
                 openbao_reconcile_mode=True,
+                openbao_bounded_rbac_mode=True,
                 openbao_mounts_raw={"rc": 0},
             )
         )

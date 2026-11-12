@@ -158,7 +158,9 @@
 # validated first so a rejected target cannot reach its retired-role cleanup.
 - name: Assert every live AppRole is either declared or a named exception
   ansible.builtin.import_tasks: 10d-approle-undeclared-live.yml
-  when: openbao_bootstrap_token is defined
+  when:
+    - openbao_bootstrap_token is defined
+    - not (openbao_ai_admin_window_mode | default(false) | bool)
 
 # Runs on the controller (openbao_cli_host, resolved in init/02): measured on
 # the target at 328s, one module execution per role. Same CLI, same

@@ -97,9 +97,49 @@ openbao_ai_global_read_policy_name: ai-global-read
 openbao_ai_trusted_read_all_policies: >-
   {{ openbao_read_all_policies + [openbao_ai_global_read_policy_name] }}
 openbao_ai_admin_guard_policy_name: ai-admin-guard
+openbao_ai_admin_window_policy_name: ai-admin-window-rbac
 openbao_ai_admin_session_token_ttl: 1h
 openbao_ai_admin_session_token_max_ttl: 12h
 openbao_ai_admin_session_token_explicit_max_ttl: 12h
+# The 12-hour admin session has an additional exact-path policy for the
+# bounded RBAC selection flow. Keep identities that can change this window,
+# the execution plane, or its children outside that grant. The attached-policy
+# closure is derived from the declared roles so a new plane policy cannot be
+# reached merely because its role was renamed.
+openbao_ai_admin_window_protected_approle_names: >-
+  {{ [openbao_ai_admin_approle_name, openbao_ai_admin_session_approle_name,
+      'admin', openbao_reconcile_approle_name, openbao_approle_issuer_approle_name,
+      openbao_policy_sync_approle_name, openbao_semaphore_approle_name,
+      openbao_ansible_converge_approle_name]
+     + (openbao_window_service_policies | map(attribute='name') | list)
+     | unique | list }}
+openbao_ai_admin_window_protected_policy_names: >-
+  {%- set _protected = [openbao_ai_admin_policy_name,
+      openbao_ai_admin_guard_policy_name, openbao_ai_admin_window_policy_name,
+      openbao_human_unlock_policy_name, openbao_human_unlock_untrusted_policy_name,
+      openbao_approle_issuer_policy_name, openbao_policy_sync_policy_name,
+      openbao_policy_sync_unlock_policy_name,
+      openbao_tofu_state_admin_policy_name] -%}
+  {%- for _role in openbao_approles
+      | selectattr('name', 'in', [openbao_ai_admin_session_approle_name]
+          + (openbao_window_service_policies | map(attribute='name') | list)) -%}
+  {%- set _attached = _role.token_policies | default([_role.policy] if _role.policy is defined else []) -%}
+  {%- set _ = _protected.extend(_attached) -%}
+  {%- endfor -%}
+  {{ (_protected + (openbao_window_service_policies | map(attribute='name') | list)) | unique | list }}
+openbao_ai_admin_window_manageable_policies: >-
+  {{ openbao_policies
+     | selectattr('name', 'in', openbao_reconcile_policy_excluded_names)
+     | rejectattr('name', 'equalto', openbao_reconcile_policy_name)
+     | rejectattr('name', 'in', openbao_ai_admin_window_protected_policy_names)
+     | list }}
+openbao_ai_admin_window_manageable_approles: >-
+  {{ openbao_approles
+     | selectattr('manage_secret_id', 'defined')
+     | rejectattr('manage_secret_id')
+     | rejectattr('name', 'in', openbao_reconcile_excluded_policies)
+     | rejectattr('name', 'in', openbao_ai_admin_window_protected_approle_names)
+     | list }}
 # Token/secret_id bounds for the elevated tiers, as the "unlock window" model:
 # one human unlock (a wrapped, single-use secret_id) -> one login -> a token that
 # lives the window, so an agent works unattended for the window instead of a

@@ -134,7 +134,7 @@
   no_log: true
   when:
     - openbao_bootstrap_token is defined
-    - openbao_reconcile_mode | default(false)
+    - openbao_bounded_rbac_mode | default(false) | bool
 
 - name: Resolve the policy-sync capability response
   ansible.builtin.set_fact:
@@ -143,7 +143,7 @@
     _body: "{{ openbao_policy_sync_caps.stdout | default('{}') | from_json }}"
   when:
     - openbao_bootstrap_token is defined
-    - openbao_reconcile_mode | default(false)
+    - openbao_bounded_rbac_mode | default(false) | bool
     - (openbao_policy_sync_caps.rc | default(1)) == 0
 
 - name: Collect the KV keys used by the reconcile policy
@@ -157,7 +157,7 @@
          + (openbao_caller_gateway_generated_app_secrets | default({})).keys() | list }}
   when:
     - openbao_bootstrap_token is defined
-    - openbao_reconcile_mode | default(false)
+    - openbao_bounded_rbac_mode | default(false) | bool
 
 - name: Add the generated seed paths used by the reconcile policy
   ansible.builtin.set_fact:
@@ -170,7 +170,7 @@
     label: "{{ item.key }}"
   when:
     - openbao_bootstrap_token is defined
-    - openbao_reconcile_mode | default(false)
+    - openbao_bounded_rbac_mode | default(false) | bool
 
 - name: Add the rotation-exempt mount and path components used by the reconcile policy
   ansible.builtin.set_fact:
@@ -182,7 +182,7 @@
     label: "{{ item }}"
   when:
     - openbao_bootstrap_token is defined
-    - openbao_reconcile_mode | default(false)
+    - openbao_bounded_rbac_mode | default(false) | bool
 
 - name: Add the reconcile read leaves used by the reconcile policy
   ansible.builtin.set_fact:
@@ -193,7 +193,7 @@
     label: "{{ item }}"
   when:
     - openbao_bootstrap_token is defined
-    - openbao_reconcile_mode | default(false)
+    - openbao_bounded_rbac_mode | default(false) | bool
 
 - name: Assert reconcile KV grant keys are literal path components
   ansible.builtin.assert:
@@ -209,7 +209,7 @@
     label: "{{ item }}"
   when:
     - openbao_bootstrap_token is defined
-    - openbao_reconcile_mode | default(false)
+    - openbao_bounded_rbac_mode | default(false) | bool
 
 - name: Preview reconcile policy changes in check mode
   ansible.builtin.import_tasks: 02c-policy-sync-preview.yml
@@ -217,7 +217,7 @@
     - ansible_check_mode
     - openbao_reconcile_policy_selected_for_sync | bool
     - openbao_bootstrap_token is defined
-    - openbao_reconcile_mode | default(false)
+    - openbao_bounded_rbac_mode | default(false) | bool
     - (openbao_policy_sync_caps.rc | default(1)) == 0
     - >-
       'update' in ((openbao_policy_sync_caps.stdout | from_json).get('data', {})
@@ -240,7 +240,7 @@
   when:
     - openbao_reconcile_policy_selected_for_sync | bool
     - openbao_bootstrap_token is defined
-    - openbao_reconcile_mode | default(false)
+    - openbao_bounded_rbac_mode | default(false) | bool
     - (openbao_policy_sync_caps.rc | default(1)) == 0
     - >-
       'update' in ((openbao_policy_sync_caps.stdout | from_json).get('data', {})

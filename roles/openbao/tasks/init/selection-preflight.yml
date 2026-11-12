@@ -31,4 +31,4 @@
   ansible.builtin.import_tasks: selection-capabilities.yml
   when:
     - openbao_select | default({}) | length > 0
-    - openbao_reconcile_mode | default(false) | bool
+    - openbao_bounded_rbac_mode | default(false) | bool

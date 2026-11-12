@@ -99,7 +99,7 @@
     - openbao_engines
     - aws
   when:
-    - not (openbao_reconcile_mode | default(false))
+    - not (openbao_bounded_rbac_mode | default(false) | bool)
     - openbao_select | default({}) | length == 0
 
 - name: Register and configure the Azure secrets engine
@@ -108,7 +108,7 @@
     - openbao_engines
     - azure
   when:
-    - not (openbao_reconcile_mode | default(false))
+    - not (openbao_bounded_rbac_mode | default(false) | bool)
     - openbao_azure_engine_enabled | bool
     - openbao_select | default({}) | length == 0
 
@@ -124,7 +124,7 @@
     - openbao_engines
     - github
   when:
-    - not (openbao_reconcile_mode | default(false))
+    - not (openbao_bounded_rbac_mode | default(false) | bool)
     - openbao_select | default({}) | length == 0
 
 - name: Register and configure the OAuthapp secrets engine
@@ -133,7 +133,7 @@
     - openbao_engines
     - oauth
   when:
-    - not (openbao_reconcile_mode | default(false))
+    - not (openbao_bounded_rbac_mode | default(false) | bool)
     - openbao_select | default({}) | length == 0
 
 - name: Configure the SSH CA and its signing roles
@@ -209,7 +209,7 @@
     - openbao_bootstrap_token is defined
     - openbao_github_engine_enabled | bool
     - >-
-      not (openbao_reconcile_mode | default(false) | bool)
+      not (openbao_bounded_rbac_mode | default(false) | bool)
       or ((openbao_policy_sync_caps.rc | default(1)) == 0
           and 'update' in _policy_sync_capabilities
           .get('sys/policies/acl/' ~ openbao_reconcile_policy_name, [])
@@ -238,7 +238,7 @@
     label: "{{ ga.app_id }}"
   no_log: true
   when:
-    - not (openbao_reconcile_mode | default(false))
+    - not (openbao_bounded_rbac_mode | default(false) | bool)
     - openbao_select | default({}) | length == 0
 
 - name: Enable AppRole/JWT auth and reconcile Terrakube workspace JWT roles
@@ -253,7 +253,7 @@
   # privileged create that cannot succeed. Enabling an auth method is bootstrap
   # work; it needs OPENBAO_PROVISIONING_TOKEN.
   when:
-    - not (openbao_reconcile_mode | default(false))
+    - not (openbao_bounded_rbac_mode | default(false) | bool)
     - openbao_select | default({}) | length == 0
 
 - name: Declare AppRoles and reconcile their policy and TTL bounds

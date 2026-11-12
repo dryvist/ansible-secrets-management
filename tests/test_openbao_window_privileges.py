@@ -2,6 +2,7 @@
 
 import pytest
 import time
+import yaml
 
 from openbao_reconcile_bounds_helpers import (
     RECONCILE,
@@ -16,8 +17,16 @@ from openbao_reconcile_bounds_helpers import (
 )
 from test_openbao_rbac_policy_render import render as render_policies
 from test_openbao_hatchet_killtest_policy_reach import _call, _dev_server
+from test_openbao_select import (
+    condition as selection_condition,
+    render as selection_render,
+    resolve as resolve_selection,
+    task as selection_task,
+)
 
 GUARD = TEMPLATES / "ai-admin-guard-policy.hcl.j2"
+WINDOW_GRANT = TEMPLATES / "ai-admin-window-policy.hcl.j2"
+WINDOW_INIT = TEMPLATES.parents[0] / "tasks/init/02-initialize-cluster.yml"
 IDENTITY_FAMILIES = ["entity", "entity-alias", "group", "group-alias"]
 DENIED_PATHS = [
     "sys/seal", "sys/seal/child", "sys/unseal", "sys/unseal/child",
@@ -86,21 +95,146 @@ def test_generic_template_does_not_grant_undeclared_paths(rendered_defaults):
 
 
 def test_guard_retains_protected_roles_and_policies(rendered_defaults):
-    values, approles, _ = rendered_defaults
+    values, _, _ = rendered_defaults
     stanzas = dict(_stanzas(_render(GUARD, values)))
-    for role in approles:
-        if role.get("manage_secret_id") is False or role["name"] == "admin":
-            for suffix in ("", "/*"):
-                assert _capabilities(stanzas[f"auth/approle/role/{role['name']}{suffix}"]) == ["deny"]
-    for key in (
-        "openbao_ai_admin_policy_name", "openbao_ai_admin_guard_policy_name",
-        "openbao_human_unlock_policy_name", "openbao_human_unlock_untrusted_policy_name",
-    ):
+    for name in values["openbao_ai_admin_window_protected_approle_names"]:
         for suffix in ("", "/*"):
-            assert _capabilities(stanzas[f"sys/policies/acl/{values[key]}{suffix}"]) == ["deny"]
-    for name in _session_policies(values) + ["window-github"]:
+            assert _capabilities(stanzas[f"auth/approle/role/{name}{suffix}"]) == ["deny"]
+    for name in values["openbao_ai_admin_window_protected_policy_names"]:
         for suffix in ("", "/*"):
             assert _capabilities(stanzas[f"sys/policies/acl/{name}{suffix}"]) == ["deny"]
+    assert "auth/approle/role/*" in stanzas
+
+
+def test_window_grant_is_exact_and_matches_only_eligible_protected_objects(rendered_defaults):
+    values, _, _ = rendered_defaults
+    text = _render(WINDOW_GRANT, values)
+    stanzas = dict(_stanzas(text))
+    expected_policy_paths = {
+        f"sys/policies/acl/{policy['name']}"
+        for policy in values["openbao_ai_admin_window_manageable_policies"]
+    } | {f"sys/policies/acl/{values['openbao_reconcile_policy_name']}"}
+    expected_role_paths = {
+        f"auth/approle/role/{role['name']}"
+        for role in values["openbao_ai_admin_window_manageable_approles"]
+    } | {
+        f"auth/approle/role/{role['name']}/policies"
+        for role in values["openbao_ai_admin_window_manageable_approles"]
+    }
+    assert {path for path in stanzas if path.startswith("sys/policies/acl/")} == expected_policy_paths
+    assert {path for path in stanzas if path.startswith("auth/approle/role/")} == expected_role_paths
+    assert _capabilities(stanzas[f"sys/policies/acl/{values['openbao_reconcile_policy_name']}"]) == [
+        "create", "read", "update",
+    ]
+    assert all(_capabilities(stanzas[path]) == ["create", "read", "update"]
+               for path in expected_policy_paths)
+    assert all(_capabilities(stanzas[path]) == ["create", "read", "update"]
+               for path in expected_role_paths if not path.endswith("/policies"))
+    assert all(_capabilities(stanzas[path]) == ["create", "update"]
+               for path in expected_role_paths if path.endswith("/policies"))
+    assert all(role.get("manage_secret_id") is False
+               for role in values["openbao_ai_admin_window_manageable_approles"])
+    assert _capabilities(stanzas["sys/capabilities-self"]) == ["create", "update"]
+    assert _capabilities(stanzas["sys/policies/acl"]) == ["list"]
+    path_declarations = [
+        line.strip().split('"', 2)[1]
+        for line in WINDOW_GRANT.read_text(encoding="utf-8").splitlines()
+        if line.lstrip().startswith('path "')
+    ]
+    assert not any("secret-id" in path or "*" in path for path in path_declarations)
+
+
+@pytest.mark.parametrize("kind", ["policies", "approles"])
+def test_window_selection_resolver_accepts_granted_and_refuses_self_protecting_names(
+    kind, rendered_defaults,
+):
+    values, approles, policies = rendered_defaults
+    candidates = values[f"openbao_ai_admin_window_manageable_{kind}"]
+    declared = policies if kind == "policies" else approles
+    candidate_names = [item["name"] for item in candidates]
+    declared_names = [item["name"] for item in declared]
+    selected_name = candidate_names[0]
+
+    _matches, accepted = resolve_selection(
+        {kind: [selected_name]}, kind=kind,
+        names=candidate_names, declared_names=declared_names,
+    )
+    assert accepted == [{"name": selected_name}]
+    gate = selection_task("Require selected OpenBao objects to be manageable by this identity")
+    outside = selection_render(gate["vars"]["_outside_grant"], {
+        "openbao_object_targets": accepted,
+        "openbao_select_candidates": candidates,
+    })
+    assert selection_condition(gate["ansible.builtin.assert"]["that"][0], {
+        "_outside_grant": outside,
+    })
+    assert outside == []
+
+    protected_name = (values["openbao_ai_admin_session_approle_name"]
+                      if kind == "approles" else values["openbao_ai_admin_policy_name"])
+    _matches, rejected = resolve_selection(
+        {kind: [protected_name]}, kind=kind,
+        names=candidate_names, declared_names=declared_names,
+    )
+    assert rejected == [{"name": protected_name}]
+    outside = selection_render(gate["vars"]["_outside_grant"], {
+        "openbao_object_targets": rejected,
+        "openbao_select_candidates": candidates,
+    })
+    assert outside == [protected_name]
+    assert "human-gated path" in selection_render(gate["ansible.builtin.assert"]["fail_msg"], {
+        "_outside_grant": outside, "openbao_select_kind": kind,
+    })
+
+
+def test_window_identity_uses_lookup_self_and_preflights_before_policy_sync(rendered_defaults):
+    values, _, _ = rendered_defaults
+    tasks = yaml.safe_load(WINDOW_INIT.read_text(encoding="utf-8"))
+    named_tasks = {task.get("name"): task for task in tasks}
+    lookup = named_tasks["Look up the supplied token's own policies"]
+    resolve = named_tasks["Resolve whether the supplied token is the ai-admin-session window"]
+    partial_policy_guard = named_tasks[
+        "FAIL — a partial admin-window policy set is present"
+    ]["ansible.builtin.assert"]["that"][0]
+    bounded = named_tasks["Resolve whether this run uses the bounded RBAC path"]
+    early_preflight = named_tasks["Resolve ai-admin-session selections and grants before policy-sync"]
+    policy_sync = named_tasks[
+        "Resolve the Raft leader and sync the reconcile policy before any grant consumer runs"
+    ]
+
+    assert lookup["ansible.builtin.command"]["cmd"] == "bao read -format=json auth/token/lookup-self"
+    assert lookup["environment"]["BAO_TOKEN"] == "{{ openbao_bootstrap_token }}"
+    assert lookup["no_log"] is True
+    expression = resolve["ansible.builtin.set_fact"]["openbao_ai_admin_window_mode"]
+    policies = [
+        values["openbao_ai_admin_policy_name"],
+        values["openbao_ai_admin_guard_policy_name"],
+        values["openbao_ai_admin_window_policy_name"],
+        values["openbao_tofu_state_admin_policy_name"],
+    ]
+    context = dict(values, _lookup={"data": {"policies": policies}})
+    assert _templar(_trust(context)).template(_trust(expression)) in (True, "True")
+    partial_context = dict(values, openbao_ai_admin_window_policies=[policies[1]])
+    assert not selection_condition(partial_policy_guard, partial_context)
+    partial_context["openbao_ai_admin_window_policies"] = [policies[2]]
+    assert not selection_condition(partial_policy_guard, partial_context)
+    partial_context["openbao_ai_admin_window_policies"] = policies[:-1]
+    assert not selection_condition(partial_policy_guard, partial_context)
+    complete_context = dict(values, openbao_ai_admin_window_policies=policies)
+    assert selection_condition(partial_policy_guard, complete_context)
+    context["_lookup"] = {"data": {"policies": ["root"]}}
+    assert _templar(_trust(context)).template(_trust(expression)) in (False, "False")
+    assert tasks.index(early_preflight) < tasks.index(policy_sync)
+    assert "openbao_ai_admin_window_mode" in str(early_preflight.get("when", []))
+    bounded_mode = bounded["ansible.builtin.set_fact"]["openbao_bounded_rbac_mode"]
+    bounded_context = dict(values, openbao_reconcile_mode=False, openbao_ai_admin_window_mode=True)
+    assert _templar(_trust(bounded_context)).template(_trust(bounded_mode)) in (True, "True")
+    selection_preflight = yaml.safe_load(
+        (WINDOW_INIT.parents[0] / "selection-preflight.yml").read_text(encoding="utf-8")
+    )
+    assert "openbao_bounded_rbac_mode" in str(
+        selection_preflight[-1].get("when", [])
+    )
 
 
 def test_guard_pins_child_token_parameters(rendered_defaults):
@@ -142,6 +276,7 @@ def window_server(rendered_defaults):
     rendered = {
         values["openbao_ai_admin_policy_name"]: _render(TEMPLATES / "ai-admin-policy.hcl.j2", values),
         values["openbao_ai_admin_guard_policy_name"]: _render(GUARD, values),
+        values["openbao_ai_admin_window_policy_name"]: _render(WINDOW_GRANT, values),
         values["openbao_tofu_state_admin_policy_name"]: _render(TEMPLATES / "tofu-state-admin-policy.hcl.j2", values),
         window["name"]: _render(TEMPLATES / window["template"], dict(values, item=window)),
     }
@@ -179,18 +314,58 @@ def _window_policy_sets(values):
 def test_native_composition_denies_dangerous_and_protected_paths(window_server):
     base, values, _ = window_server
     parent = _parent(base, values)
-    paths = DENIED_PATHS + [f"sys/policies/acl/{values[key]}" for key in (
-        "openbao_ai_admin_policy_name", "openbao_ai_admin_guard_policy_name",
-        "openbao_human_unlock_policy_name", "openbao_human_unlock_untrusted_policy_name",
-    )] + [f"sys/policies/acl/{name}{suffix}"
-          for name in _session_policies(values) + ["window-github"]
-          for suffix in ("", "/nested", "/nested/descendant")]
+    protected_approles = values["openbao_ai_admin_window_protected_approle_names"]
+    protected_policies = values["openbao_ai_admin_window_protected_policy_names"]
+    paths = DENIED_PATHS + [f"auth/approle/role/{name}{suffix}"
+                            for name in protected_approles
+                            for suffix in ("", "/nested", "/nested/descendant")] + [
+        f"sys/policies/acl/{name}{suffix}"
+        for name in protected_policies
+        for suffix in ("", "/nested", "/nested/descendant")
+    ]
     status, result = _call(base, "root", "POST", "sys/capabilities", {"token": parent, "paths": paths})
     assert status == 200
     assert {path: result[path] for path in paths} == dict.fromkeys(paths, ["deny"])
     status, result = _call(base, parent, "GET", "auth/token/lookup-self")
     assert status == 200, result if status != 200 else ""
     assert _call(base, parent, "POST", "auth/token/renew-self", {})[0] == 200
+
+
+def test_native_window_grant_allows_exact_rbac_paths_and_keeps_self_protection(window_server):
+    base, values, _ = window_server
+    parent = _parent(base, values)
+    policy = values["openbao_ai_admin_window_manageable_policies"][0]["name"]
+    approle = values["openbao_ai_admin_window_manageable_approles"][0]["name"]
+    apps_policy = values.get("openbao_apps_policy_name", "apps")
+    plane_policy = values["openbao_ansible_converge_policy_name"]
+    paths = [
+        "sys/capabilities-self",
+        "sys/policies/acl",
+        f"sys/policies/acl/{policy}",
+        f"sys/policies/acl/{values['openbao_reconcile_policy_name']}",
+        f"auth/approle/role/{approle}",
+        f"auth/approle/role/{approle}/policies",
+        f"sys/policies/acl/{apps_policy}",
+        f"sys/policies/acl/{plane_policy}",
+        "auth/approle/role/openbao-reconcile",
+        "auth/approle/role/approle-issuer",
+        "auth/approle/role/ai-admin-session",
+        f"sys/policies/acl/{values['openbao_ai_admin_window_policy_name']}",
+    ]
+    status, result = _call(base, "root", "POST", "sys/capabilities", {"token": parent, "paths": paths})
+    assert status == 200
+    assert result["sys/capabilities-self"] == ["create", "update"]
+    assert result["sys/policies/acl"] == ["list"]
+    assert result[f"sys/policies/acl/{policy}"] == ["create", "read", "update"]
+    assert result[f"sys/policies/acl/{values['openbao_reconcile_policy_name']}"] == [
+        "create", "read", "update",
+    ]
+    assert result[f"auth/approle/role/{approle}"] == ["create", "read", "update"]
+    assert result[f"auth/approle/role/{approle}/policies"] == ["create", "update"]
+    assert result[f"sys/policies/acl/{apps_policy}"] == ["create", "read", "update"]
+    assert result[f"sys/policies/acl/{plane_policy}"] == ["create", "read", "update"]
+    for path in paths[8:]:
+        assert result[path] == ["deny"]
 
 
 def test_native_session_cannot_write_attached_policies_or_widen_issuance(window_server):

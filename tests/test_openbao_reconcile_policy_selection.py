@@ -75,6 +75,7 @@ def test_policy_sync_runs_for_empty_or_selected_reconcile_policy_only():
     variables = {
         "openbao_bootstrap_token": True,
         "openbao_reconcile_mode": True,
+        "openbao_bounded_rbac_mode": True,
         "openbao_reconcile_policy_name": POLICY_NAME,
         "openbao_policy_sync_caps": {
             "rc": 0,

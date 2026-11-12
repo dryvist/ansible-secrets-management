@@ -226,6 +226,7 @@ class SelectedPolicyLoops(unittest.TestCase):
             "openbao_select": {"policies": ["apps"]},
             "openbao_bootstrap_token": "s.test",
             "openbao_reconcile_mode": True,
+            "openbao_bounded_rbac_mode": True,
             "openbao_ungranted_policy_names": ["human-gated"],
         }
         self.assertFalse(all(
