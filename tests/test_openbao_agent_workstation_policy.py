@@ -197,6 +197,8 @@ def agent_workstation_token():
         assert status == 204
 
         for path in READS + DENIED_READS:
+            if "/metadata/" in path:
+                continue
             status, _ = _call(
                 base,
                 "root",
