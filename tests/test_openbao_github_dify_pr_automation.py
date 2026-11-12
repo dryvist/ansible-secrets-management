@@ -78,11 +78,24 @@ def test_unconfigured_owner_does_not_declare_unbounded_sets():
     assert render(variables, "{{ openbao_github_dify_pr_automation_permission_sets }}") == []
 
 
+def test_empty_repository_allowlist_does_not_declare_permission_sets():
+    variables = _variables()
+    variables["openbao_dify_pr_automation_repositories"] = []
+    assert render(variables, "{{ openbao_github_dify_pr_automation_permission_sets }}") == []
+
+
 def test_role_policies_mint_only_their_assigned_set():
     variables = _variables()
+    policy_templates = {
+        entry["name"]: entry["template"]
+        for entry in render(variables, "{{ openbao_dify_agent_policies }}")
+    }
+    shared_read_template = "agent-dify-pr-automation-read-policy.hcl.j2"
+    assert policy_templates["agent-pr-keeper"] == shared_read_template
+    assert policy_templates["agent-github-clerk"] == shared_read_template
     policy_files = {
-        "agent-pr-keeper": "agent-pr-keeper-policy.hcl.j2",
-        "agent-github-clerk": "agent-github-clerk-policy.hcl.j2",
+        "agent-pr-keeper": shared_read_template,
+        "agent-github-clerk": shared_read_template,
         "agent-merge-steward": "agent-merge-steward-policy.hcl.j2",
     }
     for role_name, template_name in policy_files.items():

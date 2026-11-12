@@ -1,5 +1,0 @@
-{{ ansible_managed | comment }}
-# Mints only the repository-scoped Dify PR automation read set.
-path "{{ openbao_github_mount }}/token/{{ openbao_github_dify_pr_automation_read_set_name }}" {
-  capabilities = ["create", "update"]
-}

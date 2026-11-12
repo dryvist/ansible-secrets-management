@@ -14,7 +14,7 @@ configuration, so each App's own grant caps every token its mount mints:
 | Mount | App | Permission sets |
 | --- | --- | --- |
 | `github` | everyday | read sets and the raw `github/token` write endpoint |
-| `github-admin` | admin | admin, repo-create, docs-publisher, ci-resolver, runner, exporter |
+| `github-admin` | admin | admin, repo-create, docs-publisher, ci-resolver, runner, exporter, dify-pr-automation-read, dify-pr-automation-write |
 | `github-agents` | agents | public-read/write and five least-privilege fleet-agent sets, scoped to public dryvist repositories |
 | `github-hermes` | hermes | `hermes-review-{public,private}`, `hermes-read-public`, `hermes-author-public`, split by repository visibility |
 | `github-work` | work | a derived `read` set and the raw token endpoint for write; the App's grant is the only write ceiling |

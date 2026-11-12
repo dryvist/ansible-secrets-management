@@ -32,8 +32,8 @@ openbao_dify_agent_policies:
   - name: "{{ openbao_dify_agent_docs_updater_policy_name }}"
     template: agent-docs-updater-policy.hcl.j2
   - name: "{{ openbao_dify_agent_pr_keeper_policy_name }}"
-    template: agent-pr-keeper-policy.hcl.j2
+    template: agent-dify-pr-automation-read-policy.hcl.j2
   - name: "{{ openbao_dify_agent_github_clerk_policy_name }}"
-    template: agent-github-clerk-policy.hcl.j2
+    template: agent-dify-pr-automation-read-policy.hcl.j2
   - name: "{{ openbao_dify_agent_merge_steward_policy_name }}"
     template: agent-merge-steward-policy.hcl.j2
