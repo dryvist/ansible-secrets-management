@@ -184,6 +184,10 @@ operations the guard protects. The separate `tofu-state-admin` policy grants
 `update` only on the configured Transit data-key plaintext and decrypt paths for
 the OpenTofu state key.
 
+A converge during the admin window runs through its local proxy using the
+exported `BAO_AGENT_ADDR` and `BAO_CONFIG_PATH`. The window token stays in the
+proxy's memory and is never handed to the caller.
+
 ### UniFi controller credential tiers
 
 The UniFi controller credentials live on four exact KV v2 leaves under

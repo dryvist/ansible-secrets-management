@@ -136,6 +136,12 @@
 
 - name: Bootstrap OpenBao (init, KV, policies, AppRoles)
   ansible.builtin.import_tasks: ../init.yml
+  environment: >-
+    {{ {'BAO_AGENT_ADDR': openbao_window_proxy_addr,
+        'BAO_CONFIG_PATH': lookup('env', 'BAO_CONFIG_PATH'),
+        'BAO_TOKEN': ''}
+       if openbao_cli_proxy_active | default(false) | bool
+       else {'BAO_AGENT_ADDR': ''} }}
   tags:
     - openbao_bootstrap
   when:

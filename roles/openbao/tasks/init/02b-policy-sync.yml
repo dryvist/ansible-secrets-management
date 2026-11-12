@@ -52,6 +52,25 @@
   register: openbao_leader_status_raw
   check_mode: false
   changed_when: false
+  when: not (openbao_cli_proxy_active | default(false) | bool)
+
+- name: Read OpenBao status through the admin-window proxy to resolve the current Raft leader
+  ansible.builtin.command:
+    cmd: bao status -format=json
+  environment:
+    BAO_ADDR: "{{ openbao_window_proxy_addr }}"
+    BAO_AGENT_ADDR: "{{ openbao_window_proxy_addr }}"
+    BAO_CONFIG_PATH: "{{ lookup('env', 'BAO_CONFIG_PATH') }}"
+    BAO_TOKEN: ""
+  delegate_to: localhost
+  connection: local
+  become: false
+  vars:
+    ansible_become: false
+  register: openbao_leader_status_raw
+  check_mode: false
+  changed_when: false
+  when: openbao_cli_proxy_active | default(false) | bool
   failed_when: false
 
 # leader_address is the leader's advertised api_addr, reachable from this host
