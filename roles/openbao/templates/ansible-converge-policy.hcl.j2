@@ -54,6 +54,23 @@ path "{{ openbao_kv_mount }}/undelete/ai/mcp/splunk" {
   capabilities = ["update"]
 }
 
+# Exact-path exception: ansible-splunk's converge publishes the read-only
+# platform search user's minted token here (inventory/group_vars/splunk.yml,
+# token_openbao_path platform/splunk/search). Same narrow shape as the Splunk
+# MCP grant above: the single secret only, never platform/splunk/* or
+# platform/*, and never platform/splunk/main.
+path "{{ openbao_kv_mount }}/data/platform/splunk/search" {
+  capabilities = ["create", "update", "read"]
+}
+
+path "{{ openbao_kv_mount }}/metadata/platform/splunk/search" {
+  capabilities = ["read"]
+}
+
+path "{{ openbao_kv_mount }}/undelete/platform/splunk/search" {
+  capabilities = ["update"]
+}
+
 # Transitional exact-path exception (Vikunja MCP): the converge publishes the
 # minted Vikunja MCP connection here. Same narrow create/update/read on the
 # SINGLE secret as the splunk grant above — deliberately NOT a wildcard.
