@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.102.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.101.1...v0.102.0) (2026-11-12)
+
+
+### Features
+
+* **openbao:** select the reconcile policy in a selected run ([#666](https://github.com/dryvist/ansible-secrets-management/issues/666)) ([d285a08](https://github.com/dryvist/ansible-secrets-management/commit/d285a08db31c311ac56aafb3538d972941bcce30))
+
 ## [0.101.1](https://github.com/dryvist/ansible-secrets-management/compare/v0.101.0...v0.101.1) (2026-11-12)
 
 
