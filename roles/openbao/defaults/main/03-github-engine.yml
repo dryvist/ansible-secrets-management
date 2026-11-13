@@ -366,7 +366,6 @@ openbao_github_org_secrets_installations:
     installation_id: "{{ openbao_github_dryvist_installation_id }}"
   - name: jacobpevans
     installation_id: "{{ openbao_github_jacobpevans_installation_id }}"
-    org_secrets_permission_set_name: JacobPEvans-org-secrets
   - name: jacobpevans-ai
     installation_id: "{{ openbao_github_jacobpevans_ai_installation_id }}"
   - name: jpe-ansible
