@@ -346,6 +346,8 @@ openbao_github_dify_pr_automation_permission_sets: >-
        'permissions': openbao_github_dify_pr_automation_write_permissions}]
      if (openbao_github_jacobpevans_ai_installation_id | length > 0
          and openbao_dify_pr_automation_repositories | length > 0) else [] }}
+# A set reaches ai-orchestrator only when its tier is in this list.
+openbao_ai_orchestrator_github_tiers: [read]
 # tier drives which identities may mint a set (see the github-*-policy
 # templates): `read` sets are ambient; `admin` sets (installation-wide, full
 # App ceiling) are minted only through the inert, human-gated github-admin
@@ -406,6 +408,37 @@ openbao_github_org_secrets_installations:
     installation_id: "{{ openbao_github_jpe_ai_agents_installation_id }}"
   - name: jpe-claude
     installation_id: "{{ openbao_github_jpe_claude_installation_id }}"
+# Additional organization-scoped runner sets are opt-in through the platform
+# env document. Resolve each requested owner against the shared installation
+# catalog so this list cannot introduce a separate installation-ID source.
+openbao_github_runner_register_owners: >-
+  {{ (openbao_platform_env['OPENBAO_GITHUB_RUNNER_REGISTER_OWNERS'] | default('', true)).split(',')
+     | map('trim') | reject('equalto', '') | unique | list }}
+openbao_github_runner_register_permission_sets: >-
+  {%- set _sets = [] -%}
+  {%- set _base_runner_names = openbao_github_base_permission_sets
+       | selectattr('tier', 'equalto', 'runner') | map(attribute='name') | list -%}
+  {%- for owner in openbao_github_runner_register_owners -%}
+  {%- set _installation = openbao_github_org_secrets_installations
+       | selectattr('name', 'equalto', owner) | list | first | default({}) -%}
+  {%- if _installation.installation_id | default('', true) | string | length > 0
+        and ('runner-register-' ~ owner) not in _base_runner_names -%}
+  {%- set _ = _sets.append({'name': 'runner-register-' ~ owner,
+      'tier': 'runner', 'installation_id': _installation.installation_id,
+      'permissions': openbao_github_runner_permissions}) -%}
+  {%- endif -%}
+  {%- endfor -%}
+  {{ _sets }}
+openbao_github_runner_register_missing_owners: >-
+  {%- set _missing = [] -%}
+  {%- for owner in openbao_github_runner_register_owners -%}
+  {%- set _installation = openbao_github_org_secrets_installations
+       | selectattr('name', 'equalto', owner) | list | first | default({}) -%}
+  {%- if _installation.installation_id | default('', true) | string | length == 0 -%}
+  {%- set _ = _missing.append(owner) -%}
+  {%- endif -%}
+  {%- endfor -%}
+  {{ _missing }}
 openbao_github_org_secrets_permission_sets: >-
   {%- set _sets = [] -%}
   {%- for org in openbao_github_org_secrets_installations -%}
@@ -428,7 +461,8 @@ openbao_github_admin_permission_sets: >-
      + openbao_github_git_mirror_permission_sets
      + openbao_github_role_eval_status_permission_sets
      + openbao_github_workflows_write_permission_sets
-     + openbao_github_dispatch_permission_sets }}
+     + openbao_github_dispatch_permission_sets
+     + openbao_github_runner_register_permission_sets }}
 # Every set on every GitHub mount, each tagged with its mount, for the policy
 # templates.
 openbao_github_permission_sets: >-

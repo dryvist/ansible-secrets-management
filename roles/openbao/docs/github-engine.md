@@ -68,7 +68,7 @@ Token access is tiered; the tier IS the privilege boundary:
   boundary. The `github-write` policy also grants `github-personal/token` with
   `installation_id` pinned to the configured personal installation.
   `github-mint` remains limited to read-tier sets, and `ai-orchestrator`
-  excludes write-tier sets.
+  grants named tokens for read-tier sets only.
 - **publish (`docs-publisher`)** — `github-admin/token/docs-publisher`: one
   repository, `contents: write` + `pull_requests: write`, all three stored in
   the set. The repository list comes from the iac secret store; with none
@@ -203,8 +203,18 @@ write` permission and no OpenBao permission sets. The mount and policy are
 always declared; `OPENBAO_GITHUB_RUNNER_APP_ID` and
 `OPENBAO_GITHUB_RUNNER_APP_PRIVATE_KEY` are one-time environment that configure
 it. The App's GitHub installations determine the organizations available to
-the request. The existing
-`runner-register-dryvist` permission set remains on `github-admin`.
+the request. The existing fixed base registration set remains on
+`github-admin`.
+
+Set `OPENBAO_GITHUB_RUNNER_REGISTER_OWNERS` in the platform env document to a
+comma-separated list of additional owners, for example
+`example-org,example-other`. Each listed owner must match a `name` in
+`openbao_github_org_secrets_installations` and have a configured installation
+ID; configured owners produce a `runner-register-<owner>` set with the fixed
+runner permission map. Owners without a mapped installation ID are skipped and
+warned individually. An unset or empty list adds no sets and emits one warning
+that names the configuration key. The runner policy grants its runner-tier set
+paths only.
 
 The `github-admin/token/workflow-dispatch` set grants `actions:write` and
 `metadata:read` for one repository. Set `OPENBAO_GITHUB_DISPATCH_OWNER` to an
