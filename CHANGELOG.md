@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.105.1](https://github.com/jpe-ansible/ansible-secrets-management/compare/v0.105.0...v0.105.1) (2026-11-13)
+
+
+### Bug Fixes
+
+* **openbao:** name every org-secrets permission set in lower case ([#686](https://github.com/jpe-ansible/ansible-secrets-management/issues/686)) ([814c6ab](https://github.com/jpe-ansible/ansible-secrets-management/commit/814c6ab465c1c2362a462de7a6b12f66c110b217))
+
 ## [0.105.0](https://github.com/jpe-ansible/ansible-secrets-management/compare/v0.104.0...v0.105.0) (2026-11-13)
 
 
