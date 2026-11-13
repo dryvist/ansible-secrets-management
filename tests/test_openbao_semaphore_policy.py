@@ -18,6 +18,7 @@ def _render(kv_mount: str, config_mount: str = "config") -> str:
         "openbao_github_everyday_mount": "github-everyday",
         "openbao_semaphore_github_raw_read_permissions": {"contents": "read"},
         "openbao_semaphore_github_read_permission_sets": [],
+        "openbao_github_dispatch_permission_sets": [],
     }
     return templar.template(trust_as_template(POLICY.read_text(encoding="utf-8")))
 

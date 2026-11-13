@@ -1,4 +1,14 @@
 ---
+- name: Warn when workflow dispatch configuration is incomplete
+  ansible.builtin.debug:
+    msg: >-
+      WARNING: Workflow dispatch is disabled. Configure OPENBAO_GITHUB_DISPATCH_OWNER
+      with a mapped installation ID and OPENBAO_GITHUB_DISPATCH_REPOSITORY.
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_github_engine_enabled | bool
+    - openbao_github_dispatch_permission_sets | length == 0
+
 - name: Read the staged GitHub plugin binary's sha256
   ansible.builtin.stat:
     path: "{{ openbao_plugin_dir }}/{{ openbao_github_plugin_command }}"
