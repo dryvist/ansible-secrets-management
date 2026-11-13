@@ -1,7 +1,7 @@
 ---
 namespace: dryvist
 name: secrets_management
-version: 0.103.0  # x-release-please-version
+version: 0.104.0  # x-release-please-version
 readme: README.md
 authors:
   - dryvist
@@ -15,8 +15,8 @@ tags:
   - secrets
   - vault
   - infrastructure
-repository: https://github.com/dryvist/ansible-secrets-management
-issues: https://github.com/dryvist/ansible-secrets-management/issues
+repository: https://github.com/jpe-ansible/ansible-secrets-management
+issues: https://github.com/jpe-ansible/ansible-secrets-management/issues
 build_ignore:
   - "*.tar.gz"
   - .DS_Store

@@ -45,9 +45,9 @@ def test_ci_evals_role_is_bound_to_the_repository_workflow_and_default_branch():
     assert write is not None
 
     assert defaults["openbao_ci_evals_policy_name"] == "ci-evals"
-    assert defaults["openbao_ci_evals_repository"] == "dryvist/llm-prompt-evals"
-    assert defaults["openbao_ci_evals_job_workflow_ref"] == (
-        "dryvist/llm-prompt-evals/.github/workflows/scheduled-local-benchmark.yml"
+    assert defaults["openbao_ci_evals_repository"] == "JacobPEvans-ai/llm-prompt-evals"
+    assert defaults["openbao_ci_evals_workflow_ref"] == (
+        "JacobPEvans-ai/llm-prompt-evals/.github/workflows/scheduled-local-benchmark.yml"
         "@refs/heads/develop"
     )
     assert defaults["openbao_ci_evals_ref"] == "refs/heads/develop"
@@ -58,13 +58,14 @@ def test_ci_evals_role_is_bound_to_the_repository_workflow_and_default_branch():
     claims = write["vars"]["_ci_evals_role_claims"]
     assert claims == {
         "repository": "{{ openbao_ci_evals_repository }}",
-        "job_workflow_ref": "{{ openbao_ci_evals_job_workflow_ref }}",
+        "workflow_ref": "{{ openbao_ci_evals_workflow_ref }}",
         "ref": "{{ openbao_ci_evals_ref }}",
     }
     payload = write["ansible.builtin.command"]["stdin"]
     assert "'bound_audiences': [openbao_ci_evals_audience]" in payload
     assert "'bound_claims_type': 'string'" in payload
-    assert "'user_claim': 'job_workflow_ref'" in payload
+    assert "'user_claim': 'workflow_ref'" in payload
+    assert "job_workflow_ref" not in payload
     assert "'token_policies': [openbao_ci_evals_policy_name]" in payload
 
     read = _find_task(tasks, "Read the ci-evals OIDC role")

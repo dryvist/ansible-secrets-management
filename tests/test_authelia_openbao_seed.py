@@ -112,7 +112,7 @@ def test_contracts_pin_is_the_latest_tag():
     contracts = next(
         item
         for item in requirements["collections"]
-        if item["name"] == "https://github.com/dryvist/homelab-contracts.git#/ansible/"
+        if item["name"] == "https://github.com/jpe-ansible/homelab-contracts.git#/ansible/"
     )
     assert contracts["version"] == "v5.46.0"
 

@@ -70,6 +70,14 @@
     - openbao_status.initialized
     - openbao_provisioning_token | length > 0
 
+- name: Keep the admin-window identity out of the token environment
+  ansible.builtin.set_fact:
+    openbao_bootstrap_token: ""
+  changed_when: false
+  when:
+    - openbao_status.initialized
+    - openbao_window_proxy_mode | default(false) | bool
+
 # A supplied ai-admin-session token is distinguishable by its existing policy
 # set. Read only this token's own metadata; a partial/legacy guarded session
 # must fail closed instead of falling through to the broad provisioning path.
@@ -90,7 +98,7 @@
   failed_when: false
   when:
     - openbao_status.initialized
-    - openbao_provisioning_token | length > 0
+    - openbao_provisioning_token | length > 0 or openbao_window_proxy_mode | default(false) | bool
 
 - name: FAIL — the supplied provisioning token policy set could not be verified
   ansible.builtin.fail:
@@ -140,6 +148,7 @@
       openbao_ai_admin_guard_policy_name in openbao_ai_admin_window_policies
       or openbao_ai_admin_window_policy_name in openbao_ai_admin_window_policies
 
+# In proxy mode the window itself is the identity; do not mint a reconcile token.
 # Routine reconciliation. A change to the CONTENT of an already-declared policy
 # needs no operator: openbao-reconcile owns exactly the names this repo declares
 # and cannot reach the break-glass tiers or its own policy. Each routine run
@@ -177,6 +186,7 @@
   when:
     - openbao_status.initialized
     - openbao_provisioning_token | length == 0
+    - not (openbao_window_proxy_mode | default(false) | bool)
 
 - name: FAIL — the AppRole issuer could not authenticate
   ansible.builtin.fail:
@@ -204,6 +214,7 @@
   when:
     - openbao_status.initialized
     - openbao_provisioning_token | length == 0
+    - not (openbao_window_proxy_mode | default(false) | bool)
 
 - name: Mint a single-use reconcile secret_id through the issuer
   community.hashi_vault.vault_write:
@@ -221,6 +232,7 @@
   when:
     - openbao_status.initialized
     - openbao_provisioning_token | length == 0
+    - not (openbao_window_proxy_mode | default(false) | bool)
 
 - name: Log in as openbao-reconcile with the single-use secret_id
   community.hashi_vault.vault_login:
@@ -238,6 +250,7 @@
   when:
     - openbao_status.initialized
     - openbao_provisioning_token | length == 0
+    - not (openbao_window_proxy_mode | default(false) | bool)
 
 - name: Destroy the single-use reconcile secret_id by accessor
   ansible.builtin.uri:
@@ -270,6 +283,7 @@
   when:
     - openbao_status.initialized
     - openbao_provisioning_token | length == 0
+    - not (openbao_window_proxy_mode | default(false) | bool)
 
 - name: FAIL — the per-call reconcile credential could not authenticate
   ansible.builtin.fail:

@@ -30,6 +30,22 @@
 # phase tag used anywhere below -- so --tags can decide whether to enter it
 # at all; once entered, the loaded tasks are filtered individually by their
 # own tags exactly as documented above.
+- name: Resolve the admin-window proxy address from the controller environment
+  ansible.builtin.set_fact:
+    openbao_window_proxy_addr: "{{ lookup('env', 'BAO_AGENT_ADDR') | default('', true) | trim }}"
+  changed_when: false
+  tags:
+    - always
+
+- name: Detect whether this converge uses the admin-window proxy
+  ansible.builtin.set_fact:
+    openbao_window_proxy_mode: >-
+      {{ openbao_window_proxy_addr | length > 0
+         and openbao_provisioning_token | default('', true) | length == 0 }}
+  changed_when: false
+  tags:
+    - always
+
 - name: Phases 1-4 -- prerequisites, system user/group, and the OpenBao package install
   ansible.builtin.import_tasks: main/install.yml
   tags:

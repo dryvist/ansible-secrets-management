@@ -55,6 +55,10 @@ openbao_github_jpe_nix_installation_id: >-
   {{ openbao_platform_env['OPENBAO_GITHUB_ADMIN_JPE_NIX_INSTALLATION_ID'] | default('', true) }}
 openbao_github_jpe_private_installation_id: >-
   {{ openbao_platform_env['OPENBAO_GITHUB_ADMIN_JPE_PRIVATE_INSTALLATION_ID'] | default('', true) }}
+openbao_github_jpe_ai_agents_installation_id: >-
+  {{ openbao_platform_env['OPENBAO_GITHUB_ADMIN_JPE_AI_AGENTS_INSTALLATION_ID'] | default('', true) }}
+openbao_github_jpe_claude_installation_id: >-
+  {{ openbao_platform_env['OPENBAO_GITHUB_ADMIN_JPE_CLAUDE_INSTALLATION_ID'] | default('', true) }}
 openbao_github_jpe_splunk_installation_id: >-
   {{ openbao_platform_env['OPENBAO_GITHUB_ADMIN_JPE_SPLUNK_INSTALLATION_ID'] | default('', true) }}
 openbao_github_jpe_openbao_plugin_secrets_installation_id: >-
@@ -362,6 +366,7 @@ openbao_github_org_secrets_installations:
     installation_id: "{{ openbao_github_dryvist_installation_id }}"
   - name: jacobpevans
     installation_id: "{{ openbao_github_jacobpevans_installation_id }}"
+    org_secrets_permission_set_name: JacobPEvans-org-secrets
   - name: jacobpevans-ai
     installation_id: "{{ openbao_github_jacobpevans_ai_installation_id }}"
   - name: jpe-ansible
@@ -376,11 +381,15 @@ openbao_github_org_secrets_installations:
     installation_id: "{{ openbao_github_jpe_splunk_installation_id }}"
   - name: jpe-openbao-plugin-secrets
     installation_id: "{{ openbao_github_jpe_openbao_plugin_secrets_installation_id }}"
+  - name: jpe-ai-agents
+    installation_id: "{{ openbao_github_jpe_ai_agents_installation_id }}"
+  - name: jpe-claude
+    installation_id: "{{ openbao_github_jpe_claude_installation_id }}"
 openbao_github_org_secrets_permission_sets: >-
   {%- set _sets = [] -%}
   {%- for org in openbao_github_org_secrets_installations -%}
   {%- if org.installation_id | default('', true) | string | length > 0 -%}
-  {%- set _ = _sets.append({'name': org.name ~ '-org-secrets',
+  {%- set _ = _sets.append({'name': org.org_secrets_permission_set_name | default(org.name ~ '-org-secrets'),
       'tier': 'org-secrets', 'installation_id': org.installation_id,
       'permissions': openbao_github_org_secrets_permissions}) -%}
   {%- endif -%}

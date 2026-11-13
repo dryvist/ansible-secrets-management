@@ -312,7 +312,11 @@
     loop_var: openbao_rotation_exempt_entry
   tags:
     - openbao_rotation_exempt
-  when: openbao_bootstrap_token is defined
+  # This legacy helper runs on the OpenBao guest and uses openbao_write_addr.
+  # The bounded window profile does not include rotation-exempt metadata.
+  when:
+    - openbao_bootstrap_token is defined
+    - not (openbao_cli_proxy_active | default(false) | bool)
 
 # --- Disclosure-denylist metadata declaration (idempotent, write-if-changed) -
 # Declares owner/reader/docs/rotation custom_metadata on the disclosure-
@@ -320,9 +324,10 @@
 # metadata only, never the term list itself. Runs LAST for the same reason as
 # the rotation-exempt tagging above: a metadata patch this identity is not
 # yet granted must not fail the run before the policies it depends on are
-# reconciled.
+# reconciled. This node-local helper is excluded from bounded window runs.
 - name: Declare the disclosure-denylist entry's custom_metadata (write-if-changed)
   ansible.builtin.include_tasks: declare_disclosure_denylist_metadata.yml
   when:
     - openbao_bootstrap_token is defined
     - openbao_select | default({}) | length == 0
+    - not (openbao_cli_proxy_active | default(false) | bool)

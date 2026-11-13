@@ -78,6 +78,19 @@ Token access is tiered; the tier IS the privilege boundary:
   bound to one audience, one repository and one ref, with a 10m token. There
   is no AppRole and no secret_id for it: the workflow's own job identity is
   the credential, so the runner stores nothing.
+- **PR reconcile (`pr-reconcile-sweep`)** — the raw `github/token` endpoint,
+  requiring `org_name` from `openbao_pr_reconcile_owners` and the exact
+  `contents`, `issues`, `pull_requests` and `statuses` write map;
+  `installation_id` and `repository_ids` are denied. Set
+  `OPENBAO_GITHUB_PR_RECONCILE_REPOSITORY` to the OIDC repository, for example
+  `example-org/example-repo`, and `OPENBAO_GITHUB_PR_RECONCILE_OWNERS`
+  to a comma-separated list of permitted owners. Both are required to declare
+  the role and policy; while either is unset, the converge removes a live role
+  and policy of that name. The OIDC role binds the configured repository and its
+  `workflow_ref` (for example `example-org/example-repo/.github/workflows/pr-reconcile-sweep.yml@refs/heads/main`),
+  plus the main ref, schedule/dispatch events, and self-hosted runners. The
+  OpenBao batch token lasts 5m (10m max); GitHub's installation token keeps its
+  one-hour lifetime.
 - **CI resolver (`ci-resolver`)** — `github-admin/token/ci-resolver-dryvist`:
   `actions`, `checks`, `contents` and `pull_requests` write on the explicit
   repository list from `OPENBAO_GITHUB_CI_RESOLVER_REPOS`; an unset list omits

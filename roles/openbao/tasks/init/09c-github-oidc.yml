@@ -320,7 +320,8 @@
 
 # The scheduled local eval benchmark: one repository, one workflow file, one
 # ref. repository confines the role to the eval source repository,
-# job_workflow_ref to its benchmark workflow, and ref to the default branch —
+# workflow_ref (the top-level workflow's claim) to its benchmark workflow,
+# and ref to the default branch —
 # excluding the branch and pull-request builds a fork's contributor controls.
 - name: Read the ci-evals OIDC role
   ansible.builtin.command:
@@ -346,7 +347,7 @@
     ansible_become: "{{ openbao_cli_become }}"
     _ci_evals_role_claims:
       repository: "{{ openbao_ci_evals_repository }}"
-      job_workflow_ref: "{{ openbao_ci_evals_job_workflow_ref }}"
+      workflow_ref: "{{ openbao_ci_evals_workflow_ref }}"
       ref: "{{ openbao_ci_evals_ref }}"
     _ci_evals_role_live: >-
       {{ (openbao_github_oidc_ci_evals_role_current.stdout | default('{}') | from_json).data
@@ -360,7 +361,7 @@
       auth/{{ openbao_github_oidc_auth_path }}/role/{{ openbao_ci_evals_policy_name }} -
     stdin: >-
       {{ {'role_type': 'jwt',
-            'user_claim': 'job_workflow_ref',
+            'user_claim': 'workflow_ref',
             'bound_audiences': [openbao_ci_evals_audience],
             'bound_claims': _ci_evals_role_claims,
             'bound_claims_type': 'string',
@@ -385,10 +386,115 @@
       or (_ci_evals_role_live.bound_claims_type | default(''))
          != 'string'
       or (_ci_evals_role_live.user_claim | default(''))
-         != 'job_workflow_ref'
+         != 'workflow_ref'
       or (_ci_evals_role_live.token_policies | default([]) | sort)
          != [openbao_ci_evals_policy_name]
       or (_ci_evals_role_live.token_ttl | default(0) | int)
          != (_ci_evals_token_ttl_s | int)
       or (_ci_evals_role_live.token_max_ttl | default(0) | int)
          != (_ci_evals_token_max_ttl_s | int)
+
+# The PR reconcile sweep (a top-level workflow, so its claim is workflow_ref)
+# has one exact repository/workflow identity and a
+# closed set of event/ref/runner claims. Batch tokens cannot be renewed; the
+# token carries only the policy that pins its raw GitHub token requests.
+- name: Read the pr-reconcile-sweep OIDC role
+  ansible.builtin.command:
+    cmd: >-
+      bao read -format=json
+      auth/{{ openbao_github_oidc_auth_path }}/role/{{ openbao_github_pr_reconcile_policy_name }}
+  environment:
+    BAO_ADDR: "{{ openbao_cli_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
+  register: openbao_github_oidc_pr_reconcile_role_current
+  no_log: true
+  changed_when: false
+  check_mode: false
+  failed_when: false
+  when: openbao_bootstrap_token is defined
+
+- name: Reconcile the pr-reconcile-sweep OIDC role
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
+    _pr_reconcile_role_claims:
+      repository: "{{ openbao_github_pr_reconcile_repository }}"
+      workflow_ref: "{{ openbao_github_pr_reconcile_workflow_ref }}"
+      ref: "{{ openbao_github_pr_reconcile_ref }}"
+      event_name: "{{ openbao_github_pr_reconcile_event_names }}"
+      runner_environment: "{{ openbao_github_pr_reconcile_runner_environment }}"
+    _pr_reconcile_role_live: >-
+      {{ (openbao_github_oidc_pr_reconcile_role_current.stdout | default('{}') | from_json).data
+         | default({}, true) }}
+    _pr_reconcile_token_ttl_s: >-
+      {{ openbao_github_pr_reconcile_token_ttl | community.general.to_seconds | int }}
+    _pr_reconcile_token_max_ttl_s: >-
+      {{ openbao_github_pr_reconcile_token_max_ttl | community.general.to_seconds | int }}
+  ansible.builtin.command:
+    cmd: >-
+      bao write
+      auth/{{ openbao_github_oidc_auth_path }}/role/{{ openbao_github_pr_reconcile_policy_name }} -
+    stdin: >-
+      {{ {'role_type': 'jwt',
+            'user_claim': 'workflow_ref',
+            'bound_audiences': [openbao_github_pr_reconcile_audience],
+            'bound_claims': _pr_reconcile_role_claims,
+            'bound_claims_type': 'string',
+            'token_policies': [openbao_github_pr_reconcile_policy_name],
+            'token_no_default_policy': true,
+            'token_type': 'batch',
+            'token_ttl': openbao_github_pr_reconcile_token_ttl,
+            'token_max_ttl': openbao_github_pr_reconcile_token_max_ttl} | to_json }}
+  environment:
+    BAO_ADDR: "{{ openbao_cli_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  no_log: true
+  changed_when: true
+  when:
+    - openbao_bootstrap_token is defined
+    - openbao_github_pr_reconcile_enabled | bool
+    - >-
+      (openbao_github_oidc_pr_reconcile_role_current.rc | default(1)) != 0
+      or (_pr_reconcile_role_live.role_type | default('')) != 'jwt'
+      or (_pr_reconcile_role_live.bound_audiences | default([]))
+         != [openbao_github_pr_reconcile_audience]
+      or (_pr_reconcile_role_live.bound_claims | default({}, true))
+         != _pr_reconcile_role_claims
+      or (_pr_reconcile_role_live.bound_claims_type | default(''))
+         != 'string'
+      or (_pr_reconcile_role_live.user_claim | default(''))
+         != 'workflow_ref'
+      or (_pr_reconcile_role_live.token_policies | default([]) | sort)
+         != [openbao_github_pr_reconcile_policy_name]
+      or not (_pr_reconcile_role_live.token_no_default_policy | default(false) | bool)
+      or (_pr_reconcile_role_live.token_type | default('')) != 'batch'
+      or (_pr_reconcile_role_live.token_ttl | default(0) | int)
+         != (_pr_reconcile_token_ttl_s | int)
+      or (_pr_reconcile_role_live.token_max_ttl | default(0) | int)
+         != (_pr_reconcile_token_max_ttl_s | int)
+
+# Unset inputs leave the role undeclared: remove a live one so it cannot keep
+# minting under a policy that is being retired.
+- name: Remove the pr-reconcile-sweep OIDC role while its inputs are unset
+  ansible.builtin.command:
+    cmd: >-
+      bao delete
+      auth/{{ openbao_github_oidc_auth_path }}/role/{{ openbao_github_pr_reconcile_policy_name }}
+  environment:
+    BAO_ADDR: "{{ openbao_cli_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
+  no_log: true
+  changed_when: true
+  when:
+    - openbao_bootstrap_token is defined
+    - not (openbao_github_pr_reconcile_enabled | bool)
+    - (openbao_github_oidc_pr_reconcile_role_current.rc | default(1)) == 0
