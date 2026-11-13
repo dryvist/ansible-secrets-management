@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.104.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.103.0...v0.104.0) (2026-11-13)
+
+
+### Features
+
+* **openbao:** add a BAO_AGENT_ADDR mode ([#673](https://github.com/dryvist/ansible-secrets-management/issues/673)) ([a0085db](https://github.com/dryvist/ansible-secrets-management/commit/a0085db654755ecfedd66997939ffe664ed23b6b))
+
+
+### Bug Fixes
+
+* **openbao:** update the evals OIDC repository binding ([#674](https://github.com/dryvist/ansible-secrets-management/issues/674)) ([bf1dabf](https://github.com/dryvist/ansible-secrets-management/commit/bf1dabfbdbcf616e82f3b2487af50e07ef78938a))
+
 ## [0.103.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.102.0...v0.103.0) (2026-11-12)
 
 
