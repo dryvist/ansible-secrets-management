@@ -203,8 +203,18 @@ write` permission and no OpenBao permission sets. The mount and policy are
 always declared; `OPENBAO_GITHUB_RUNNER_APP_ID` and
 `OPENBAO_GITHUB_RUNNER_APP_PRIVATE_KEY` are one-time environment that configure
 it. The App's GitHub installations determine the organizations available to
-the request. The existing
-`runner-register-dryvist` permission set remains on `github-admin`.
+the request. The existing fixed base registration set remains on
+`github-admin`.
+
+Set `OPENBAO_GITHUB_RUNNER_REGISTER_OWNERS` in the platform env document to a
+comma-separated list of additional owners, for example
+`example-org,example-other`. Each listed owner must match a `name` in
+`openbao_github_org_secrets_installations` and have a configured installation
+ID; configured owners produce a `runner-register-<owner>` set with the fixed
+runner permission map. Owners without a mapped installation ID are skipped and
+warned individually. An unset or empty list adds no sets and emits one warning
+that names the configuration key. The runner policy grants its runner-tier set
+paths only.
 
 Estate identities (`ai-apply-*`, `ai-orchestrator`) attach the `github-mint`
 capability policy, which grants the read-tier sets only. Raw token endpoints
