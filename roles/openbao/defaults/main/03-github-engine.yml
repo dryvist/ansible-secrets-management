@@ -137,6 +137,28 @@ openbao_github_org_secrets_permissions:
 # repository, and only mints the short-lived registration token a runner needs.
 openbao_github_runner_permissions:
   organization_self_hosted_runners: write
+# A dispatch token is restricted to one repository in a known installation.
+openbao_github_dispatch_owner: >-
+  {{ openbao_platform_env['OPENBAO_GITHUB_DISPATCH_OWNER'] | default('', true) | trim }}
+openbao_github_dispatch_repository: >-
+  {{ openbao_platform_env['OPENBAO_GITHUB_DISPATCH_REPOSITORY'] | default('', true) | trim }}
+openbao_github_dispatch_permissions:
+  actions: write
+  metadata: read
+openbao_github_dispatch_permission_sets: >-
+  {%- set _sets = [] -%}
+  {%- for org in openbao_github_org_secrets_installations -%}
+  {%- if _sets | length == 0 and openbao_github_dispatch_owner | length > 0
+      and openbao_github_dispatch_repository | length > 0
+      and org.name == openbao_github_dispatch_owner
+      and org.installation_id | default('', true) | string | trim | length > 0 -%}
+  {%- set _ = _sets.append({'name': 'workflow-dispatch', 'tier': 'agents',
+      'installation_id': org.installation_id,
+      'repositories': [openbao_github_dispatch_repository],
+      'permissions': openbao_github_dispatch_permissions}) -%}
+  {%- endif -%}
+  {%- endfor -%}
+  {{ _sets }}
 # CI-metrics exporter (github_exporter role, prometheus host). Read-only,
 # organization-scoped: `actions:read` for the workflow_runs/workflow_jobs/
 # runners collectors, `administration:read` for the org-level runners listing.
@@ -406,7 +428,8 @@ openbao_github_admin_permission_sets: >-
      + openbao_github_router_snapshot_permission_sets
      + openbao_github_git_mirror_permission_sets
      + openbao_github_role_eval_status_permission_sets
-     + openbao_github_workflows_write_permission_sets }}
+     + openbao_github_workflows_write_permission_sets
+     + openbao_github_dispatch_permission_sets }}
 # Every set on every GitHub mount, each tagged with its mount, for the policy
 # templates.
 openbao_github_permission_sets: >-
