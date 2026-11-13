@@ -155,7 +155,7 @@
     openbao_policy_preview_name: "{{ item }}"
     openbao_policy_preview_after_text: "{{ openbao_rendered_policy_map[item] }}"
     openbao_policy_preview_paths_only: true
-  loop: "{{ openbao_changed_policy_names }}"
+  loop: "{{ openbao_changed_policy_names | default([]) }}"
   loop_control:
     label: "{{ item }}"
   when:
