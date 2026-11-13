@@ -81,7 +81,7 @@ def test_org_secrets_names_and_workspace_reads_match_each_requested_owner():
         ],
     })
     expected_names = [
-        "dryvist-org-secrets", "JacobPEvans-org-secrets", "jacobpevans-ai-org-secrets",
+        "dryvist-org-secrets", "jacobpevans-org-secrets", "jacobpevans-ai-org-secrets",
         "jpe-ansible-org-secrets", "jpe-cribl-org-secrets", "jpe-nix-org-secrets",
         "jpe-private-org-secrets", "jpe-splunk-org-secrets",
         "jpe-openbao-plugin-secrets-org-secrets",
@@ -110,7 +110,7 @@ def test_org_secrets_names_and_workspace_reads_match_each_requested_owner():
     })
     assert api_reads == [f"github-configured/token/{name}" for name in expected_names]
     for name in (
-        "JacobPEvans-org-secrets", "jacobpevans-ai-org-secrets", "jpe-nix-org-secrets",
+        "jacobpevans-org-secrets", "jacobpevans-ai-org-secrets", "jpe-nix-org-secrets",
     ):
         assert f"github-configured/token/{name}" in api_reads
 

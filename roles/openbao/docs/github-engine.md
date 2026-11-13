@@ -216,6 +216,14 @@ warned individually. An unset or empty list adds no sets and emits one warning
 that names the configuration key. The runner policy grants its runner-tier set
 paths only.
 
+The `github-admin/token/workflow-dispatch` set grants `actions:write` and
+`metadata:read` for one repository. Set `OPENBAO_GITHUB_DISPATCH_OWNER` to an
+owner in `openbao_github_org_secrets_installations` with an installation ID,
+and set `OPENBAO_GITHUB_DISPATCH_REPOSITORY` to its repository name. For
+example, these can be `example-org` and `example-repo`. The set and its exact
+Semaphore policy path are omitted when either input or the installation ID is
+missing.
+
 Estate identities (`ai-apply-*`, `ai-orchestrator`) attach the `github-mint`
 capability policy, which grants the read-tier sets only. Raw token endpoints
 are limited to `github-write`, `github-write-scoped`, `open-llm`, the two
