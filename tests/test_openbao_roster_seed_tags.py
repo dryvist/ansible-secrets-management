@@ -31,7 +31,7 @@ def test_generated_seed_uses_the_pinned_shared_create_if_absent_contract():
     requirements = yaml.safe_load(REQUIREMENTS.read_text(encoding="utf-8"))
     contracts = next(
         item for item in requirements["collections"]
-        if item["name"] == "https://github.com/dryvist/homelab-contracts.git#/ansible/"
+        if item["name"] == "https://github.com/jpe-ansible/homelab-contracts.git#/ansible/"
     )
 
     assert contracts["version"] == "v5.46.0"

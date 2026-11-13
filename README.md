@@ -75,7 +75,7 @@ Apache-2.0. See [LICENSE][license].
 
 [docs.jacobpevans.com](https://docs.jacobpevans.com)
 
-[ci-badge]: https://github.com/dryvist/ansible-secrets-management/actions/workflows/ci-gate.yml/badge.svg
-[ci-workflow]: https://github.com/dryvist/ansible-secrets-management/actions/workflows/ci-gate.yml
+[ci-badge]: https://github.com/jpe-ansible/ansible-secrets-management/actions/workflows/ci-gate.yml/badge.svg
+[ci-workflow]: https://github.com/jpe-ansible/ansible-secrets-management/actions/workflows/ci-gate.yml
 [license-badge]: https://img.shields.io/badge/license-Apache--2.0-blue.svg
 [license]: LICENSE
