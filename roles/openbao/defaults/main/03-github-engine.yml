@@ -55,6 +55,10 @@ openbao_github_jpe_nix_installation_id: >-
   {{ openbao_platform_env['OPENBAO_GITHUB_ADMIN_JPE_NIX_INSTALLATION_ID'] | default('', true) }}
 openbao_github_jpe_private_installation_id: >-
   {{ openbao_platform_env['OPENBAO_GITHUB_ADMIN_JPE_PRIVATE_INSTALLATION_ID'] | default('', true) }}
+openbao_github_jpe_ai_agents_installation_id: >-
+  {{ openbao_platform_env['OPENBAO_GITHUB_ADMIN_JPE_AI_AGENTS_INSTALLATION_ID'] | default('', true) }}
+openbao_github_jpe_claude_installation_id: >-
+  {{ openbao_platform_env['OPENBAO_GITHUB_ADMIN_JPE_CLAUDE_INSTALLATION_ID'] | default('', true) }}
 openbao_github_jpe_splunk_installation_id: >-
   {{ openbao_platform_env['OPENBAO_GITHUB_ADMIN_JPE_SPLUNK_INSTALLATION_ID'] | default('', true) }}
 openbao_github_jpe_openbao_plugin_secrets_installation_id: >-
@@ -377,6 +381,10 @@ openbao_github_org_secrets_installations:
     installation_id: "{{ openbao_github_jpe_splunk_installation_id }}"
   - name: jpe-openbao-plugin-secrets
     installation_id: "{{ openbao_github_jpe_openbao_plugin_secrets_installation_id }}"
+  - name: jpe-ai-agents
+    installation_id: "{{ openbao_github_jpe_ai_agents_installation_id }}"
+  - name: jpe-claude
+    installation_id: "{{ openbao_github_jpe_claude_installation_id }}"
 openbao_github_org_secrets_permission_sets: >-
   {%- set _sets = [] -%}
   {%- for org in openbao_github_org_secrets_installations -%}

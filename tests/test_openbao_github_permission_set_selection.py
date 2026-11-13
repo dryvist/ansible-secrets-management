@@ -56,6 +56,7 @@ def test_org_secrets_names_and_workspace_reads_match_each_requested_owner():
     assert owners == [
         "dryvist", "jacobpevans", "jacobpevans-ai", "jpe-ansible", "jpe-cribl",
         "jpe-nix", "jpe-private", "jpe-splunk", "jpe-openbao-plugin-secrets",
+        "jpe-ai-agents", "jpe-claude",
     ]
     assert len(owners) == len(set(owners))
 
@@ -84,6 +85,7 @@ def test_org_secrets_names_and_workspace_reads_match_each_requested_owner():
         "jpe-ansible-org-secrets", "jpe-cribl-org-secrets", "jpe-nix-org-secrets",
         "jpe-private-org-secrets", "jpe-splunk-org-secrets",
         "jpe-openbao-plugin-secrets-org-secrets",
+        "jpe-ai-agents-org-secrets", "jpe-claude-org-secrets",
     ]
     assert [item["name"] for item in sets] == expected_names
     assert len({item["name"] for item in sets}) == len(sets)
