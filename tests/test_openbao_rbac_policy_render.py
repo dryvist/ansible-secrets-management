@@ -27,7 +27,9 @@ from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar, trust_as_template
 
 from openbao_reconcile_bounds_helpers import (
+    TEMPLATES,
     _capabilities,
+    _render,
     _render_value,
     _stanzas,
     rendered_defaults,
@@ -175,6 +177,44 @@ def test_github_window_service_keeps_the_parameter_deny(rendered_defaults):
     policy = _policy_named(policies, "window-github")
     for _path, body in _stanzas(render([policy])[0]["value"]):
         assert "denied_parameters" in body
+
+
+def test_scheduled_secret_id_rotator_grants_each_rotated_approle(rendered_defaults):
+    values, _approles, policies = rendered_defaults
+    scheduled_policy = _policy_named(
+        policies, values["openbao_approle_secret_id_rotate_scheduled_policy_name"]
+    )
+    rendered = _render(
+        TEMPLATES / scheduled_policy["template"],
+        dict(values, item=scheduled_policy),
+    )
+    grants = _capability_map(rendered)
+
+    domain_names = _render_value(
+        values, "{{ openbao_secrets_domain_approle_names }}"
+    )
+    scheduled_name = values[
+        "openbao_approle_secret_id_rotate_scheduled_approle_name"
+    ]
+    scheduled_names = sorted(set(domain_names + [scheduled_name]))
+    rotated_ttl = _render_value(values, "{{ openbao_rotated_domain_secret_id_ttl }}")
+    ttl_overrides = _render_value(
+        values, "{{ openbao_approle_secret_id_ttl_overrides }}"
+    )
+    rotated_names = {
+        name for name in scheduled_names if ttl_overrides.get(name) == rotated_ttl
+    }
+
+    assert rotated_names == set(scheduled_names)
+    expected_capabilities = {
+        "role-id": ["read"],
+        "secret-id": ["create", "update"],
+        "secret-id/lookup": ["update"],
+        "secret-id-accessor/destroy": ["update"],
+    }
+    for name in rotated_names:
+        for suffix, capabilities in expected_capabilities.items():
+            assert grants[f"auth/approle/role/{name}/{suffix}"] == capabilities
 
 
 if __name__ == "__main__":

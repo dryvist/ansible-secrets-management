@@ -1,12 +1,12 @@
 ---
-- name: Read the live reconcile policy for check-mode diff
+- name: Read the live policy for check-mode diff
   ansible.builtin.command:
     argv:
       - bao
       - policy
       - read
       - -format=json
-      - "{{ openbao_reconcile_policy_name }}"
+      - "{{ openbao_policy_preview_name }}"
   environment:
     BAO_ADDR: "{{ openbao_cli_addr }}"
     BAO_TOKEN: "{{ openbao_bootstrap_token }}"
@@ -14,36 +14,89 @@
   become: "{{ openbao_cli_become }}"
   vars:
     ansible_become: "{{ openbao_cli_become }}"
-  register: openbao_reconcile_policy_live_read
+  register: openbao_policy_preview_live_read
   check_mode: false
   changed_when: false
   failed_when: >-
-    openbao_reconcile_policy_live_read.rc != 0
-    and not (((openbao_reconcile_policy_live_read.stdout | default(''))
-              ~ (openbao_reconcile_policy_live_read.stderr | default('')))
+    openbao_policy_preview_live_read.rc != 0
+    and not (((openbao_policy_preview_live_read.stdout | default(''))
+              ~ (openbao_policy_preview_live_read.stderr | default('')))
              | lower is search('no value found|404'))
   no_log: true
 
-- name: Render the reconcile policy for check-mode diff
+- name: Render policy text for check-mode diff
   ansible.builtin.set_fact:
-    openbao_reconcile_policy_live_text: >-
-      {{ ((openbao_reconcile_policy_live_read.stdout | from_json).policy | default('') | trim)
-         if (openbao_reconcile_policy_live_read.rc | default(1)) == 0 else '' }}
-    openbao_reconcile_policy_rendered_text: >-
-      {{ lookup('template', 'openbao-reconcile-policy.hcl.j2') | trim }}
+    openbao_policy_preview_live_text: >-
+      {{ ((openbao_policy_preview_live_read.stdout | from_json).policy | default('') | trim)
+         if (openbao_policy_preview_live_read.rc | default(1)) == 0 else '' }}
+    openbao_policy_preview_rendered_text: >-
+      {{ (openbao_policy_preview_after_text
+          if openbao_policy_preview_after_text is defined
+          else lookup('template', openbao_policy_preview_template)) | trim }}
   no_log: true
 
-- name: Compute a unified line diff for the reconcile policy
+- name: Compute a unified line diff for the policy
   ansible.utils.fact_diff:
-    before: "{{ openbao_reconcile_policy_live_text }}"
-    after: "{{ openbao_reconcile_policy_rendered_text }}"
-  register: openbao_reconcile_policy_diff
+    before: "{{ openbao_policy_preview_live_text }}"
+    after: "{{ openbao_policy_preview_rendered_text }}"
+  register: openbao_policy_preview_diff
   check_mode: false
   changed_when: false
-  when: openbao_reconcile_policy_live_text != openbao_reconcile_policy_rendered_text
+  no_log: true
+  when: openbao_policy_preview_live_text != openbao_policy_preview_rendered_text
+
+- name: Resolve added and removed policy path capabilities
+  ansible.builtin.set_fact:
+    openbao_policy_preview_path_changes: >-
+      {%- set _before = {} -%}
+      {%- for _path, _body in openbao_policy_preview_live_text
+             | regex_findall('(?ms)^path "([^"]+)" \\{(.*?)^\\}') -%}
+      {%- set _caps = _body
+             | regex_findall('(?m)^\\s*capabilities\\s*=\\s*(\\[[^\\]]*\\])') -%}
+      {%- if _caps | length == 1 -%}
+      {%- set _ = _before.update({_path: _caps[0]}) -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {%- set _after = {} -%}
+      {%- for _path, _body in openbao_policy_preview_rendered_text
+             | regex_findall('(?ms)^path "([^"]+)" \\{(.*?)^\\}') -%}
+      {%- set _caps = _body
+             | regex_findall('(?m)^\\s*capabilities\\s*=\\s*(\\[[^\\]]*\\])') -%}
+      {%- if _caps | length == 1 -%}
+      {%- set _ = _after.update({_path: _caps[0]}) -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {%- set _changes = [] -%}
+      {%- for _path in _before.keys() | sort -%}
+      {%- if _before[_path] != _after.get(_path) -%}
+      {%- set _ = _changes.append('- path "' ~ _path ~ '" { capabilities = ' ~ _before[_path] ~ ' }') -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {%- for _path in _after.keys() | sort -%}
+      {%- if _after[_path] != _before.get(_path) -%}
+      {%- set _ = _changes.append('+ path "' ~ _path ~ '" { capabilities = ' ~ _after[_path] ~ ' }') -%}
+      {%- endif -%}
+      {%- endfor -%}
+      {{ _changes }}
+  no_log: true
+  when:
+    - openbao_policy_preview_paths_only | default(false) | bool
+    - openbao_policy_preview_live_text != openbao_policy_preview_rendered_text
 
 # Printed explicitly: with changed_when false the --diff callback may not show fact_diff's own output.
 - name: Show the reconcile policy diff in check mode
   ansible.builtin.debug:
-    msg: "{{ openbao_reconcile_policy_diff.diff_lines }}"
-  when: openbao_reconcile_policy_diff.diff_lines is defined
+    msg: "{{ openbao_policy_preview_diff.diff_lines }}"
+  when:
+    - not (openbao_policy_preview_paths_only | default(false) | bool)
+    - openbao_policy_preview_diff.diff_lines is defined
+
+- name: Show added and removed policy paths in check mode
+  ansible.builtin.debug:
+    msg: >-
+      {{ (openbao_policy_preview_path_changes | join('\n'))
+         if openbao_policy_preview_path_changes | default([]) | length > 0
+         else 'No path or capability changes.' }}
+  when:
+    - openbao_policy_preview_paths_only | default(false) | bool
+    - openbao_policy_preview_live_text != openbao_policy_preview_rendered_text

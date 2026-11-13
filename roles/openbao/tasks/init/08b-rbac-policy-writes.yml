@@ -149,6 +149,19 @@
     - ansible_check_mode
     - openbao_bootstrap_token is defined
 
+- name: Preview changed RBAC policy paths in check mode
+  ansible.builtin.include_tasks: 02c-policy-sync-preview.yml
+  vars:
+    openbao_policy_preview_name: "{{ item }}"
+    openbao_policy_preview_after_text: "{{ openbao_rendered_policy_map[item] }}"
+    openbao_policy_preview_paths_only: true
+  loop: "{{ openbao_changed_policy_names }}"
+  loop_control:
+    label: "{{ item }}"
+  when:
+    - ansible_check_mode
+    - openbao_bootstrap_token is defined
+
 - name: Report retired RBAC policies that would be deleted in check mode
   ansible.builtin.debug:
     msg: >-

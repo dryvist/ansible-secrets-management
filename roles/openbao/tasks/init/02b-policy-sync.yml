@@ -230,7 +230,10 @@
     - openbao_bounded_rbac_mode | default(false) | bool
 
 - name: Preview reconcile policy changes in check mode
-  ansible.builtin.import_tasks: 02c-policy-sync-preview.yml
+  ansible.builtin.include_tasks: 02c-policy-sync-preview.yml
+  vars:
+    openbao_policy_preview_name: "{{ openbao_reconcile_policy_name }}"
+    openbao_policy_preview_template: openbao-reconcile-policy.hcl.j2
   when:
     - ansible_check_mode
     - openbao_reconcile_policy_selected_for_sync | bool
