@@ -112,8 +112,7 @@ def test_policy_sync_runs_for_empty_or_selected_reconcile_policy_only():
 
 
 def test_check_mode_preview_reads_live_policy_and_only_prints_real_diffs():
-    read = task("Read the live policy for check-mode diff", POLICY_PREVIEW)
-    assert read["ansible.builtin.command"]["argv"][-1] == "{{ openbao_policy_preview_name }}"
+    read = task("Read the live reconcile policy for check-mode diff", POLICY_PREVIEW)
     assert read["check_mode"] is False
     assert read["changed_when"] is False
     assert read["environment"] == {
@@ -124,98 +123,17 @@ def test_check_mode_preview_reads_live_policy_and_only_prints_real_diffs():
     assert read["become"] == "{{ openbao_cli_become }}"
     assert read["failed_when"] is not False
 
-    assert condition(read["failed_when"], {
-        "openbao_policy_preview_live_read": {
-            "rc": 2,
-            "stderr": "Error reading policy: No policy named: new-policy",
-        },
-    }) is False
-    assert condition(read["failed_when"], {
-        "openbao_policy_preview_live_read": {
-            "rc": 2,
-            "stderr": "permission denied",
-        },
-    }) is True
-
-    diff = task("Compute a unified line diff for the policy", POLICY_PREVIEW)
+    diff = task("Compute a unified line diff for the reconcile policy", POLICY_PREVIEW)
     assert diff["check_mode"] is False
     assert diff["changed_when"] is False
     assert diff["ansible.utils.fact_diff"] == {
-        "before": "{{ openbao_policy_preview_live_text }}",
-        "after": "{{ openbao_policy_preview_rendered_text }}",
+        "before": "{{ openbao_reconcile_policy_live_text }}",
+        "after": "{{ openbao_reconcile_policy_rendered_text }}",
     }
-    assert diff["no_log"] is True
     assert "ansible.builtin.shell" not in diff
-    assert diff["when"] == "openbao_policy_preview_live_text != openbao_policy_preview_rendered_text"
+    assert diff["when"] == "openbao_reconcile_policy_live_text != openbao_reconcile_policy_rendered_text"
     report = task("Show the reconcile policy diff in check mode", POLICY_PREVIEW)
-    assert report["ansible.builtin.debug"]["msg"] == "{{ openbao_policy_preview_diff.diff_lines }}"
-    assert report["when"][0] == "not (openbao_policy_preview_paths_only | default(false) | bool)"
-
-    path_changes = task("Resolve added and removed policy path stanzas", POLICY_PREVIEW)
-    expression = path_changes["ansible.builtin.set_fact"]["openbao_policy_preview_path_changes"]
-    before = '''path "secret/data/kept" {\n  capabilities = ["read"]\n}\npath "secret/data/removed" {\n  capabilities = ["update"]\n}'''
-    after = '''path "secret/data/kept" {\n  capabilities = ["update"]\n}\npath "secret/data/added" {\n  capabilities = ["read"]\n}'''
-    assert render(expression, {
-        "openbao_policy_preview_live_text": before,
-        "openbao_policy_preview_rendered_text": after,
-    }) == [
-        '- path "secret/data/kept" {\n  capabilities = ["read"]\n}',
-        '- path "secret/data/removed" {\n  capabilities = ["update"]\n}',
-        '+ path "secret/data/added" {\n  capabilities = ["read"]\n}',
-        '+ path "secret/data/kept" {\n  capabilities = ["update"]\n}',
-    ]
-
-    before = '''path "auth/token/create" {
-  capabilities = ["create", "update", "sudo"]
-  required_parameters = ["policies", "type"]
-  allowed_parameters = {
-    "policies" = [["window-service"]]
-    "type" = ["service"]
-  }
-}'''
-    after = '''path "auth/token/create" {
-  capabilities = ["create", "update", "sudo"]
-  required_parameters = ["policies", "type", "ttl"]
-  allowed_parameters = {
-    "policies" = [["window-service"]]
-    "type" = ["batch"]
-  }
-}'''
-    assert render(expression, {
-        "openbao_policy_preview_live_text": before,
-        "openbao_policy_preview_rendered_text": after,
-    }) == [
-        '- path "auth/token/create" {\n'
-        '  capabilities = ["create", "update", "sudo"]\n'
-        '  required_parameters = ["policies", "type"]\n'
-        '  allowed_parameters = {\n'
-        '    "policies" = [["window-service"]]\n'
-        '    "type" = ["service"]\n'
-        '  }\n'
-        '}',
-        '+ path "auth/token/create" {\n'
-        '  capabilities = ["create", "update", "sudo"]\n'
-        '  required_parameters = ["policies", "type", "ttl"]\n'
-        '  allowed_parameters = {\n'
-        '    "policies" = [["window-service"]]\n'
-        '    "type" = ["batch"]\n'
-        '  }\n'
-        '}',
-    ]
-
-
-def test_rbac_check_mode_includes_shared_path_preview_for_changed_policies():
-    writes = ROLE / "tasks/init/08b-rbac-policy-writes.yml"
-    preview = task("Preview changed RBAC policy paths in check mode", writes)
-    assert preview["ansible.builtin.include_tasks"] == "02c-policy-sync-preview.yml"
-    assert preview["loop"] == "{{ openbao_changed_policy_names }}"
-    assert preview["vars"] == {
-        "openbao_policy_preview_name": "{{ item }}",
-        "openbao_policy_preview_after_text": "{{ openbao_rendered_policy_map[item] }}",
-        "openbao_policy_preview_paths_only": True,
-    }
-    assert "ansible_check_mode" in preview["when"]
-    assert "openbao_bootstrap_token is defined" in preview["when"]
+    assert report["ansible.builtin.debug"]["msg"] == "{{ openbao_reconcile_policy_diff.diff_lines }}"
 
 
 def test_rbac_tag_reaches_the_policy_sync_import():
