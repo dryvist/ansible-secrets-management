@@ -243,6 +243,7 @@ def test_vikunja_generated_login_fields_cover_the_openhands_bot_user():
         "hermes_login_password",
         "ai_jobs_login_password",
         "openhands_login_password",
+        "svc_mcp_clerk_password",
     ]
     assert "vikunja" in _read_apps(_yaml(NAMES_FILE))
 
