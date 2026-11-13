@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.106.0](https://github.com/jpe-ansible/ansible-secrets-management/compare/v0.105.1...v0.106.0) (2026-11-13)
+
+
+### Features
+
+* **openbao:** declare a workflow-dispatch permission set ([#688](https://github.com/jpe-ansible/ansible-secrets-management/issues/688)) ([f93355e](https://github.com/jpe-ansible/ansible-secrets-management/commit/f93355e0f8706aadc8f4a03106fcf3b7f4de0a4e))
+* **openbao:** declare runner registration sets for env-listed owners ([#691](https://github.com/jpe-ansible/ansible-secrets-management/issues/691)) ([d7f418e](https://github.com/jpe-ansible/ansible-secrets-management/commit/d7f418e08513065180ffe64a69a6b08abf65244a))
+
+
+### Bug Fixes
+
+* **openbao:** cover the scheduled rotator's own AppRole ([#681](https://github.com/jpe-ansible/ansible-secrets-management/issues/681)) ([145c4de](https://github.com/jpe-ansible/ansible-secrets-management/commit/145c4dedbc068f1c83001e419e25180c9ec9ffc0))
+
 ## [0.105.1](https://github.com/jpe-ansible/ansible-secrets-management/compare/v0.105.0...v0.105.1) (2026-11-13)
 
 
