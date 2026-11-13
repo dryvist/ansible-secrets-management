@@ -1,0 +1,19 @@
+{{ ansible_managed | comment }}
+# pr-reconcile-sweep: the raw everyday-App token endpoint, limited to the listed
+# owners and the fixed reconcile permission map; installation and repository
+# selectors are denied, so each token covers one owner's installation.
+
+{% if openbao_pr_reconcile_owners | length > 0 %}
+path "{{ openbao_github_everyday_mount }}/token" {
+  capabilities = ["create", "update"]
+  required_parameters = ["org_name", "permissions"]
+  allowed_parameters = {
+    "org_name" = [{% for owner in openbao_pr_reconcile_owners %}"{{ owner }}"{{ ", " if not loop.last else "" }}{% endfor %}]
+    "permissions" = [{ {% for name, level in openbao_github_pr_reconcile_permissions | dictsort %}"{{ name }}" = "{{ level }}"{{ ", " if not loop.last else "" }}{% endfor %} }]
+  }
+  denied_parameters = {
+    "installation_id" = []
+    "repository_ids" = []
+  }
+}
+{% endif %}
