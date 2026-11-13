@@ -21,7 +21,7 @@
     openbao_policy_preview_live_read.rc != 0
     and not (((openbao_policy_preview_live_read.stdout | default(''))
               ~ (openbao_policy_preview_live_read.stderr | default('')))
-             | lower is search('no value found|404'))
+             | lower is search('no value found|no policy named|404'))
   no_log: true
 
 - name: Render policy text for check-mode diff
@@ -45,36 +45,28 @@
   no_log: true
   when: openbao_policy_preview_live_text != openbao_policy_preview_rendered_text
 
-- name: Resolve added and removed policy path capabilities
+- name: Resolve added and removed policy path stanzas
   ansible.builtin.set_fact:
     openbao_policy_preview_path_changes: >-
       {%- set _before = {} -%}
       {%- for _path, _body in openbao_policy_preview_live_text
              | regex_findall('(?ms)^path "([^"]+)" \\{(.*?)^\\}') -%}
-      {%- set _caps = _body
-             | regex_findall('(?m)^\\s*capabilities\\s*=\\s*(\\[[^\\]]*\\])') -%}
-      {%- if _caps | length == 1 -%}
-      {%- set _ = _before.update({_path: _caps[0]}) -%}
-      {%- endif -%}
+      {%- set _ = _before.update({_path: (_body | trim)}) -%}
       {%- endfor -%}
       {%- set _after = {} -%}
       {%- for _path, _body in openbao_policy_preview_rendered_text
              | regex_findall('(?ms)^path "([^"]+)" \\{(.*?)^\\}') -%}
-      {%- set _caps = _body
-             | regex_findall('(?m)^\\s*capabilities\\s*=\\s*(\\[[^\\]]*\\])') -%}
-      {%- if _caps | length == 1 -%}
-      {%- set _ = _after.update({_path: _caps[0]}) -%}
-      {%- endif -%}
+      {%- set _ = _after.update({_path: (_body | trim)}) -%}
       {%- endfor -%}
       {%- set _changes = [] -%}
       {%- for _path in _before.keys() | sort -%}
       {%- if _before[_path] != _after.get(_path) -%}
-      {%- set _ = _changes.append('- path "' ~ _path ~ '" { capabilities = ' ~ _before[_path] ~ ' }') -%}
+      {%- set _ = _changes.append('- path "' ~ _path ~ '" {\n  ' ~ _before[_path] ~ '\n}') -%}
       {%- endif -%}
       {%- endfor -%}
       {%- for _path in _after.keys() | sort -%}
       {%- if _after[_path] != _before.get(_path) -%}
-      {%- set _ = _changes.append('+ path "' ~ _path ~ '" { capabilities = ' ~ _after[_path] ~ ' }') -%}
+      {%- set _ = _changes.append('+ path "' ~ _path ~ '" {\n  ' ~ _after[_path] ~ '\n}') -%}
       {%- endif -%}
       {%- endfor -%}
       {{ _changes }}
@@ -96,7 +88,7 @@
     msg: >-
       {{ (openbao_policy_preview_path_changes | join('\n'))
          if openbao_policy_preview_path_changes | default([]) | length > 0
-         else 'No path or capability changes.' }}
+         else 'No path stanza changes.' }}
   when:
     - openbao_policy_preview_paths_only | default(false) | bool
     - openbao_policy_preview_live_text != openbao_policy_preview_rendered_text

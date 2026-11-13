@@ -124,6 +124,19 @@ def test_check_mode_preview_reads_live_policy_and_only_prints_real_diffs():
     assert read["become"] == "{{ openbao_cli_become }}"
     assert read["failed_when"] is not False
 
+    assert condition(read["failed_when"], {
+        "openbao_policy_preview_live_read": {
+            "rc": 2,
+            "stderr": "Error reading policy: No policy named: new-policy",
+        },
+    }) is False
+    assert condition(read["failed_when"], {
+        "openbao_policy_preview_live_read": {
+            "rc": 2,
+            "stderr": "permission denied",
+        },
+    }) is True
+
     diff = task("Compute a unified line diff for the policy", POLICY_PREVIEW)
     assert diff["check_mode"] is False
     assert diff["changed_when"] is False
@@ -138,7 +151,7 @@ def test_check_mode_preview_reads_live_policy_and_only_prints_real_diffs():
     assert report["ansible.builtin.debug"]["msg"] == "{{ openbao_policy_preview_diff.diff_lines }}"
     assert report["when"][0] == "not (openbao_policy_preview_paths_only | default(false) | bool)"
 
-    path_changes = task("Resolve added and removed policy path capabilities", POLICY_PREVIEW)
+    path_changes = task("Resolve added and removed policy path stanzas", POLICY_PREVIEW)
     expression = path_changes["ansible.builtin.set_fact"]["openbao_policy_preview_path_changes"]
     before = '''path "secret/data/kept" {\n  capabilities = ["read"]\n}\npath "secret/data/removed" {\n  capabilities = ["update"]\n}'''
     after = '''path "secret/data/kept" {\n  capabilities = ["update"]\n}\npath "secret/data/added" {\n  capabilities = ["read"]\n}'''
@@ -146,10 +159,48 @@ def test_check_mode_preview_reads_live_policy_and_only_prints_real_diffs():
         "openbao_policy_preview_live_text": before,
         "openbao_policy_preview_rendered_text": after,
     }) == [
-        '- path "secret/data/kept" { capabilities = ["read"] }',
-        '- path "secret/data/removed" { capabilities = ["update"] }',
-        '+ path "secret/data/added" { capabilities = ["read"] }',
-        '+ path "secret/data/kept" { capabilities = ["update"] }',
+        '- path "secret/data/kept" {\n  capabilities = ["read"]\n}',
+        '- path "secret/data/removed" {\n  capabilities = ["update"]\n}',
+        '+ path "secret/data/added" {\n  capabilities = ["read"]\n}',
+        '+ path "secret/data/kept" {\n  capabilities = ["update"]\n}',
+    ]
+
+    before = '''path "auth/token/create" {
+  capabilities = ["create", "update", "sudo"]
+  required_parameters = ["policies", "type"]
+  allowed_parameters = {
+    "policies" = [["window-service"]]
+    "type" = ["service"]
+  }
+}'''
+    after = '''path "auth/token/create" {
+  capabilities = ["create", "update", "sudo"]
+  required_parameters = ["policies", "type", "ttl"]
+  allowed_parameters = {
+    "policies" = [["window-service"]]
+    "type" = ["batch"]
+  }
+}'''
+    assert render(expression, {
+        "openbao_policy_preview_live_text": before,
+        "openbao_policy_preview_rendered_text": after,
+    }) == [
+        '- path "auth/token/create" {\n'
+        '  capabilities = ["create", "update", "sudo"]\n'
+        '  required_parameters = ["policies", "type"]\n'
+        '  allowed_parameters = {\n'
+        '    "policies" = [["window-service"]]\n'
+        '    "type" = ["service"]\n'
+        '  }\n'
+        '}',
+        '+ path "auth/token/create" {\n'
+        '  capabilities = ["create", "update", "sudo"]\n'
+        '  required_parameters = ["policies", "type", "ttl"]\n'
+        '  allowed_parameters = {\n'
+        '    "policies" = [["window-service"]]\n'
+        '    "type" = ["batch"]\n'
+        '  }\n'
+        '}',
     ]
 
 
