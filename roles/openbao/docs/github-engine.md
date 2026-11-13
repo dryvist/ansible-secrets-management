@@ -68,7 +68,7 @@ Token access is tiered; the tier IS the privilege boundary:
   boundary. The `github-write` policy also grants `github-personal/token` with
   `installation_id` pinned to the configured personal installation.
   `github-mint` remains limited to read-tier sets, and `ai-orchestrator`
-  excludes write-tier sets.
+  grants named tokens for read-tier sets only.
 - **publish (`docs-publisher`)** — `github-admin/token/docs-publisher`: one
   repository, `contents: write` + `pull_requests: write`, all three stored in
   the set. The repository list comes from the iac secret store; with none
