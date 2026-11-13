@@ -81,8 +81,9 @@ openbao_write_addr: "{{ openbao_api_addr }}"
 # One switch for every read and write in init/03 onward. With a reconcile
 # address the CLI runs on the controller (the reads cost one module execution
 # per item on the target: measured 559 s for policy reads, 328 s for AppRole
-# checks) against the active node; without one -- a first-ever bootstrap, no
-# BAO_ADDR ambient yet -- it stays on the node with become.
+# checks) against the active node; with the admin-window proxy, it runs on the
+# controller through BAO_AGENT_ADDR. A first-ever bootstrap with neither route
+# stays on the node with become.
 #
 # Defaults, deliberately not set_fact: openbao_cli_become is consumed as
 # `vars: ansible_become:` on delegated tasks, and a connection variable on a
@@ -90,9 +91,25 @@ openbao_write_addr: "{{ openbao_api_addr }}"
 # on the openbao node does not exist ('openbao_cli_become' is undefined). A
 # role default is in scope for every host the play touches. Lazy, so
 # openbao_write_addr's init/02 override is still honoured at use time.
-openbao_cli_host: "{{ 'localhost' if openbao_reconcile_addr | length > 0 else inventory_hostname }}"
-openbao_cli_addr: "{{ openbao_reconcile_addr | default(openbao_write_addr, true) }}"
-openbao_cli_become: "{{ openbao_reconcile_addr | length == 0 }}"
+# The one environment for every bao call through the admin-window proxy: the
+# proxy injects the window identity, so the caller token stays empty.
+openbao_window_proxy_env:
+  BAO_ADDR: "{{ openbao_window_proxy_addr | default('') }}"
+  BAO_AGENT_ADDR: "{{ openbao_window_proxy_addr | default('') }}"
+  BAO_CONFIG_PATH: "{{ lookup('env', 'BAO_CONFIG_PATH') }}"
+  BAO_TOKEN: ""
+openbao_cli_proxy_active: >-
+  {{ openbao_window_proxy_mode | default(false) | bool
+     and (openbao_status | default({})).initialized | default(false) | bool }}
+openbao_cli_host: >-
+  {{ 'localhost'
+     if openbao_reconcile_addr | length > 0 or openbao_cli_proxy_active | default(false) | bool
+     else inventory_hostname }}
+openbao_cli_addr: >-
+  {{ openbao_window_proxy_addr if openbao_cli_proxy_active | default(false) | bool
+     else openbao_reconcile_addr | default(openbao_write_addr, true) }}
+openbao_cli_become: >-
+  {{ not (openbao_reconcile_addr | length > 0 or openbao_cli_proxy_active | default(false) | bool) }}
 
 # --- Optional per-kind object selection ------------------------------------
 # Rename shim: the retired single-object inputs still select that one object.
