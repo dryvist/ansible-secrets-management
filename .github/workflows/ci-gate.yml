@@ -179,9 +179,13 @@ jobs:
   # The full pytest suite runs in its own job so each job stays inside the
   # pull-request timeout policy.
   pytest:
-    name: Role pytest suite
+    name: Role pytest suite (${{ matrix.shard }}/2)
     needs: changes
     if: ${{ needs.changes.outputs.tiny != 'true' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     runs-on: ubuntu-latest
     timeout-minutes: ${{ github.event_name == 'pull_request' && 5 || 10 }}
     permissions:
@@ -231,10 +235,21 @@ jobs:
       - name: Install Nix
         uses: DeterminateSystems/determinate-nix-action@8d87e8d5e5b8a8309d4281094560f127d9a265f1 # v3
 
-      - name: Run the full pytest suite
-        run: >-
-          nix shell --inputs-from . nixpkgs#openbao
-          --command python3 -m pytest -q -n auto tests/
+      - name: Run the pytest shard
+        env:
+          PYTEST_SHARD: ${{ matrix.shard }}
+        run: |
+          # Every other test module by sorted path; the count check proves both shards together cover tests/ exactly.
+          mapfile -t files < <(find tests -type f \( -name 'test_*.py' -o -name '*_test.py' \) | LC_ALL=C sort)
+          mine=(); other=()
+          for i in "${!files[@]}"; do
+            if (( i % 2 == PYTEST_SHARD - 1 )); then mine+=("${files[i]}"); else other+=("${files[i]}"); fi
+          done
+          count() { python3 -m pytest --collect-only -q "$@" | grep -c '::'; }
+          all=$(count tests/); a=$(count "${mine[@]}"); b=$(count "${other[@]}")
+          echo "shard ${PYTEST_SHARD}/2: ${a} tests, other shard ${b}, unsharded ${all}"
+          test $((a + b)) -eq "${all}"
+          nix shell --inputs-from . nixpkgs#openbao --command python3 -m pytest -q -n auto "${mine[@]}"
 
   gate:
     name: Merge Gate

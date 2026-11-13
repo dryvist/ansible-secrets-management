@@ -102,3 +102,9 @@ path "{{ openbao_github_everyday_mount }}/token/{{ permission_set }}" {
   capabilities = ["create", "update"]
 }
 {% endfor %}
+
+{% if openbao_github_dispatch_permission_sets | length > 0 %}
+path "{{ openbao_github_mount }}/token/workflow-dispatch" {
+  capabilities = ["read", "create", "update"]
+}
+{% endif %}
