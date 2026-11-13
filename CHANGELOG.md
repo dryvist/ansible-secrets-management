@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.105.0](https://github.com/jpe-ansible/ansible-secrets-management/compare/v0.104.0...v0.105.0) (2026-11-13)
+
+
+### Features
+
+* **openbao:** add the pr-reconcile-sweep OIDC role and policy ([#675](https://github.com/jpe-ansible/ansible-secrets-management/issues/675)) ([26f7963](https://github.com/jpe-ansible/ansible-secrets-management/commit/26f79631e1a134a436fa670690986b60d01881a9))
+* **openbao:** declare org-secrets sets for two more organizations ([#680](https://github.com/jpe-ansible/ansible-secrets-management/issues/680)) ([3561585](https://github.com/jpe-ansible/ansible-secrets-management/commit/356158577bf1077b5f6558dfb1f0713c1a0cb7ca))
+* **openbao:** generate svc_mcp_clerk_password for vikunja ([#678](https://github.com/jpe-ansible/ansible-secrets-management/issues/678)) ([19f1cb7](https://github.com/jpe-ansible/ansible-secrets-management/commit/19f1cb7b28936617ae1861406b6c341bbb92d19f))
+
+
+### Bug Fixes
+
+* **openbao:** add org-secrets leaves and per-owner permission sets ([#677](https://github.com/jpe-ansible/ansible-secrets-management/issues/677)) ([abeccaf](https://github.com/jpe-ansible/ansible-secrets-management/commit/abeccafd2a150252405f2e29dc2ba20230ae3bde))
+
 ## [0.104.0](https://github.com/dryvist/ansible-secrets-management/compare/v0.103.0...v0.104.0) (2026-11-13)
 
 
