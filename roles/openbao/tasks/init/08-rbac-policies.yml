@@ -232,6 +232,16 @@
     - openbao_bootstrap_token is defined
     - openbao_github_ci_resolver_repos | default([]) | length == 0
 
+- name: Warn when PR reconcile configuration is incomplete
+  ansible.builtin.debug:
+    msg: >-
+      The pr-reconcile-sweep role and policy are not declared until both
+      OPENBAO_GITHUB_PR_RECONCILE_REPOSITORY and OPENBAO_GITHUB_PR_RECONCILE_OWNERS are set;
+      an existing role and policy of that name are removed by this converge.
+  when:
+    - openbao_bootstrap_token is defined
+    - not (openbao_github_pr_reconcile_enabled | bool)
+
 # `bao policy write <name> -` REPLACES the whole stored ACL document; there is
 # no merge. A policy template whose only content is conditional on some other
 # input (a permission set, a workspace list, ...) renders as comment lines

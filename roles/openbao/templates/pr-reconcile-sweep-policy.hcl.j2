@@ -3,6 +3,7 @@
 # owners and the fixed reconcile permission map; installation and repository
 # selectors are denied, so each token covers one owner's installation.
 
+{% if openbao_pr_reconcile_owners | length > 0 %}
 path "{{ openbao_github_everyday_mount }}/token" {
   capabilities = ["create", "update"]
   required_parameters = ["org_name", "permissions"]
@@ -15,3 +16,4 @@ path "{{ openbao_github_everyday_mount }}/token" {
     "repository_ids" = []
   }
 }
+{% endif %}

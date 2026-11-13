@@ -44,7 +44,9 @@ openbao_retired_policies: >-
   {{ ['github-agents', 'github-admin-claude-issuer', 'github-work', 'github-write-work',
       'github-work-admin']
      + openbao_roster_key_reader_retired_names
-     + openbao_roster_owned_mcp_deny_retired_names }}
+     + openbao_roster_owned_mcp_deny_retired_names
+     + ([] if openbao_github_pr_reconcile_enabled | bool
+        else [openbao_github_pr_reconcile_policy_name]) }}
 # Example shape (do not add speculatively):
 #   - name: some-vendor-managed-role
 #     reason: provisioned by <tool>, out of this repo's control

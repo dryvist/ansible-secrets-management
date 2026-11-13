@@ -81,9 +81,13 @@ Token access is tiered; the tier IS the privilege boundary:
 - **PR reconcile (`pr-reconcile-sweep`)** — the raw `github/token` endpoint,
   requiring `org_name` from `openbao_pr_reconcile_owners` and the exact
   `contents`, `issues`, `pull_requests` and `statuses` write map;
-  `installation_id` and `repository_ids` are denied. Its OIDC role binds
-  `repository=JacobPEvans/.github-ai` and `workflow_ref` to
-  `JacobPEvans/.github-ai/.github/workflows/pr-reconcile-sweep.yml@refs/heads/main`,
+  `installation_id` and `repository_ids` are denied. Set
+  `OPENBAO_GITHUB_PR_RECONCILE_REPOSITORY` to the OIDC repository, for example
+  `example-org/example-repo`, and `OPENBAO_GITHUB_PR_RECONCILE_OWNERS`
+  to a comma-separated list of permitted owners. Both are required to declare
+  the role and policy; while either is unset, the converge removes a live role
+  and policy of that name. The OIDC role binds the configured repository and its
+  `workflow_ref` (for example `example-org/example-repo/.github/workflows/pr-reconcile-sweep.yml@refs/heads/main`),
   plus the main ref, schedule/dispatch events, and self-hosted runners. The
   OpenBao batch token lasts 5m (10m max); GitHub's installation token keeps its
   one-hour lifetime.

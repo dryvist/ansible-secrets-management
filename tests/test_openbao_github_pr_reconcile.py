@@ -5,6 +5,7 @@ from pathlib import Path
 
 import yaml
 from jinja2 import Environment, FileSystemLoader
+from jinja2.nativetypes import NativeEnvironment
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -12,10 +13,35 @@ DEFAULTS = ROOT / "roles/openbao/defaults/main"
 TASKS = ROOT / "roles/openbao/tasks/init/09c-github-oidc.yml"
 POLICIES = DEFAULTS / "07c-base-policies.yml"
 TEMPLATES = ROOT / "roles/openbao/templates"
+RBAC = ROOT / "roles/openbao/tasks/init/08-rbac-policies.yml"
+REPOSITORY_KEY = "OPENBAO_GITHUB_PR_RECONCILE_REPOSITORY"
+OWNERS_KEY = "OPENBAO_GITHUB_PR_RECONCILE_OWNERS"
 
 
 def _defaults(name):
     return yaml.safe_load((DEFAULTS / name).read_text(encoding="utf-8"))
+
+
+def _render_defaults(env):
+    environment = NativeEnvironment()
+    environment.globals["lookup"] = lambda plugin, key: env.get(key, "")
+    environment.filters["bool"] = bool
+    defaults = _defaults("05f-pr-reconcile.yml")
+    for name, value in defaults.items():
+        if isinstance(value, str) and "{{" in value:
+            defaults[name] = environment.from_string(value).render(**defaults)
+    return defaults
+
+
+def _retired(defaults):
+    environment = NativeEnvironment()
+    environment.filters["bool"] = bool
+    expression = _defaults("07c-approle-undeclared-exceptions.yml")["openbao_retired_policies"]
+    return environment.from_string(expression).render(
+        **defaults,
+        openbao_roster_key_reader_retired_names=[],
+        openbao_roster_owned_mcp_deny_retired_names=[],
+    )
 
 
 def _find_task(tasks, name):
@@ -41,18 +67,20 @@ def _render_policy(defaults):
     )
 
 
-def test_owners_and_permission_map_are_exact():
-    defaults = _defaults("05f-pr-reconcile.yml")
-    assert defaults["openbao_pr_reconcile_owners"] == [
-        "JacobPEvans",
-        "JacobPEvans-ai",
-        "jpe-nix",
-        "jpe-private",
-        "jpe-ansible",
-        "jpe-cribl",
-        "jpe-splunk",
-        "jpe-openbao-plugin-secrets",
+def test_inputs_enable_reconcile_and_build_workflow_ref():
+    defaults = _render_defaults({
+        REPOSITORY_KEY: "example-org/example-repo",
+        OWNERS_KEY: " example-org, , example-other ",
+    })
+    assert defaults["openbao_github_pr_reconcile_enabled"] is True
+    assert defaults["openbao_pr_reconcile_owners"] == ["example-org", "example-other"]
+    assert defaults["openbao_github_pr_reconcile_workflow_ref"] == (
+        "example-org/example-repo/.github/workflows/pr-reconcile-sweep.yml@refs/heads/main"
+    )
+    assert defaults["openbao_pr_reconcile_policies"] == [
+        {"name": "pr-reconcile-sweep", "template": "pr-reconcile-sweep-policy.hcl.j2"}
     ]
+    assert defaults["openbao_github_pr_reconcile_policy_name"] not in _retired(defaults)
     assert defaults["openbao_github_pr_reconcile_permissions"] == {
         "contents": "write",
         "issues": "write",
@@ -61,8 +89,48 @@ def test_owners_and_permission_map_are_exact():
     }
 
 
+def test_missing_inputs_disable_reconcile_and_warn():
+    for env in (
+        {REPOSITORY_KEY: "example-org/example-repo"},
+        {OWNERS_KEY: "example-org"},
+        {},
+    ):
+        defaults = _render_defaults(env)
+        assert defaults["openbao_github_pr_reconcile_enabled"] is False
+        # Not declared, retired (deleted if live), and never rendered as an empty allow-list.
+        assert defaults["openbao_pr_reconcile_policies"] == []
+        assert defaults["openbao_github_pr_reconcile_policy_name"] in _retired(defaults)
+        rendered = _render_policy(defaults)
+        assert '"org_name" = []' not in rendered
+        if not defaults["openbao_pr_reconcile_owners"]:
+            assert re.findall(r'(?m)^path ', rendered) == []
+
+    tasks = yaml.safe_load(TASKS.read_text(encoding="utf-8"))
+    remove = _find_task(tasks, "Remove the pr-reconcile-sweep OIDC role while its inputs are unset")
+    assert remove is not None
+    assert " ".join(remove["ansible.builtin.command"]["cmd"].split()) == (
+        "bao delete auth/{{ openbao_github_oidc_auth_path }}/role/"
+        "{{ openbao_github_pr_reconcile_policy_name }}"
+    )
+    assert "not (openbao_github_pr_reconcile_enabled | bool)" in remove["when"]
+    assert "(openbao_github_oidc_pr_reconcile_role_current.rc | default(1)) == 0" in remove["when"]
+    read = _find_task(tasks, "Read the pr-reconcile-sweep OIDC role")
+    assert read["when"] == "openbao_bootstrap_token is defined"
+
+    warning = _find_task(
+        yaml.safe_load(RBAC.read_text(encoding="utf-8")),
+        "Warn when PR reconcile configuration is incomplete",
+    )
+    assert warning is not None
+    assert REPOSITORY_KEY in warning["ansible.builtin.debug"]["msg"]
+    assert OWNERS_KEY in warning["ansible.builtin.debug"]["msg"]
+    assert "not (openbao_github_pr_reconcile_enabled | bool)" in warning["when"]
+
+
 def test_policy_pins_owner_names_and_permission_map_on_the_raw_endpoint():
-    defaults = _defaults("05f-pr-reconcile.yml")
+    defaults = _render_defaults(
+        {REPOSITORY_KEY: "example-org/example-repo", OWNERS_KEY: "example-org,example-other"}
+    )
     rendered = _render_policy(defaults)
     paths = re.findall(r'(?m)^path "([^"]+)" \{', rendered)
     assert paths == ["github/token"]
@@ -79,20 +147,17 @@ def test_policy_pins_owner_names_and_permission_map_on_the_raw_endpoint():
     assert '"repositories"' not in rendered
 
     policies = yaml.safe_load(POLICIES.read_text(encoding="utf-8"))
-    entries = [
+    assert not [
         item for item in policies["openbao_base_policies_static"]
         if item["name"] == "{{ openbao_github_pr_reconcile_policy_name }}"
     ]
-    assert entries == [
-        {
-            "name": "{{ openbao_github_pr_reconcile_policy_name }}",
-            "template": "pr-reconcile-sweep-policy.hcl.j2",
-        }
-    ]
+    assert "+ openbao_pr_reconcile_policies" in policies["openbao_base_policies"]
 
 
 def test_oidc_role_has_exact_claims_one_policy_short_batch_token_and_drift_guard():
-    defaults = _defaults("05f-pr-reconcile.yml")
+    defaults = _render_defaults(
+        {REPOSITORY_KEY: "example-org/example-repo", OWNERS_KEY: "example-org"}
+    )
     tasks = yaml.safe_load(TASKS.read_text(encoding="utf-8"))
     read = _find_task(tasks, "Read the pr-reconcile-sweep OIDC role")
     write = _find_task(tasks, "Reconcile the pr-reconcile-sweep OIDC role")
@@ -101,10 +166,6 @@ def test_oidc_role_has_exact_claims_one_policy_short_batch_token_and_drift_guard
 
     assert defaults["openbao_github_pr_reconcile_policy_name"] == "pr-reconcile-sweep"
     assert defaults["openbao_github_pr_reconcile_audience"] == "openbao"
-    assert defaults["openbao_github_pr_reconcile_repository"] == "JacobPEvans/.github-ai"
-    assert defaults["openbao_github_pr_reconcile_workflow_ref"] == (
-        "JacobPEvans/.github-ai/.github/workflows/pr-reconcile-sweep.yml@refs/heads/main"
-    )
     assert defaults["openbao_github_pr_reconcile_ref"] == "refs/heads/main"
     assert defaults["openbao_github_pr_reconcile_event_names"] == [
         "schedule", "workflow_dispatch"
@@ -133,8 +194,7 @@ def test_oidc_role_has_exact_claims_one_policy_short_batch_token_and_drift_guard
     assert "'token_ttl': openbao_github_pr_reconcile_token_ttl" in payload
     assert "'token_max_ttl': openbao_github_pr_reconcile_token_max_ttl" in payload
 
-    assert "openbao_pr_reconcile_owners | length > 0" in read["when"]
-    assert "openbao_pr_reconcile_owners | length > 0" in write["when"]
+    assert "openbao_github_pr_reconcile_enabled | bool" in write["when"]
     drift_guard = write["when"][-1]
     assert "openbao_github_oidc_pr_reconcile_role_current.rc | default(1)" in drift_guard
     for field in (

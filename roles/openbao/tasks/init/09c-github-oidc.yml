@@ -414,9 +414,7 @@
   changed_when: false
   check_mode: false
   failed_when: false
-  when:
-    - openbao_bootstrap_token is defined
-    - openbao_pr_reconcile_owners | length > 0
+  when: openbao_bootstrap_token is defined
 
 - name: Reconcile the pr-reconcile-sweep OIDC role
   vars:
@@ -458,7 +456,7 @@
   changed_when: true
   when:
     - openbao_bootstrap_token is defined
-    - openbao_pr_reconcile_owners | length > 0
+    - openbao_github_pr_reconcile_enabled | bool
     - >-
       (openbao_github_oidc_pr_reconcile_role_current.rc | default(1)) != 0
       or (_pr_reconcile_role_live.role_type | default('')) != 'jwt'
@@ -478,3 +476,24 @@
          != (_pr_reconcile_token_ttl_s | int)
       or (_pr_reconcile_role_live.token_max_ttl | default(0) | int)
          != (_pr_reconcile_token_max_ttl_s | int)
+
+# Unset inputs leave the role undeclared: remove a live one so it cannot keep
+# minting under a policy that is being retired.
+- name: Remove the pr-reconcile-sweep OIDC role while its inputs are unset
+  ansible.builtin.command:
+    cmd: >-
+      bao delete
+      auth/{{ openbao_github_oidc_auth_path }}/role/{{ openbao_github_pr_reconcile_policy_name }}
+  environment:
+    BAO_ADDR: "{{ openbao_cli_addr }}"
+    BAO_TOKEN: "{{ openbao_bootstrap_token }}"
+  delegate_to: "{{ openbao_cli_host }}"
+  become: "{{ openbao_cli_become }}"
+  vars:
+    ansible_become: "{{ openbao_cli_become }}"
+  no_log: true
+  changed_when: true
+  when:
+    - openbao_bootstrap_token is defined
+    - not (openbao_github_pr_reconcile_enabled | bool)
+    - (openbao_github_oidc_pr_reconcile_role_current.rc | default(1)) == 0
