@@ -15,8 +15,8 @@ tags:
   - secrets
   - vault
   - infrastructure
-repository: https://github.com/dryvist/ansible-secrets-management
-issues: https://github.com/dryvist/ansible-secrets-management/issues
+repository: https://github.com/jpe-ansible/ansible-secrets-management
+issues: https://github.com/jpe-ansible/ansible-secrets-management/issues
 build_ignore:
   - "*.tar.gz"
   - .DS_Store

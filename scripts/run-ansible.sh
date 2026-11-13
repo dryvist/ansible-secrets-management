@@ -9,6 +9,6 @@ export RUN_ANSIBLE_LOG_DIR="${RUN_ANSIBLE_LOG_DIR:-.ansible-run-logs}"
 export RUN_ANSIBLE_RECAP_CHECK="${RUN_ANSIBLE_RECAP_CHECK:-1}"
 export RUN_ANSIBLE_REQUIRE_RECAP="${RUN_ANSIBLE_REQUIRE_RECAP:-1}"
 
-# renovate: datasource=github-releases depName=dryvist/homelab-contracts
+# renovate: datasource=github-releases depName=jpe-ansible/homelab-contracts
 HOMELAB_CONTRACTS_REF=v5.60.0
-exec nix run "github:dryvist/homelab-contracts/${HOMELAB_CONTRACTS_REF}#run-ansible" -- "$@"
+exec nix run "github:jpe-ansible/homelab-contracts/${HOMELAB_CONTRACTS_REF}#run-ansible" -- "$@"

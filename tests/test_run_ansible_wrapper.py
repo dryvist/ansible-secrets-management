@@ -86,7 +86,7 @@ class RunAnsibleShim(unittest.TestCase):
             re.MULTILINE,
         )
         self.assertIsNotNone(pin)
-        runner_ref = f"github:dryvist/homelab-contracts/{pin.group(1)}#run-ansible"
+        runner_ref = f"github:jpe-ansible/homelab-contracts/{pin.group(1)}#run-ansible"
         result = self._run()
 
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
