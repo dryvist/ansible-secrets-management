@@ -53,6 +53,7 @@ def _admin_sets(variables):
         "openbao_github_git_mirror_permission_sets": [],
         "openbao_github_role_eval_status_permission_sets": [],
         "openbao_github_workflows_write_permission_sets": [],
+        "openbao_github_dispatch_permission_sets": [],
     }
     return _render(
         variables["openbao_github_admin_permission_sets"],
