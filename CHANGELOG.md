@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.107.0](https://github.com/jpe-ansible/ansible-secrets-management/compare/v0.106.0...v0.107.0) (2026-11-14)
+
+
+### Features
+
+* **openbao:** declare the Splunk rotator path in the converge policy ([#695](https://github.com/jpe-ansible/ansible-secrets-management/issues/695)) ([4c085c0](https://github.com/jpe-ansible/ansible-secrets-management/commit/4c085c05ad673ac3da65300ba603ddeb76fcf2b9))
+
+
+### Bug Fixes
+
+* **openbao:** grant converge the Splunk rotator credential path ([4c085c0](https://github.com/jpe-ansible/ansible-secrets-management/commit/4c085c05ad673ac3da65300ba603ddeb76fcf2b9))
+
 ## [0.106.0](https://github.com/jpe-ansible/ansible-secrets-management/compare/v0.105.1...v0.106.0) (2026-11-13)
 
 
