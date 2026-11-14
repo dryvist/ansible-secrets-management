@@ -37,3 +37,11 @@ def test_no_wildcard_or_main_grant_reaches_the_platform_splunk_tree() -> None:
                 assert "*" not in path and "+" not in path, f"{template.name}: {path}"
     assert f"{MOUNT}/data/platform/splunk/main" not in _grants(CONVERGE)
     assert _grants(SEMAPHORE)[f"{MOUNT}/data/platform/splunk/main"] == ("read",)
+
+
+def test_converge_grants_the_rotator_credentials_at_exact_paths_only() -> None:
+    grants = _grants(CONVERGE)
+    assert grants[f"{MOUNT}/data/apps/splunk-rotator"] == ("create", "update", "read")
+    assert grants[f"{MOUNT}/metadata/apps/splunk-rotator"] == ("read",)
+    rotator = [path for path in grants if "splunk-rotator" in path]
+    assert sorted(rotator) == sorted(f"{MOUNT}/{kind}/apps/splunk-rotator" for kind in ("data", "metadata"))
