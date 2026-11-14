@@ -51,9 +51,12 @@ def _template(name):
     return (_defaults.__globals__["DEFAULTS"].parents[1] / "templates" / name).read_text()
 
 
-def test_only_the_admin_policy_selects_the_admin_tier():
+def test_only_the_admin_policy_selects_the_admin_tier_and_orchestrator_uses_allowlist():
     assert "selectattr('tier', 'equalto', 'admin')" in _template("github-admin-policy.hcl.j2")
     write_policy = _template("github-write-policy.hcl.j2")
     assert "selectattr('tier', 'equalto', 'write')" in write_policy
     assert "'admin'" not in write_policy
-    assert "rejectattr('tier', 'equalto', 'admin')" in _template("ai-orchestrator-policy.hcl.j2")
+    orchestrator_policy = _template("ai-orchestrator-policy.hcl.j2")
+    assert "selectattr('tier', 'defined')" in orchestrator_policy
+    assert "selectattr('tier', 'in', openbao_ai_orchestrator_github_tiers)" in orchestrator_policy
+    assert "rejectattr('tier'" not in orchestrator_policy
