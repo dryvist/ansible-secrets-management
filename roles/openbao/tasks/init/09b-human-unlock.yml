@@ -6,7 +6,7 @@
 #
 # This is what replaces the retired standing `admin` secret_id: it is the only
 # way a human mints a break-glass credential without already holding one. See
-# templates/human-unlock-policy.hcl.j2 and docs/secrets-and-rbac.md.
+# templates/human-unlock-policy.hcl.j2.
 
 # --- Human unlock: userpass + login MFA --------------------------------------
 # The operator's own login, carrying the human-unlock policy. This is what

@@ -27,7 +27,7 @@ openbao_human_unlock_cidr_class: workstation
 # method and the enforcement; a human then runs the `admin-generate` endpoint
 # once against their own entity to get the QR/secret. Enrolling from a converge
 # would mean the automation had, however briefly, the second factor — which
-# would make it not a second factor. See docs/secrets-and-rbac.md.
+# would make it not a second factor.
 openbao_human_unlock_mfa_enabled: true
 openbao_human_unlock_mfa_method_name: human-unlock-totp
 openbao_human_unlock_mfa_enforcement_name: human-unlock
