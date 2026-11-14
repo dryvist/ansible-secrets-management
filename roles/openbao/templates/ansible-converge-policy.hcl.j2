@@ -71,6 +71,19 @@ path "{{ openbao_kv_mount }}/undelete/platform/splunk/search" {
   capabilities = ["update"]
 }
 
+# Exact-path exception: ansible-splunk's converge creates the Splunk MCP
+# rotator's service account and publishes its credentials here on first
+# create, then reads the secret on every run to prove it still exists
+# (roles/splunk_docker/tasks/manage_mcp_rotator.yml). The single secret only,
+# never apps/*.
+path "{{ openbao_kv_mount }}/data/apps/splunk-rotator" {
+  capabilities = ["create", "update", "read"]
+}
+
+path "{{ openbao_kv_mount }}/metadata/apps/splunk-rotator" {
+  capabilities = ["read"]
+}
+
 # Transitional exact-path exception (Vikunja MCP): the converge publishes the
 # minted Vikunja MCP connection here. Same narrow create/update/read on the
 # SINGLE secret as the splunk grant above — deliberately NOT a wildcard.
