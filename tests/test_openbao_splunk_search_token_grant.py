@@ -45,3 +45,15 @@ def test_converge_grants_the_rotator_credentials_at_exact_paths_only() -> None:
     assert grants[f"{MOUNT}/metadata/apps/splunk-rotator"] == ("read",)
     rotator = [path for path in grants if "splunk-rotator" in path]
     assert sorted(rotator) == sorted(f"{MOUNT}/{kind}/apps/splunk-rotator" for kind in ("data", "metadata"))
+
+
+def test_converge_grants_the_agent_session_search_token_at_exact_paths_only() -> None:
+    grants = _grants(CONVERGE)
+    assert grants[f"{MOUNT}/data/apps/llamaindex"] == ("create", "update", "read")
+    assert grants[f"{MOUNT}/metadata/apps/llamaindex"] == ("read",)
+    assert grants[f"{MOUNT}/undelete/apps/llamaindex"] == ("update",)
+    apps = sorted(path for path in grants if "/apps/" in path)
+    assert apps == sorted(
+        [f"{MOUNT}/{kind}/apps/llamaindex" for kind in ("data", "metadata", "undelete")]
+        + [f"{MOUNT}/{kind}/apps/splunk-rotator" for kind in ("data", "metadata")]
+    )
