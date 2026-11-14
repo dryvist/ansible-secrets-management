@@ -83,6 +83,21 @@ path "{{ openbao_kv_mount }}/metadata/apps/splunk-rotator" {
   capabilities = ["read"]
 }
 
+# Exact-path exception: the Splunk converge publishes the agent-session search
+# user's minted token here. Same narrow shape as the platform search grant
+# above: the single secret only, never apps/*.
+path "{{ openbao_kv_mount }}/data/apps/llamaindex" {
+  capabilities = ["create", "update", "read"]
+}
+
+path "{{ openbao_kv_mount }}/metadata/apps/llamaindex" {
+  capabilities = ["read"]
+}
+
+path "{{ openbao_kv_mount }}/undelete/apps/llamaindex" {
+  capabilities = ["update"]
+}
+
 # Transitional exact-path exception (Vikunja MCP): the converge publishes the
 # minted Vikunja MCP connection here. Same narrow create/update/read on the
 # SINGLE secret as the splunk grant above — deliberately NOT a wildcard.

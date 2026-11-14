@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.108.0 (2026-11-14)
+
+
+### Features
+
+* **openbao:** declare the agent-session search token path in the converge policy (#699)
+
 ## [0.107.0](https://github.com/jpe-ansible/ansible-secrets-management/compare/v0.106.0...v0.107.0) (2026-11-14)
 
 
